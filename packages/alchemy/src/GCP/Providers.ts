@@ -2611,6 +2611,7 @@ const gcpLive = fromCredentials().pipe(
 );
 
 const makeProviders = () =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erased on purpose, see comment at the cast below
   Layer.effect(
     Providers,
     Effect.gen(function* () {

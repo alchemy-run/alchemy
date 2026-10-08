@@ -218,7 +218,7 @@ export const DockerLive = Layer.effect(
               return endpoint
                 ? Effect.succeed(endpoint)
                 : Effect.fail(
-                    new ConfigError({
+                    ConfigError.make({
                       subtag: "DockerHostNotFound",
                       message: "Docker host not found",
                     }),
@@ -382,20 +382,19 @@ export const DockerLive = Layer.effect(
      */
     const pull = ({ imageUri, platform }: ContainerImage.Pull & { readonly platform?: string }) =>
       run(["pull", toPullRef(imageUri), ...(platform ? ["--platform", platform] : [])]).pipe(
-        Effect.mapError(
-          (cause) =>
-            new SystemError({
-              subtag: "DockerPullFailed",
-              message: `Failed to pull image "${imageUri}".`,
-              hint: "Ensure Docker is running and the image is available.",
-              detail: { bin, imageUri },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          SystemError.make({
+            subtag: "DockerPullFailed",
+            message: `Failed to pull image "${imageUri}".`,
+            hint: "Ensure Docker is running and the image is available.",
+            detail: { bin, imageUri },
+            cause,
+          }),
         ),
         Effect.flatMap((result) => {
           if (result.exitCode !== 0) {
             return Effect.fail(
-              new SystemError({
+              SystemError.make({
                 subtag: "DockerPullFailed",
                 message: `Failed to pull image "${imageUri}".`,
                 hint: "Ensure Docker is running and the image is available.",
@@ -516,24 +515,21 @@ export const DockerLive = Layer.effect(
             ),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
-            Effect.mapError(
-              (cause) =>
-                new SystemError({
-                  subtag: "DockerBuildFailed",
-                  message: `Failed to build image "${tag}".`,
-                  cause,
-                }),
+            Effect.mapError((cause) =>
+              SystemError.make({
+                subtag: "DockerBuildFailed",
+                message: `Failed to build image "${tag}".`,
+                cause,
+              }),
             ),
             Effect.flatMap((result) =>
-              ensureExitZero(
-                result,
-                ({ exitCode, stdout, stderr }) =>
-                  new SystemError({
-                    subtag: "DockerBuildFailed",
-                    message: `Failed to build image "${tag}".`,
-                    hint: buildFailureHint(stderr),
-                    detail: { bin, tag, exitCode, stdout, stderr },
-                  }),
+              ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
+                SystemError.make({
+                  subtag: "DockerBuildFailed",
+                  message: `Failed to build image "${tag}".`,
+                  hint: buildFailureHint(stderr),
+                  detail: { bin, tag, exitCode, stdout, stderr },
+                }),
               ),
             ),
           );
@@ -542,30 +538,27 @@ export const DockerLive = Layer.effect(
         pull({ ...image, platform: "linux/amd64" }).pipe(
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new SystemError({
-                    subtag: "DockerTagFailed",
-                    message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
-                    cause,
-                  }),
+              Effect.mapError((cause) =>
+                SystemError.make({
+                  subtag: "DockerTagFailed",
+                  message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                  cause,
+                }),
               ),
               Effect.flatMap((result) =>
-                ensureExitZero(
-                  result,
-                  ({ exitCode, stdout, stderr }) =>
-                    new SystemError({
-                      subtag: "DockerTagFailed",
-                      message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
-                      detail: {
-                        bin,
-                        imageUri: image.imageUri,
-                        tag,
-                        exitCode,
-                        stdout,
-                        stderr,
-                      },
-                    }),
+                ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
+                  SystemError.make({
+                    subtag: "DockerTagFailed",
+                    message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                    detail: {
+                      bin,
+                      imageUri: image.imageUri,
+                      tag,
+                      exitCode,
+                      stdout,
+                      stderr,
+                    },
+                  }),
                 ),
               ),
             ),
@@ -580,7 +573,7 @@ export const DockerLive = Layer.effect(
           Effect.flatMap((output) =>
             output === "0"
               ? Effect.fail(
-                  new ConfigError({
+                  ConfigError.make({
                     subtag: "ContainerNoExposedPorts",
                     message: `The container for "${tag}" does not expose any ports.`,
                     hint: "Add an EXPOSE instruction to the Dockerfile for any ports you intend to connect to.",
@@ -613,13 +606,12 @@ export const DockerLive = Layer.effect(
             );
           }),
           Effect.withLogSpan(`docker: remove containers for ${tag}`),
-          Effect.mapError(
-            (cause) =>
-              new SystemError({
-                subtag: "DockerRemoveContainerFailed",
-                message: `Failed to remove containers for "${tag}".`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            SystemError.make({
+              subtag: "DockerRemoveContainerFailed",
+              message: `Failed to remove containers for "${tag}".`,
+              cause,
+            }),
           ),
         ),
     });
@@ -630,7 +622,7 @@ const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;
 
 const dockerProxyError = (subtag: string, message: string) => (cause: unknown) =>
-  new SystemError({ subtag, message, cause });
+  SystemError.make({ subtag, message, cause });
 
 /** Forward `req` to the Docker socket, replacing its body when one is given. */
 const sendDockerRequest = (

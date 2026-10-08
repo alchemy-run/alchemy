@@ -305,7 +305,7 @@ export const ContractProvider = () =>
               const dir = plan.dir
                 ? relative(path.resolve(configDir(news), plan.dir))
                 : "the planned migration directory";
-              return yield* Effect.fail(new CliError({ message: placeholderGuidance(dir) }));
+              return yield* new CliError({ message: placeholderGuidance(dir) });
             }
             if (!plan.noOp && plan.dir !== undefined) {
               // Guard against a config/props mismatch: if the CLI wrote the
@@ -313,15 +313,13 @@ export const ContractProvider = () =>
               // deploy would re-plan a duplicate package.
               const planDir = path.resolve(configDir(news), plan.dir);
               if (!planDir.startsWith(migrationsDir + path.sep)) {
-                return yield* Effect.fail(
-                  new CliError({
-                    message: [
-                      `prisma wrote the migration package to ${relative(planDir)},`,
-                      `outside this resource's migrationsDir (${relative(migrationsDir)}).`,
-                      "Set the `migrationsDir` prop to match `orm.migrations.dir` in prisma.config.ts.",
-                    ].join("\n"),
-                  }),
-                );
+                return yield* new CliError({
+                  message: [
+                    `prisma wrote the migration package to ${relative(planDir)},`,
+                    `outside this resource's migrationsDir (${relative(migrationsDir)}).`,
+                    "Set the `migrationsDir` prop to match `orm.migrations.dir` in prisma.config.ts.",
+                  ].join("\n"),
+                });
               }
             }
             packages = yield* readMigrationPackages(migrationsDir);
@@ -332,7 +330,7 @@ export const ContractProvider = () =>
           const finalHead = resolveGraphHead(packages);
           if (finalHead?.opsEmpty) {
             const dir = relative(path.join(migrationsDir, "app", finalHead.dirName));
-            return yield* Effect.fail(new CliError({ message: placeholderGuidance(dir) }));
+            return yield* new CliError({ message: placeholderGuidance(dir) });
           }
 
           return attributes(news, emitted, packages);

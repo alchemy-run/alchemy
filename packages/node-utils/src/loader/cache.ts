@@ -11,7 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import rolldown from "rolldown/package.json" with { type: "json" };
-import self from "../package.json" with { type: "json" };
+import self from "../../package.json" with { type: "json" };
 
 /**
  * Anything that changes Oxc's output for identical input invalidates every
@@ -22,6 +22,14 @@ const CACHE_VERSION = ["1", self.version, rolldown.version].join("-");
 
 /** Entries untouched for this long are swept on the first disk access. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How often the sweep runs. Every process on the machine opens the cache,
+ * and a sweep stats every entry — thousands of files — so a marker file's
+ * mtime limits it to once per interval.
+ */
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SWEEP_MARKER = ".swept";
 
 export const TRANSFORM_CACHE_ENV = "ALCHEMY_TRANSFORM_CACHE";
 
@@ -76,8 +84,8 @@ export interface CachedTransform {
  * ever invalidated in place. Size plus nanosecond mtime stands in for the
  * contents so a hit never reads the source.
  *
- * An entry is two files: `<key>.json` with the code, and `<key>.map` with
- * the source map. The map stays on disk and is referenced from the module
+ * An entry is two files: `<key>.code` with the code behind a short header,
+ * and `<key>.map` with the source map. The map stays on disk and is referenced from the module
  * by path rather than inlined — an inline `data:` map is part of the
  * script's source text, which V8 keeps for the process lifetime; for a
  * graph the size of alchemy's that is hundreds of megabytes per process.
@@ -85,7 +93,7 @@ export interface CachedTransform {
  * so the map is written (atomically) before `set` returns; the code entry
  * is a fire-and-forget write, because a missing one is only a slower
  * cache. Reads are synchronous (the loader hook is). Stale entries are
- * swept by age once per process.
+ * swept by age at most once a day.
  */
 export class TransformCache {
   readonly #directory: string;
@@ -117,30 +125,19 @@ export class TransformCache {
     this.#prepare();
     let raw: string;
     try {
-      raw = readFileSync(this.#file(key, "json"), "utf8");
+      raw = readFileSync(this.#file(key, "code"), "utf8");
     } catch {
       return undefined;
     }
-    let entry: { format?: unknown; code?: unknown; map?: unknown };
-    try {
-      entry = JSON.parse(raw);
-    } catch {
+    // `<format><map>\n<code>`: the code is stored as is, so a hit is one
+    // read and a slice rather than a JSON parse of the whole module.
+    const format = raw[0] === "m" ? "module" : raw[0] === "c" ? "commonjs" : undefined;
+    if (format === undefined || raw[2] !== "\n" || (raw[1] !== "1" && raw[1] !== "0")) {
       return undefined;
     }
-    if (
-      (entry.format !== "module" && entry.format !== "commonjs") ||
-      typeof entry.code !== "string" ||
-      typeof entry.map !== "boolean"
-    ) {
-      return undefined;
-    }
-    const mapFile = this.#file(key, "map");
-    if (entry.map && !existsSync(mapFile)) return undefined;
-    return {
-      format: entry.format,
-      code: entry.code,
-      mapFile: entry.map ? mapFile : undefined,
-    };
+    const mapFile = raw[1] === "1" ? this.#file(key, "map") : undefined;
+    if (mapFile !== undefined && !existsSync(mapFile)) return undefined;
+    return { format, code: raw.slice(3), mapFile };
   }
 
   /**
@@ -155,23 +152,17 @@ export class TransformCache {
       mapFile = this.#file(key, "map");
       if (!this.#writeAtomically(mapFile, entry.map)) return undefined;
     }
-    const file = this.#file(key, "json");
+    const file = this.#file(key, "code");
     const temporary = this.#temporary(file);
+    const header = `${entry.format === "module" ? "m" : "c"}${mapFile === undefined ? "0" : "1"}\n`;
     // Best effort: a cache that cannot be written is only a slower cache.
-    fs.writeFile(
-      temporary,
-      JSON.stringify({
-        format: entry.format,
-        code: entry.code,
-        map: mapFile !== undefined,
-      }),
-    )
+    fs.writeFile(temporary, header + entry.code)
       .then(() => fs.rename(temporary, file))
       .catch(() => fs.unlink(temporary).catch(() => {}));
     return mapFile;
   }
 
-  #file(key: string, extension: "json" | "map") {
+  #file(key: string, extension: "code" | "map") {
     return path.join(this.#directory, `${key}.${extension}`);
   }
 
@@ -209,10 +200,18 @@ export class TransformCache {
   }
 
   async #sweep() {
+    const marker = path.join(this.#directory, SWEEP_MARKER);
+    const swept = await fs.stat(marker).then(
+      ({ mtimeMs }) => mtimeMs,
+      () => 0,
+    );
+    if (Date.now() - swept < SWEEP_INTERVAL_MS) return;
+    await fs.writeFile(marker, "");
     const cutoff = Date.now() - MAX_AGE_MS;
     const names = await fs.readdir(this.#directory);
     await Promise.all(
       names.map(async (name) => {
+        if (name === SWEEP_MARKER) return;
         const file = path.join(this.#directory, name);
         try {
           const { mtimeMs } = await fs.stat(file);

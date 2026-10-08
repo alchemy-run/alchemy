@@ -297,7 +297,7 @@ const makeBun = () =>
             Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
               if (!child.stdio[3]) {
                 return resume(
-                  new SystemError({
+                  SystemError.make({
                     subtag: "WorkerdSpawn",
                     message: "The workerd process did not have a control fd.",
                   }),
@@ -366,7 +366,7 @@ const makeNode = () =>
           killSignal: "SIGKILL",
         }),
       catch: (error) =>
-        new SystemError({
+        SystemError.make({
           subtag: "WorkerdSpawn",
           message: "Failed to spawn the Workers runtime (workerd) process.",
           cause: error,
@@ -380,7 +380,7 @@ const makeNode = () =>
           };
           const onError = (error: unknown) => {
             resume(
-              new SystemError({
+              SystemError.make({
                 subtag: "WorkerdStart",
                 message: "Failed to start the Workers runtime (workerd) process.",
                 cause: error,
@@ -410,7 +410,7 @@ const makeNode = () =>
               cause: unknown,
               message: string = "Failed to write to the workerd process stdin.",
             ) => {
-              resume(new SystemError({ subtag: "WorkerdSpawn", message, cause }));
+              resume(SystemError.make({ subtag: "WorkerdSpawn", message, cause }));
             };
             if (!child.stdin) {
               return onError(undefined, "The workerd process did not have a stdin.");
@@ -429,7 +429,7 @@ const makeNode = () =>
             const pipe = child.stdio[3];
             if (!pipe) {
               return resume(
-                new SystemError({
+                SystemError.make({
                   subtag: "WorkerdSpawn",
                   message: "The workerd process did not have a control fd.",
                 }),
@@ -565,7 +565,7 @@ const classifyWorkerdError = (
   if (serviceLine) {
     const match = serviceLine.match(/^service ([^:]+): (.*)$/);
     const [, service, message] = match ?? [];
-    return new ConfigError({
+    return ConfigError.make({
       subtag: "WorkerdUserScript",
       message: message ?? serviceLine,
       hint: service ? `Check the configuration for service "${service}".` : undefined,
@@ -577,7 +577,7 @@ const classifyWorkerdError = (
   // address was reported by the C++ backend; the Rust backend omits it.
   if (/Address already in use/i.test(text)) {
     const address = text.match(/toString\(\) = (\S+)/)?.[1];
-    return new ConfigError({
+    return ConfigError.make({
       subtag: ADDRESS_IN_USE_SUBTAG,
       message: address
         ? `The Workers runtime could not bind to ${address} (already in use).`
@@ -589,7 +589,7 @@ const classifyWorkerdError = (
     });
   }
 
-  return new SystemError({
+  return SystemError.make({
     subtag: "WorkerdStartFailed",
     message: "The Workers runtime failed to start.",
     detail,

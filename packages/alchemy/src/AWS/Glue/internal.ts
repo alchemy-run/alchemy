@@ -44,7 +44,7 @@ export const fetchObservedTags = Effect.fn("AWS.Glue.fetchObservedTags")(functio
 ) {
   const response = yield* glue
     .getTags({ ResourceArn: resourceArn })
-    .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
+    .pipe(Effect.orElseSucceed(() => ({ Tags: undefined })));
   const tags = response.Tags ?? {};
   return Object.fromEntries(
     Object.entries(tags).filter((entry): entry is [string, string] => entry[1] !== undefined),

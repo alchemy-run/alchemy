@@ -186,7 +186,7 @@ export const ContactProvider = () =>
               ),
             ),
           ),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       const buildAttrs = (contact: contacts.GetContactResult) => ({

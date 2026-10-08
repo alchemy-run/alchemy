@@ -30,9 +30,9 @@
   "sideEffects": false,
   "exports": {
     "./ignore": "./src/ignore.ts",
-    "./register-oxc": "./src/register-oxc.ts",
-    "./watch-import": "./src/watch-import.ts",
-    "./watch-import-bun": "./src/watch-import-bun.ts"
+    "./register-oxc": "./src/loader/register.ts",
+    "./watch-import": "./src/watch/import-watcher.ts",
+    "./watch-import-bun": "./src/watch/bun-import-tracker.ts"
   },
   "publishConfig": {
     "exports": {
@@ -42,19 +42,19 @@
         "default": "./lib/ignore.js"
       },
       "./register-oxc": {
-        "types": "./lib/register-oxc.d.ts",
-        "bun": "./src/register-oxc.ts",
-        "default": "./lib/register-oxc.js"
+        "types": "./lib/loader/register.d.ts",
+        "bun": "./src/loader/register.ts",
+        "default": "./lib/loader/register.js"
       },
       "./watch-import": {
-        "types": "./lib/watch-import.d.ts",
-        "bun": "./src/watch-import.ts",
-        "default": "./lib/watch-import.js"
+        "types": "./lib/watch/import-watcher.d.ts",
+        "bun": "./src/watch/import-watcher.ts",
+        "default": "./lib/watch/import-watcher.js"
       },
       "./watch-import-bun": {
-        "types": "./lib/watch-import-bun.d.ts",
-        "bun": "./src/watch-import-bun.ts",
-        "default": "./lib/watch-import-bun.js"
+        "types": "./lib/watch/bun-import-tracker.d.ts",
+        "bun": "./src/watch/bun-import-tracker.ts",
+        "default": "./lib/watch/bun-import-tracker.js"
       }
     },
     "access": "public"

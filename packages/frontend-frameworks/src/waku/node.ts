@@ -54,12 +54,12 @@ const makeNodeAdapterTarget = (
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (output.distDirectory === undefined) {
-          return yield* Effect.fail(fail("The waku build produced no dist directory")(undefined));
+          return yield* fail("The waku build produced no dist directory")(undefined);
         }
         if (output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The waku build produced no client directory for the Node serve entry")(undefined),
-          );
+          return yield* fail(
+            "The waku build produced no client directory for the Node serve entry",
+          )(undefined);
         }
         const serverDir = path.join(output.distDirectory, "server");
         const serverIndex = path.join(serverDir, "index.js");
@@ -67,8 +67,8 @@ const makeNodeAdapterTarget = (
           .exists(serverIndex)
           .pipe(Effect.mapError(fail("Failed to probe the built server entry")));
         if (!hasServerIndex) {
-          return yield* Effect.fail(
-            fail(`The waku build produced no server entry at ${serverIndex}`)(undefined),
+          return yield* fail(`The waku build produced no server entry at ${serverIndex}`)(
+            undefined,
           );
         }
         yield* fs

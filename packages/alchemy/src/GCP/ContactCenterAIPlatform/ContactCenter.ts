@@ -429,9 +429,8 @@ export const ContactCenterProvider = () =>
         currentName,
         (item) => item.state,
       ).pipe(
-        Effect.catchIf(
-          (error) => error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotReady",
-          () => waitUntilExists(getLive(currentName), currentName),
+        Effect.catchTag("GCP.ContactCenterAIPlatform.ContactCenterNotReady", () =>
+          waitUntilExists(getLive(currentName), currentName),
         ),
       );
 

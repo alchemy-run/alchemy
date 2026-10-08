@@ -198,12 +198,10 @@ const resolveCodeHooks = Effect.fn(function* (
     for (const [localeId, arn] of Object.entries(hooks)) {
       const existing = merged[localeId];
       if (existing !== undefined && existing !== arn) {
-        return yield* Effect.fail(
-          new ConflictingCodeHook({
-            localeId,
-            functionArns: [existing, arn],
-          }),
-        );
+        return yield* new ConflictingCodeHook({
+          localeId,
+          functionArns: [existing, arn],
+        });
       }
       merged[localeId] = arn;
     }

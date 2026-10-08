@@ -163,8 +163,10 @@ export const syncTags = Effect.fn(function* ({
         tagKeys: removed,
       })
       .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.void),
-        Effect.catchTag("BadRequestException", () => Effect.void),
+        Effect.catchTags({
+          NotFoundException: () => Effect.void,
+          BadRequestException: () => Effect.void,
+        }),
       );
   }
   if (upsert.length > 0) {

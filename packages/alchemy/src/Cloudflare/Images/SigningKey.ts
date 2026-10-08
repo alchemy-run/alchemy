@@ -172,12 +172,10 @@ export const SigningKeyProvider = () =>
         // The PUT response and the follow-up list both failed to surface
         // the key — eventual-consistency blip; fail typed so the engine
         // can retry the reconcile.
-        return yield* Effect.fail(
-          new images.KeyNotFound({
-            code: 5404,
-            message: `signing key ${name} not observable after create`,
-          }),
-        );
+        return yield* images.KeyNotFound.make({
+          code: 5404,
+          message: `signing key ${name} not observable after create`,
+        });
       }
 
       return toAttributes(observed, acct);

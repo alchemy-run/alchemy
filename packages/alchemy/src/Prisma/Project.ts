@@ -9,6 +9,7 @@ import {
   createProject,
   createProjectDatabase,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -173,12 +174,10 @@ const listProjects = () =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -199,7 +198,9 @@ const findProjectByName = (name: string) =>
     }),
   );
 
-class GeneratedProjectNotVisible extends Error {}
+class GeneratedProjectNotVisible extends Data.TaggedError("GeneratedProjectNotVisible")<{
+  readonly message: string;
+}> {}
 
 const generatedProjectRecoverySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -212,9 +213,9 @@ const recoverGeneratedProjectAfterConflict = (name: string) =>
       project
         ? Effect.succeed(project)
         : Effect.fail(
-            new GeneratedProjectNotVisible(
-              `Generated Prisma project '${name}' already exists but is not visible yet.`,
-            ),
+            new GeneratedProjectNotVisible({
+              message: `Generated Prisma project '${name}' already exists but is not visible yet.`,
+            }),
           ),
     ),
     Effect.retry({
@@ -235,12 +236,10 @@ const listProjectDatabases = (projectId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -261,7 +260,9 @@ const defaultDatabase = (projectId: string) =>
     }),
   );
 
-class DefaultDatabaseConsistencyError extends Error {}
+class DefaultDatabaseConsistencyError extends Data.TaggedError("DefaultDatabaseConsistencyError")<{
+  readonly message: string;
+}> {}
 
 const defaultDatabaseConsistencySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -276,11 +277,11 @@ const requireDefaultDatabaseInRegion = (
   database?.region?.id === desiredRegion
     ? Effect.succeed(database)
     : Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          database
+        new DefaultDatabaseConsistencyError({
+          message: database
             ? `Prisma project '${projectName}' still has default database '${database.id}' in region '${database.region?.id ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after any in-progress default database promotion completes.`
             : `Prisma project '${projectName}' does not expose the requested default database in region '${desiredRegion}'. Retry after any in-progress default database creation completes.`,
-        ),
+        }),
       );
 
 type ProjectDatabaseAttrs = ObservedDatabase;
@@ -295,9 +296,9 @@ const observeDesiredDefaultDatabase = (
     const project = (yield* getProject({ id: projectId }).pipe(
       Effect.catchTag("NotFound", () =>
         Effect.fail(
-          new DefaultDatabaseConsistencyError(
-            `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
-          ),
+          new DefaultDatabaseConsistencyError({
+            message: `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
+          }),
         ),
       ),
     )).data;
@@ -305,9 +306,9 @@ const observeDesiredDefaultDatabase = (
       yield* defaultDatabase(projectId).pipe(
         Effect.catchTag("NotFound", () =>
           Effect.fail(
-            new DefaultDatabaseConsistencyError(
-              `Prisma project '${projectName}' default database list is not visible yet.`,
-            ),
+            new DefaultDatabaseConsistencyError({
+              message: `Prisma project '${projectName}' default database list is not visible yet.`,
+            }),
           ),
         ),
       ),
@@ -315,18 +316,14 @@ const observeDesiredDefaultDatabase = (
       desiredRegion,
     );
     if (database.id !== expectedDatabaseId) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
-        ),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
+      });
     }
     if (project.defaultRegion !== desiredRegion) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
-        ),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
+      });
     }
     return { project, database };
   }).pipe(
@@ -629,11 +626,9 @@ const ProviderLive = () =>
           if (defaultDatabaseChanged) {
             const changedDatabaseId = database?.id;
             if (changedDatabaseId === undefined) {
-              return yield* Effect.fail(
-                new DefaultDatabaseConsistencyError(
-                  `Prisma project '${name}' did not return an identifier for its new default database.`,
-                ),
-              );
+              return yield* new DefaultDatabaseConsistencyError({
+                message: `Prisma project '${name}' did not return an identifier for its new default database.`,
+              });
             }
             const observed = yield* observeDesiredDefaultDatabase(
               name,

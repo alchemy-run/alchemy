@@ -232,13 +232,11 @@ export const AnalyzerProvider = () =>
             analyzer = yield* observe(name);
           }
           if (analyzer === undefined) {
-            return yield* Effect.fail(
-              new aa.ResourceNotFoundException({
-                message: `analyzer ${name} not visible after create`,
-                resourceId: name,
-                resourceType: "AWS::AccessAnalyzer::Analyzer",
-              }),
-            );
+            return yield* aa.ResourceNotFoundException.make({
+              message: `analyzer ${name} not visible after create`,
+              resourceId: name,
+              resourceType: "AWS::AccessAnalyzer::Analyzer",
+            });
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags

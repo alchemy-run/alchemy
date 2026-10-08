@@ -217,7 +217,7 @@ export const ServerProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* transfer
           .listTagsForResource({ Arn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.Tags);
       });
 

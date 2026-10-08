@@ -286,7 +286,7 @@ export const ProviderLive = () =>
                 Effect.gen(function* () {
                   const match = yield* findByName(name);
                   if (!match) {
-                    return yield* Effect.fail(originalError);
+                    return yield* originalError;
                   }
                   return yield* hyperdrive.updateConfig({
                     accountId,

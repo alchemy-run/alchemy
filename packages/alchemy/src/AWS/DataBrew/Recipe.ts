@@ -293,18 +293,16 @@ export const RecipeProvider = () =>
           const name = output.recipeName;
           // A recipe is deleted by deleting all of its versions: published
           // versions first (batched), then LATEST_WORKING.
-          const versions = yield* databrew.listRecipeVersions
-            .pages({ Name: name })
-            .pipe(Stream.runCollect)
-            .pipe(
-              Effect.map((pages) =>
-                Array.from(pages)
-                  .flatMap((page) => page.Recipes ?? [])
-                  .map((r) => r.RecipeVersion)
-                  .filter((v): v is string => v !== undefined),
-              ),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
-            );
+          const versions = yield* databrew.listRecipeVersions.pages({ Name: name }).pipe(
+            Stream.runCollect,
+            Effect.map((pages) =>
+              Array.from(pages)
+                .flatMap((page) => page.Recipes ?? [])
+                .map((r) => r.RecipeVersion)
+                .filter((v): v is string => v !== undefined),
+            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
+          );
           if (versions.length > 0) {
             yield* retryWhileConflict(
               databrew.batchDeleteRecipeVersion({
