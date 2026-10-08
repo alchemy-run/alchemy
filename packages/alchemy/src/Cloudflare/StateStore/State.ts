@@ -705,7 +705,12 @@ const hoistBootstrapStack = Effect.fn(function* ({
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
-export const loginWithCloudflare = Effect.fn("state_store.login")(
+export const loginWithCloudflare = Effect.fn("state_store.login", {
+  attributes: {
+    "alchemy.state_store.op": "login",
+    "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
+  },
+})(
   function* (profileName: string, force: boolean) {
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
@@ -881,7 +886,9 @@ const waitForStateStoreVersion = (url: string) =>
     }),
   );
 
-const checkStateStoreVersion = Effect.fn("state_store.check_version")(function* (url: string) {
+const checkStateStoreVersion = Effect.fn("state_store.check_version", {
+  attributes: { "alchemy.state_store.op": "check_version" },
+})(function* (url: string) {
   const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
   const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
   // The /version route may 404 transiently after a fresh deploy
