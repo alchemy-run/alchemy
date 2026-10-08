@@ -310,6 +310,29 @@ export interface Ruleset extends Resource<
  * })
  * ```
  *
+ * ### Adopting an Existing Ruleset
+ * Ruleset names are unique per repository. A ruleset that already exists
+ * with the same name is foreign until you opt in with `adopt(true)` or
+ * `--adopt`; adoption then converges it to the declared props in place.
+ *
+ * **Example:** Take over a ruleset created in the GitHub UI
+ * ```typescript
+ * import { adopt } from "alchemy/AdoptPolicy";
+ *
+ * yield* GitHub.Ruleset("main-protection", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "main protection",
+ *   conditions: {
+ *     include: ["~DEFAULT_BRANCH"],
+ *   },
+ *   rules: {
+ *     deletion: true,
+ *     nonFastForward: true,
+ *   },
+ * }).pipe(adopt(true))
+ * ```
+ *
  * @resource
  * @product Repository
  */
@@ -480,9 +503,7 @@ export const RulesetProvider = () =>
           () => Effect.succeed([]),
         ),
       );
-      const match = rulesets.find(
-        (ruleset) => ruleset.name === olds.name && ruleset.target === (olds.target ?? "branch"),
-      );
+      const match = rulesets.find((ruleset) => ruleset.name === olds.name);
       if (match === undefined) return undefined;
       const observed = yield* getRuleset(olds, match.id);
       return observed === undefined ? undefined : Unowned(attrsOf(observed));
