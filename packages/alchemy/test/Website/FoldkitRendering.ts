@@ -8,8 +8,8 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
 
-export type FoldkitMode = "spa" | "ssr" | "hybrid" | "static";
-export const foldkitModes = ["spa", "ssr", "hybrid"] as const;
+export type FoldkitMode = "spa" | "ssg" | "ssr" | "hybrid" | "static";
+export const foldkitModes = ["spa", "ssg", "ssr", "hybrid"] as const;
 export const foldkitChecks = ["http", "browser"] as const;
 export const browserEnabled = process.env.FOLDKIT_WEBSITE_BROWSER === "1";
 export const foldkitMemo = {
@@ -36,7 +36,12 @@ export const foldkitFixture = (mode: FoldkitMode) =>
       {
         prefix: `foldkit-${mode}-`,
         tempRoot: path.resolve(import.meta.dirname, "../../.tmp"),
-        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+        entries: [
+          "package.json",
+          "vite.config.ts",
+          "src",
+          ...(mode === "spa" ? ["index.html"] : []),
+        ],
       },
     );
     yield* fs.makeDirectory(path.join(root, "public"));
@@ -55,6 +60,21 @@ export const foldkitFixture = (mode: FoldkitMode) =>
         path.join(root, "src/prerender.ts"),
         'export const prerenderPaths = ["/", "/about"];\n',
       );
+      if (mode === "ssg") {
+        const entry = path.join(root, "src/entry.server.ts");
+        yield* fs.writeFileString(
+          entry,
+          (yield* fs.readFileString(entry)).replace(
+            "Effect.gen(function* () {",
+            `Effect.gen(function* () {
+      const pathname = new URL(request.url).pathname.replace(/\\/+$/, "") || "/";
+      if (pathname !== "/" && pathname !== "/about")
+        return Server.Responded(new Response("Not Found", { status: 404 }));
+      if (request.method !== "GET" && request.method !== "HEAD")
+        return Server.Responded(new Response(null, { status: 405, headers: { allow: "GET, HEAD" } }));`,
+          ),
+        );
+      }
       if (mode === "ssr") {
         const config = path.join(root, "vite.config.ts");
         yield* fs.writeFileString(
@@ -87,7 +107,7 @@ const request = (url: string, init?: RequestInit) =>
 const routes = (mode: FoldkitMode) => [
   { path: "/?count=7", count: mode === "ssr" ? 7 : 0 },
   { path: "/about/?count=9", count: mode === "ssr" ? 9 : 0 },
-  ...(mode === "static"
+  ...(mode === "static" || mode === "ssg"
     ? []
     : [{ path: "/counter/42?count=3", count: mode === "spa" ? 0 : 3 }]),
 ];
@@ -130,6 +150,17 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
       );
       expect(javascript.status).toBe(200);
       expect(javascript.type).toMatch(/javascript/);
+      if (mode !== "spa") {
+        const stylesheet = response.body.match(
+          /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/,
+        );
+        expect(stylesheet).not.toBeNull();
+        const css = yield* request(
+          new URL(stylesheet![1]!, base + route.path).href,
+        );
+        expect(css.status).toBe(200);
+        expect(css.type).toMatch(/text\/css/);
+      }
       const head = yield* request(base + route.path, { method: "HEAD" });
       expect(head.status).toBe(200);
       expect(head.body).toBe("");
@@ -143,7 +174,13 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
       expect(posted.body).toMatch(/id="count"[^>]*>11</);
       expect((yield* request(`${base}/assets/missing.js`)).status).toBe(404);
     }
-    if (mode === "static")
+    if (mode === "ssg") {
+      expect(
+        (yield* request(`${base}/about/`, { method: "POST" })).status,
+      ).toBe(405);
+      expect((yield* request(`${base}/assets/missing.js`)).status).toBe(404);
+    }
+    if (mode === "static" || mode === "ssg")
       expect((yield* request(`${base}/not-prerendered`)).status).toBe(404);
   });
 

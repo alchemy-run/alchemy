@@ -26,7 +26,12 @@ const fixture = (name: string) =>
     return yield* cloneFixture(path.join(import.meta.dirname, name), {
       prefix: "foldkit-contract-",
       tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
-      entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      entries: [
+        "package.json",
+        "vite.config.ts",
+        "src",
+        ...(name === "foldkit-ssr-fixture" ? [] : ["index.html"]),
+      ],
     });
   });
 const build = (rootDir: string, main?: string) =>
@@ -108,6 +113,22 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         expect(response.html).toContain(">7<");
         expect(response.html).not.toContain('rel="canonical"');
         expect(response.missingStatus).toBe(404);
+        const prerendered = yield* fs.readFileString(
+          path.join(output.clientDirectory!, "about/index.html"),
+        );
+        for (const pattern of [
+          /<script[^>]+src="([^"]+)"/,
+          /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/,
+        ]) {
+          const asset = response.html.match(pattern)?.[1];
+          expect(asset).toBeDefined();
+          expect(prerendered).toContain(asset!);
+          expect(
+            yield* fs.exists(
+              path.join(output.clientDirectory!, asset!.replace(/^\/+/, "")),
+            ),
+          ).toBe(true);
+        }
 
         expect(
           foldkitAssetsFromManifest(output.foldkit?.manifest),

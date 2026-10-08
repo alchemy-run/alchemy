@@ -29,9 +29,8 @@ writes down which, and the asset routing follows from that — no
 
 ## Configure Vite
 
-Your Vite config stays exactly what `create-foldkit-app` gives you —
-the `foldkit()` plugin, and the `optimizeDeps.entries` hint pointing
-Vite's dependency scan at your app's entry module:
+Keep the `foldkit()` plugin from `create-foldkit-app`. Foldkit configures
+dependency optimization and deduplication for every Vite environment:
 
 ```typescript
 // vite.config.ts
@@ -40,9 +39,6 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [foldkit()],
-  optimizeDeps: {
-    entries: ["src/entry.ts"],
-  },
 });
 ```
 
@@ -60,8 +56,8 @@ manager — Alchemy imposes no Effect version on your frontend.
 
 ### Server-rendered and prerendered
 
-Use `@foldkit/vite-plugin` 0.25.0 or newer with a compatible Foldkit
-version (0.164.0 or newer). Declare the server entry in Vite:
+Use `@foldkit/vite-plugin` 0.27.0 or newer with a compatible Foldkit
+version (0.167.0 or newer, with Effect 4.0.0). Declare the server entry in Vite:
 
 ```diff lang="typescript"
 // vite.config.ts
@@ -71,13 +67,11 @@ export default defineConfig({
 +    foldkit({
 +      ssr: {
 +        serverEntry: "/src/entry.server.ts",
++        clientEntry: "/src/entry.ts",
 +        build: true,
 +      },
 +    }),
 +  ],
-  optimizeDeps: {
-    entries: ["src/entry.ts"],
-  },
 });
 ```
 
@@ -85,12 +79,18 @@ export default defineConfig({
 handler next to the browser bundle. Alchemy deploys it as the
 Worker; nothing in `alchemy.run.ts` names an entry.
 
+Import CSS from the client entry and export `renderDocument = Server.renderDocument`
+alongside `renderPage` in the server entry. Remove the source `index.html`: Foldkit
+generates the complete document, including stylesheets and module preload links,
+for both request-time rendering and prerendering.
+
 To prerender instead, ask the build to generate the paths the entry
 exports as `prerenderPaths`:
 
 ```diff lang="typescript"
 ssr: {
   serverEntry: "/src/entry.server.ts",
+  clientEntry: "/src/entry.ts",
 -  build: true,
 +  build: { prerender: true },
 },
@@ -180,7 +180,7 @@ Alchemy does not read that file:
   serves `/about` from `about/index.html`.
 - Every other request reaches the `fetch` handler, which answers a
   miss for a hashed asset with a 404 and renders a page.
-- The build keeps the unfilled template out of the client output, so
+- The build starts from a client script and emits only rendered HTML, so
   `/` is a file only when the build prerendered it; otherwise the
   front page reaches the handler like any other route.
 

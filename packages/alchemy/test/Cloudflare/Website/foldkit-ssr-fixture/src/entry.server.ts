@@ -8,6 +8,8 @@ export { prerenderPaths } from "./prerender.ts";
 // The count comes off the query string so a render has something
 // request-shaped in it: a page served from a prerendered file shows the
 // count it was built with, a page rendered on request shows the query's.
+export const renderDocument = Server.renderDocument;
+
 const flagsForRequest = (request: Request): Flags => {
   const raw = new URL(request.url).searchParams.get("count");
   const parsed = raw === null ? Number.NaN : Number(raw);

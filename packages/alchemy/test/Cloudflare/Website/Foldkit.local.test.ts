@@ -29,7 +29,7 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const ssrFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-ssr-fixture");
 
-const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
+const fixtureEntries = ["package.json", "vite.config.ts", "src"];
 
 // Restrict the input memo to fixture sources so the test isn't re-hashing
 // the whole monorepo on every deploy.

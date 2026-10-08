@@ -1,4 +1,5 @@
 import { Runtime } from "foldkit";
+import "./styles.css";
 
 import { Message, Model, init, update, view } from "./main";
 

@@ -35,7 +35,7 @@ const probe = (script: string) =>
 
 layer(NodeServices.layer)("Foldkit provider build contracts", (it) => {
   for (const platform of ["aws", "node", "neon"] as const) {
-    for (const mode of ["ssr", "hybrid"] as const) {
+    for (const mode of ["ssg", "ssr", "hybrid"] as const) {
       it.effect(
         `${platform}: builds and hosts Foldkit's generated ${mode} output`,
         () =>
@@ -60,13 +60,13 @@ layer(NodeServices.layer)("Foldkit provider build contracts", (it) => {
               yield* fs.exists(
                 path.join(root, "custom-output/client/about/index.html"),
               ),
-            ).toBe(mode === "hybrid");
+            ).toBe(mode !== "ssr");
             expect(
               yield* fs.exists(
                 path.join(root, "custom-output/server/fetch.js"),
               ),
             ).toBe(true);
-            if (mode === "hybrid")
+            if (mode !== "ssr")
               expect(
                 yield* fs.readFileString(
                   path.join(output.clientDirectory!, "about/index.html"),
@@ -76,30 +76,36 @@ layer(NodeServices.layer)("Foldkit provider build contracts", (it) => {
               output.distDirectory!,
               output.serverModules![0]!.name,
             );
+            const routes = [
+              ["/?count=7", mode === "ssr" ? ">7<" : ">0<"],
+              ["/about?count=7", mode === "ssr" ? ">7<" : ">0<"],
+              ...(mode === "ssg" ? [] : [["/dynamic?count=7", ">7<"]]),
+            ];
             if (platform === "node") {
               // Inspect the bundled handler independently of the Node routing tests.
               expect(output.nodeServe?.serveRootIndex).toBe(true);
               expect(output.nodeServe?.notFoundHandling).toBe("none");
               const source = `import { default: handler } from ${JSON.stringify(pathToFileURL(path.join(output.distDirectory!, "server/fetch.js")).href)};
-const response = await handler.fetch(new Request("https://example.test/dynamic?count=7"));
+const response = await handler.fetch(new Request("https://example.test/${mode === "ssg" ? "about" : "dynamic"}?count=7"));
 if (response.status !== 200 || !(await response.text()).includes(">7<")) throw new Error("SSR failed");
 console.log("FOLDKIT_HANDLER_OK");`;
               expect(yield* probe(source)).toContain("FOLDKIT_HANDLER_OK");
             } else if (platform === "neon") {
               expect(
                 yield* probe(`import { default: handler } from ${JSON.stringify(pathToFileURL(entry).href)};
-for (const [pathname, expected] of [["/?count=7", ${JSON.stringify(mode === "ssr" ? ">7<" : ">0<")}], ["/about?count=7", ${JSON.stringify(mode === "ssr" ? ">7<" : ">0<")}], ["/dynamic?count=7", ">7<"]]) {
+for (const [pathname, expected] of ${JSON.stringify(routes)}) {
   const response = await handler.fetch(new Request("https://example.test" + pathname));
   if (response.status !== 200 || !(await response.text()).includes(expected)) throw new Error("Wrong rendering for " + pathname);
 }
 const missing = await handler.fetch(new Request("https://example.test/assets/missing.js"));
 if (missing.status !== 404) throw new Error("Missing assets must 404");
+${mode === "ssg" ? 'if ((await handler.fetch(new Request("https://example.test/dynamic"))).status !== 404) throw new Error("SSG misses must 404");' : ""}
 console.log("FOLDKIT_NEON_OK");`),
               ).toContain("FOLDKIT_NEON_OK");
             } else {
               expect(
                 yield* probe(`import { handler } from ${JSON.stringify(pathToFileURL(entry).href)};
-const response = await handler({ version: "2.0", rawPath: "/dynamic", rawQueryString: "count=7", headers: { host: "example.test" }, requestContext: { http: { method: "GET" } } });
+const response = await handler({ version: "2.0", rawPath: ${JSON.stringify(mode === "ssg" ? "/about" : "/dynamic")}, rawQueryString: "count=7", headers: { host: "example.test" }, requestContext: { http: { method: "GET" } } });
 if (response.statusCode !== 200 || !response.body.includes(">7<")) throw new Error("Lambda SSR failed");
 console.log("FOLDKIT_LAMBDA_OK");`),
               ).toContain("FOLDKIT_LAMBDA_OK");

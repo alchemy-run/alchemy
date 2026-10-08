@@ -130,7 +130,7 @@ export const Website = Prisma.Website.Foldkit("Website", {
 
 ## Server rendering and prerendering
 
-Use Foldkit 0.164.0 and `@foldkit/vite-plugin` 0.25.0 or newer. Keep rendering
+Use Foldkit 0.167.0, `@foldkit/vite-plugin` 0.27.0 and Effect 4.0.0. Keep rendering
 configuration in your app's `vite.config.ts`:
 
 ```typescript
@@ -141,14 +141,17 @@ export default defineConfig({
   plugins: [foldkit({
     ssr: {
       serverEntry: "/src/entry.server.ts",
+      clientEntry: "/src/entry.ts",
       build: { prerender: true },
     },
   })],
 });
 ```
 
-The server entry exports `renderPage` and, when prerendering is enabled,
-`prerenderPaths`. Use `build: true` for SSR without prerendering. See
+Import CSS from the client entry and export `renderDocument = Server.renderDocument`
+alongside `renderPage` in the server entry. SSR/SSG builds generate their complete
+HTML documents from code; remove the source `index.html`. Export `prerenderPaths`
+when prerendering is enabled. Use `build: true` for SSR without prerendering. See
 [Foldkit's server rendering guide](https://foldkit.dev/core/server-rendering)
 for the application contract.
 

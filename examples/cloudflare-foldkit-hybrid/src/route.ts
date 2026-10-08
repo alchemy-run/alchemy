@@ -19,6 +19,11 @@ export const counterRouter = pipe(
   Route.mapTo(AppRoute.Counter),
 );
 
+export const prerenderPaths: ReadonlyArray<string> = [
+  homeRouter(),
+  aboutRouter(),
+];
+
 const routeParser = Route.oneOf(counterRouter, aboutRouter, homeRouter);
 
 export const urlToAppRoute = Route.parseUrlWithFallback(

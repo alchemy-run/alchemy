@@ -28,8 +28,8 @@ or build identity declaration is required.
 
 ## Scaffold source
 
-Application files come from [Foldkit’s generator and examples](https://github.com/foldkit/foldkit/tree/24f1c43eaaf74a83b6e338d72ba98422b7ac8ec4/packages/create-foldkit-app/templates/rendering/ssr)
-(`create-foldkit-app` 0.36.0, Foldkit 0.164.0). They were produced using the
+Application files follow [Foldkit’s generator and examples](https://github.com/foldkit/foldkit/tree/foldkit%400.167.0/packages/create-foldkit-app/templates/rendering/ssr)
+(Foldkit 0.167.0 / `create-foldkit-app` 0.39.0). The original files were produced using the
 generator’s `createProject` function. Alchemy adds the deployment file, workspace
 package configuration and integration tests. The SSR cookie helper uses the HTTP
 module path from this workspace’s Effect version.
@@ -40,3 +40,6 @@ module path from this workspace’s Effect version.
 - [SSG](../cloudflare-foldkit-ssg): prerendered home and about pages.
 - [SSR](../cloudflare-foldkit-ssr): cookie-backed request rendering.
 - [Hybrid](../cloudflare-foldkit-hybrid): prerendered pages and a dynamic counter.
+
+SSR/SSG documents follow the 0.167 scaffold: CSS is imported by the client entry,
+and the server exports `renderDocument`. There is no source `index.html`.

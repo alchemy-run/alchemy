@@ -255,7 +255,7 @@ describe.concurrent(
           const rootDir = yield* cloneFixture(ssrFixtureDir, {
             prefix: "alchemy-foldkit-ssr-",
             tempRoot,
-            entries: fixtureEntries,
+            entries: fixtureEntries.filter((entry) => entry !== "index.html"),
           });
 
           const site = yield* stack.deploy(
@@ -318,7 +318,7 @@ describe.concurrent(
           const rootDir = yield* cloneFixture(ssrFixtureDir, {
             prefix: "alchemy-foldkit-prerendered-",
             tempRoot,
-            entries: fixtureEntries,
+            entries: fixtureEntries.filter((entry) => entry !== "index.html"),
           });
           yield* fs.writeFileString(
             path.join(rootDir, "src", "prerender.ts"),

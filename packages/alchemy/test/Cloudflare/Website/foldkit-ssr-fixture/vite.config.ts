@@ -6,6 +6,7 @@ export default defineConfig({
     foldkit({
       ssr: {
         serverEntry: "/src/entry.server.ts",
+        clientEntry: "/src/entry.ts",
         // One `vite build` emits the browser bundle, `dist/server/fetch.js`
         // and `foldkit.build.json`, and prerenders whatever
         // `src/prerender.ts` lists.
@@ -13,7 +14,4 @@ export default defineConfig({
       },
     }),
   ],
-  optimizeDeps: {
-    entries: ["src/entry.ts"],
-  },
 });

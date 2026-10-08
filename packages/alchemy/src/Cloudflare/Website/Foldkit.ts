@@ -75,8 +75,10 @@ export interface FoldkitProps<
  * ### Server Rendering and Prerendering
  * Enable `ssr.build` to generate the Worker handler. Foldkit manages the
  * shared hydration identity for the client and server automatically.
- * Requires `@foldkit/vite-plugin` 0.25.0 or newer and a compatible Foldkit
- * version (0.164.0 or newer).
+ * Requires `@foldkit/vite-plugin` 0.27.0 or newer and a compatible Foldkit
+ * version (0.167.0 or newer). Import CSS from the client entry and export
+ * `renderDocument = Server.renderDocument` alongside `renderPage` in the
+ * server entry. SSR/SSG documents are generated from code; no source index.html is needed.
  *
  * **Example:** vite.config.ts for a server-rendered app
  * ```typescript
@@ -86,7 +88,11 @@ export interface FoldkitProps<
  * export default defineConfig({
  *   plugins: [
  *     foldkit({
- *       ssr: { serverEntry: "/src/entry.server.ts", build: true },
+ *       ssr: {
+ *         serverEntry: "/src/entry.server.ts",
+ *         clientEntry: "/src/entry.ts",
+ *         build: true,
+ *       },
  *     }),
  *   ],
  * });

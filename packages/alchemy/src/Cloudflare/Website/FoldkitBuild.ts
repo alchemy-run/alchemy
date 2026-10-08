@@ -51,23 +51,10 @@ export const foldkitBuildMetadataReader = (
 };
 
 /**
- * The asset routing a Foldkit build's manifest implies.
- *
- * A build with Foldkit metadata is server-rendered, and its client output
- * needs no routing of its own: a path the build prerendered is a file the
- * default `htmlHandling` serves, and the browser bundle's template is not
- * among the files, so `/` and every other unrendered path miss the asset
- * layer and reach the `fetch` handler, which carries the template and
- * renders into it. An asset-shaped miss is the handler's to classify, and
- * it answers with a 404 rather than a page.
- *
- * A build without the Foldkit build plugin is client-only: nothing renders outside
- * the browser, every route is the app's own to resolve, and a deep link
- * is a request for a file that does not exist. It gets the
- * single-page-application fallback, so the template is served and the
- * app's router takes over — the same default the other clouds' Foldkit
- * resources apply. A declaration still wins over it, so an app that ships
- * a real 404 page declares `"404-page"`.
+ * Client-only builds need SPA fallback. Server builds contain only generated
+ * pages in the client directory, so normal asset lookup serves prerendered
+ * routes and misses reach Foldkit's generated document handler.
+ * Explicit resource asset settings override this default.
  */
 export const foldkitAssetsFromManifest = (
   manifest: FoldkitBuildManifest | undefined,

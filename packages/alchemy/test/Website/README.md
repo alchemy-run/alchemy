@@ -1,7 +1,7 @@
 # Foldkit rendering coverage
 
 `FoldkitBuild.test.ts` exercises real Foldkit builds for the AWS, Node and Neon
-targets in SSR and hybrid modes, plus SPA and static-only AWS output.
+targets in SSG, SSR and hybrid modes, plus SPA and static-only AWS output.
 `packages/frontend-frameworks/src/foldkit/test/targets.test.ts` covers target
 packaging and HTTP contracts independently of cloud deployments.
 
@@ -10,6 +10,7 @@ Each provider's `Website/FoldkitRendering.test.ts` checks these modes:
 | Mode | Expected behavior |
 | --- | --- |
 | SPA / CSR | HTML shell on root and deep links; browser renders the counter |
+| SSG | All declared pages are prerendered and hydrated; unknown pages return 404 |
 | SSR | Request query determines the rendered counter on every page |
 | Hybrid / prerendering | `/` and `/about` retain their build-time counter; other pages render per request |
 | Static-only SSG (AWS) | Prerendered pages and browser interaction without a server; unknown pages return 404 |
@@ -49,6 +50,7 @@ create or delete them. The existing AWS Foldkit lifecycle suite remains separate
 Set one or more public origins:
 
 - `FOLDKIT_AWS_SPA_URL`
+- `FOLDKIT_AWS_SSG_URL`
 - `FOLDKIT_AWS_SSR_URL`
 - `FOLDKIT_AWS_HYBRID_URL`
 - `FOLDKIT_AWS_STATIC_URL`
@@ -56,11 +58,12 @@ Set one or more public origins:
 Use fixtures matching `foldkitFixture(mode)` in `FoldkitRendering.ts`: the existing
 Cloudflare Foldkit SPA/SSR fixtures, with `public/foldkit-probe.txt` containing
 `FOLDKIT_STATIC_ASSET` (no trailing newline). For SSR disable prerendering; for
-hybrid/static prerender `/` and `/about`. Static fixtures also supply
-`public/404.html`.
+SSG/hybrid/static prerender `/` and `/about`. Static fixtures also supply
+`public/404.html`. SSG fixtures reject paths outside `/` and `/about` and return
+405 for non-GET/HEAD page requests.
 
 Deploy through `AWS.Website.Foldkit`: leave `output` unset for SPA, use
-`output: "server"` for SSR/hybrid, and `output: "static", errorPage: "404.html"`
+`output: "server"` for SSG/SSR/hybrid, and `output: "static", errorPage: "404.html"`
 for static-only SSG. Missing origins produce explicit skipped cases. Contributors
 own cleanup of these separately prepared deployments.
 
