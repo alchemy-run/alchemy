@@ -151,15 +151,16 @@ export const PipelineProvider = () =>
       // created in the same deploy are not visible yet, so a missing table
       // is not a validation failure.
       yield* pipelines.validateSqlPipeline({ accountId, sql: news.sql }).pipe(
-        Effect.catchTag("TableNotFound", () => Effect.void),
-        Effect.catchTag("InvalidSql", (error) =>
-          Effect.fail(
-            new PipelineSqlInvalid({
-              message: `Cloudflare.Pipelines.Pipeline '${id}': invalid SQL — ${error.message}`,
-              sql: news.sql,
-            }),
-          ),
-        ),
+        Effect.catchTags({
+          TableNotFound: () => Effect.void,
+          InvalidSql: (error) =>
+            Effect.fail(
+              new PipelineSqlInvalid({
+                message: `Cloudflare.Pipelines.Pipeline '${id}': invalid SQL — ${error.message}`,
+                sql: news.sql,
+              }),
+            ),
+        }),
       );
       return { action: "replace" } as const;
     }),

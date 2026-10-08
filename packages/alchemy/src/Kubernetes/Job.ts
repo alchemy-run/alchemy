@@ -43,14 +43,8 @@ import {
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
-export const isJob = (value: any): value is Job => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "Kubernetes.Job"
-  );
-};
+export const isJob = (value: any): value is Job =>
+  typeof value === "object" && value !== null && "Type" in value && value.Type === "Kubernetes.Job";
 
 export interface JobPropsBase extends PlatformProps {
   /**
@@ -389,6 +383,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],
@@ -478,7 +473,7 @@ export const JobProvider = () =>
           const transport = yield* connectCluster(connection).pipe(
             Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             // Transient unreachability must not read as "gone".
-            Effect.catch(() => Effect.succeed("unreachable" as const)),
+            Effect.orElseSucceed(() => "unreachable" as const),
           );
           if (transport === undefined) return undefined;
           if (transport === "unreachable") return output;
@@ -491,7 +486,7 @@ export const JobProvider = () =>
             object: anchor,
           }).pipe(
             Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-            Effect.catch(() => Effect.succeed(output)),
+            Effect.orElseSucceed(() => output),
           );
           if (observed === undefined) return undefined;
           return output;
@@ -678,12 +673,12 @@ export const JobProvider = () =>
           // adapter-owned cloud resources that outlive it.
           const transport = yield* adapter
             .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(Effect.orElseSucceed(() => undefined));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport,
               objects: output.kubernetesObjects ?? [],
-            }).pipe(Effect.catch(() => Effect.void));
+            }).pipe(Effect.ignore);
           }
 
           if (adapter.identity) {

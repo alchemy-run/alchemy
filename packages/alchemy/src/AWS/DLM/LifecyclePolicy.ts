@@ -823,11 +823,9 @@ export const LifecyclePolicyProvider = () =>
           ) {
             // The policy vanished between create/update and the final read —
             // surface as a typed not-found so the engine can retry the plan.
-            return yield* Effect.fail(
-              new dlm.ResourceNotFoundException({
-                message: `DLM lifecycle policy ${policyId} disappeared during reconcile`,
-              }),
-            );
+            return yield* dlm.ResourceNotFoundException.make({
+              message: `DLM lifecycle policy ${policyId} disappeared during reconcile`,
+            });
           }
 
           // 3b. SYNC TAGS — against OBSERVED cloud tags so adoption

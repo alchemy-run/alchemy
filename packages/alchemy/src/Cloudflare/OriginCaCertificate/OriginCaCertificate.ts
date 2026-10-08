@@ -285,13 +285,14 @@ export const OriginCaCertificateProvider = () =>
           schedule: Schedule.exponential("500 millis"),
           times: 6,
         }),
-        Effect.catchTag("CertificateNotFound", () => Effect.void),
-        Effect.catchTag("CertificateAlreadyRevoked", () => Effect.void),
-        Effect.catchTag("CertificateRevocationFailed", (e) =>
-          getCertificate(output.certificateId).pipe(
-            Effect.flatMap((cert) => (cert ? Effect.fail(e) : Effect.void)),
-          ),
-        ),
+        Effect.catchTags({
+          CertificateNotFound: () => Effect.void,
+          CertificateAlreadyRevoked: () => Effect.void,
+          CertificateRevocationFailed: (e) =>
+            getCertificate(output.certificateId).pipe(
+              Effect.flatMap((cert) => (cert ? Effect.fail(e) : Effect.void)),
+            ),
+        }),
       );
     }),
   });

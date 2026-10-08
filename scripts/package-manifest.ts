@@ -1,4 +1,5 @@
 // `package.json` reading shared by the release scripts.
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -33,6 +34,9 @@ export const publishablePackages = Effect.fn(function* (root: string, directory:
   const entries = (yield* fs.readDirectory(path.join(root, directory))).sort();
   const packages = yield* Effect.forEach(entries, (entry) =>
     Effect.gen(function* () {
+      // Skip stray files such as `.DS_Store`.
+      if ((yield* fs.stat(path.join(root, directory, entry))).type !== "Directory")
+        return undefined;
       const manifestPath = path.join(root, directory, entry, "package.json");
       if (!(yield* fs.exists(manifestPath))) return undefined;
       const text = yield* fs.readFileString(manifestPath);
@@ -46,4 +50,29 @@ export const publishablePackages = Effect.fn(function* (root: string, directory:
   return packages.filter(
     (pkg): pkg is WorkspacePackage => pkg !== undefined && pkg.manifest.private !== true,
   );
+});
+
+export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
+  readonly message: string;
+  readonly specs: ReadonlyArray<string>;
+}> {}
+
+/** The one version every package carries; they are released in lockstep. */
+export const sharedVersion = Effect.fn(function* (packages: ReadonlyArray<WorkspacePackage>) {
+  const versions = new Set(packages.map(({ manifest }) => manifest.version));
+  if (versions.size !== 1) {
+    const specs = packages.map(({ manifest }) => `${manifest.name}@${manifest.version}`);
+    // Name the packages on each version, except where that is most of them.
+    const groups = [...versions].map((version) => {
+      const names = packages
+        .filter(({ manifest }) => manifest.version === version)
+        .map(({ manifest }) => manifest.name);
+      return `${version}: ${names.length > 5 ? `${names.length} packages` : names.join(", ")}`;
+    });
+    return yield* new VersionMismatch({
+      message: `Packages must share one version; found ${groups.join("; ")}`,
+      specs,
+    });
+  }
+  return [...versions][0]!;
 });

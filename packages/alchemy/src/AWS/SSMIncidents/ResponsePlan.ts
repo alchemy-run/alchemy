@@ -167,7 +167,7 @@ export const ResponsePlanProvider = () =>
                 Object.entries(r.tags).filter((e): e is [string, string] => e[1] !== undefined),
               ) as Record<string, string>,
           ),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       return ResponsePlanResource.Provider.of({

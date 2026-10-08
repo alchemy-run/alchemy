@@ -409,7 +409,7 @@ const makePlan = <A>(
     // already-deployed state), so the check is scoped to platform tags.
     for (const resource of resources) {
       if (resource.RequiresImplementation && resource.Props === undefined) {
-        yield* Effect.die(missingImplementation(resource.Type, resource.LogicalId));
+        return yield* Effect.die(missingImplementation(resource.Type, resource.LogicalId));
       }
     }
 

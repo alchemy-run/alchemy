@@ -78,25 +78,17 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 const PLATFORM_NETWORK_NAME = "railway";
 
 const NetworkConfig = Schema.Struct({
-  privateNetworkDisabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
-  services: Schema.optional(
+  privateNetworkDisabled: Schema.Boolean.pipe(Schema.NullOr, Schema.optional),
+  services: Schema.Record(
+    Schema.String,
     Schema.NullOr(
-      Schema.Record(
-        Schema.String,
-        Schema.NullOr(
-          Schema.Struct({
-            networking: Schema.optional(
-              Schema.NullOr(
-                Schema.Struct({
-                  privateNetworkEndpoint: Schema.optional(Schema.NullOr(Schema.String)),
-                }),
-              ),
-            ),
-          }),
-        ),
-      ),
+      Schema.Struct({
+        networking: Schema.Struct({
+          privateNetworkEndpoint: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        }).pipe(Schema.NullOr, Schema.optional),
+      }),
     ),
-  ),
+  ).pipe(Schema.NullOr, Schema.optional),
 });
 
 const readNetworkConfig = Effect.fn(function* (environmentId: string) {

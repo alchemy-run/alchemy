@@ -577,16 +577,20 @@ const destroyVersion = (name: string) =>
       body: {},
     })
     .pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.catchTag("BadRequest", () => Effect.void),
-      Effect.catchTag("Conflict", () => Effect.void),
+      Effect.catchTags({
+        NotFound: () => Effect.void,
+        BadRequest: () => Effect.void,
+        Conflict: () => Effect.void,
+      }),
     );
 
 const deleteVersion = (name: string) =>
   kms.deleteProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-    Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      NotFound: () => Effect.succeed(undefined),
+      BadRequest: () => Effect.succeed(undefined),
+      Conflict: () => Effect.succeed(undefined),
+    }),
     Effect.flatMap(
       (
         operation,

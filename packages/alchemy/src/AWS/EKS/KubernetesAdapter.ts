@@ -199,12 +199,12 @@ const narrowEksAuth = (connection: Connection) =>
  * Provide a per-connection region override so a cluster in another region
  * than the ambient one describes correctly.
  */
-const withRegion = (region: string | undefined) => {
-  return <A, E, R>(self: Effect.Effect<A, E, R>) =>
+const withRegion =
+  (region: string | undefined) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
     region === undefined
       ? self
       : Effect.provideService(self, Region, Effect.succeed(region as RegionName));
-};
 
 const createRoleName = (id: string) => createPhysicalName({ id: `${id}-pod-role`, maxLength: 64 });
 
@@ -439,11 +439,9 @@ export const EksKubernetesAdapter = () =>
         );
         const cluster = described?.cluster;
         if (!cluster || cluster.status === "DELETING") {
-          return yield* Effect.fail(
-            new ClusterNotFoundError({
-              message: `EKS cluster '${auth.clusterName}' no longer exists`,
-            }),
-          );
+          return yield* new ClusterNotFoundError({
+            message: `EKS cluster '${auth.clusterName}' no longer exists`,
+          });
         }
         return cluster;
       });

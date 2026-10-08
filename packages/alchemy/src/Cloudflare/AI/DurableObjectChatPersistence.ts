@@ -16,7 +16,7 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
     const storage = state.storage;
 
     const wrapErr = (op: string, key?: string) => (cause: unknown) =>
-      new PersistenceError({
+      PersistenceError.make({
         message: `Failed to ${op}${key !== undefined ? ` key ${key}` : ""} in DurableObject storage`,
         cause,
       });

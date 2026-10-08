@@ -353,36 +353,34 @@ export const ReportDefinitionProvider = () =>
           if (!observed) {
             // ENSURE — create; tolerate the duplicate-name race by converging
             // through modify instead.
-            yield* retryBucketVerification(
-              pin(
-                cur.putReportDefinition({
-                  ReportDefinition: desired,
-                  Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                    Key,
-                    Value,
-                  })),
-                }),
-              ),
-            ).pipe(
-              Effect.catchTag("DuplicateReportNameException", () =>
-                pin(
-                  cur.modifyReportDefinition({
-                    ReportName: name,
-                    ReportDefinition: desired,
-                  }),
+            yield* cur
+              .putReportDefinition({
+                ReportDefinition: desired,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                pin,
+                retryBucketVerification,
+                Effect.catchTag("DuplicateReportNameException", () =>
+                  pin(
+                    cur.modifyReportDefinition({
+                      ReportName: name,
+                      ReportDefinition: desired,
+                    }),
+                  ),
                 ),
-              ),
-            );
+              );
           } else if (needsModify(observed, desired)) {
             // SYNC — apply the delta only; skip the API entirely on no-op.
-            yield* retryBucketVerification(
-              pin(
-                cur.modifyReportDefinition({
-                  ReportName: name,
-                  ReportDefinition: desired,
-                }),
-              ),
-            );
+            yield* cur
+              .modifyReportDefinition({
+                ReportName: name,
+                ReportDefinition: desired,
+              })
+              .pipe(pin, retryBucketVerification);
           }
 
           // SYNC TAGS — against observed cloud tags.
