@@ -40,7 +40,7 @@ export default defineConfig({
     "effecttsgo/unnecessary-arrow-block": "warn",
     "effecttsgo/extends-native-error": "warn",
     "effecttsgo/unnecessary-fail-yieldable-error": "warn",
-    "effecttsgo/flat-map-conditional-to-filter-or-fail": "warn",
+    "effecttsgo/flat-map-conditional-to-filter-or-fail": "off",
     "effecttsgo/multiple-catch-tag": "warn",
     "effecttsgo/catch-to-or-else-succeed": "warn",
     "effecttsgo/missed-pipeable-opportunity": "warn",
