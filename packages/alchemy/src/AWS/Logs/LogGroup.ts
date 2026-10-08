@@ -410,7 +410,7 @@ export const LogGroupProvider = () =>
             },
           );
           if (remaining) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(
                 `CloudWatch log group ${output.logGroupName} remained observable after delete`,
               ),

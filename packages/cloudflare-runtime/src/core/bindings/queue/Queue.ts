@@ -266,7 +266,7 @@ export const QueueLive = Layer.effect(
               return messages.length > 0;
             });
 
-            yield* iteration.pipe(
+            return yield* iteration.pipe(
               Effect.flatMap((busy) => (busy ? Effect.void : Effect.sleep("1 second"))),
               Effect.catchCause((cause) =>
                 Effect.logWarning(

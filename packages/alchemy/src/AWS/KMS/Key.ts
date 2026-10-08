@@ -419,7 +419,7 @@ export const KeyProvider = () =>
         },
       );
       if (remaining !== undefined && remaining !== "PendingDeletion") {
-        yield* Effect.die(
+        return yield* Effect.die(
           new Error(`KMS key ${output.keyId} remained ${remaining} after scheduling deletion`),
         );
       }

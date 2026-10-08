@@ -281,7 +281,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
-    yield* Effect.never;
+    return yield* Effect.never;
   });
 
   return {

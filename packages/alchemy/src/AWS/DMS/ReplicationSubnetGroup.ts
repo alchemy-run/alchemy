@@ -372,7 +372,7 @@ export const ReplicationSubnetGroupProvider = () =>
             }
             yield* Effect.sleep("1 second");
           }
-          yield* Effect.die(
+          return yield* Effect.die(
             new Error(
               `DMS replication subnet group ${output.replicationSubnetGroupIdentifier} remained observable 30 seconds after delete`,
             ),

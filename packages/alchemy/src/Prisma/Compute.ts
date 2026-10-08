@@ -805,7 +805,7 @@ export const Compute: Platform<
               yield* httpServer.serve(
                 handler.pipe(Effect.provideService(RuntimeContext, runtimeContext)),
               );
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }).pipe(Effect.catch((error: unknown) => Effect.die(error))),
         );

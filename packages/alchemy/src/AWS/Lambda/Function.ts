@@ -2683,7 +2683,7 @@ export const FunctionProvider = () =>
           // recreation stuck (gone); present means the group survives its own
           // deletion (denied/undeletable) and must fail loudly.
           if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(`Lambda log group ${logGroupName} remained observable after delete`),
             );
           }
