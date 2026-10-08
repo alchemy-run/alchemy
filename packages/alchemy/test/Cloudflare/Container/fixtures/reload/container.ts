@@ -22,6 +22,6 @@ export const RELOAD_CONTAINER_PORT = 17362;
  * hot reload rides the local worker runner's context watcher.
  */
 export class ReloadContainer extends Cloudflare.Container<ReloadContainer>()("ReloadContainer", {
-  context: RELOAD_CONTEXT_DIR,
+  image: { context: RELOAD_CONTEXT_DIR },
   observability: { logs: { enabled: true } },
 }) {}

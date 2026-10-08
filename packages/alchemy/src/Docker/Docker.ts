@@ -138,13 +138,14 @@ export class Docker extends Context.Service<
           credentials?: RegistryCredentials;
         },
         session?: ScopedPlanStatusSession,
-        registry?: RegistryCredentials,
+        registry?: RegistryCredentials | { server: string },
       ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
       /** Pulls an image. */
       readonly pull: (
         ref: string,
         platform?: string,
         context?: string,
+        credentials?: RegistryCredentials,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
@@ -157,7 +158,7 @@ export class Docker extends Context.Service<
        */
       readonly push: (
         ref: string,
-        credentials: RegistryCredentials,
+        credentials: RegistryCredentials | { server: string },
         platform?: string,
         context?: string,
       ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
@@ -641,6 +642,53 @@ const makeDocker = (options: DockerOptions) =>
       }),
     );
 
+    const registryConfig = Effect.fn(function* (credentials: RegistryCredentials) {
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-",
+      });
+      const original = yield* Effect.sync(
+        () => process.env.DOCKER_CONFIG ?? path.join(process.env.HOME ?? ".", ".docker"),
+      );
+      const filename = path.join(original, "config.json");
+      const current = (yield* fs.exists(filename))
+        ? yield* fs.readFileString(filename).pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    currentContext: Schema.optional(Schema.String),
+                  }),
+                ),
+              ),
+            ),
+            Effect.mapError(() =>
+              systemError({
+                _tag: "InvalidData",
+                args: [],
+                description: "Invalid Docker configuration",
+              }),
+            ),
+          )
+        : {};
+      const contexts = path.join(original, "contexts");
+      if (yield* fs.exists(contexts)) yield* fs.symlink(contexts, path.join(dir, "contexts"));
+      const config = yield* Effect.sync(() =>
+        JSON.stringify({
+          ...current,
+          auths: {
+            [credentials.server]: {
+              auth: Base64.encode(
+                `${credentials.username}:${Redacted.isRedacted(credentials.password) ? Redacted.value(credentials.password) : credentials.password}`,
+              ),
+            },
+          },
+        }),
+      );
+      yield* fs.writeFileString(path.join(dir, "config.json"), config);
+      yield* fs.chmod(path.join(dir, "config.json"), 0o600);
+      return { DOCKER_CONFIG: dir };
+    });
+
     // `podman push` prints no `digest:` line, and Podman's RepoDigests can
     // list a source digest under the pushed name, so Podman pushes report the
     // published digest through `--digestfile` instead. Probed once.
@@ -653,52 +701,31 @@ const makeDocker = (options: DockerOptions) =>
 
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
-        // Write the registry credentials directly into an isolated docker config
-        // as a plaintext `auths` entry and skip `docker login` entirely.
-        //
-        // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
-        // through the shared `osxkeychain`/`desktop` credential helper *regardless*
-        // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
-        // keychain (`The specified item already exists in the keychain (-25299)`) or
-        // land the credential in the helper — leaving this isolated config without
-        // an `auths` entry, so the subsequent `docker push` fails with "no basic
-        // auth credentials". Embedding the base64 `auth` inline (the same thing
-        // `docker login` would write when no credsStore is configured) makes each
-        // deploy fully self-contained: no credential helper, no keychain, no login
-        // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
-        // global docker config (buildx builders, `docker context`, etc. intact).
-        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
-        const config = yield* Effect.sync(() => {
-          const password = Redacted.isRedacted(credentials.password)
-            ? Redacted.value(credentials.password)
-            : credentials.password;
-          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
-        });
-        yield* fs.writeFileString(path.join(dir, "config.json"), config);
-        const digestFile = path.join(dir, "digest");
-        const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
+        // Isolated credentials avoid global login/keychain races.
+        const env = "username" in credentials ? yield* registryConfig(credentials) : undefined;
+        const digestFile = (yield* isPodman)
+          ? path.join(
+              yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-digest-" }),
+              "digest",
+            )
+          : undefined;
+        const digestArgs = digestFile ? ["--digestfile", digestFile] : [];
         const result =
           platform === undefined
-            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], {
-                DOCKER_CONFIG: dir,
-              })
+            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], env)
             : yield* run(
                 [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
-                { DOCKER_CONFIG: dir },
+                env,
               ).pipe(
                 // Engines without the containerd image store reject `--platform`
                 // on push; their local tag is already narrowed to the requested
                 // platform by `pull --platform`, so a plain push is equivalent.
                 Effect.catchIf(
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
-                  () =>
-                    run([...formatArgs({ context }), "push", ...digestArgs, ref], {
-                      DOCKER_CONFIG: dir,
-                    }),
+                  () => run([...formatArgs({ context }), "push", ...digestArgs, ref], env),
                 ),
               );
-        if (digestArgs.length === 0) return result;
+        if (digestFile === undefined) return result;
         const digest = (yield* fs
           .readFileString(digestFile)
           .pipe(Effect.orElseSucceed(() => ""))).trim();
@@ -777,11 +804,13 @@ const makeDocker = (options: DockerOptions) =>
               tap,
             );
           }
-          const mode = yield* publication;
+          // Podman is not BuildKit: it rejects BuildKit cache backends such as
+          // `--cache-to type=inline`, so it builds like the legacy builder.
+          const mode = (yield* isPodman) ? ("legacy" as const) : yield* publication;
           if (mode === "export") {
             // Export straight from BuildKit to the registry; the image never
             // round-trips through the local image store.
-            const env = yield* registryEnvironment(registry);
+            const env = "username" in registry ? yield* registryEnvironment(registry) : undefined;
             return yield* run(
               [...engine, "buildx", "build", "--push", ...buildArgs],
               env,
@@ -794,13 +823,23 @@ const makeDocker = (options: DockerOptions) =>
           // `--load` matters for non-loading builders (docker-container):
           // without it the result stays in the build cache and `push` sees no
           // such tag.
+          // The legacy builder (no Buildx plugin) has no `--cache-to` and no
+          // BuildKit cache backends, so its build drops the cache flags. It
+          // does honor DOCKER_AUTH_CONFIG for private base images; older
+          // Buildx ignores it, which is harmless.
+          const legacyArgs = [
+            buildContext,
+            ...formatArgs({ ...options, "cache-from": undefined, "cache-to": undefined }),
+            ...(args ?? []),
+          ];
           yield* run(
             [
               ...engine,
-              ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
-              ...buildArgs,
+              ...(mode === "load"
+                ? ["buildx", "build", "--load", ...buildArgs]
+                : ["image", "build", ...legacyArgs]),
             ],
-            undefined,
+            "username" in registry ? yield* registryEnvironment(registry) : undefined,
             tap,
           );
           const [tag, ...tags] =
@@ -811,14 +850,19 @@ const makeDocker = (options: DockerOptions) =>
             ),
           );
         }),
-        pull: (ref, platform, context) =>
-          run([
-            ...formatArgs({ context }),
-            "image",
-            "pull",
-            ref,
-            ...(platform ? ["--platform", platform] : []),
-          ]),
+        pull: Effect.fn(function* (ref, platform, context, credentials) {
+          const env = credentials ? yield* registryConfig(credentials) : undefined;
+          return yield* run(
+            [
+              ...formatArgs({ context }),
+              "image",
+              "pull",
+              ref,
+              ...(platform ? ["--platform", platform] : []),
+            ],
+            env,
+          );
+        }, Effect.scoped),
         inspect: (ref, context) =>
           runInspect<Docker.Image>([...formatArgs({ context }), "image", "inspect", ref]),
         remove: (ref, force, context) =>

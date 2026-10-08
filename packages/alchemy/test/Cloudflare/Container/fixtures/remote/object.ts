@@ -23,7 +23,7 @@ export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
   Effect.gen(function* () {
     const bucket = yield* EnvBucket;
     return {
-      image: "mendhak/http-https-echo:latest",
+      image: { ref: "mendhak/http-https-echo:latest" },
       vcpu: 1,
       memoryMib: 4096,
       observability: { logs: { enabled: true } },

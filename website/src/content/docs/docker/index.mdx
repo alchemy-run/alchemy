@@ -3,13 +3,12 @@ title: Docker
 description: Images, containers, networks, and volumes as Stack resources, driven through your active Docker CLI context.
 ---
 
-The Docker provider manages images, containers, networks, and
-volumes by shelling out to the `docker` CLI's active context —
-Docker Desktop, a remote or SSH context, a CI daemon. There is no
-daemon API client and no credentials of its own, and the resources
-live in the same Stack as your cloud resources. It is separate from
-`Cloudflare.Container`; registry image references are the boundary
-between Docker-managed images and cloud container platforms.
+The Docker provider manages images, containers, networks, and volumes in the
+same Stack as your cloud resources. Builds and local resources use the `docker`
+CLI's active context — Docker Desktop, an SSH context, or a CI daemon.
+Published-image reuse reads the registry directly without a builder.
+`Cloudflare.Container` composes the same Docker image resources; immutable
+image references separate image publication from application deployment.
 
 New here? [Set up Docker](/docker/setup) first.
 
@@ -32,8 +31,7 @@ export default Alchemy.Stack(
     });
 
     const image = yield* Docker.RemoteImage("postgres-image", {
-      name: "postgres",
-      tag: "18-alpine",
+      source: "docker.io/library/postgres:18-alpine",
       alwaysPull: false,
     });
     const network = yield* Docker.Network("app-network");
@@ -75,8 +73,6 @@ through this composition.
 
 ```typescript
 const image = yield* Docker.Image("app", {
-  name: "my-app",
-  tag: "latest",
   build: {
     context: "./app",
     dockerfile: "Dockerfile",
@@ -85,11 +81,24 @@ const image = yield* Docker.Image("app", {
 });
 ```
 
-The build *is* the diff: `diff` runs `docker build` and compares the
-resulting `imageId` against the last deploy, and the result is
-memoized so plan + deploy build once — see
-[Build and push an image](/docker/build-and-push) for tagging and
-pushing to a registry.
+Planning hashes build inputs without building. Reconciliation reuses a matching
+local image or published manifest, and builds only when needed. `image.ref`
+returns a local image ID or a published digest reference. See
+[Build and push an image](/docker/build-and-push) for publication, authentication,
+cache settings, and explicit invalidation.
+
+For a Cloudflare Container that owns its image, omit the image ID:
+
+```typescript
+const application = yield* Cloudflare.Container("Web", {
+  image: { context: "./app", publish: { repository: "shared-web" } },
+}).Application;
+```
+
+The image object is plain data. Cloudflare registers the real child image
+resource and resolves `shared-web` within the account's managed registry.
+Use `image: { ref: "nginx:alpine" }` for an existing image. `ref` is mutually
+exclusive with build inputs.
 
 `Docker.inspectContainer(name)` reads live runtime details for any
 container by name, including the bound host ports.

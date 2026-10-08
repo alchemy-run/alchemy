@@ -211,7 +211,7 @@ describe(
               "traefik.http.services.web.loadbalancer.server.port": "80",
             },
             stopTimeout: "10 minutes",
-            start: true,
+            start: false,
           }),
         );
 
@@ -1132,7 +1132,10 @@ describe(
           const deploy = () =>
             stack.deploy(
               Effect.gen(function* () {
+                // A fixed tag keeps the ref stable across rebuilds (generated
+                // tags are content hashes), so only the image id changes.
                 const image = yield* Docker.Image("container-image", {
+                  tag: "latest",
                   build: { context: root },
                 });
                 const container = yield* Docker.Container("rebuilt-image-container", {

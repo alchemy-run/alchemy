@@ -14,6 +14,9 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Docker"
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
+/** Shared image provider layers for container-platform integrations. */
+export const imageProviders = Layer.mergeAll(ImageProvider(), RemoteImageProvider());
+
 /**
  * Registers all Docker resource providers.
  *
@@ -33,9 +36,8 @@ export const providers = (options: DockerOptions = {}) =>
     Layer.provide(
       Layer.mergeAll(
         ContainerProvider(),
-        ImageProvider(),
+        imageProviders,
         NetworkProvider(),
-        RemoteImageProvider(),
         VolumeProvider(),
         ContextProvider(),
         ServiceProvider(),

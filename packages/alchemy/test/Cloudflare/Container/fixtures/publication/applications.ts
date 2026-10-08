@@ -1,6 +1,51 @@
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Docker from "@/Docker";
 import * as Output from "@/Output.ts";
+
+export const descriptorApplications = (
+  context: string,
+  includeFirst = true,
+  mirrorRepository = "alchemy-embedded-mirror",
+) =>
+  Effect.gen(function* () {
+    const image = {
+      context,
+      dockerfile: "Dockerfile.custom",
+      options: ["--provenance=false"],
+      publish: { repository: "alchemy-embedded-build", tags: ["release"] },
+    } satisfies Docker.ImageOptions;
+    const first = includeFirst
+      ? yield* Cloudflare.Container("DescriptorFirst", { image }).Application
+      : undefined;
+    const second = yield* Cloudflare.Container("DescriptorSecond", { image }).Application;
+    const remote = yield* Cloudflare.Container("DescriptorRemote", {
+      image: {
+        ref: second.configuration.pipe(Output.map((configuration) => configuration.image)),
+        publish: {
+          repository: second.applicationId.pipe(Output.map(() => mirrorRepository)),
+          tags: ["release"],
+        },
+      },
+    }).Application;
+    const generated = yield* Cloudflare.Container("DescriptorGenerated", {
+      image: {
+        dockerfile: Docker.Dockerfile.inline`FROM alpine:3.19 AS app
+ARG MESSAGE
+LABEL message=$MESSAGE
+COPY payload /payload
+CMD ["sleep", "3600"]`,
+        files: [{ path: "payload", content: "generated", mode: 0o755 }],
+        args: { MESSAGE: "embedded" },
+        target: "app",
+        platform: "linux/amd64",
+        dockerContext: "default",
+        publish: { repository: "alchemy-embedded-generated" },
+      },
+    }).Application;
+    return { first, second, remote, generated };
+  });
 
 export const publicationApplications = (contexts: {
   shared: string;
@@ -8,13 +53,20 @@ export const publicationApplications = (contexts: {
   changed: string;
 }) =>
   Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const image = yield* Docker.Image("SharedImage", {
+      build: { context: contexts.shared, platform: "linux/amd64" },
+      publish: {
+        repository: `registry.cloudflare.com/${accountId}/alchemy-publication-sharing`,
+      },
+    });
     const first = yield* Cloudflare.Container("PublicationFirst", {
-      context: contexts.shared,
+      image: image.ref,
       env: { SLOT: "first" },
       maxInstances: 2,
     }).Application;
     const second = yield* Cloudflare.Container("PublicationSecond", {
-      context: contexts.shared,
+      image: image.ref,
       env: { SLOT: "second" },
       maxInstances: 3,
     }).Application;
@@ -31,9 +83,17 @@ export const publicationApplications = (contexts: {
 
 export const sharedApplication = (context: string, repository?: string) =>
   Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const image = repository
+      ? yield* Docker.Image("SharedImage", {
+          build: { context, platform: "linux/amd64" },
+          publish: {
+            repository: `registry.cloudflare.com/${accountId}/${repository}`,
+          },
+        })
+      : undefined;
     const app = yield* Cloudflare.Container("SharedPublication", {
-      context,
-      publish: repository === undefined ? undefined : { repository },
+      ...(image ? { image: image.ref } : { context }),
       maxInstances: 2,
     }).Application;
     return { app };
@@ -41,26 +101,35 @@ export const sharedApplication = (context: string, repository?: string) =>
 
 export const historyApplications = (converge = false) =>
   Effect.gen(function* () {
+    // Mirrors share one repository so converged applications reference one image.
+    const publish = { repository: "alchemy-publication-history" };
     const target = converge
       ? yield* Cloudflare.Container("HistoryTarget", {
           image: "docker.io/alpine:3.19",
+          publish,
         }).Application
       : undefined;
     const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
+      publish,
     }).Application;
     const second = yield* Cloudflare.Container("HistorySecond", {
       image: image ?? "alpine:3.20",
+      publish,
     }).Application;
     return { first, second, target };
   });
 
-export const recoveryApplications = (delay: number, includeSecond = false) =>
+export const recoveryApplications = (delay: number, includeSecond = false, seed = "") =>
   Effect.gen(function* () {
     const props = {
-      dockerfile: {
-        content: `FROM alpine:3.19\nRUN sleep ${delay}\nCMD ["sleep", "3600"]\n`,
+      image: {
+        dockerfile: {
+          content: `FROM alpine:3.19\nLABEL test.run="${seed}"\nRUN sleep ${delay}\nCMD ["sleep", "3600"]\n`,
+        },
+        // Applications share a published image only through a shared repository.
+        publish: { repository: "alchemy-publication-recovery" },
       },
       maxInstances: 2,
     };

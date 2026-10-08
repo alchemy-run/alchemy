@@ -2,6 +2,9 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import type { ImageOptions } from "../../Docker/ImageOptions.ts";
+import type { ImagePublish } from "../../Docker/ImageRegistry.ts";
+import type { LocalImageBuild } from "../../Docker/LocalImage.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
@@ -69,6 +72,8 @@ export namespace ContainerApplication {
  * {@link RemoteContainerProps}) that extend this base.
  */
 export interface ContainerApplicationPropsBase extends PlatformProps {
+  /** @internal Image resource outputs resolved before application reconciliation. */
+  imageArtifact?: { ref: string; hash?: string; localBuild?: LocalImageBuild };
   /**
    * Human-readable application name. If omitted, Alchemy derives a deterministic
    * physical name from the stack, stage, and logical ID.
@@ -188,67 +193,39 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   registryId?: string;
   /**
-   * Image publication configuration. Builds are cached by default in a
-   * repository named after the application's physical name. Generated names
-   * include the stage and resource instance, so updates within that stage can
-   * reuse images. Replacement or destroy/recreate can select a new repository.
-   * Set `repository` to share finished images and build layers across stages.
+   * Publication destination for the image Alchemy builds or mirrors: the
+   * generated program image (`main`), a top-level `context`/`dockerfile`
+   * build, or an external `image` reference. Embedded image options declare
+   * `publish` inside `image` instead.
+   *
+   * A relative `repository` such as `"web"` resolves inside the current
+   * account's registry (`registry.cloudflare.com/<account-id>/web` with the
+   * default `registryId`); fully qualified destinations are used as-is. When
+   * omitted, each application publishes to its own repository, named
+   * `<stack>-<id>-<stage>` (long names keep the id and stage and are
+   * shortened with a hash). Name the same `repository` on several
+   * applications to share images between them.
+   *
+   * Builds publish a content-hash tag plus an inline layer cache at a
+   * per-image `:buildcache-<hash>` tag and deploy the immutable manifest digest. Matching build
+   * inputs in the same repository reuse the published image without invoking
+   * a builder, so applications and stages that share `repository` share
+   * finished images and build layers. Pin base images and downloaded
+   * dependencies: changes outside the build context cannot invalidate the
+   * input hash. Images already in the target registry keep their existing
+   * repository; this option does not copy them into another one.
    *
    * @example
    * ```typescript
-   * // Default: cached in this application's generated repository.
-   * const app = yield* Cloudflare.Container("Web", { context: "./web" }).Application;
-   * // Repository: registry.cloudflare.com/<account-id>/<app.applicationName>
+   * const app = yield* Cloudflare.Container("WebProduction", {
+   *   context: "./web",
+   *   publish: { repository: "web" },
+   * }).Application;
+   * // Deployed image (app.configuration.image):
+   * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
    * ```
    */
-  publish?: {
-    /**
-     * Destination repository name within the current Cloudflare account's
-     * container registry, for example `"web"`. This is not a source image,
-     * registry hostname, account ID, tag, or fully qualified image reference.
-     * Alchemy lowercases the name and adds the registry host and account ID:
-     * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
-     * The container application's name is independent of this repository name.
-     * Omitting `publish` uses the application's physical name instead and still
-     * enables caching. Generated names are scoped to the stage and resource
-     * instance; an explicit repository allows cross-stage reuse.
-     *
-     * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag and an inline layer-cache tag, then deploys an immutable manifest
-     * digest. The build hash and manifest digest are different identifiers.
-     * Builds targeting this repository import reusable layers from its shared
-     * `:buildcache` tag, even when their full input hashes differ. The tag points
-     * to the latest exported inline cache, not an aggregate of all historical
-     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
-     *
-     * Applications and stages in the same account can share `"web"`. Matching
-     * build inputs reuse the published image; changed inputs produce another
-     * hash tag in the same repository. Finished-image cache reuse applies to
-     * builds, not to re-publishing remote images. Pin base images and downloaded
-     * dependencies: changes outside the build context cannot invalidate its
-     * content hash.
-     *
-     * External remote images are re-published into this repository without
-     * building them. Images already in the target registry keep their existing
-     * repository; setting this option does not copy them into another one.
-     *
-     * @example
-     * ```typescript
-     * const app = yield* Cloudflare.Container("WebProduction", {
-     *   context: "./web",
-     *   publish: { repository: "web" },
-     * }).Application;
-     *
-     * // Published build:
-     * // registry.cloudflare.com/<account-id>/web:<build-hash>
-     * // Shared build-layer cache:
-     * // registry.cloudflare.com/<account-id>/web:buildcache
-     * // Deployed image (app.configuration.image):
-     * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
-     * ```
-     */
-    repository: string;
-  };
+  publish?: ImagePublish;
   /**
    * Environment variables passed to the container runtime.
    */
@@ -262,11 +239,15 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
 /**
  * Bundle an Effect-native program into a generated image. Alchemy bundles
  * {@link main} and bakes it in as the container's entrypoint. The
- * environment the program runs in comes from {@link image} or an inline
+ * environment the program runs in comes from {@link baseImage} or an inline
  * {@link dockerfile} (exclusive with each other), defaulting to the
  * runtime's base image.
  */
 export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
+  /** Base image for the generated program image, exclusive with an inline Dockerfile. */
+  baseImage?: string;
+  /** JavaScript bundler configuration for the program. */
+  bundle?: Bundle.BundleConfig;
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
@@ -276,6 +257,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * entrypoint. The image must be able to run the {@link runtime}.
    * Exclusive with {@link dockerfile}.
    *
+   * @deprecated Use `baseImage` for generated program images.
    * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
    */
   image?: string;
@@ -330,6 +312,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
    * `pure.packages`, or disable with `pure: false`.
+   * @deprecated Use `bundle` for JavaScript bundler configuration.
    */
   build?: Bundle.BundleConfig;
 }
@@ -339,6 +322,10 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  * bundled. The image is shipped as-is.
  */
 export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+  /** A Dockerfile build cannot also declare a program entrypoint. */
+  main?: never;
+  /** Use either embedded image options or legacy top-level build inputs. */
+  image?: never;
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -357,14 +344,21 @@ export interface ExternalContainerProps extends ContainerApplicationPropsBase {
 }
 
 /**
- * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
- * Cloudflare's managed registry without building anything.
+ * Deploy an image reference or embedded Docker image options. Plain image
+ * options become child Docker resources owned by the container's namespace.
  */
 export interface RemoteContainerProps extends ContainerApplicationPropsBase {
+  /** Finished image specifications cannot also declare a program entrypoint. */
+  main?: never;
+  /** Build context belongs inside `image` when using embedded image options. */
+  context?: never;
+  /** Dockerfile belongs inside `image` when using embedded image options. */
+  dockerfile?: never;
   /**
-   * The pre-built image to pull and re-push.
-   *
-   * E.g. `ghcr.io/alpine/alpine:latest`
+   * An image reference, `{ context: "./app" }` build specification, or
+   * `{ ref: "nginx:alpine" }` existing-image specification. Plain objects
+   * create managed child Docker resources without a separate image name.
+   * `publish.repository` may be relative to this account's container registry.
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
@@ -372,15 +366,13 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
    * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
-  image: string;
+  image: string | ImageOptions;
 }
 
 /**
- * Container application props — the image comes from exactly one of three
- * sources, declared flat on the props: `main` (bundled Effect program,
- * composing with `image` / inline `dockerfile` as its environment),
- * `context`/`dockerfile` (user Dockerfile), or `image` (pre-built remote
- * image).
+ * Container application props — `main` bundles an Effect program, while
+ * `image` accepts a reference or plain Docker build/existing-image options.
+ * Legacy top-level `context`/`dockerfile` builds remain supported.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
@@ -394,8 +386,10 @@ export type ContainerApplicationProps =
  * with it instead of narrowing the union at every property access.
  */
 export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
+  baseImage?: string;
+  bundle?: Bundle.BundleConfig;
   main?: string;
-  image?: string;
+  image?: string | ImageOptions;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   handler?: string;
@@ -832,6 +826,8 @@ export declare namespace DevContainerImage {
   }
   export interface Ref extends Base {
     readonly tag: string;
+    /** Local Docker image recipe for filesystem-triggered development reloads. */
+    readonly localBuild?: LocalImageBuild;
   }
 }
 

@@ -321,7 +321,13 @@ export const Platform = <
       // no Effect-native entry to inject (an ordinary bundled worker, or an
       // assets-only worker with no script at all).
       const externalProps = () => {
-        const transformed = applyTransformProps(id, props);
+        const source = Effect.isEffect(props)
+          ? Effect.map(props as Effect.Effect<any>, (resolved) => ({
+              ...resolved,
+              isExternal: true,
+            }))
+          : { ...props, isExternal: true };
+        const transformed = applyTransformProps(id, source);
         return Effect.isEffect(transformed)
           ? Effect.map(transformed, (p: any) => ({
               ...p,

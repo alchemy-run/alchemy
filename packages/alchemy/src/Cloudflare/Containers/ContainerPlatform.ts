@@ -17,6 +17,7 @@ import type {
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
+import { composeContainerImage } from "./ContainerImage.ts";
 
 const toHttpUrl = (url: string) =>
   url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
@@ -55,6 +56,7 @@ export const ContainerPlatform: Platform<
 > = Platform(
   "Cloudflare.Container",
   {
+    transformProps: composeContainerImage,
     createRuntimeContext: (id: string): ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
