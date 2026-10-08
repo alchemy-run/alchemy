@@ -1002,16 +1002,18 @@ test.provider(
       expect(remaining).toContain("FOREIGN_SECRET");
       expect(yield* readSecret(removed.url, "unset")).toEqual("unset");
 
-      // A bound value never overwrites an App secret it did not write.
+      // A bound name that already exists is taken over, as after a crash
+      // between the secret write and the state save.
       yield* machines.updateSecrets({
         app_name: appName,
         values: { BOUND_SECRET: "someone-else" },
       });
-      const conflict = yield* deploy({
+      const takenOver = yield* deploy({
         BOUND_SECRETS_MODE: "on",
         BOUND_SECRET: "value-three",
-      }).pipe(Effect.flip);
-      expect(conflict).toMatchObject({ _tag: "Fly.ServiceSecretConflict", name: "BOUND_SECRET" });
+      });
+      expect(Object.keys(takenOver.secrets ?? {})).toContain("BOUND_SECRET");
+      expect(yield* readSecret(takenOver.url, "value-three")).toEqual("value-three");
 
       yield* stack.destroy();
       const app = yield* machines.getApp({ app_name: appName }).pipe(

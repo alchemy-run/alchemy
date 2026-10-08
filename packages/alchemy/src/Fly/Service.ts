@@ -1097,12 +1097,6 @@ export class ServiceAppNotResolved extends Data.TaggedError("Fly.ServiceAppNotRe
   message: string;
 }> {}
 
-/** A bound value would overwrite an App secret the Service did not write. */
-export class ServiceSecretConflict extends Data.TaggedError("Fly.ServiceSecretConflict")<{
-  appName: string;
-  name: string;
-}> {}
-
 const appNameOf = (value: unknown): string | undefined => {
   if (value == null || typeof value !== "object") return undefined;
   const name = (value as { appName?: unknown }).appName;
@@ -1142,10 +1136,11 @@ const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
  * Store bound `Config` and Redacted values as App secrets. Fly's digest is
  * not a hash Alchemy can compute, so a value is unchanged only when its
  * sha256 matches the last write and Fly still reports that write's digest.
- * Deletes secrets this Service wrote that are no longer bound. A secret it
- * did not write is never touched; binding one of the same name fails the
- * deploy. Returns what it now owns and the App-secrets version Machines
- * must reach.
+ * A bound name that already exists is taken over, as the plain env var
+ * used to override it; this also converges after a crash between the
+ * write and the state save. Deletes only secrets this Service wrote that
+ * are no longer bound. Returns what it now owns and the App-secrets
+ * version Machines must reach.
  */
 const syncBoundSecrets = Effect.fn(function* (
   appName: string,
@@ -1174,9 +1169,6 @@ const syncBoundSecrets = Effect.fn(function* (
   for (const [name, value] of Object.entries(desired)) {
     const hash = yield* sha256(value);
     const last = previous.secrets[name];
-    if (observed.has(name) && last === undefined) {
-      return yield* new ServiceSecretConflict({ appName, name });
-    }
     if (last !== undefined && last.sha256 === hash && observed.get(name) === last.digest) {
       secrets[name] = last;
     } else {
