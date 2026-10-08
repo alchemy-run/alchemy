@@ -41,7 +41,7 @@ export const OAuthCredentials = Schema.Struct({
   access: Schema.RedactedFromValue(Schema.String),
   refresh: Schema.RedactedFromValue(Schema.String),
   expires: Schema.Number,
-  scopes: Schema.mutable(Schema.Array(Schema.String)),
+  scopes: Schema.String.pipe(Schema.Array, Schema.mutable),
 });
 export type OAuthCredentials = typeof OAuthCredentials.Type;
 
@@ -401,14 +401,10 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         if (error) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          resolveOnce(
-            Effect.fail(
-              new OAuthError({
-                error,
-                errorDescription: errorDescription ?? "An unknown error occurred.",
-              }),
-            ),
-          );
+          new OAuthError({
+            error,
+            errorDescription: errorDescription ?? "An unknown error occurred.",
+          }).pipe(Effect.fail, resolveOnce);
           return;
         }
 
@@ -417,24 +413,19 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         if (!code || !state) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          resolveOnce(
-            Effect.fail(
-              new OAuthError({
-                error: "invalid_request",
-                errorDescription: "Missing code or state",
-              }),
-            ),
-          );
+          new OAuthError({
+            error: "invalid_request",
+            errorDescription: "Missing code or state",
+          }).pipe(Effect.fail, resolveOnce);
           return;
         }
 
         if (state !== authorization.state) {
           res.writeHead(302, { Location: AUTH_ERROR_URL });
           res.end();
-          resolveOnce(
-            Effect.fail(
-              new OAuthError({ error: "invalid_request", errorDescription: "Invalid state" }),
-            ),
+          new OAuthError({ error: "invalid_request", errorDescription: "Invalid state" }).pipe(
+            Effect.fail,
+            resolveOnce,
           );
           return;
         }
@@ -457,18 +448,15 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       });
 
       server.on("error", (err) => {
-        resolveOnce(
-          Effect.fail(
-            server.listening
-              ? new OAuthError({
-                  error: "server_error",
-                  errorDescription: `Callback server failed: ${err.message}`,
-                })
-              : new CallbackServerStartError({
-                  message: `Failed to start callback server: ${err.message}`,
-                }),
-          ),
-        );
+        (server.listening
+          ? new OAuthError({
+              error: "server_error",
+              errorDescription: `Callback server failed: ${err.message}`,
+            })
+          : new CallbackServerStartError({
+              message: `Failed to start callback server: ${err.message}`,
+            })
+        ).pipe(Effect.fail, resolveOnce);
       });
 
       server.listen(listenPort, "127.0.0.1");

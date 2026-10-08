@@ -119,8 +119,9 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
       request: HttpClientRequest.HttpClientRequest | HttpServerRequest.HttpServerRequest,
     ): any =>
       HttpClientRequest.isHttpClientRequest(request)
-        ? pipe(
-            HttpServerRequest.toWeb(HttpServerRequest.fromClientRequest(request)),
+        ? request.pipe(
+            HttpServerRequest.fromClientRequest,
+            HttpServerRequest.toWeb,
             Effect.flatMap(fetch),
             Effect.map((response) =>
               HttpClientResponse.fromWeb(request, response as any as Response),
@@ -245,21 +246,17 @@ export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): S
   // `fromTransformStream` snapshots fiber context, then waits to acquire
   // the streams until a consumer opens the reader. `runSync` is only that
   // snapshot — connection still happens on first `socket.reader`.
-  Effect.runSync(
-    Socket.fromTransformStream(
-      Effect.tryPromise({
-        try: () =>
-          Promise.resolve(cfSocket.opened).then(
-            () =>
-              ({
-                readable: cfSocket.readable,
-                writable: cfSocket.writable,
-              }) as Socket.InputTransformStream,
-          ),
-        catch: (cause) =>
-          Socket.SocketError.make({
-            reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
-          }),
+  Effect.tryPromise({
+    try: () =>
+      Promise.resolve(cfSocket.opened).then(
+        () =>
+          ({
+            readable: cfSocket.readable,
+            writable: cfSocket.writable,
+          }) as Socket.InputTransformStream,
+      ),
+    catch: (cause) =>
+      Socket.SocketError.make({
+        reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
       }),
-    ),
-  );
+  }).pipe(Socket.fromTransformStream, Effect.runSync);

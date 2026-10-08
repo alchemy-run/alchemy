@@ -288,7 +288,7 @@ const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
 };
 
 const appendStreamErrors = <R>(s: Stream.Stream<string, unknown, R>) =>
-  s.pipe(Stream.catchCause((cause) => Stream.succeed(encodeStreamErrorMarker(cause))));
+  s.pipe(Stream.catchCause((cause) => cause.pipe(encodeStreamErrorMarker, Stream.succeed)));
 
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
   Effect.scoped(
@@ -308,10 +308,11 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
       return {
         _tag: StreamTag,
         encoding: "jsonl",
-        body: Stream.toReadableStream(
-          appendStreamErrors(body.pipe(Stream.map((value) => JSON.stringify(value) + "\n"))).pipe(
-            Stream.encodeText,
-          ),
+        body: body.pipe(
+          Stream.map((value) => JSON.stringify(value) + "\n"),
+          appendStreamErrors,
+          Stream.encodeText,
+          Stream.toReadableStream(),
         ),
       } satisfies RpcStreamEnvelope;
     }),
@@ -322,12 +323,15 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
         return Effect.succeed({
           _tag: StreamTag,
           encoding: "jsonl",
-          body: Stream.toReadableStream(
-            Stream.succeed(encodeStreamErrorMarker(cause)).pipe(Stream.encodeText),
+          body: cause.pipe(
+            encodeStreamErrorMarker,
+            Stream.succeed,
+            Stream.encodeText,
+            Stream.toReadableStream(),
           ),
         } satisfies RpcStreamEnvelope);
       }
-      return Effect.die(Cause.squash(cause));
+      return cause.pipe(Cause.squash, Effect.die);
     }),
   );
 

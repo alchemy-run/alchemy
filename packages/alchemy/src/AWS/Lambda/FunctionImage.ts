@@ -54,8 +54,8 @@ export type FunctionImageSource = FunctionDockerImageSource | FunctionEcrImageSo
 // Instruction overrides ride along on the source object; they are function
 // configuration, not image identity, so they never enter the image hash.
 const FunctionImageConfigFields = {
-  command: Schema.optionalKey(Schema.Array(Schema.String)),
-  entryPoint: Schema.optionalKey(Schema.Array(Schema.String)),
+  command: Schema.String.pipe(Schema.Array, Schema.optionalKey),
+  entryPoint: Schema.String.pipe(Schema.Array, Schema.optionalKey),
   workingDirectory: Schema.optionalKey(Schema.String),
 };
 

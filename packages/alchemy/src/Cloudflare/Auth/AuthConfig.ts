@@ -21,7 +21,7 @@ export const CloudflareAuthConfigSchema = Schema.Union([
   }),
   Schema.Struct({
     method: Schema.Literal("oauth"),
-    scopes: Schema.mutable(Schema.Array(Schema.String)),
+    scopes: Schema.String.pipe(Schema.Array, Schema.mutable),
     accountId: Schema.String,
     clientId: Schema.optional(Schema.String),
     access: Schema.String,

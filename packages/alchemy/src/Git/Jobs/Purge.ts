@@ -100,13 +100,11 @@ export const runPurgeJob = (options: PurgeJobOptions): Effect.Effect<PurgeOutcom
     // from the listing stream, delete in 1000-key batches, and treat a
     // short take as fully drained.
     const cap = MAX_PAGES_PER_RUN * 1000;
-    const keys = yield* r2ToStore(`blob list ${prefix}`)(
-      Stream.runCollect(
-        options.blobs.list(prefix).pipe(
-          Stream.take(cap),
-          Stream.map((meta) => meta.key),
-        ),
-      ),
+    const keys = yield* options.blobs.list(prefix).pipe(
+      Stream.take(cap),
+      Stream.map((meta) => meta.key),
+      Stream.runCollect,
+      r2ToStore(`blob list ${prefix}`),
     );
     for (let at = 0; at < keys.length; at += 1000) {
       yield* r2ToStore(`blob delete under ${prefix}`)(

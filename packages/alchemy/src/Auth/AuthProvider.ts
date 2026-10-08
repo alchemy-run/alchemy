@@ -107,7 +107,7 @@ export const EnvironmentVariable = Schema.Struct({
    * precedence order after {@link name} (e.g. `AWS_DEFAULT_REGION` for
    * `AWS_REGION`).
    */
-  alternatives: Schema.optional(Schema.Array(Schema.String)),
+  alternatives: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 export type EnvironmentVariable = typeof EnvironmentVariable.Type;

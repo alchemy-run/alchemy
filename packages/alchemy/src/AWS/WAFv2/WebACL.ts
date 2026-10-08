@@ -445,40 +445,34 @@ export const WebACLProvider = () =>
           // Re-read for a fresh LockToken on every attempt; tolerate the
           // ACL already being gone, a stale lock, or a still-propagating
           // disassociation.
-          yield* retryAssociatedItem(
-            retryOptimisticLock(
-              Effect.gen(function* () {
-                const found = yield* withWafScope(
-                  scope,
-                  wafv2
-                    .getWebACL({
-                      Name: output.webAclName,
-                      Scope: scope,
-                      Id: output.webAclId,
-                    })
-                    .pipe(
-                      Effect.catchTag("WAFNonexistentItemException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    ),
-                );
-                if (!found?.WebACL || found.LockToken === undefined) {
-                  return;
-                }
-                yield* withWafScope(
-                  scope,
-                  wafv2
-                    .deleteWebACL({
-                      Name: output.webAclName,
-                      Scope: scope,
-                      Id: output.webAclId,
-                      LockToken: found.LockToken,
-                    })
-                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
-                );
-              }),
-            ),
-          );
+          yield* Effect.gen(function* () {
+            const found = yield* withWafScope(
+              scope,
+              wafv2
+                .getWebACL({
+                  Name: output.webAclName,
+                  Scope: scope,
+                  Id: output.webAclId,
+                })
+                .pipe(
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
+                ),
+            );
+            if (!found?.WebACL || found.LockToken === undefined) {
+              return;
+            }
+            yield* withWafScope(
+              scope,
+              wafv2
+                .deleteWebACL({
+                  Name: output.webAclName,
+                  Scope: scope,
+                  Id: output.webAclId,
+                  LockToken: found.LockToken,
+                })
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
+            );
+          }).pipe(retryOptimisticLock, retryAssociatedItem);
         }),
       };
     }),

@@ -176,7 +176,7 @@ const sandboxApi = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, ApiError, R> =>
   effect.pipe(
-    Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))),
+    Effect.tapCause((cause) => cause.pipe(Cause.pretty, Effect.logError)),
     Effect.catchCause((cause) => {
       const failure = Cause.findErrorOption(cause);
       const defect = Cause.findDefect(cause);

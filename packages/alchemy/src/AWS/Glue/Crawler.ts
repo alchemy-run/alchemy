@@ -322,23 +322,27 @@ export const CrawlerProvider = () =>
 
           // 2. ENSURE / 3. SYNC
           if (crawler === undefined) {
-            yield* retryWhileCrawlerTargetNotReady(
-              retryWhileRoleNotAssumable(
-                glue.createCrawler({
-                  Name: name,
-                  ...common,
-                  Tags: desiredTags,
-                }),
-              ),
-            ).pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
+            yield* glue
+              .createCrawler({
+                Name: name,
+                ...common,
+                Tags: desiredTags,
+              })
+              .pipe(
+                retryWhileRoleNotAssumable,
+                retryWhileCrawlerTargetNotReady,
+                Effect.catchTag("AlreadyExistsException", () => Effect.void),
+              );
           } else {
             // updateCrawler fails with CrawlerRunningException mid-crawl and
             // with GlueRoleNotAssumable during IAM propagation.
-            yield* retryWhileCrawlerRunning(
-              retryWhileCrawlerTargetNotReady(
-                retryWhileRoleNotAssumable(glue.updateCrawler({ Name: name, ...common })),
-              ),
-            );
+            yield* glue
+              .updateCrawler({ Name: name, ...common })
+              .pipe(
+                retryWhileRoleNotAssumable,
+                retryWhileCrawlerTargetNotReady,
+                retryWhileCrawlerRunning,
+              );
           }
 
           // 3b. SYNC TAGS

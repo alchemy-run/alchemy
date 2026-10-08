@@ -139,16 +139,14 @@ const make = Effect.gen(function* () {
         insertStagedBatch: (id, objects) =>
           Effect.gen(function* () {
             const encoded = encodeStagedBatch(objects);
-            const fiber = yield* Effect.forkDetach(
-              Semaphore.withPermits(
-                stageGate,
-                1,
-              )(
-                stub
-                  .stagePush(id, encoded)
-                  .pipe(Effect.mapError(asStoreError), Effect.provide(RuntimeContext.phantom)),
-              ),
-            );
+            const fiber = yield* stub
+              .stagePush(id, encoded)
+              .pipe(
+                Effect.mapError(asStoreError),
+                Effect.provide(RuntimeContext.phantom),
+                Semaphore.withPermits(stageGate, 1),
+                Effect.forkDetach,
+              );
             staging.push(fiber);
           }),
         settle: Effect.gen(function* () {

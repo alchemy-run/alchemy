@@ -1002,12 +1002,10 @@ export const ApplicationProvider = () =>
               Tags: createTagsList(desiredTags),
             };
             const create = (request: analytics.CreateApplicationRequest) =>
-              retryWhileInUse(
-                retryThroughRolePropagation(
-                  analytics
-                    .createApplication(request)
-                    .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void)),
-                ),
+              analytics.createApplication(request).pipe(
+                Effect.catchTag("ResourceInUseException", () => Effect.void),
+                retryThroughRolePropagation,
+                retryWhileInUse,
               );
             yield* create(createRequest).pipe(
               // The lingering tag registration on a recently-deleted name can

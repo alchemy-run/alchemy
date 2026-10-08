@@ -37,10 +37,10 @@ export const deriveConnectionAttrs = (secrets: {
     secrets.directConnectionString ??
     secrets.accelerateConnectionString,
   origin: secrets.directConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.directConnectionString))
+    ? secrets.directConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
   pooledOrigin: secrets.pooledConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.pooledConnectionString))
+    ? secrets.pooledConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
 });
 

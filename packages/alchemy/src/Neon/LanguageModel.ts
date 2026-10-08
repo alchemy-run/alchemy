@@ -200,11 +200,13 @@ const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Usage = Schema.Struct({
   prompt_tokens: Schema.optional(TokenCount),
   completion_tokens: Schema.optional(TokenCount),
-  prompt_tokens_details: Schema.optional(
-    Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(TokenCount) })),
+  prompt_tokens_details: Schema.Struct({ cached_tokens: Schema.optional(TokenCount) }).pipe(
+    Schema.NullOr,
+    Schema.optional,
   ),
-  completion_tokens_details: Schema.optional(
-    Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) })),
+  completion_tokens_details: Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) }).pipe(
+    Schema.NullOr,
+    Schema.optional,
   ),
 });
 const Content = Schema.NullOr(
@@ -219,53 +221,45 @@ const Completion = Schema.Struct({
       finish_reason: Schema.NullOr(Schema.String),
       message: Schema.Struct({
         content: Schema.optional(Content),
-        reasoning_content: Schema.optional(Schema.NullOr(Schema.String)),
-        refusal: Schema.optional(Schema.NullOr(Schema.String)),
-        tool_calls: Schema.optional(
-          Schema.Array(
-            Schema.Struct({
-              id: Schema.String,
-              type: Schema.Literal("function"),
-              function: Schema.Struct({
-                name: Schema.String,
-                arguments: Schema.String,
-              }),
-            }),
-          ),
-        ),
+        reasoning_content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        refusal: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        tool_calls: Schema.Struct({
+          id: Schema.String,
+          type: Schema.Literal("function"),
+          function: Schema.Struct({
+            name: Schema.String,
+            arguments: Schema.String,
+          }),
+        }).pipe(Schema.Array, Schema.optional),
       }),
     }),
   ),
-  usage: Schema.optional(Schema.NullOr(Usage)),
+  usage: Usage.pipe(Schema.NullOr, Schema.optional),
 });
 const Chunk = Schema.Struct({
   choices: Schema.Array(
     Schema.Struct({
       index: TokenCount,
-      finish_reason: Schema.optional(Schema.NullOr(Schema.String)),
+      finish_reason: Schema.String.pipe(Schema.NullOr, Schema.optional),
       delta: Schema.Struct({
-        content: Schema.optional(Schema.NullOr(Schema.String)),
-        reasoning_content: Schema.optional(Schema.NullOr(Schema.String)),
-        refusal: Schema.optional(Schema.NullOr(Schema.String)),
-        tool_calls: Schema.optional(
-          Schema.Array(
+        content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        reasoning_content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        refusal: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        tool_calls: Schema.Struct({
+          index: TokenCount,
+          id: Schema.optional(Schema.String),
+          type: Schema.optional(Schema.Literal("function")),
+          function: Schema.optional(
             Schema.Struct({
-              index: TokenCount,
-              id: Schema.optional(Schema.String),
-              type: Schema.optional(Schema.Literal("function")),
-              function: Schema.optional(
-                Schema.Struct({
-                  name: Schema.optional(Schema.String),
-                  arguments: Schema.optional(Schema.String),
-                }),
-              ),
+              name: Schema.optional(Schema.String),
+              arguments: Schema.optional(Schema.String),
             }),
           ),
-        ),
+        }).pipe(Schema.Array, Schema.optional),
       }),
     }),
   ),
-  usage: Schema.optional(Schema.NullOr(Usage)),
+  usage: Usage.pipe(Schema.NullOr, Schema.optional),
 });
 const ErrorBody = Schema.Struct({
   error: Schema.Struct({

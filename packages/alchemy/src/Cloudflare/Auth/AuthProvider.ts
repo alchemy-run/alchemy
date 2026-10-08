@@ -328,7 +328,9 @@ export const CloudflareAuth = AuthProviderLayer<
 
       const oauthCreds = yield* oauthLogin(profileName, [...scopes]);
 
-      const accountId = yield* selectAccount(Redacted.value(oauthCreds.access)).pipe(
+      const accountId = yield* oauthCreds.access.pipe(
+        Redacted.value,
+        selectAccount,
         // Keep AuthError messages intact — they carry the actionable
         // diagnosis (e.g. "no accounts visible"); only wrap raw API errors.
         Effect.mapError((e) =>

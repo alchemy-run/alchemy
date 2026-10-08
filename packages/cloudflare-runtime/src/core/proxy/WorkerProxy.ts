@@ -289,8 +289,9 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // The connection lives exactly as long as the client socket: whatever
       // it is doing when the client closes is interrupted, and the scope
       // destroys both sockets.
-      const fiber = Effect.runFork(
-        Effect.race(connection(socket), closed(socket)).pipe(Effect.scoped),
+      const fiber = Effect.race(connection(socket), closed(socket)).pipe(
+        Effect.scoped,
+        Effect.runFork,
       );
       connections.add(fiber);
       fiber.addObserver(() => connections.delete(fiber));

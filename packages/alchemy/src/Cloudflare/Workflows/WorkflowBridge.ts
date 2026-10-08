@@ -151,15 +151,13 @@ export const wrapWorkflowStep = (
       ? {
           // Native compensation may run after this step and the run scope have closed.
           rollback: async (context: any) => {
-            const exit = await Effect.runPromiseExit(
-              Effect.scoped(
-                rollbackEffect({ error: context.error, output: context.output }) as Effect.Effect<
-                  void,
-                  unknown,
-                  Scope.Scope
-                >,
-              ),
-            );
+            const exit = await (
+              rollbackEffect({ error: context.error, output: context.output }) as Effect.Effect<
+                void,
+                unknown,
+                Scope.Scope
+              >
+            ).pipe(Effect.scoped, Effect.runPromiseExit);
             if (Exit.isFailure(exit)) throw await callbackFailure(exit.cause, name, identity);
           },
           rollbackConfig: definedStepConfig(options.rollbackConfig),

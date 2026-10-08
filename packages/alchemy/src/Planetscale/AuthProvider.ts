@@ -131,7 +131,7 @@ export const PlanetscaleAuthConfigSchema = Schema.Union([
     access: Schema.String,
     refresh: Schema.String,
     expires: Schema.Number,
-    scopes: Schema.mutable(Schema.Array(Schema.String)),
+    scopes: Schema.String.pipe(Schema.Array, Schema.mutable),
   }),
 ]);
 export type PlanetscaleAuthConfig = typeof PlanetscaleAuthConfigSchema.Type;
@@ -201,7 +201,9 @@ export const PlanetscaleAuth = AuthProviderLayer<
       // `user:read_organizations` scope. If the call fails for any
       // reason — missing scope, network, off-spec response — fall back
       // to a manual prompt so login still completes.
-      const organization = yield* selectOrganization(Redacted.value(oauthCreds.access)).pipe(
+      const organization = yield* oauthCreds.access.pipe(
+        Redacted.value,
+        selectOrganization,
         Effect.catch((e) =>
           Effect.gen(function* () {
             yield* interaction.output.warning(

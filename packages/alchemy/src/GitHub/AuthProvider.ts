@@ -183,8 +183,8 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           const [exitCode, stdout, stderr] = yield* Effect.all(
             [
               handle.exitCode,
-              Stream.mkString(Stream.decodeText(handle.stdout)),
-              Stream.mkString(Stream.decodeText(handle.stderr)),
+              handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+              handle.stderr.pipe(Stream.decodeText, Stream.mkString),
             ],
             { concurrency: 3 },
           );

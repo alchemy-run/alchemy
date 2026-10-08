@@ -189,7 +189,7 @@ export const RestrictedApiKeyProvider = () =>
       const resolveAccountApiKey = Effect.gen(function* () {
         const resolve = yield* Credentials;
         const cfg = yield* resolve;
-        return Redacted.make(Redacted.value(cfg.apiKey));
+        return cfg.apiKey.pipe(Redacted.value, Redacted.make);
       });
       const value =
         props.value !== undefined ? Redacted.make(props.value) : yield* resolveAccountApiKey;

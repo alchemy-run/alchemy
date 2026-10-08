@@ -488,21 +488,19 @@ export const FleetProvider = () =>
 
           // Ensure — create if missing, then wait for ACTIVE.
           if (state === undefined) {
-            const created = yield* retryWhileFarmSettling(
-              retryThroughIamPropagation(
-                deadline.createFleet({
-                  farmId,
-                  displayName,
-                  description: news.description,
-                  roleArn: news.roleArn,
-                  minWorkerCount: news.minWorkerCount,
-                  maxWorkerCount: news.maxWorkerCount,
-                  configuration: toWireConfiguration(news.configuration),
-                  hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
-                  tags: desiredTags,
-                }),
-              ),
-            );
+            const created = yield* deadline
+              .createFleet({
+                farmId,
+                displayName,
+                description: news.description,
+                roleArn: news.roleArn,
+                minWorkerCount: news.minWorkerCount,
+                maxWorkerCount: news.maxWorkerCount,
+                configuration: toWireConfiguration(news.configuration),
+                hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
+                tags: desiredTags,
+              })
+              .pipe(retryThroughIamPropagation, retryWhileFarmSettling);
             yield* session.note(`Creating fleet ${displayName} (${created.fleetId})...`);
             state = yield* waitForFleetActive(farmId, created.fleetId, arnOf);
           }

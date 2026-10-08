@@ -130,7 +130,7 @@ export const decodeGitBodyStream = <E>(
         ? Stream.empty
         : // `toPull`'s error channel is already Done-free, so ExcludeDone<E> = E;
           // TS cannot reduce the conditional for a generic E, hence the cast.
-          (Stream.fromPull(Effect.succeed(pull)) as Stream.Stream<Uint8Array, E>);
+          (pull.pipe(Effect.succeed, Stream.fromPull) as Stream.Stream<Uint8Array, E>);
       const full: Stream.Stream<Uint8Array, E> =
         length === 0 ? remainder : Stream.concat(Stream.succeed(headBytes), remainder);
       return sniffGzip(headBytes)

@@ -1708,30 +1708,23 @@ export const ingestPackFrom = (
             readonly partNumber: number;
           },
         ) =>
-          Effect.forkChild(
-            Semaphore.withPermits(
-              gate,
-              1,
-            )(
-              hasher
-                .hashPart(payload, {
-                  base: opts.base,
-                  skip: opts.skip,
-                  remaining: count,
-                  maxObjectSize: MAX_OBJECT_SIZE,
-                  resync: opts.resync,
-                  spill:
-                    upload === undefined || spill === undefined || !hasher.writesSpill
-                      ? undefined
-                      : {
-                          key: spill.key,
-                          uploadId: upload.uploadId,
-                          partNumber: opts.partNumber,
-                        },
-                })
-                .pipe(Effect.mapError(asIngest)),
-            ),
-          );
+          hasher
+            .hashPart(payload, {
+              base: opts.base,
+              skip: opts.skip,
+              remaining: count,
+              maxObjectSize: MAX_OBJECT_SIZE,
+              resync: opts.resync,
+              spill:
+                upload === undefined || spill === undefined || !hasher.writesSpill
+                  ? undefined
+                  : {
+                      key: spill.key,
+                      uploadId: upload.uploadId,
+                      partNumber: opts.partNumber,
+                    },
+            })
+            .pipe(Effect.mapError(asIngest), Semaphore.withPermits(gate, 1), Effect.forkChild);
         const produce = Effect.gen(function* () {
           if (spill === undefined) {
             // Pack-relative parts from the (in-memory or spilled) source.
@@ -1772,21 +1765,18 @@ export const ingestPackFrom = (
               const partNumber = Math.floor(partStart / partBytes) + 1;
               const bytes = bytesFrom(partStart - packStart, end - packStart);
               partStart = end;
-              const fiber = yield* Effect.forkDetach(
-                Semaphore.withPermits(
-                  uploadGate,
-                  1,
-                )(
-                  spill.blobs.uploadPart(spill.key, settled.uploadId, partNumber, bytes).pipe(
-                    Effect.mapError((error) =>
-                      PackIngestError.make({
-                        reason: `spill part ${partNumber}: ${error.reason}`,
-                      }),
-                    ),
-                    Effect.provide(RuntimeContext.phantom),
+              const fiber = yield* spill.blobs
+                .uploadPart(spill.key, settled.uploadId, partNumber, bytes)
+                .pipe(
+                  Effect.mapError((error) =>
+                    PackIngestError.make({
+                      reason: `spill part ${partNumber}: ${error.reason}`,
+                    }),
                   ),
-                ),
-              );
+                  Effect.provide(RuntimeContext.phantom),
+                  Semaphore.withPermits(uploadGate, 1),
+                  Effect.forkDetach,
+                );
               parts.push(Fiber.join(fiber));
             });
           let index = 0;

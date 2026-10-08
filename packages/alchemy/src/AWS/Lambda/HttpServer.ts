@@ -59,8 +59,11 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `InvocationTimeoutError` as its status — before draining the exporters.
   // The dispatcher's outer guard stands down when this one takes the
   // deadline; see `withInvocationDeadline`.
-  const safeHandler = HttpMiddleware.tracer(
-    withInvocationDeadline(Http.safeHttpEffect(handler)).pipe(annotateRequestSpan),
+  const safeHandler = handler.pipe(
+    Http.safeHttpEffect,
+    withInvocationDeadline,
+    annotateRequestSpan,
+    HttpMiddleware.tracer,
   );
   return (
     event: any,

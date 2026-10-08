@@ -296,9 +296,9 @@ export const InstructionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreGone(
-        retryDelete(datalabeling.deleteProjectsInstructions({ name: output.name })),
-      );
+      yield* datalabeling
+        .deleteProjectsInstructions({ name: output.name })
+        .pipe(retryDelete, ignoreGone);
       yield* waitUntilGone(getByName(output.name));
     }),
   });

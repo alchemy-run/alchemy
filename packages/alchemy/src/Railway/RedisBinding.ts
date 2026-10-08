@@ -26,7 +26,7 @@ export const REDIS_URL_ENV = "REDIS_URL";
 
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
-  if (Redacted.isRedacted(value)) return asPlain(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, asPlain);
   return undefined;
 };
 

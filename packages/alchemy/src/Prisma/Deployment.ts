@@ -366,7 +366,7 @@ const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
 const TRIGGERS_HASH_SALT = "alchemy/Prisma.Deployment/triggers/v1";
 
 const unwrapRedacted = (value: unknown): unknown => {
-  if (Redacted.isRedacted(value)) return unwrapRedacted(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, unwrapRedacted);
   if (Array.isArray(value)) return value.map(unwrapRedacted);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(

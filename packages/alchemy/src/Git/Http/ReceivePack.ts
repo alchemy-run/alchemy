@@ -38,7 +38,7 @@ export const decode = (request: HttpServerRequest.HttpServerRequest) =>
     const gzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
     const body =
       gzip && web.body !== null ? web.body.pipeThrough(new DecompressionStream("gzip")) : web.body;
-    const receiving = yield* Effect.forkScoped(Effect.result(feedBody(body, feeder)));
+    const receiving = yield* feedBody(body, feeder).pipe(Effect.result, Effect.forkScoped);
     const state = {
       feeder,
       receiving,

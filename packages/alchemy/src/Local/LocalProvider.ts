@@ -209,7 +209,7 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
     if (typeof input === "bigint") return `bigint:${input.toString()}`;
     if (input === null || typeof input !== "object") return input;
     if (Redacted.isRedacted(input)) {
-      return { __redacted: normalize(Redacted.value(input)) };
+      return { __redacted: input.pipe(Redacted.value, normalize) };
     }
     if (seen.has(input)) return "[circular]";
     seen.add(input);
