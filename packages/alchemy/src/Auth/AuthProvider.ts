@@ -44,6 +44,21 @@ export class AuthError extends Schema.TaggedError<AuthError>()("AuthError", {
 }
 
 /**
+ * An {@link AuthProvider} registration declares an inconsistent contract,
+ * e.g. it implements `readEnvironment` without declaring its `environment`
+ * variables. Raised when the provider's layer is built.
+ */
+export class InvalidAuthProviderDeclaration extends Schema.TaggedError<InvalidAuthProviderDeclaration>()(
+  "InvalidAuthProviderDeclaration",
+  {
+    provider: Schema.String,
+    message: Schema.String,
+  },
+) {
+  readonly [UserFacingError] = true;
+}
+
+/**
  * Stored credentials exist (or are expected) but cannot be used until the
  * user re-authenticates: missing values, an expired/rotated
  * token, or a session the provider can no longer refresh silently. The
@@ -352,21 +367,25 @@ export const AuthProvider =
         service.environment,
       ).pipe(Effect.orElseSucceed(() => []));
       if (service.readEnvironment !== undefined && environment.length === 0) {
-        return yield* Effect.die(
-          `AuthProvider '${name}' implements readEnvironment but does not ` +
+        return yield* InvalidAuthProviderDeclaration.make({
+          provider: name,
+          message:
+            `AuthProvider '${name}' implements readEnvironment but does not ` +
             "declare its `environment` variables. Declare every variable " +
             "readEnvironment consumes so CI requirements are discoverable.",
-        );
+        });
       }
       if (
         service.configureWith !== undefined &&
         (service.configureMethods === undefined || service.configureMethods.length === 0)
       ) {
-        return yield* Effect.die(
-          `AuthProvider '${name}' implements configureWith but does not ` +
+        return yield* InvalidAuthProviderDeclaration.make({
+          provider: name,
+          message:
+            `AuthProvider '${name}' implements configureWith but does not ` +
             "declare `configureMethods`. Declare each accepted --method and " +
             "its --set fields so the CLI can validate and document them.",
-        );
+        });
       }
 
       const provider: AuthProvider<Config, Credentials> = {
