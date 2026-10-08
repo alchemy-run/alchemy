@@ -1,36 +1,23 @@
 ---
 title: Foldkit
-description: Deploy a Foldkit app to Cloudflare Workers with Cloudflare.Website.Foldkit — client-only, server-rendered, or prerendered from a single vite build, no adapter, no Worker entry, no Wrangler config.
+description: Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Cloudflare Workers.
 sidebar:
   order: 8
 ---
 
-[Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. A Foldkit app builds through Vite, so
-`Cloudflare.Website.Foldkit` deploys one as a Cloudflare Worker with
-a single declaration: no adapter, no build command, no output
-directory, no Wrangler configuration.
+`Cloudflare.Website.Foldkit` deploys a [Foldkit](https://foldkit.dev) app
+as a Cloudflare Worker. Alchemy runs the project's Vite build and uploads
+the client output as Worker static assets. With `ssr.build` enabled, the
+generated Fetch handler becomes the Worker entry.
 
-`Foldkit` is [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite)
-with Foldkit's defaults: one `vite build` over the project. The
-client output deploys as the Worker's static assets. When the app's
-own `vite.config.ts` asks for a server build, that same `vite build`
-also emits `dist/server/fetch.js` — a Web `fetch` handler with the
-built shell embedded — and that handler is the Worker, exactly the
-way a TanStack Start server bundle is. Every prop this page doesn't
-cover behaves as it does on `Vite`.
-
-How a Foldkit app is delivered is a property of the app's Vite
-config, not of the declaration. The same declaration deploys a
-client-only, prerendered, server-rendered, or hybrid app; the build
-writes down which, and the asset routing follows from that — no
-`assets` config for any of them. See
-[Asset routing](#asset-routing).
+Configure rendering in the application's Foldkit plugin. The resource supports
+browser-only SPAs, server-side rendering (SSR), static site generation (SSG),
+and hybrid rendering. Asset routing follows the build's output.
 
 ## Configure Vite
 
-Keep the `foldkit()` plugin from `create-foldkit-app`. Foldkit configures
-dependency optimization and deduplication for every Vite environment:
+Keep the `foldkit()` plugin from the Foldkit scaffold and your normal Vite
+plugins:
 
 ```typescript
 // vite.config.ts
@@ -47,65 +34,66 @@ its Cloudflare integration on top of this config — the Foldkit
 plugin and the rest of your setup are preserved as-is. This is a
 client-only app: a plain `vite build`, deployed as assets.
 
-:::note[Pinned Effect versions]
-Foldkit pins its `effect` peer dependency to an exact version.
-Alchemy runs your app's own Vite build with your app's own
-`node_modules`, so that pin is between Foldkit and your package
-manager — Alchemy imposes no Effect version on your frontend.
-:::
+### Server rendering and prerendering
 
-### Server-rendered and prerendered
+Configure rendering in the application's `foldkit(...)` plugin. This example
+uses Foldkit 0.167.0, `@foldkit/vite-plugin` 0.27.0 and compatible Effect
+dependencies:
 
-Use `@foldkit/vite-plugin` 0.27.0 or newer with a compatible Foldkit
-version (0.167.0 or newer, with Effect 4.0.0). Declare the server entry in Vite:
-
-```diff lang="typescript"
+```typescript
 // vite.config.ts
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
 export default defineConfig({
--  plugins: [foldkit()],
-+  plugins: [
-+    foldkit({
-+      ssr: {
-+        serverEntry: "/src/entry.server.ts",
-+        clientEntry: "/src/entry.ts",
-+        build: true,
-+      },
-+    }),
-+  ],
+  plugins: [
+    foldkit({
+      ssr: {
+        serverEntry: "/src/entry.server.ts",
+        clientEntry: "/src/entry.ts",
+        build: true,
+      },
+    }),
+  ],
 });
 ```
 
-`ssr.build` is what makes the one `vite build` emit the `fetch`
-handler next to the browser bundle. Alchemy deploys it as the
-Worker; nothing in `alchemy.run.ts` names an entry.
+The server entry exports `renderPage` and `renderDocument`. Import stylesheets
+from the client entry and use `Runtime.hydrate` to start the browser application.
+Remove the source `index.html` for this build: Foldkit generates the complete
+HTML document, including the client script, stylesheets and module preload links.
 
-Import CSS from the client entry and export `renderDocument = Server.renderDocument`
-alongside `renderPage` in the server entry. Remove the source `index.html`: Foldkit
-generates the complete document, including stylesheets and module preload links,
-for both request-time rendering and prerendering.
+```typescript
+// src/entry.server.ts
+import { Server } from "foldkit/experimental";
 
-To prerender instead, ask the build to generate the paths the entry
-exports as `prerenderPaths`:
-
-```diff lang="typescript"
-ssr: {
-  serverEntry: "/src/entry.server.ts",
-  clientEntry: "/src/entry.ts",
--  build: true,
-+  build: { prerender: true },
-},
+export const renderDocument = Server.renderDocument;
 ```
 
-The handler is still built and still deployed: prerendered routes
-are served as files, and any route the entry did not list renders on
-request. Prerender every route for a fully static site, some of them
-for a hybrid one.
+Keep your application's `renderPage` export alongside the document renderer.
+Foldkit currently exposes its server rendering API through `foldkit/experimental`;
+see its [server rendering guide](https://foldkit.dev/core/server-rendering) for
+the application and hydration contract.
 
-Foldkit automatically generates a shared build identity for the client
-and server. `Server.renderToString` and `Runtime.hydrate` use it by
-default; no manual build ID or custom `vite-env.d.ts` declaration is
-needed. See Foldkit's [server rendering](https://foldkit.dev/core/server-rendering)
-docs for the hydration contract.
+For static site generation (SSG), change `build` to `{ prerender: true }` and
+export the URLs to generate from the server entry:
+
+```typescript
+// src/entry.server.ts
+export const prerenderPaths = ["/", "/about"];
+```
+
+SSG renders those URLs during the build. SSR renders a page when its request
+arrives. A hybrid application prerenders some URLs and renders others on request.
+The same `renderPage` and `renderDocument` exports serve both delivery policies.
+
+The same Website declaration deploys the generated handler and client assets.
+Prerendered pages are served as files. Requests that match no file reach the
+handler, where `renderPage` chooses whether to render a page, redirect or return
+404. For an SSG-only application, return 404 for URLs outside its generated
+route set. Rendering those URLs on request makes the deployment hybrid.
+
+Foldkit generates the shared client/server build identity automatically.
 
 ## Declare the Website
 
@@ -121,10 +109,8 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit");
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
 
-That declaration is the whole of it, whichever way the app is
-delivered. `WebsiteEnv` is the typed shape of the Worker's bindings;
-a client-only app with a `main` entry imports it in
-[Custom Worker entry](#custom-worker-entry).
+`WebsiteEnv` is the typed shape of the Worker's bindings. A client-only app
+with a custom Worker imports it in [Custom Worker entry](#custom-worker-entry).
 
 For an app in a subdirectory of a monorepo, point `rootDir` at it:
 
@@ -165,34 +151,16 @@ export default Alchemy.Stack(
 
 ## Asset routing
 
-The asset layer answers a request before the Worker sees it, so what
-it does with a request that matches no file decides whether a page
-ever renders. Getting it wrong fails quietly: the site serves 200s
-that carry an empty document. `Foldkit` derives it from the build, so
-nothing needs declaring.
+GET and HEAD requests serve matching client assets and prerendered pages first.
+The browser build contains a rendered homepage only when `/` was prerendered;
+otherwise the homepage reaches the handler. Other application methods reach
+the Worker rather than a prerendered file.
 
-After the build completes, Alchemy reads the Foldkit plugin's
-`getBuildMetadata()` result, which includes the prerendered paths.
-Foldkit also writes `foldkit.build.json` beside the handler, but
-Alchemy does not read that file:
+Browser-only builds use `notFoundHandling: "single-page-application"`. An
+unmatched path serves `index.html`, and the browser router resolves the URL.
+Server builds use normal asset lookup and send misses to Foldkit's handler.
 
-- A prerendered route is a file, and the default `htmlHandling`
-  serves `/about` from `about/index.html`.
-- Every other request reaches the `fetch` handler, which answers a
-  miss for a hashed asset with a 404 and renders a page.
-- The build starts from a client script and emits only rendered HTML, so
-  `/` is a file only when the build prerendered it; otherwise the
-  front page reaches the handler like any other route.
-
-Without the Foldkit SSR build plugin, Alchemy applies the client-only
-default. Nothing renders outside the browser, so a deep link like
-`/counter/42` is a request for a file that doesn't exist. It gets
-`notFoundHandling: "single-page-application"` — the template is
-served and the app's router resolves the path once it boots — the
-same default `AWS`, `Fly`, `Hetzner`, and `Railway`'s `Foldkit`
-resources apply.
-
-Anything you set in `assets` wins over what is derived. An app that
+Explicit `assets` settings override these defaults. An application that
 ships a real 404 page opts out of the fallback:
 
 ```typescript
@@ -205,9 +173,8 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
 
 ## Add environment variables
 
-Browser code has no server to ask, so anything a client-only app
-needs from the rest of your Stack is baked into the bundle at build
-time — pass a `VITE_`-prefixed key in `env`:
+Pass browser configuration through `VITE_`-prefixed keys in `env`. Alchemy
+inlines these values into `import.meta.env.*` during the Vite build:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -218,8 +185,9 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
 });
 ```
 
-Type it for your Foldkit code with Vite's standard `ImportMetaEnv`
-augmentation:
+## Read the environment in client code
+
+Type a custom public key with Vite's standard `ImportMetaEnv` augmentation:
 
 ```typescript
 // src/vite-env.d.ts
@@ -234,9 +202,9 @@ Client code reads it as `import.meta.env.VITE_API_URL`. See
 [Environment](/cloudflare/frontend/vite#environment) for the full
 inlining semantics.
 
-The same `env` prop also carries runtime bindings — KV namespaces,
-secrets, other Workers — to a `main` entry, where they are read from
-the Worker's env rather than inlined into the bundle.
+The same `env` prop carries runtime bindings, including KV namespaces, secrets
+and other Workers. A custom Worker reads them from its `env` argument. Keep
+secrets out of `VITE_*` keys and serialized Foldkit Flags; both reach the browser.
 
 ## Custom Worker entry
 
@@ -274,11 +242,11 @@ the entry and bind what the Worker needs:
 
 ```typescript
 // alchemy.run.ts
-const ticker = yield* Cloudflare.KV.Namespace("Ticker");
+export const Ticker = Cloudflare.KV.Namespace("Ticker");
 
 export const Website = Cloudflare.Website.Foldkit("Foldkit", {
   main: "src/worker.ts",
-  env: { TICKER: ticker },
+  env: { TICKER: Ticker },
   assets: {
     runWorkerFirst: ["/api/*"],
   },
@@ -290,16 +258,14 @@ layer. The client-only fallback is still derived — a deep link the
 Worker hands back through `env.ASSETS.fetch` is answered with the
 template as before.
 
-Bindings passed in `env` are reachable from this Worker entry (and
-from cron handlers), not from browser code. `env.TICKER` is typed as
-a KV namespace and `ASSETS` comes with the resource, so nothing here
-is hand-written — renaming a binding in `alchemy.run.ts` is a type
-error in your Worker.
+`env.TICKER` is typed as a KV namespace, and Alchemy supplies the `ASSETS`
+binding. These runtime bindings are available to Worker code; browser code
+receives only the public build-time values.
 
 A server-rendered or prerendered app cannot take a `main`: with
 `ssr.build` set, Foldkit's plugin owns the server entry, and the
-build fails if another module claims it. Put edge logic for such an
-app in its `renderPage` entry, or in a separate Worker.
+build fails if another module claims it. Handle page redirects, status and
+response headers in `renderPage`. Put data APIs or additional Worker handlers in a separate Worker.
 
 ## Local dev
 
@@ -307,13 +273,14 @@ app in its `renderPage` entry, or in a separate Worker.
 bun alchemy dev
 ```
 
-`alchemy dev` runs the app's own Vite dev server, so Foldkit's
-state-preserving live reload and its devtools wiring work unchanged. A
-server-rendered app renders in dev through the same `ssr.serverEntry`
-Foldkit's own `vite dev` uses — Alchemy leaves Vite's `ssr`
-environment in place when nothing of yours runs in workerd — and a
-client-only app with a `main` entry sees real KV namespaces and
-secrets through that entry.
+`alchemy dev` runs Foldkit's native Vite dev server with state-preserving live
+reload and devtools. SSR uses the same server entry as the production build.
+A development reload restores the Model and rebuilds the DOM; refresh manually
+to exercise hydration from the server-rendered HTML.
+
+A client-only app with a custom `main` runs its Worker through workerd and can
+use Cloudflare bindings. The native Foldkit SSR dev host runs in Node; it does
+not expose the generated Worker's bindings as an `env` argument to `renderPage`.
 
 Pin the dev server's address when several apps run in one Stack:
 
