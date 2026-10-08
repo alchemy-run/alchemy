@@ -380,7 +380,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
     > =>
       configureInteractive().pipe(
         Effect.mapError((e) =>
-          e instanceof AuthError
+          Schema.is(AuthError)(e)
             ? e
             : new AuthError({
                 message: "failed to configure credentials",
@@ -804,7 +804,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
       } satisfies AwsResolvedCredentials;
     }).pipe(
       Effect.mapError((cause) =>
-        cause instanceof AuthError
+        Schema.is(AuthError)(cause)
           ? cause
           : new AuthError({
               message: "Failed to resolve AWS credentials from the CI environment.",

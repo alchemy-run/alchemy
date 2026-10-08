@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import { parseAllDocuments, parse as parseYaml } from "yaml";
 import { exec } from "../Util/exec.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
@@ -1624,7 +1625,7 @@ const readArtifactFiles = (directory: string) =>
   );
 
 function toBundleError(cause: unknown): BundleError {
-  return cause instanceof BundleError
+  return Schema.is(BundleError)(cause)
     ? cause
     : new BundleError({
         message: cause instanceof Error ? cause.message : String(cause),

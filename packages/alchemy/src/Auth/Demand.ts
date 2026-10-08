@@ -106,7 +106,7 @@ export const failCredentialsRequired =
   (fqn: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.catchDefect(self, (defect) =>
-      defect instanceof CredentialsUnavailable
+      Schema.is(CredentialsUnavailable)(defect)
         ? Effect.fail(
             new CredentialsRequired({
               provider: defect.provider,

@@ -18,6 +18,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 const TTL_SECONDS = 120;
 const EXPIRY_MARGIN_MS = 15_000;
@@ -26,11 +27,11 @@ const retrySchedule = <E>(): Schedule.Schedule<Duration.Duration, E> =>
   Schedule.exponential("500 millis").pipe(
     Schedule.modifyDelay<Duration.Duration, E>(({ input, duration }) =>
       Effect.succeed(
-        (input instanceof TooManyRequests ||
-          input instanceof InternalServerError ||
-          input instanceof BadGateway ||
-          input instanceof ServiceUnavailable ||
-          input instanceof GatewayTimeout) &&
+        (Schema.is(TooManyRequests)(input) ||
+          Schema.is(InternalServerError)(input) ||
+          Schema.is(BadGateway)(input) ||
+          Schema.is(ServiceUnavailable)(input) ||
+          Schema.is(GatewayTimeout)(input)) &&
           input.retryAfter
           ? Math.min(Duration.toMillis(input.retryAfter), 60_000)
           : Math.min(Duration.toMillis(duration), 5_000),

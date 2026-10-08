@@ -62,7 +62,7 @@ export const readDeltaHeader = (delta: Uint8Array): DeltaHeader => {
       offset: result.next,
     };
   } catch (error) {
-    throw error instanceof ObjectParseError
+    throw Schema.is(ObjectParseError)(error)
       ? new DeltaFormatError({
           reason: `truncated delta header: ${error.reason}`,
         })
@@ -84,7 +84,9 @@ export const applyDelta = (
       header = readDeltaHeader(delta);
     } catch (error) {
       return Effect.fail(
-        error instanceof DeltaFormatError ? error : new DeltaFormatError({ reason: String(error) }),
+        Schema.is(DeltaFormatError)(error)
+          ? error
+          : new DeltaFormatError({ reason: String(error) }),
       );
     }
     if (header.baseSize !== base.length) {

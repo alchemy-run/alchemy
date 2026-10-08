@@ -249,7 +249,7 @@ export const decodePktStream = <E, R>(
         void
       > = Effect.suspend(() => {
         const drained = drain();
-        if (drained instanceof PktLineError) return Effect.fail(drained);
+        if (Schema.is(PktLineError)(drained)) return Effect.fail(drained);
         if (Arr.isReadonlyArrayNonEmpty(drained)) {
           return Effect.succeed(drained);
         }

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { PushDenied, RefConflict, RepoNotFound } from "./Api/Schema.ts";
@@ -39,7 +40,7 @@ import { sliceRandomAccess } from "./Store/PackSource.ts";
 const path = (repo: RepoMetaData) => ({ owner: repo.owner, repo: repo.name });
 
 const asStoreError = (error: { readonly _tag: string; readonly reason?: string }) =>
-  error instanceof StoreError
+  Schema.is(StoreError)(error)
     ? error
     : new StoreError({
         reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,

@@ -19,6 +19,7 @@
  * hashes the whole pack as it streams).
  */
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { applyDelta } from "./Delta.ts";
 import {
   bytesToHex,
@@ -163,10 +164,9 @@ export const scanPart = (
         // A header cut by the buffer edge: stop here, carry the tail.
         if (lenient || buf.length - pos < 16) break;
         return yield* new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry at ${offset}: ${error.reason}`
-              : `entry at ${offset}: ${String(error)}`,
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry at ${offset}: ${error.reason}`
+            : `entry at ${offset}: ${String(error)}`,
         });
       }
       if (header.size > options.maxObjectSize) {
@@ -339,10 +339,9 @@ export const scanBounds = (
       } catch (error) {
         if (buf.length - pos < 16) break;
         return yield* new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry at ${offset}: ${error.reason}`
-              : `entry at ${offset}: ${String(error)}`,
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry at ${offset}: ${error.reason}`
+            : `entry at ${offset}: ${String(error)}`,
         });
       }
       if (header.size > options.maxObjectSize) {

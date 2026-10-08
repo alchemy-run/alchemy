@@ -183,7 +183,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         Effect.onInterrupt(() => cancel),
         Effect.tapError(() => cancel),
         Effect.mapError((e) =>
-          e instanceof AuthError
+          Schema.is(AuthError)(e)
             ? e
             : new AuthError({ message: "Railway login session poll failed", cause: e }),
         ),
@@ -355,7 +355,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         )
         .pipe(
           Effect.mapError((e) =>
-            e instanceof AuthError ? e : new AuthError({ message: "login failed", cause: e }),
+            Schema.is(AuthError)(e) ? e : new AuthError({ message: "login failed", cause: e }),
           ),
         );
 

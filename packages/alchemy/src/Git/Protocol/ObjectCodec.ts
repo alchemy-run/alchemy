@@ -731,7 +731,7 @@ export const encodeTree = (
       }
       return Effect.succeed(concatBytes(parts, total));
     } catch (error) {
-      return error instanceof ObjectParseError
+      return Schema.is(ObjectParseError)(error)
         ? Effect.fail(error)
         : Effect.fail(new ObjectParseError({ reason: String(error) }));
     }

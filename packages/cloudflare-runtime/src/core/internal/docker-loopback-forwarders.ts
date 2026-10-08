@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import {
@@ -99,7 +100,7 @@ export const makeDockerLoopbackForwarders = Effect.fnUntraced(function* (options
     }).pipe(
       Effect.scoped,
       Effect.mapError((cause) =>
-        cause instanceof SystemError ? cause : failure(String(cause), cause),
+        Schema.is(SystemError)(cause) ? cause : failure(String(cause), cause),
       ),
       Effect.catchCause((cause) =>
         // A completed readiness signal means this is a failure after startup.

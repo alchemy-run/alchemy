@@ -1,6 +1,7 @@
 import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { diffTags } from "../../Tags.ts";
 
 /**
@@ -68,7 +69,7 @@ export const retryRolePropagation = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e instanceof entityresolution.AccessDeniedException &&
+      Schema.is(entityresolution.AccessDeniedException)(e) &&
       typeof e.message === "string" &&
       (e.message.includes("assuming the passed role") ||
         e.message.includes("does not have access")),

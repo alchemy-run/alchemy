@@ -563,10 +563,9 @@ export const ingestPack = <E, R>(
         header = decodeTypeSize(window, 0);
       } catch (error) {
         return new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry ${i}: ${error.reason}`
-              : `entry ${i}: ${String(error)}`,
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry ${i}: ${error.reason}`
+            : `entry ${i}: ${String(error)}`,
         });
       }
       if (isDeltaType(header.type)) return undefined;
@@ -677,10 +676,9 @@ export const ingestPack = <E, R>(
         header = decodeTypeSize(window, 0);
       } catch (error) {
         return yield* new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry ${i}: ${error.reason}`
-              : `entry ${i}: ${String(error)}`,
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry ${i}: ${error.reason}`
+            : `entry ${i}: ${String(error)}`,
         });
       }
       let pos = header.next;
@@ -692,10 +690,9 @@ export const ingestPack = <E, R>(
           ofs = decodeOfsDeltaOffset(window, pos);
         } catch (error) {
           return yield* new PackFormatError({
-            reason:
-              error instanceof ObjectParseError
-                ? `entry ${i}: ${error.reason}`
-                : `entry ${i}: ${String(error)}`,
+            reason: Schema.is(ObjectParseError)(error)
+              ? `entry ${i}: ${error.reason}`
+              : `entry ${i}: ${String(error)}`,
           });
         }
         pos = ofs.next;
@@ -790,8 +787,8 @@ export const ingestPack = <E, R>(
         const result = yield* Effect.result(emitDelta(entry));
         if (Result.isFailure(result)) {
           if (
-            result.failure instanceof MissingDeltaBaseError ||
-            result.failure instanceof BaseEvictedError
+            Schema.is(MissingDeltaBaseError)(result.failure) ||
+            Schema.is(BaseEvictedError)(result.failure)
           ) {
             // The base may appear later in the pack (thin ref-delta), or
             // it was evicted from a streaming source and is readable once
@@ -827,10 +824,10 @@ export const ingestPack = <E, R>(
       for (const entry of pending) {
         const result = yield* Effect.result(emitDelta(entry));
         if (Result.isFailure(result)) {
-          if (result.failure instanceof MissingDeltaBaseError) {
+          if (Schema.is(MissingDeltaBaseError)(result.failure)) {
             firstMissing ??= result.failure;
             next.push(entry);
-          } else if (result.failure instanceof BaseEvictedError) {
+          } else if (Schema.is(BaseEvictedError)(result.failure)) {
             return yield* new PackFormatError({
               reason: `delta base at ${result.failure.offset} unreadable after the body ended`,
             });

@@ -9,6 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import {
   AuthError,
   AuthProviderLayer,
@@ -331,7 +332,7 @@ export const CloudflareAuth = AuthProviderLayer<
         // Keep AuthError messages intact — they carry the actionable
         // diagnosis (e.g. "no accounts visible"); only wrap raw API errors.
         Effect.mapError((e) =>
-          e instanceof AuthError
+          Schema.is(AuthError)(e)
             ? e
             : new AuthError({ message: "Cloudflare: could not list accounts", cause: e }),
         ),
@@ -374,7 +375,7 @@ export const CloudflareAuth = AuthProviderLayer<
         // generic banner is what hid "no accounts visible" behind
         // "failed to configure credentials".
         Effect.mapError((e) =>
-          e instanceof AuthError
+          Schema.is(AuthError)(e)
             ? e
             : new AuthError({ message: "failed to configure credentials", cause: e }),
         ),
@@ -653,7 +654,7 @@ export const CloudflareAuth = AuthProviderLayer<
           // A blanket mapError must never swallow the NeedsReauth tag —
           // the profile UI matches on it to render "needs re-login".
           Effect.mapError((e) =>
-            e instanceof NeedsReauth ? e : new AuthError({ message: "login failed", cause: e }),
+            Schema.is(NeedsReauth)(e) ? e : new AuthError({ message: "login failed", cause: e }),
           ),
         );
 

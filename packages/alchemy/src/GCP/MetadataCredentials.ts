@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 /**
@@ -76,7 +77,7 @@ const metadataGet = (http: HttpClient.HttpClient, path: string) =>
           }),
       ),
       Effect.mapError((cause) =>
-        cause instanceof ConfigError
+        Schema.is(ConfigError)(cause)
           ? cause
           : new ConfigError({
               message: `GCE metadata ${path} is unreachable: ${String(cause)}`,
