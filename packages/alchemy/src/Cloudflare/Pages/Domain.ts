@@ -273,8 +273,10 @@ export const DomainProvider = () =>
           domainName: output.name,
         })
         .pipe(
-          Effect.catchTag("PagesDomainNotFound", () => Effect.void),
-          Effect.catchTag("ProjectNotFound", () => Effect.void),
+          Effect.catchTags({
+            PagesDomainNotFound: () => Effect.void,
+            ProjectNotFound: () => Effect.void,
+          }),
         );
     }),
   });
@@ -291,8 +293,10 @@ type ObservedDomain =
  */
 const getDomain = (accountId: string, projectName: string, domainName: string) =>
   pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
-    Effect.catchTag("PagesDomainNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      PagesDomainNotFound: () => Effect.succeed(undefined),
+      ProjectNotFound: () => Effect.succeed(undefined),
+    }),
   );
 
 const toAttributes = (

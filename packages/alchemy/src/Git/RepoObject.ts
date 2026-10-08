@@ -3599,16 +3599,16 @@ export const GitRepoLive = GitRepo.make(
           const parsed = yield* decodePktLines(body).pipe(
             Effect.flatMap(parseUploadPackRequest),
             Effect.map(Option.some),
-            Effect.catchTag("PktLineError", (e) =>
-              Effect.succeed(Option.none<UploadPackRequest>()).pipe(
-                Effect.tap(() => Effect.logWarning(`upload-pack: ${e.reason}`)),
-              ),
-            ),
-            Effect.catchTag("WireProtocolError", (e) =>
-              Effect.succeed(Option.none<UploadPackRequest>()).pipe(
-                Effect.tap(() => Effect.logWarning(`upload-pack: ${e.reason}`)),
-              ),
-            ),
+            Effect.catchTags({
+              PktLineError: (e) =>
+                Effect.succeed(Option.none<UploadPackRequest>()).pipe(
+                  Effect.tap(() => Effect.logWarning(`upload-pack: ${e.reason}`)),
+                ),
+              WireProtocolError: (e) =>
+                Effect.succeed(Option.none<UploadPackRequest>()).pipe(
+                  Effect.tap(() => Effect.logWarning(`upload-pack: ${e.reason}`)),
+                ),
+            }),
           );
           if (Option.isNone(parsed)) {
             return errResponse("malformed upload-pack request");
@@ -5322,20 +5322,20 @@ export const GitRepoLive = GitRepo.make(
           }
           return HttpServerResponse.text("not found", { status: 404 });
         }).pipe(
-          Effect.catchTag("StoreError", (error) =>
-            Effect.as(
-              Effect.logError("git wire: storage failure", error),
-              HttpServerResponse.text("internal error", { status: 500 }),
-            ),
-          ),
-          Effect.catchTag("PackIngestError", (error) =>
-            Effect.succeed(
-              HttpServerResponse.uint8Array(errPkt(error.reason), {
-                status: 200,
-                headers: noCache,
-              }),
-            ),
-          ),
+          Effect.catchTags({
+            StoreError: (error) =>
+              Effect.as(
+                Effect.logError("git wire: storage failure", error),
+                HttpServerResponse.text("internal error", { status: 500 }),
+              ),
+            PackIngestError: (error) =>
+              Effect.succeed(
+                HttpServerResponse.uint8Array(errPkt(error.reason), {
+                  status: 200,
+                  headers: noCache,
+                }),
+              ),
+          }),
         ),
 
         alarm: () =>

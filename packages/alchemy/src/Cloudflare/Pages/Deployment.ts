@@ -262,13 +262,14 @@ export const DeploymentProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("DeploymentNotFound", () => Effect.void),
-          Effect.catchTag("ProjectNotFound", () => Effect.void),
-          Effect.catchTag("ActiveProductionDeployment", () =>
-            Effect.logWarning(
-              `Pages deployment ${output.deploymentId} is the active production deployment of project ${output.projectName}; it will be deleted with the project.`,
-            ),
-          ),
+          Effect.catchTags({
+            DeploymentNotFound: () => Effect.void,
+            ProjectNotFound: () => Effect.void,
+            ActiveProductionDeployment: () =>
+              Effect.logWarning(
+                `Pages deployment ${output.deploymentId} is the active production deployment of project ${output.projectName}; it will be deleted with the project.`,
+              ),
+          }),
         );
     }),
   });
@@ -288,8 +289,10 @@ type ObservedDeployment =
  */
 const getDeployment = (accountId: string, projectName: string, deploymentId: string) =>
   pages.getProjectDeployment({ accountId, projectName, deploymentId }).pipe(
-    Effect.catchTag("DeploymentNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      DeploymentNotFound: () => Effect.succeed(undefined),
+      ProjectNotFound: () => Effect.succeed(undefined),
+    }),
   );
 
 const isTerminalStage = (stage: ObservedDeployment["latestStage"]): boolean =>

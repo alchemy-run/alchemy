@@ -499,8 +499,10 @@ export const StreamProvider = () =>
             while: (e) => e._tag === "StreamInUse",
             schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
-          Effect.catchTag("StreamNotFound", () => Effect.void),
-          Effect.catchTag("InvalidStreamId", () => Effect.void),
+          Effect.catchTags({
+            StreamNotFound: () => Effect.void,
+            InvalidStreamId: () => Effect.void,
+          }),
         );
     }),
 
@@ -561,8 +563,10 @@ const streamName = (id: string, name: string | undefined) =>
 const getStream = (accountId: string, streamId: string) =>
   pipelines.getStream({ accountId, streamId }).pipe(
     Effect.map((s): ObservedStream | undefined => s),
-    Effect.catchTag("StreamNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidStreamId", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      StreamNotFound: () => Effect.succeed(undefined),
+      InvalidStreamId: () => Effect.succeed(undefined),
+    }),
   );
 
 const findStreamByName = (accountId: string, name: string) =>

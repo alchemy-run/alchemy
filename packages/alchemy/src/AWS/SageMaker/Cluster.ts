@@ -731,8 +731,10 @@ export const ClusterProvider = () =>
               Effect.catchTag(["ClusterFailed", "ClusterNotReady"], () => Effect.void),
             );
             yield* sagemaker.deleteCluster({ ClusterName: output.clusterName }).pipe(
-              Effect.catchTag("ResourceNotFound", () => Effect.void),
-              Effect.catchTag("ConflictException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFound: () => Effect.void,
+                ConflictException: () => Effect.void,
+              }),
             );
           }
           yield* waitForCluster(output.clusterName, "Gone");

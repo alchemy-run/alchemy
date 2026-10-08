@@ -250,8 +250,10 @@ export const PostgresRoleProvider = () =>
               branch: token.branch.name,
             }),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            Forbidden: () => Effect.succeed(undefined),
+            NotFound: () => Effect.succeed(undefined),
+          }),
         );
     }),
 
@@ -422,12 +424,10 @@ export const PostgresRoleProvider = () =>
                             ),
                         ),
                       ),
-                      Effect.catchTag("NotFound", () =>
-                        Effect.succeed([] as PostgresRoleAttributes[]),
-                      ),
-                      Effect.catchTag("Forbidden", () =>
-                        Effect.succeed([] as PostgresRoleAttributes[]),
-                      ),
+                      Effect.catchTags({
+                        NotFound: () => Effect.succeed([] as PostgresRoleAttributes[]),
+                        Forbidden: () => Effect.succeed([] as PostgresRoleAttributes[]),
+                      }),
                     ),
                 { concurrency: 10 },
               ).pipe(Effect.map((perBranch) => perBranch.flat())),

@@ -403,8 +403,10 @@ export const KeyProvider = () =>
           PendingWindowInDays: output.deletionWindowInDays,
         })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.void),
-          Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+          Effect.catchTags({
+            NotFoundException: () => Effect.void,
+            KMSInvalidStateException: () => Effect.void,
+          }),
         );
 
       const remaining = yield* Effect.repeat(
@@ -548,17 +550,21 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
       enabled: response.KeyRotationEnabled,
       periodInDays: response.RotationPeriodInDays,
     })),
-    Effect.catchTag("UnsupportedOperationException", () => Effect.succeed(undefined)),
-    Effect.catchTag("KMSInvalidStateException", () => Effect.succeed(undefined)),
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      UnsupportedOperationException: () => Effect.succeed(undefined),
+      KMSInvalidStateException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.succeed(undefined),
+    }),
   );
 });
 
 const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
     Effect.map((response) => response.Policy),
-    Effect.catchTag("KMSInvalidStateException", () => Effect.succeed(undefined)),
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      KMSInvalidStateException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.succeed(undefined),
+    }),
   );
 });
 

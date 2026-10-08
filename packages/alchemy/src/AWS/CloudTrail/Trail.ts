@@ -629,10 +629,12 @@ export const TrailProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryWhileConflict(cloudtrail.deleteTrail({ Name: output.trailArn })).pipe(
-            Effect.catchTag("TrailNotFoundException", () => Effect.void),
-            // A stale ARN whose trail is already gone can also surface as an
-            // invalid-ARN complaint; both mean "nothing left to delete".
-            Effect.catchTag("CloudTrailARNInvalidException", () => Effect.void),
+            Effect.catchTags({
+              TrailNotFoundException: () => Effect.void,
+              // A stale ARN whose trail is already gone can also surface as an
+              // invalid-ARN complaint; both mean "nothing left to delete".
+              CloudTrailARNInvalidException: () => Effect.void,
+            }),
           );
         }),
       });

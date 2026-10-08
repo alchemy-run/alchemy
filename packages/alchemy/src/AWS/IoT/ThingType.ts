@@ -211,8 +211,10 @@ export const ThingTypeProvider = () =>
 
             const deleteAccepted = yield* iot.deleteThingType({ thingTypeName }).pipe(
               Effect.as(true),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
-              Effect.catchTag("InvalidRequestException", () => Effect.succeed(false)),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.succeed(true),
+                InvalidRequestException: () => Effect.succeed(false),
+              }),
             );
             if (deleteAccepted) {
               const gone = yield* iot.describeThingType({ thingTypeName }).pipe(

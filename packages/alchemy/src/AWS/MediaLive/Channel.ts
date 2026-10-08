@@ -418,8 +418,10 @@ export const ChannelProvider = () =>
                   ),
             ),
             retryWhilePending,
-            Effect.catchTag("NotFoundException", () => Effect.void),
-            Effect.catchTag("MediaLiveResourcePending", () => Effect.void),
+            Effect.catchTags({
+              NotFoundException: () => Effect.void,
+              MediaLiveResourcePending: () => Effect.void,
+            }),
           );
         }),
       });

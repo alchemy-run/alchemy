@@ -32,16 +32,16 @@ export const waitForSqlOperation = (
       budget: options.budget,
       interval: "10 seconds",
     }).pipe(
-      Effect.catchTag("GCP.OperationFailed", (error) => {
-        const code = (error.reason ?? "").toUpperCase();
-        return code.includes("ALREADY_EXISTS") ||
-          (options.notFoundOk === true && code.includes("NOT_FOUND"))
-          ? Effect.void
-          : Effect.fail(error);
+      Effect.catchTags({
+        "GCP.OperationFailed": (error) => {
+          const code = (error.reason ?? "").toUpperCase();
+          return code.includes("ALREADY_EXISTS") ||
+            (options.notFoundOk === true && code.includes("NOT_FOUND"))
+            ? Effect.void
+            : Effect.fail(error);
+        },
+        NotFound: (error) => (options.notFoundOk === true ? Effect.void : Effect.fail(error)),
       }),
-      Effect.catchTag("NotFound", (error) =>
-        options.notFoundOk === true ? Effect.void : Effect.fail(error),
-      ),
     );
     if (operation.status === "DONE" || name.length === 0) return operation;
     return yield* get(name).pipe(

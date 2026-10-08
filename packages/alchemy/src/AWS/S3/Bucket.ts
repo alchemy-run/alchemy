@@ -1813,23 +1813,24 @@ export const BucketProvider = () =>
                 Bucket: output.bucketName,
               })
               .pipe(
-                Effect.catchTag("NoSuchBucket", () => Effect.void),
-                // BucketNotEmpty after an empty is eventual consistency (or
-                // a concurrent writer landing new versions between the empty
-                // and the DeleteBucket): re-empty so the bounded retry below
-                // has a chance to succeed instead of spinning on a bucket
-                // that still has content.
-                Effect.catchTag("BucketNotEmpty", (e) =>
-                  Effect.gen(function* () {
-                    if (!mayEmpty) return yield* e;
-                    yield* deleteAllObjects(output.bucketName).pipe(
-                      Effect.catchTag("NoSuchBucket", () => Effect.void),
-                    );
-                    // Re-fail with the original error so the retry policy
-                    // drives the next DeleteBucket attempt.
-                    return yield* e;
-                  }),
-                ),
+                Effect.catchTags({
+                  NoSuchBucket: () => Effect.void,
+                  // BucketNotEmpty after an empty is eventual consistency (or
+                  // a concurrent writer landing new versions between the empty
+                  // and the DeleteBucket): re-empty so the bounded retry below
+                  // has a chance to succeed instead of spinning on a bucket
+                  // that still has content.
+                  BucketNotEmpty: (e) =>
+                    Effect.gen(function* () {
+                      if (!mayEmpty) return yield* e;
+                      yield* deleteAllObjects(output.bucketName).pipe(
+                        Effect.catchTag("NoSuchBucket", () => Effect.void),
+                      );
+                      // Re-fail with the original error so the retry policy
+                      // drives the next DeleteBucket attempt.
+                      return yield* e;
+                    }),
+                }),
                 Effect.retry({
                   // BucketHasAccessPointsAttached: S3's access-point
                   // attachment view is eventually consistent — deleting a

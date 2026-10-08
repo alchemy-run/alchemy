@@ -1936,12 +1936,10 @@ export const TableProvider = () =>
               .pipe(
                 Effect.timeout(1000),
                 Effect.as("accepted" as const),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed("already-deleted" as const),
-                ),
-                Effect.catchTag("ResourceInUseException", () =>
-                  Effect.succeed("delete-gsis-first" as const),
-                ),
+                Effect.catchTags({
+                  ResourceNotFoundException: () => Effect.succeed("already-deleted" as const),
+                  ResourceInUseException: () => Effect.succeed("delete-gsis-first" as const),
+                }),
                 Effect.retry({
                   while: (error) =>
                     error._tag === "InternalServerError" || error._tag === "TimeoutError",

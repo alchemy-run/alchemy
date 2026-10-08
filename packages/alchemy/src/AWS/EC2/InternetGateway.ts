@@ -360,8 +360,10 @@ export const InternetGatewayProvider = () =>
                   })
                   .pipe(
                     Effect.tapError(Effect.logDebug),
-                    Effect.catchTag("Gateway.NotAttached", () => Effect.void),
-                    Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
+                    Effect.catchTags({
+                      "Gateway.NotAttached": () => Effect.void,
+                      "InvalidInternetGatewayID.NotFound": () => Effect.void,
+                    }),
                   ),
                 {
                   scope: { name: "vpc-id", value: attachment.VpcId! },

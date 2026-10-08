@@ -3459,9 +3459,11 @@ export const ServiceProvider = () =>
               // `deleteService`. Neither status ever returns to ACTIVE, so
               // there is nothing to scale: fall through to the drain/delete
               // waits below, which treat both as progress toward "gone".
-              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
-              Effect.catchTag("ServiceNotFoundException", () => Effect.void),
-              Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+              Effect.catchTags({
+                ServiceNotActiveException: () => Effect.void,
+                ServiceNotFoundException: () => Effect.void,
+                ClusterNotFoundException: () => Effect.void,
+              }),
             );
 
           yield* session.note(`Waiting for ECS service ${output.serviceName} to drain`);
@@ -3478,8 +3480,10 @@ export const ServiceProvider = () =>
               force: true,
             })
             .pipe(
-              Effect.catchTag("ServiceNotFoundException", () => Effect.void),
-              Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+              Effect.catchTags({
+                ServiceNotFoundException: () => Effect.void,
+                ClusterNotFoundException: () => Effect.void,
+              }),
             );
 
           yield* waitForServiceConvergence({

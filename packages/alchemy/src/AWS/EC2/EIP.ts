@@ -338,8 +338,10 @@ export const EIPProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag("InvalidAllocationID.NotFound", () => Effect.void),
-              Effect.catchTag("AuthFailure", () => Effect.void),
+              Effect.catchTags({
+                "InvalidAllocationID.NotFound": () => Effect.void,
+                AuthFailure: () => Effect.void,
+              }),
               Effect.tapError(Effect.logDebug),
               // Retry when EIP is still in use (e.g., NAT Gateway being deleted)
               Effect.retry({

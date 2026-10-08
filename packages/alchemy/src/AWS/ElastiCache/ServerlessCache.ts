@@ -530,13 +530,12 @@ export const ServerlessCacheProvider = () =>
           // settle first. A cache already deleting (or gone) is success.
           yield* waitUntilSettled(name);
           yield* elasticache.deleteServerlessCache({ ServerlessCacheName: name }).pipe(
-            Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.void),
-            Effect.catchTag(
-              "InvalidServerlessCacheStateFault",
-              () =>
+            Effect.catchTags({
+              ServerlessCacheNotFoundFault: () => Effect.void,
+              InvalidServerlessCacheStateFault: () =>
                 // Already deleting — deletion is in progress.
                 Effect.void,
-            ),
+            }),
           );
         }),
 

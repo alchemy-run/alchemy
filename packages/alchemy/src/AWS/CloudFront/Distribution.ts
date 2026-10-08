@@ -921,29 +921,27 @@ export const DistributionProvider = () =>
                   etag: created.ETag,
                   tags: desiredTags,
                 })),
-                Effect.catchTag("DistributionAlreadyExists", () =>
-                  Effect.gen(function* () {
-                    yield* Effect.logInfo(
-                      `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
-                    );
-                    const recovered = yield* getByCallerReference(callerReference);
-                    if (!recovered?.distribution.Id) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                        ),
+                Effect.catchTags({
+                  DistributionAlreadyExists: () =>
+                    Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
                       );
-                    }
-                    return {
-                      distributionId: recovered.distribution.Id,
-                      etag: recovered.etag,
-                      tags: recovered.tags,
-                    };
-                  }),
-                ),
-                Effect.catchTag(
-                  "InvalidArgument",
-                  (
+                      const recovered = yield* getByCallerReference(callerReference);
+                      if (!recovered?.distribution.Id) {
+                        return yield* Effect.fail(
+                          new Error(
+                            `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                          ),
+                        );
+                      }
+                      return {
+                        distributionId: recovered.distribution.Id,
+                        etag: recovered.etag,
+                        tags: recovered.tags,
+                      };
+                    }),
+                  InvalidArgument: (
                     error,
                   ): Effect.Effect<
                     never,
@@ -962,7 +960,7 @@ export const DistributionProvider = () =>
                           ),
                         )
                       : Effect.fail(error),
-                ),
+                }),
                 Effect.retry({
                   while: (error) => error instanceof DistributionFunctionAssociationPending,
                   schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),

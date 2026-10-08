@@ -331,10 +331,10 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function
           Effect.provideService(AuthProviders, registry),
           Effect.provideService(ProfileStore, profile),
           Effect.provideService(SuppressMissingProviderConfig, true),
-          Effect.catchTag("MissingProviderConfig", () => credentialsRequired(demand, profileName)),
-          Effect.catchTag("ProfileError", (error) =>
-            AuthError.make({ message: error.message, cause: error }),
-          ),
+          Effect.catchTags({
+            MissingProviderConfig: () => credentialsRequired(demand, profileName),
+            ProfileError: (error) => AuthError.make({ message: error.message, cause: error }),
+          }),
         );
         yield* resolved.resolve.pipe(attachDemandContext(demand));
       }),

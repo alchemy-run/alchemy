@@ -1996,14 +1996,14 @@ export const LiveWorkerProvider = () =>
               (observedScripts.some((observed) => observed.id === script) ||
                 params.observedNamespaces.some((ns) => ns.script === script)));
           const settings = yield* getScriptSettings(params.accountId, script, undefined).pipe(
-            Effect.catchTag("WorkerNotFound", (error) =>
-              knownSource ? Effect.fail(error) : Effect.succeed(undefined),
-            ),
-            Effect.catchTag("WorkerHasNoVersions", (error) =>
-              knownSource || params.sources.includes(script)
-                ? Effect.fail(error)
-                : Effect.succeed(undefined),
-            ),
+            Effect.catchTags({
+              WorkerNotFound: (error) =>
+                knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+              WorkerHasNoVersions: (error) =>
+                knownSource || params.sources.includes(script)
+                  ? Effect.fail(error)
+                  : Effect.succeed(undefined),
+            }),
           );
           if (
             settings === undefined ||
@@ -3009,14 +3009,15 @@ export const LiveWorkerProvider = () =>
         const existingPreview = yield* workers
           .getPreview({ accountId, workerId: parentName, previewId: previewName })
           .pipe(
-            Effect.catchTag("PreviewNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerNotFound", () =>
-              Effect.fail(
-                new WorkerPreviewConfigError({
-                  message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              PreviewNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () =>
+                Effect.fail(
+                  new WorkerPreviewConfigError({
+                    message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                  }),
+                ),
+            }),
           );
 
         const previewResource =
@@ -4717,10 +4718,12 @@ export const LiveWorkerProvider = () =>
             // worker the dispatch-namespace endpoints report a missing
             // script as `DispatchNamespaceScriptNotFound` (and a missing
             // namespace as `DispatchNamespaceNotFound`).
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
-            Effect.catchTag("DispatchNamespaceScriptNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
 
@@ -5079,10 +5082,12 @@ export const LiveWorkerProvider = () =>
               // as "not deployed" — fall through to (re)create like NotFound.
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
-              Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-              Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
-              Effect.catchTag("DispatchNamespaceScriptNotFound", () => Effect.succeed(undefined)),
-              Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.succeed(undefined),
+                WorkerHasNoVersions: () => Effect.succeed(undefined),
+                DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+                DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              }),
             ),
         ),
         reconcile: Effect.fn(function* ({ id, fqn, news, olds, bindings, output, session }) {
@@ -5141,10 +5146,12 @@ export const LiveWorkerProvider = () =>
                 (error._tag === "WorkerNotFound" || error._tag === "WorkerHasNoVersions"),
               schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
             }),
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
-            Effect.catchTag("DispatchNamespaceScriptNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(

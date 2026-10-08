@@ -305,8 +305,10 @@ export const CustomHostnameProvider = () =>
                 ),
               ),
             ),
-            Effect.catchTag("SaasQuotaNotAllocated", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            Effect.catchTags({
+              SaasQuotaNotAllocated: () => Effect.succeed([]),
+              Forbidden: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );

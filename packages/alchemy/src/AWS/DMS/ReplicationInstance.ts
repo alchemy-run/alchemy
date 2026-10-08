@@ -365,8 +365,10 @@ export const ReplicationInstanceProvider = () =>
               ReplicationInstanceArn: output.replicationInstanceArn,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundFault", () => Effect.void),
-              Effect.catchTag("InvalidResourceStateFault", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundFault: () => Effect.void,
+                InvalidResourceStateFault: () => Effect.void,
+              }),
             );
         }),
 

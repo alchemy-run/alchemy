@@ -754,8 +754,10 @@ export const QueueProvider = () =>
               })
               .pipe(
                 Effect.as(false),
-                Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
-                Effect.catchTag("RequestThrottled", () => Effect.succeed(false)),
+                Effect.catchTags({
+                  QueueDoesNotExist: () => Effect.succeed(true),
+                  RequestThrottled: () => Effect.succeed(false),
+                }),
               );
             const absentFromList = yield* sqs.listQueues({ QueueNamePrefix: queueName }).pipe(
               Effect.map((result) => !(result.QueueUrls ?? []).includes(queueUrl)),

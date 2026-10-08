@@ -1153,8 +1153,10 @@ const parseStreamText = (
   }).pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode<AiError.AiError, unknown>()),
-    Stream.catchTag("Retry", (retry) => Stream.die(retry)),
-    Stream.catchTag("SseError", (error) => Stream.fail(toAiError(error, "streamText"))),
+    Stream.catchTags({
+      Retry: (retry) => Stream.die(retry),
+      SseError: (error) => Stream.fail(toAiError(error, "streamText")),
+    }),
     Stream.mapAccumEffect(
       () => initialStreamState(startsInThink),
       (state, event) => handleStreamChunk(state, event.data, idGen, hasTools),

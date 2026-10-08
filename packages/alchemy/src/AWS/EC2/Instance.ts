@@ -541,8 +541,10 @@ export const InstanceProvider = () =>
             // minutes; the prior ~64s budget timed out intermittently.
             schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(48)]),
           }),
-          Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-          Effect.catchTag("InstanceNotFound", () => Effect.void),
+          Effect.catchTags({
+            "InvalidInstanceID.NotFound": () => Effect.void,
+            InstanceNotFound: () => Effect.void,
+          }),
         );
       });
 
@@ -679,8 +681,10 @@ export const InstanceProvider = () =>
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.succeed(undefined)),
-                Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+                Effect.catchTags({
+                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
+                  InstanceNotFound: () => Effect.succeed(undefined),
+                }),
               )
             : yield* findInstanceByTags(id, instanceId);
           return instance
@@ -724,8 +728,10 @@ export const InstanceProvider = () =>
           // record before deciding whether to launch a new one.
           let instance: ec2.Instance | undefined = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.succeed(undefined)),
-                Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
+                Effect.catchTags({
+                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
+                  InstanceNotFound: () => Effect.succeed(undefined),
+                }),
               )
             : yield* findInstanceByTags(id, generation);
 

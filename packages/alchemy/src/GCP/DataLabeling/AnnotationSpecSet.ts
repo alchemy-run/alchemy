@@ -167,8 +167,10 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : datalabeling.getProjectsAnnotationSpecSets({ name }).pipe(
         Effect.provide(noRetryLayer),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("BadGateway", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(undefined),
+          BadGateway: () => Effect.succeed(undefined),
+        }),
       );
 
 const findByOwnership = (id: string, project: string) =>

@@ -808,12 +808,14 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
-      Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
-      Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
-      // A worker that exists but has no versions (a previous deploy was
-      // interrupted before any content upload) can't serve — treat it
-      // as absent so bootstrap redeploys it.
-      Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(false)),
+      Effect.catchTags({
+        WorkerNotFound: () => Effect.succeed(false),
+        InvalidRoute: () => Effect.succeed(false),
+        // A worker that exists but has no versions (a previous deploy was
+        // interrupted before any content upload) can't serve — treat it
+        // as absent so bootstrap redeploys it.
+        WorkerHasNoVersions: () => Effect.succeed(false),
+      }),
     );
   });
 

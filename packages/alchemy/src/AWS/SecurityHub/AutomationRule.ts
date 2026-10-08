@@ -135,8 +135,10 @@ export const AutomationRuleProvider = () =>
       const getRule = (arn: string) =>
         securityhub.batchGetAutomationRules({ AutomationRulesArns: [arn] }).pipe(
           Effect.map((r) => r.Rules?.[0]),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            InvalidAccessException: () => Effect.succeed(undefined),
+          }),
         );
 
       // `ListAutomationRules` is not modeled as paginated in the Smithy spec
@@ -289,8 +291,10 @@ export const AutomationRuleProvider = () =>
               AutomationRulesArns: [output.ruleArn],
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("InvalidAccessException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                InvalidAccessException: () => Effect.void,
+              }),
             );
         }),
       };

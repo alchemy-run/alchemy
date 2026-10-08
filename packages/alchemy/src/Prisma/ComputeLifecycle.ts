@@ -270,12 +270,13 @@ export const destroyApp = Effect.fn(function* (
     for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
       const deleted = yield* deleteService({ serviceId: appId }).pipe(
         Effect.as(true),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.catchTag("Conflict", (error) =>
-          attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
-            ? deleteRetryDelay(attempt).pipe(Effect.as(false))
-            : Effect.fail(error),
-        ),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(true),
+          Conflict: (error) =>
+            attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
+              ? deleteRetryDelay(attempt).pipe(Effect.as(false))
+              : Effect.fail(error),
+        }),
       );
       if (deleted) {
         appDeleted = true;
@@ -345,17 +346,18 @@ export const destroyProjectApps = Effect.fn(function* (
       // delete is blocked on remaining member resources: re-clean and retry.
       const deleted = yield* deleteProject({ id: projectId }).pipe(
         Effect.as(true),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.catchTag("Conflict", (error) =>
-          Effect.gen(function* () {
-            if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
-              return yield* error;
-            }
-            yield* cleanupApps();
-            yield* deleteRetryDelay(attempt);
-            return false;
-          }),
-        ),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(true),
+          Conflict: (error) =>
+            Effect.gen(function* () {
+              if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
+                return yield* error;
+              }
+              yield* cleanupApps();
+              yield* deleteRetryDelay(attempt);
+              return false;
+            }),
+        }),
         Effect.catchTag("BadRequest", (error) =>
           Effect.gen(function* () {
             if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
