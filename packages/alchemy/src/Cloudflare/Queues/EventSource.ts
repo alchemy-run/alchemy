@@ -188,18 +188,16 @@ export const EventSourceLive = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* Namespace.push(
           host.LogicalId,
-          Effect.gen(function* () {
-            // The engine creates / updates / destroys the Consumer
-            // alongside the Worker's lifecycle; the consumer's
-            // reconciler waits for the Worker upload to expose the
-            // `queue` handler before completing (see PR #257 for the
-            // 11001 retry).
-            yield* Consumer(`${queue.LogicalId}Consumer`, {
-              queueId: queue.queueId,
-              scriptName: host.workerName,
-              settings: toConsumerSettings(props),
-              deadLetterQueue: props.deadLetterQueue,
-            });
+          // The engine creates / updates / destroys the Consumer
+          // alongside the Worker's lifecycle; the consumer's
+          // reconciler waits for the Worker upload to expose the
+          // `queue` handler before completing (see PR #257 for the
+          // 11001 retry).
+          Consumer(`${queue.LogicalId}Consumer`, {
+            queueId: queue.queueId,
+            scriptName: host.workerName,
+            settings: toConsumerSettings(props),
+            deadLetterQueue: props.deadLetterQueue,
           }),
         );
       }

@@ -328,34 +328,31 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       );
 
     const login = (profileName: string, config: RailwayAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "env" }, () =>
-            getEnvRedacted(RAILWAY_API_TOKEN_ENV).pipe(
-              Effect.flatMap((token) =>
-                token
-                  ? Effect.void
-                  : Effect.fail(
-                      AuthError.make({
-                        message:
-                          `Railway: ${RAILWAY_API_TOKEN_ENV} is not set. Export it, or run ` +
-                          `\`alchemy profile edit --profile ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
-                      }),
-                    ),
-              ),
+      Match.value(config).pipe(
+        Match.when({ method: "env" }, () =>
+          getEnvRedacted(RAILWAY_API_TOKEN_ENV).pipe(
+            Effect.flatMap((token) =>
+              token
+                ? Effect.void
+                : Effect.fail(
+                    AuthError.make({
+                      message:
+                        `Railway: ${RAILWAY_API_TOKEN_ENV} is not set. Export it, or run ` +
+                        `\`alchemy profile edit --profile ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
+                    }),
+                  ),
             ),
           ),
-          // Railway account tokens neither expire nor refresh, so login only
-          // (re-)prompts when no credential is stored yet.
-          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
-          Match.when({ method: "oauth" }, (config) => Effect.succeed(config)),
-          Match.exhaustive,
-        )
-        .pipe(
-          Effect.mapError((e) =>
-            Schema.is(AuthError)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
-          ),
-        );
+        ),
+        // Railway account tokens neither expire nor refresh, so login only
+        // (re-)prompts when no credential is stored yet.
+        Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
+        Match.when({ method: "oauth" }, (config) => Effect.succeed(config)),
+        Match.exhaustive,
+        Effect.mapError((e) =>
+          Schema.is(AuthError)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
+        ),
+      );
 
     const details = (
       profileName: string,

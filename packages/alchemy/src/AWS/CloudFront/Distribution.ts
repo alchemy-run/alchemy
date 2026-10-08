@@ -583,14 +583,15 @@ export const DistributionProvider = () =>
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
           // Bound each poll — a wedged read must count as "not deployed
           // yet" and retry, never hang the deploy (see the delete-wait).
-          Effect.timeout(30_000),
-          Effect.catchTag("TimeoutError", () =>
-            Effect.fail(
-              new DistributionPendingDeployment({
-                message: `Timed out reading distribution ${distributionId} while polling deployment`,
-              }),
-            ),
-          ),
+          Effect.timeoutOrElse({
+            duration: 30_000,
+            orElse: () =>
+              Effect.fail(
+                new DistributionPendingDeployment({
+                  message: `Timed out reading distribution ${distributionId} while polling deployment`,
+                }),
+              ),
+          }),
           Effect.map((response) => response.Distribution),
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
@@ -712,14 +713,15 @@ export const DistributionProvider = () =>
           // rides the same bounded retry.
           Effect.andThen(() =>
             getCurrent(distributionId).pipe(
-              Effect.timeout(30_000),
-              Effect.catchTag("TimeoutError", () =>
-                Effect.fail(
-                  new DistributionPendingDeletionReadiness({
-                    message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
-                  }),
-                ),
-              ),
+              Effect.timeoutOrElse({
+                duration: 30_000,
+                orElse: () =>
+                  Effect.fail(
+                    new DistributionPendingDeletionReadiness({
+                      message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
+                    }),
+                  ),
+              }),
             ),
           ),
           Effect.flatMap(

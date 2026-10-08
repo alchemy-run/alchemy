@@ -429,19 +429,19 @@ const instrumentLifecycle =
         effect.pipe(
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
-          Effect.catchCause((cause): Effect.Effect<never, E | DriftResourceError> =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
-              : Effect.fail(
-                  new DriftResourceError({
-                    message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
-                    fqn,
-                    logicalId,
-                    resourceType,
-                    operation: op,
-                    cause: Cause.squash(cause),
-                  }),
-                ),
+          Effect.catchCauseIf(
+            (cause: Cause.Cause<E>) => !Cause.hasInterruptsOnly(cause),
+            (cause) =>
+              Effect.fail(
+                new DriftResourceError({
+                  message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
+                  fqn,
+                  logicalId,
+                  resourceType,
+                  operation: op,
+                  cause: Cause.squash(cause),
+                }),
+              ),
           ),
         ),
       ),

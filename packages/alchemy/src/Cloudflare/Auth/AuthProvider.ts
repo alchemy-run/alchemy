@@ -511,153 +511,141 @@ export const CloudflareAuth = AuthProviderLayer<
     });
 
     const logout = (profileName: string, config: CloudflareAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "stored" }, () => Effect.void),
-          Match.when({ method: "oauth" }, (config) => {
-            if (!("scopes" in config)) return Effect.void;
-            const credentials: OAuthClient.OAuthCredentials = {
-              type: "oauth",
-              clientId: config.clientId,
-              access: Redacted.make(config.access),
-              refresh: Redacted.make(config.refresh),
-              expires: config.expires,
-              scopes: config.scopes,
-            };
-            return OAuthClient.usesCurrentClient(credentials)
-              ? OAuthClient.revoke(credentials).pipe(
-                  Effect.catchTag("OAuthError", (err) =>
-                    interaction.output.warning(
-                      `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
-                    ),
+      Match.value(config).pipe(
+        Match.when({ method: "stored" }, () => Effect.void),
+        Match.when({ method: "oauth" }, (config) => {
+          if (!("scopes" in config)) return Effect.void;
+          const credentials: OAuthClient.OAuthCredentials = {
+            type: "oauth",
+            clientId: config.clientId,
+            access: Redacted.make(config.access),
+            refresh: Redacted.make(config.refresh),
+            expires: config.expires,
+            scopes: config.scopes,
+          };
+          return OAuthClient.usesCurrentClient(credentials)
+            ? OAuthClient.revoke(credentials).pipe(
+                Effect.catchTag("OAuthError", (err) =>
+                  interaction.output.warning(
+                    `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
                   ),
-                )
-              : Effect.void;
-          }),
-          Match.exhaustive,
-        )
+                ),
+              )
+            : Effect.void;
+        }),
+        Match.exhaustive,
         // The cached state-store credentials are derived from the account we
         // just logged out of, so drop them regardless of auth method.
-        .pipe(
-          Effect.andThen(
-            store.delete(profileName, STATE_STORE_CREDENTIALS_FILE).pipe(Effect.ignore),
-          ),
-        );
+        Effect.andThen(store.delete(profileName, STATE_STORE_CREDENTIALS_FILE).pipe(Effect.ignore)),
+      );
 
     const login = (
       profileName: string,
       config: CloudflareAuthConfig,
       updateConfig?: (config: CloudflareAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
-          Match.when({ method: "oauth" }, (c) =>
-            "scopes" in c
-              ? Effect.gen(function* () {
-                  const creds: OAuthClient.OAuthCredentials = {
-                    type: "oauth",
-                    clientId: c.clientId,
-                    access: Redacted.make(c.access),
-                    refresh: Redacted.make(c.refresh),
-                    expires: c.expires,
-                    scopes: c.scopes,
-                  };
-                  const reconfigure = reconfigureHint(CLOUDFLARE_AUTH_PROVIDER_NAME, profileName);
-                  // Any path that falls back to a full browser login rebuilds the
-                  // authorize URL from the profile's stored scopes. Those scopes
-                  // may predate the current OAuth client (or a catalog change), and
-                  // one unknown scope makes the whole authorize URL invalid — so
-                  // sanitize before generating a URL, never after it fails.
-                  const fullLogin = Effect.gen(function* () {
-                    const { valid, dropped } = partitionOAuthScopes(c.scopes);
-                    if (valid.length === 0) {
-                      return yield* AuthError.make({
-                        message:
-                          `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
-                          `Scopes must be picked again. ${reconfigure}`,
-                      });
-                    }
-                    const refreshed = yield* (
-                      dropped.length === 0
-                        ? Effect.void
-                        : interaction.output.warning(
-                            `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
-                              `Scopes must be picked again. ${reconfigure}`,
-                          )
-                    ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
-                    return {
-                      ...c,
-                      scopes: valid,
-                      clientId: refreshed.clientId,
-                      access: Redacted.value(refreshed.access),
-                      refresh: Redacted.value(refreshed.refresh),
-                      expires: refreshed.expires,
-                    };
-                  });
-
-                  const fallBackToBrowserLogin = Effect.gen(function* () {
-                    if (creds.type === "oauth") {
-                      yield* interaction.output.warning(
-                        "Cloudflare: removed OAuth credentials issued to the previous client.",
-                      );
-                    }
-                    return { type: "browser" as const };
-                  });
-
-                  // The silent refresh rotates a single-use refresh token, so
-                  // its read-refresh-persist section runs under the profile
-                  // lock — a concurrent `read` refreshing the same token would
-                  // double-spend it. The lock is held only for this API
-                  // round-trip, never across the browser wait below.
-                  const outcome =
-                    creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
-                      ? yield* withProfileCredentialsLock(
-                          profileName,
-                          interaction.output
-                            .info("Cloudflare: refreshing OAuth credentials...")
-                            .pipe(
-                              Effect.andThen(OAuthClient.refresh(creds)),
-                              Effect.flatMap((credentials) => {
-                                const config = {
-                                  ...c,
-                                  clientId: credentials.clientId,
-                                  access: Redacted.value(credentials.access),
-                                  refresh: Redacted.value(credentials.refresh),
-                                  expires: credentials.expires,
-                                  scopes: credentials.scopes,
-                                };
-                                return (updateConfig?.(config) ?? Effect.void).pipe(
-                                  Effect.as({ type: "refreshed" as const, config }),
-                                );
-                              }),
-                              Effect.tap(() =>
-                                interaction.output.success(
-                                  "Cloudflare: OAuth credentials refreshed.",
-                                ),
-                              ),
-                              Effect.catchTag("OAuthError", () =>
-                                Effect.succeed({ type: "browser" as const }),
-                              ),
-                            ),
-                        )
-                      : yield* fallBackToBrowserLogin;
-                  if (outcome.type === "browser") {
-                    return yield* fullLogin;
+      Match.value(config).pipe(
+        Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
+        Match.when({ method: "oauth" }, (c) =>
+          "scopes" in c
+            ? Effect.gen(function* () {
+                const creds: OAuthClient.OAuthCredentials = {
+                  type: "oauth",
+                  clientId: c.clientId,
+                  access: Redacted.make(c.access),
+                  refresh: Redacted.make(c.refresh),
+                  expires: c.expires,
+                  scopes: c.scopes,
+                };
+                const reconfigure = reconfigureHint(CLOUDFLARE_AUTH_PROVIDER_NAME, profileName);
+                // Any path that falls back to a full browser login rebuilds the
+                // authorize URL from the profile's stored scopes. Those scopes
+                // may predate the current OAuth client (or a catalog change), and
+                // one unknown scope makes the whole authorize URL invalid — so
+                // sanitize before generating a URL, never after it fails.
+                const fullLogin = Effect.gen(function* () {
+                  const { valid, dropped } = partitionOAuthScopes(c.scopes);
+                  if (valid.length === 0) {
+                    return yield* AuthError.make({
+                      message:
+                        `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
+                        `Scopes must be picked again. ${reconfigure}`,
+                    });
                   }
-                  return outcome.config;
-                })
-              : configureOAuth(profileName, c),
-          ),
-          Match.exhaustive,
-        )
-        .pipe(
-          // A blanket mapError must never swallow the NeedsReauth tag —
-          // the profile UI matches on it to render "needs re-login".
-          Effect.mapError((e) =>
-            Schema.is(NeedsReauth)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
-          ),
-        );
+                  const refreshed = yield* (
+                    dropped.length === 0
+                      ? Effect.void
+                      : interaction.output.warning(
+                          `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
+                            `Scopes must be picked again. ${reconfigure}`,
+                        )
+                  ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
+                  return {
+                    ...c,
+                    scopes: valid,
+                    clientId: refreshed.clientId,
+                    access: Redacted.value(refreshed.access),
+                    refresh: Redacted.value(refreshed.refresh),
+                    expires: refreshed.expires,
+                  };
+                });
+
+                const fallBackToBrowserLogin = Effect.gen(function* () {
+                  if (creds.type === "oauth") {
+                    yield* interaction.output.warning(
+                      "Cloudflare: removed OAuth credentials issued to the previous client.",
+                    );
+                  }
+                  return { type: "browser" as const };
+                });
+
+                // The silent refresh rotates a single-use refresh token, so
+                // its read-refresh-persist section runs under the profile
+                // lock — a concurrent `read` refreshing the same token would
+                // double-spend it. The lock is held only for this API
+                // round-trip, never across the browser wait below.
+                const outcome =
+                  creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
+                    ? yield* withProfileCredentialsLock(
+                        profileName,
+                        interaction.output.info("Cloudflare: refreshing OAuth credentials...").pipe(
+                          Effect.andThen(OAuthClient.refresh(creds)),
+                          Effect.flatMap((credentials) => {
+                            const config = {
+                              ...c,
+                              clientId: credentials.clientId,
+                              access: Redacted.value(credentials.access),
+                              refresh: Redacted.value(credentials.refresh),
+                              expires: credentials.expires,
+                              scopes: credentials.scopes,
+                            };
+                            return (updateConfig?.(config) ?? Effect.void).pipe(
+                              Effect.as({ type: "refreshed" as const, config }),
+                            );
+                          }),
+                          Effect.tap(() =>
+                            interaction.output.success("Cloudflare: OAuth credentials refreshed."),
+                          ),
+                          Effect.catchTag("OAuthError", () =>
+                            Effect.succeed({ type: "browser" as const }),
+                          ),
+                        ),
+                      )
+                    : yield* fallBackToBrowserLogin;
+                if (outcome.type === "browser") {
+                  return yield* fullLogin;
+                }
+                return outcome.config;
+              })
+            : configureOAuth(profileName, c),
+        ),
+        Match.exhaustive,
+        // A blanket mapError must never swallow the NeedsReauth tag —
+        // the profile UI matches on it to render "needs re-login".
+        Effect.mapError((e) =>
+          Schema.is(NeedsReauth)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
+        ),
+      );
 
     const details = (
       profileName: string,

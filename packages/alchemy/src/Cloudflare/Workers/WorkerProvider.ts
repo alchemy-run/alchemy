@@ -2121,7 +2121,7 @@ export const LiveWorkerProvider = () =>
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* getScriptSettings(accountId, scriptName, dispatchNamespace).pipe(
-          Effect.map((settings) => {
+          Effect.flatMap((settings) => {
             const namespaces = getDurableObjects(settings.bindings);
             const missing = expectedClassNames.filter((className) => !namespaces[className]);
             if (missing.length > 0) {
@@ -2129,7 +2129,6 @@ export const LiveWorkerProvider = () =>
             }
             return Effect.succeed({ settings, durableObjectNamespaces: namespaces });
           }),
-          Effect.flatten,
           Effect.retry({
             // `MissingDurableObjects`: the DO bindings haven't
             // surfaced in the version settings yet. `WorkerHasNoVersions` /

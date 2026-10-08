@@ -93,11 +93,11 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
           const validated = Output.all(Output.of(credential), Output.of(bucket)).pipe(
             Output.mapEffect(
               Effect.fn(function* ([credential, target]) {
-                yield* validateCredential(credential, target, scope).pipe(Effect.orDie);
+                yield* validateCredential(credential, target, scope);
                 if (scope === "storage:write")
-                  yield* validateCredential(credential, target, "storage:read").pipe(Effect.orDie);
+                  yield* validateCredential(credential, target, "storage:read");
                 return credential;
-              }),
+              }, Effect.orDie),
             ),
           );
           env[keys.accessKeyId] = validated.tokenId;

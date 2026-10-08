@@ -105,7 +105,7 @@ const writeCache = Effect.fn(
     const cache: VersionCheckCache = { checkedAt, distTags };
     yield* fs.writeFileString(cachePath, JSON.stringify(cache));
   },
-  Effect.catch(() => Effect.void),
+  (effect) => Effect.ignore(effect),
 );
 
 const fetchDistTags = Effect.gen(function* () {
@@ -184,7 +184,7 @@ export const checkLatestVersion = Effect.gen(function* () {
   yield* Console.warn(
     useColor ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}` : message,
   );
-}).pipe(Effect.catch(() => Effect.void));
+}).pipe(Effect.ignore);
 
 // Exported for tests.
 export const _internal = { pickDistTag, compareVersions };

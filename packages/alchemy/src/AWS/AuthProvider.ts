@@ -491,171 +491,168 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
     ) =>
       Effect.gen(function* () {
         const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
-        return yield* Match.value(config)
-          .pipe(
-            Match.when({ method: "stored" }, (config) =>
-              Effect.gen(function* () {
-                const credentials: AwsCredentials = {
-                  accessKeyId: Redacted.make(config.accessKeyId),
-                  secretAccessKey: Redacted.make(config.secretAccessKey),
-                  sessionToken:
-                    config.sessionToken === undefined
-                      ? undefined
-                      : Redacted.make(config.sessionToken),
-                  region: config.region,
-                };
-                const accountId = config.accountId ?? (yield* getAccountId(credentials));
-                if (config.accountId === undefined && updateConfig !== undefined) {
-                  yield* updateConfig({ ...config, accountId });
-                }
-                return {
-                  accountId,
-                  credentials: Effect.succeed(credentials),
-                  region: config.region,
-                  source: { type: "stored" as const },
-                } satisfies AwsResolvedCredentials;
-              }),
-            ),
-            Match.when({ method: "sso" }, (config) =>
-              Effect.gen(function* () {
-                const auth = yield* DistilledAuth.Default;
-                const profile = yield* auth
-                  .loadProfile(config.ssoProfile)
-                  .pipe(Effect.orElseSucceed(() => undefined));
-                if (profile?.sso_account_id == null) {
-                  const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
-                  return yield* AuthError.make({
-                    message:
-                      profile == null
-                        ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
-                        : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it. ${reconfigure}`,
-                  });
-                }
-                // `applyEnvRegionOverride` below only overrides an existing
-                // region, so an env-provided region must be consulted here for
-                // profiles that don't record one.
-                const region = profile.region ?? (yield* getEnv("AWS_REGION"));
-                if (!region) {
-                  return yield* AuthError.make({
-                    message: `AWS SSO profile '${config.ssoProfile}' has no region in ~/.aws/config and AWS_REGION is not set.`,
-                  });
-                }
-                return {
-                  accountId: profile.sso_account_id,
-                  // Rewrite the message of an expired/invalid SSO token to the
-                  // alchemy refresh hint, but PRESERVE the error tags: the inner
-                  // effect must stay a `CredentialsError` for downstream
-                  // consumers (AWSEnvironment), while `details` and other
-                  // in-provider consumers match these tags to surface a typed
-                  // `NeedsReauth` instead of a generic failure.
-                  credentials: auth.loadProfileCredentials(config.ssoProfile).pipe(
-                    Effect.provideService(EffectConsole.Console, silentConsole),
-                    Effect.mapError((error) => {
-                      if (error._tag === "Alchemy::AWS::ExpiredSSOToken") {
-                        return new ExpiredSSOToken({
-                          message: `AWS SSO credentials need to be refreshed. ${reauth}`,
-                          profile: error.profile,
-                        });
-                      }
-                      if (error._tag === "Alchemy::AWS::InvalidSSOToken") {
-                        return new InvalidSSOToken({
-                          message: `AWS SSO credentials need to be refreshed. ${reauth}`,
-                          sso_session: error.sso_session,
-                        });
-                      }
-                      return error;
-                    }),
-                  ),
-                  region,
-                  source: { type: "sso" as const, details: config.ssoProfile },
-                } satisfies AwsResolvedCredentials;
-              }),
-            ),
-            Match.when({ method: "console-login" }, (config) =>
-              Effect.gen(function* () {
+        return yield* Match.value(config).pipe(
+          Match.when({ method: "stored" }, (config) =>
+            Effect.gen(function* () {
+              const credentials: AwsCredentials = {
+                accessKeyId: Redacted.make(config.accessKeyId),
+                secretAccessKey: Redacted.make(config.secretAccessKey),
+                sessionToken:
+                  config.sessionToken === undefined
+                    ? undefined
+                    : Redacted.make(config.sessionToken),
+                region: config.region,
+              };
+              const accountId = config.accountId ?? (yield* getAccountId(credentials));
+              if (config.accountId === undefined && updateConfig !== undefined) {
+                yield* updateConfig({ ...config, accountId });
+              }
+              return {
+                accountId,
+                credentials: Effect.succeed(credentials),
+                region: config.region,
+                source: { type: "stored" as const },
+              } satisfies AwsResolvedCredentials;
+            }),
+          ),
+          Match.when({ method: "sso" }, (config) =>
+            Effect.gen(function* () {
+              const auth = yield* DistilledAuth.Default;
+              const profile = yield* auth
+                .loadProfile(config.ssoProfile)
+                .pipe(Effect.orElseSucceed(() => undefined));
+              if (profile?.sso_account_id == null) {
                 const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
-                const auth = yield* DistilledAuth.Default;
-                const profile = yield* loadLoginProfile(config.loginProfile).pipe(
-                  Effect.mapError((cause) =>
-                    AuthError.make({
-                      message: `${cause.message} ${reconfigure}`,
-                      cause,
-                    }),
-                  ),
-                );
-                const region =
-                  profile.region ??
-                  (yield* getEnv("AWS_REGION")) ??
-                  (yield* getEnv("AWS_DEFAULT_REGION"));
-                if (!region) {
-                  return yield* AuthError.make({
-                    message: `AWS profile '${config.loginProfile}' has no region. Set one with \`aws configure set region <region> --profile ${config.loginProfile}\` or set AWS_REGION.`,
-                  });
-                }
-                // Lazy: distilled reads the token `aws login` cached under
-                // `~/.aws/login/cache` and renews it itself when it nears
-                // expiry. A dead session surfaces as a credential-provider
-                // error; rewrite its message to the alchemy refresh hint but
-                // PRESERVE the tag (see the SSO branch) so `details` can
-                // surface a typed NeedsReauth.
-                const credentials = auth.loadProfileCredentials(config.loginProfile).pipe(
-                  Effect.mapError((error) =>
-                    error._tag === "AWS::CredentialProviderError"
-                      ? new AwsCredentialProviderError({
-                          message: `AWS console login credentials need to be refreshed. ${reauth}`,
-                          provider: error.provider,
-                          cause: error,
-                        })
-                      : error,
-                  ),
-                );
-                const accountId =
-                  config.accountId ??
-                  (yield* getEnvRequired("AWS_ACCOUNT_ID").pipe(
-                    Effect.catch(() => Effect.flatMap(credentials, getAccountId)),
-                  ));
-                if (config.accountId === undefined && updateConfig !== undefined) {
-                  yield* updateConfig({ ...config, accountId });
-                }
-                return {
-                  accountId,
-                  credentials,
-                  region,
-                  source: {
-                    type: "console-login" as const,
-                    details: config.loginProfile,
-                  },
-                } satisfies AwsResolvedCredentials;
-              }),
-            ),
-            Match.exhaustive,
-          )
-          .pipe(
-            // Pass diagnosable failures through untouched: NeedsReauth (stored
-            // credentials missing) and the specific AuthErrors raised above
-            // (missing SSO profile / sso_account_id / region, missing
-            // login_session) carry the real
-            // diagnosis. Only genuinely unexpected failures (store I/O, the
-            // STS accountId backfill) get wrapped.
-            Effect.mapError((e) =>
-              e._tag === "AuthError"
-                ? e
-                : AuthError.make({
-                    message: "failed to resolve AWS credentials",
-                    cause: e,
+                return yield* AuthError.make({
+                  message:
+                    profile == null
+                      ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
+                      : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it. ${reconfigure}`,
+                });
+              }
+              // `applyEnvRegionOverride` below only overrides an existing
+              // region, so an env-provided region must be consulted here for
+              // profiles that don't record one.
+              const region = profile.region ?? (yield* getEnv("AWS_REGION"));
+              if (!region) {
+                return yield* AuthError.make({
+                  message: `AWS SSO profile '${config.ssoProfile}' has no region in ~/.aws/config and AWS_REGION is not set.`,
+                });
+              }
+              return {
+                accountId: profile.sso_account_id,
+                // Rewrite the message of an expired/invalid SSO token to the
+                // alchemy refresh hint, but PRESERVE the error tags: the inner
+                // effect must stay a `CredentialsError` for downstream
+                // consumers (AWSEnvironment), while `details` and other
+                // in-provider consumers match these tags to surface a typed
+                // `NeedsReauth` instead of a generic failure.
+                credentials: auth.loadProfileCredentials(config.ssoProfile).pipe(
+                  Effect.provideService(EffectConsole.Console, silentConsole),
+                  Effect.mapError((error) => {
+                    if (error._tag === "Alchemy::AWS::ExpiredSSOToken") {
+                      return new ExpiredSSOToken({
+                        message: `AWS SSO credentials need to be refreshed. ${reauth}`,
+                        profile: error.profile,
+                      });
+                    }
+                    if (error._tag === "Alchemy::AWS::InvalidSSOToken") {
+                      return new InvalidSSOToken({
+                        message: `AWS SSO credentials need to be refreshed. ${reauth}`,
+                        sso_session: error.sso_session,
+                      });
+                    }
+                    return error;
                   }),
+                ),
+                region,
+                source: { type: "sso" as const, details: config.ssoProfile },
+              } satisfies AwsResolvedCredentials;
+            }),
+          ),
+          Match.when({ method: "console-login" }, (config) =>
+            Effect.gen(function* () {
+              const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
+              const auth = yield* DistilledAuth.Default;
+              const profile = yield* loadLoginProfile(config.loginProfile).pipe(
+                Effect.mapError((cause) =>
+                  AuthError.make({
+                    message: `${cause.message} ${reconfigure}`,
+                    cause,
+                  }),
+                ),
+              );
+              const region =
+                profile.region ??
+                (yield* getEnv("AWS_REGION")) ??
+                (yield* getEnv("AWS_DEFAULT_REGION"));
+              if (!region) {
+                return yield* AuthError.make({
+                  message: `AWS profile '${config.loginProfile}' has no region. Set one with \`aws configure set region <region> --profile ${config.loginProfile}\` or set AWS_REGION.`,
+                });
+              }
+              // Lazy: distilled reads the token `aws login` cached under
+              // `~/.aws/login/cache` and renews it itself when it nears
+              // expiry. A dead session surfaces as a credential-provider
+              // error; rewrite its message to the alchemy refresh hint but
+              // PRESERVE the tag (see the SSO branch) so `details` can
+              // surface a typed NeedsReauth.
+              const credentials = auth.loadProfileCredentials(config.loginProfile).pipe(
+                Effect.mapError((error) =>
+                  error._tag === "AWS::CredentialProviderError"
+                    ? new AwsCredentialProviderError({
+                        message: `AWS console login credentials need to be refreshed. ${reauth}`,
+                        provider: error.provider,
+                        cause: error,
+                      })
+                    : error,
+                ),
+              );
+              const accountId =
+                config.accountId ??
+                (yield* getEnvRequired("AWS_ACCOUNT_ID").pipe(
+                  Effect.catch(() => Effect.flatMap(credentials, getAccountId)),
+                ));
+              if (config.accountId === undefined && updateConfig !== undefined) {
+                yield* updateConfig({ ...config, accountId });
+              }
+              return {
+                accountId,
+                credentials,
+                region,
+                source: {
+                  type: "console-login" as const,
+                  details: config.loginProfile,
+                },
+              } satisfies AwsResolvedCredentials;
+            }),
+          ),
+          Match.exhaustive,
+          // Pass diagnosable failures through untouched: NeedsReauth (stored
+          // credentials missing) and the specific AuthErrors raised above
+          // (missing SSO profile / sso_account_id / region, missing
+          // login_session) carry the real
+          // diagnosis. Only genuinely unexpected failures (store I/O, the
+          // STS accountId backfill) get wrapped.
+          Effect.mapError((e) =>
+            e._tag === "AuthError"
+              ? e
+              : AuthError.make({
+                  message: "failed to resolve AWS credentials",
+                  cause: e,
+                }),
+          ),
+          Effect.flatMap(applyEnvRegionOverride),
+          Effect.map((creds): AwsResolvedCredentials => ({
+            ...creds,
+            credentials: creds.credentials.pipe(
+              Effect.map((credentials) => ({
+                ...credentials,
+                region: creds.region,
+              })),
             ),
-            Effect.flatMap(applyEnvRegionOverride),
-            Effect.map((creds): AwsResolvedCredentials => ({
-              ...creds,
-              credentials: creds.credentials.pipe(
-                Effect.map((credentials) => ({
-                  ...credentials,
-                  region: creds.region,
-                })),
-              ),
-            })),
-          );
+          })),
+        );
       });
 
     const details = (
@@ -742,20 +739,15 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
       );
 
     const login = (profileName: string, config: AwsAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "sso" }, (config) =>
-            loginSSO(config, config.authorizationMethod ?? "oauth"),
-          ),
-          Match.when({ method: "console-login" }, (config) => loginConsole(config)),
-          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
-          Match.exhaustive,
-        )
-        .pipe(
-          Effect.mapError((e) =>
-            AuthError.make({ message: `login failed: ${e.message}`, cause: e }),
-          ),
-        );
+      Match.value(config).pipe(
+        Match.when({ method: "sso" }, (config) =>
+          loginSSO(config, config.authorizationMethod ?? "oauth"),
+        ),
+        Match.when({ method: "console-login" }, (config) => loginConsole(config)),
+        Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
+        Match.exhaustive,
+        Effect.mapError((e) => AuthError.make({ message: `login failed: ${e.message}`, cause: e })),
+      );
 
     const readEnvironment = Effect.gen(function* () {
       const accessKeyId = yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");

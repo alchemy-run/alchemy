@@ -601,9 +601,7 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
     budget,
   );
 
-  return yield* build.pipe(
-    Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
-  );
+  return yield* build.pipe(Effect.tapError(() => temp.cleanup));
 });
 
 const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
@@ -765,9 +763,7 @@ const buildFramework = Effect.fn(function* (options: {
     budget,
   );
 
-  return yield* build.pipe(
-    Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
-  );
+  return yield* build.pipe(Effect.tapError(() => temp.cleanup));
 });
 
 const buildNestjs = Effect.fn(function* (options: ComputeAutoBuildOptions) {
@@ -813,10 +809,8 @@ const buildNestjs = Effect.fn(function* (options: ComputeAutoBuildOptions) {
   });
 
   return yield* build.pipe(
-    Effect.catch((error) =>
-      fs
-        .remove(path.dirname(temp.artifactDir), { recursive: true })
-        .pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
+    Effect.tapError(() =>
+      fs.remove(path.dirname(temp.artifactDir), { recursive: true }).pipe(Effect.ignore),
     ),
   );
 });
@@ -1192,9 +1186,7 @@ function buildBun(options: ComputeAutoBuildOptions) {
       };
     });
 
-    return yield* build.pipe(
-      Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
-    );
+    return yield* build.pipe(Effect.tapError(() => temp.cleanup));
   });
 }
 
@@ -1269,13 +1261,7 @@ const readPackageJson = Effect.fn(function* (appPath: string) {
   const packagePath = path.join(appPath, "package.json");
   const text = yield* fs
     .readFileString(packagePath)
-    .pipe(
-      Effect.catch((error) =>
-        error._tag === "PlatformError" && error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(error),
-      ),
-    );
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
   if (!text) return undefined;
   return yield* Effect.try({
     try: () => JSON.parse(text) as Record<string, unknown>,

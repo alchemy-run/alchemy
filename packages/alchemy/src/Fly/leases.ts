@@ -233,8 +233,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
             schedule: Schedule.spaced("2 seconds"),
             until: (absent) => absent,
           }),
-          Effect.timeout("30 seconds"),
-          Effect.catchTag("TimeoutError", () => Effect.succeed(false)),
+          Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.succeed(false) }),
           Effect.catch((error) =>
             Effect.gen(function* () {
               if (!held.has(machineId)) return true;
