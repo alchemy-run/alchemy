@@ -849,7 +849,7 @@ const makeCloudflareStateStore = Effect.fn(function* ({
   });
 });
 
-class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersionNotReady")<{
+export class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersionNotReady")<{
   readonly expected: number;
   readonly observed: number | undefined;
 }> {
