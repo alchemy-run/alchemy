@@ -601,7 +601,19 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           const key = `${stack}/${stage}`;
           const existing = leases.get(key);
           if (existing !== undefined) return existing;
-          const cached = yield* Effect.cached(acquireLease(stack, stage));
+          // Drop a failed acquire. Caching it would make the next operation
+          // report the same holder after that holder has gone.
+          const cached = yield* Effect.cached(
+            acquireLease(stack, stage).pipe(
+              Effect.tapError(() =>
+                Effect.sync(() => {
+                  if (leases.get(key) === cached) {
+                    leases.delete(key);
+                  }
+                }),
+              ),
+            ),
+          );
           leases.set(key, cached);
           return cached;
         }),
