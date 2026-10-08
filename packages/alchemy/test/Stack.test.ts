@@ -125,12 +125,9 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
       >()("StagedStack") {}
 
       expect(yield* resolve(StagedStack.at("prod"))).toEqual({ value: "prod" });
-      expect(yield* resolve(StagedStack.at("prod"))).toEqual(
-        yield* resolve(StagedStack.stage.prod),
-      );
-      expect(yield* resolve(StagedStack.at("pr-42"))).toEqual(
-        yield* resolve(StagedStack.stage["pr-42"]),
-      );
+      expect(yield* resolve(StagedStack.stage.prod)).toEqual({ value: "prod" });
+      expect(yield* resolve(StagedStack.at("pr-42"))).toEqual({ value: "pr-42" });
+      expect(yield* resolve(StagedStack.stage["pr-42"])).toEqual({ value: "pr-42" });
     }),
   );
 
@@ -143,9 +140,7 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
       ) {}
 
       expect(yield* resolve(InlineStagedStack.at("dev"))).toEqual({ value: "dev" });
-      expect(yield* resolve(InlineStagedStack.at("dev"))).toEqual(
-        yield* resolve(InlineStagedStack.stage.dev),
-      );
+      expect(yield* resolve(InlineStagedStack.stage.dev)).toEqual({ value: "dev" });
     }),
   );
 });
