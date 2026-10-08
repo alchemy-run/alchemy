@@ -312,7 +312,7 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.orElseSucceed((): Effect.Effect<ObservedPolicy | undefined> => undefined),
+            Effect.orElseSucceed((): ObservedPolicy | undefined => undefined),
           );
       }
       if (!observed) {
@@ -429,7 +429,7 @@ export const PolicyProvider = () =>
             accountId: acct,
             policyId: output.policyId,
           })
-          .pipe(Effect.orElseSucceed((): Effect.Effect<ObservedPolicy | undefined> => undefined));
+          .pipe(Effect.orElseSucceed((): ObservedPolicy | undefined => undefined));
         if (direct && direct.id) {
           return {
             policyId: direct.id,
