@@ -1409,13 +1409,11 @@ const withStagingDeadline = <A, E, R>(
   effect.pipe(
     Effect.timeoutOption(Duration.millis(Math.max(1, budget.deadline - Date.now()))),
     Effect.flatMap((result) =>
-      Option.isSome(result)
-        ? Effect.succeed(result.value)
-        : Effect.fail(
-            new Error(
-              `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
-            ),
-          ),
+      Effect.fromOption(
+        result,
+        () =>
+          new Error(`Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`),
+      ),
     ),
   );
 
