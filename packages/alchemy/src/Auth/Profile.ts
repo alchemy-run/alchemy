@@ -536,7 +536,7 @@ export const ProfileStoreLive = Layer.effect(
 
     const getProfile = (name: string) =>
       validateProfileName(name).pipe(
-        Effect.flatMap(() => readManifest),
+        Effect.andThen(readManifest),
         Effect.map((manifest) => manifest.profiles[name]),
       );
 

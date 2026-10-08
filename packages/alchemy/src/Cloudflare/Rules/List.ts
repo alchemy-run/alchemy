@@ -370,7 +370,7 @@ export const ListProvider = () =>
                 if (match.kind === news.kind) return Effect.succeed(match);
                 return rules.deleteList({ accountId: acct, listId: match.id }).pipe(
                   Effect.catchTag("ListNotFound", () => Effect.void),
-                  Effect.flatMap(() => create),
+                  Effect.andThen(create),
                 );
               }),
             ),
