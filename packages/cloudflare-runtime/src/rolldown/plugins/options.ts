@@ -210,13 +210,6 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
           },
         };
       },
-      // A declared main replaces framework inputs in the entry environment.
-      options(options) {
-        if (pluginOptions.main === undefined) return;
-        if (this.environment?.name !== parseViteEnvironments(pluginOptions)[0]) return;
-        options.input = wrapInput(input);
-        return options;
-      },
     },
   };
 });
