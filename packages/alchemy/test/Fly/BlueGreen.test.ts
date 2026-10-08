@@ -1367,7 +1367,7 @@ describe.sequential(
                             (active) =>
                               active.stage === "completed" &&
                               active.machineId === ready.machineId &&
-                              active.method === "PUT" &&
+                              active.method === "PATCH" &&
                               active.phase === "active" &&
                               active.status! < 300,
                           ),
@@ -5467,7 +5467,7 @@ describe.sequential(
         });
       const stamp = (slot: number, phase: string) => {
         const input = {
-          method: "PUT",
+          method: "PATCH",
           path: `${path(slot)}/metadata`,
           machineId: `green-${slot}`,
           phase,
@@ -5555,7 +5555,7 @@ describe.sequential(
     const active = ({ events }: Trace) =>
       events.filter(
         (event) =>
-          event.method === "PUT" && event.machineId === "green-0" && event.phase === "active",
+          event.method === "PATCH" && event.machineId === "green-0" && event.phase === "active",
       );
 
     it.effect("pure readiness matcher permits only passing corresponding mirrors", () =>
@@ -5654,7 +5654,7 @@ describe.sequential(
         (value) => {
           for (const event of value.events.filter(
             (event) =>
-              event.method === "PUT" &&
+              event.method === "PATCH" &&
               event.machineId === "green-0" &&
               event.phase === "validating",
           )) {
@@ -6065,7 +6065,7 @@ describe.sequential(
               endpoint = proxy.url;
               proxy.arm({
                 match: (event) =>
-                  event.method === "PUT" &&
+                  event.method === "PATCH" &&
                   event.path.endsWith("/metadata") &&
                   event.phase === "promoting",
                 action: "cut-request",

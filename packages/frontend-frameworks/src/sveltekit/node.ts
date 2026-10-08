@@ -45,7 +45,7 @@ const fail = (message: string, cause?: unknown) =>
 export interface SvelteKitNodeTargetConfig extends SvelteKitTargetConfig {}
 
 /** The bundled fetch-handler module the finishing pass writes. */
-export const SERVER_ENTRY_NAME = NodePath.join("server", "index.mjs");
+export const SERVER_ENTRY_NAME = "server/index.mjs";
 
 const generateFetchEntry = (options: { readonly serverImport: string }): string =>
   /* js */ `

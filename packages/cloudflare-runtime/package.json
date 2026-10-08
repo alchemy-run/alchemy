@@ -716,7 +716,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",

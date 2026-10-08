@@ -160,6 +160,13 @@ const launchers = [
     runtime: "node",
   },
   {
+    // A directory named like bun (`/home/ubuntu/`) must not select bun.
+    name: "pnpm under /home/ubuntu",
+    npm_execpath: "/home/ubuntu/.local/share/pnpm/pnpm.cjs",
+    npm_config_user_agent: "pnpm/11.25.0 npm/? node/v24.0.0 linux x64",
+    runtime: "node",
+  },
+  {
     name: "bun run / bunx",
     npm_execpath: "<fake-bun>",
     npm_config_user_agent: "bun/1.4.2 npm/? node/v26.3.0 darwin arm64",

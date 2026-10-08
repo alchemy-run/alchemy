@@ -7,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { inChatbotRegion } from "./internal.ts";
 
 /**
  * Raised when a freshly created Chatbot association has not become visible
@@ -94,6 +95,7 @@ export const AssociationProvider = () =>
       const observeAssociation = Effect.fn(function* (chatConfiguration: string, resource: string) {
         return yield* chatbot.listAssociations.items({ ChatConfiguration: chatConfiguration }).pipe(
           Stream.runCollect,
+          inChatbotRegion,
           Effect.map((listings) =>
             Array.from(listings).find((listing) => listing.Resource === resource),
           ),
@@ -140,10 +142,12 @@ export const AssociationProvider = () =>
           // 2. ENSURE — associate when missing. The API is an idempotent
           //    upsert, so a concurrent associate converges naturally.
           if (observed === undefined) {
-            yield* chatbot.associateToConfiguration({
-              Resource: news.resource,
-              ChatConfiguration: news.chatConfiguration,
-            });
+            yield* chatbot
+              .associateToConfiguration({
+                Resource: news.resource,
+                ChatConfiguration: news.chatConfiguration,
+              })
+              .pipe(inChatbotRegion);
 
             // 3. RETURN — bounded wait until the association is visible.
             yield* observeAssociation(news.chatConfiguration, news.resource).pipe(
@@ -181,6 +185,7 @@ export const AssociationProvider = () =>
               ChatConfiguration: output.chatConfigurationArn,
             })
             .pipe(
+              inChatbotRegion,
               // Idempotent delete — a concurrently removed association or
               // configuration is not an error. A configuration deleted out
               // from under the association surfaces the typed
@@ -197,13 +202,13 @@ export const AssociationProvider = () =>
             const configurationArns: string[] = [];
             const slack = yield* chatbot.describeSlackChannelConfigurations
               .items({})
-              .pipe(Stream.runCollect);
+              .pipe(Stream.runCollect, inChatbotRegion);
             for (const config of slack) {
               configurationArns.push(config.ChatConfigurationArn);
             }
             const teams = yield* chatbot.listMicrosoftTeamsChannelConfigurations
               .items({})
-              .pipe(Stream.runCollect);
+              .pipe(Stream.runCollect, inChatbotRegion);
             for (const config of teams) {
               configurationArns.push(config.ChatConfigurationArn);
             }
@@ -214,7 +219,7 @@ export const AssociationProvider = () =>
             for (const arn of configurationArns) {
               const associations = yield* chatbot.listAssociations
                 .items({ ChatConfiguration: arn })
-                .pipe(Stream.runCollect);
+                .pipe(Stream.runCollect, inChatbotRegion);
               for (const association of associations) {
                 results.push(toAttributes(arn, association.Resource));
               }

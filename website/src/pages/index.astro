@@ -8,6 +8,7 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import HeroHosts from "../components/marketing-islands/HeroHosts.tsx";
 import { HOSTS, hostSource } from "../components/marketing-islands/heroHosts";
+import { installSpec } from "../../plugins/preview-install.ts";
 import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -16,6 +17,8 @@ import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
 import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
+
+const alchemySpec = installSpec("alchemy");
 
 // Modules: one Layer creates the resource, binds it, and exposes the API.
 const PHOTOS_SRC = `export class Photos extends Context.Service<Photos, {
@@ -492,7 +495,7 @@ const PROVIDERS = [
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
-          <code class="v2-steps__code">pnpm add alchemy@latest effect</code>
+          <code class="v2-steps__code">pnpm add {alchemySpec} effect</code>
         </li>
         <li id="agent-prompt">
           <span class="v2-steps__label" data-copy>Paste this into your coding agent</span>
@@ -758,6 +761,34 @@ const PROVIDERS = [
     }
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
+    }
+    /* The copy fills the screen width here, so the desktop halo can't fade
+       the rings at its edges. A blurred veil covering the whole copy block
+       keeps the white text readable over the animation. */
+    .v2-hero__copy::before {
+      inset: -28px -32px;
+      background: color-mix(in srgb, var(--alc-bg) 68%, transparent);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      -webkit-mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+      mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+    }
+    /* Equal-width, stacked CTAs. */
+    .v2-hero__copy :global(.alc-hero__cta) {
+      flex-direction: column;
+      align-items: stretch;
+      max-width: 340px;
+    }
+    .v2-hero__copy :global(.alc-hero__cta .alc-btn) {
+      justify-content: center;
     }
     /* Stacked, the bottom-left spot falls on the code card. */
     .v2-motion-toggle {

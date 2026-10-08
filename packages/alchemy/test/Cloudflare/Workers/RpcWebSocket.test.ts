@@ -21,7 +21,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as RpcWebSocketClient from "@/Cloudflare/Workers/RpcWebSocketClient.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import { Greeting, Rejected, SocketRpcs, SocketStats } from "./fixtures/rpc-websocket/rpcs.ts";
 import SocketWorker from "./fixtures/rpc-websocket/worker.ts";
 
@@ -186,21 +186,31 @@ describe.concurrent.each([
       Effect.gen(function* () {
         yield* destroy(Stack);
         const output = yield* deploy(Stack);
-        yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`)).pipe(
-          Effect.flatMap((response) =>
-            response.text.pipe(
-              Effect.flatMap((body) =>
-                response.status === 200 && body === "ready"
-                  ? Effect.void
-                  : Effect.fail(new Test.WorkerNotReady({ status: response.status })),
+        // A new version reaches Cloudflare's hosts one at a time; hosts still
+        // on the old version reject the upgrade ("Expected 101"). Require the
+        // HTTP route and a handshake to succeed several times in a row.
+        yield* waitUntilStable(
+          `RPC WebSocket worker at ${output.url}`,
+          requestWorker(HttpClientRequest.get(`${output.url}/ready`)).pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(
+                Effect.flatMap((body) =>
+                  response.status === 200 && body === "ready"
+                    ? Effect.void
+                    : Effect.fail(new Test.WorkerNotReady({ status: response.status })),
+                ),
               ),
+            ),
+            Effect.andThen(rawConnect(`${output.url}/rpc/ready`).pipe(Effect.scoped)),
+            Effect.as(true),
+            Effect.catchTag(["WorkerNotPropagated", "WebSocketHandshakeFailed"], () =>
+              Effect.succeed(false),
             ),
           ),
         );
-        yield* rawConnect(`${output.url}/rpc/ready`).pipe(Effect.scoped);
         return output;
       }),
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     );
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 

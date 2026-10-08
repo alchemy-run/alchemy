@@ -52,7 +52,7 @@ describe(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "creates, lists, retains, replaces, and deletes target network associations",
       (stack) =>
         Effect.gen(function* () {

@@ -10,6 +10,7 @@ import {
   createProjectBranch,
 } from "@distilled.cloud/prisma/management";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
@@ -448,9 +449,18 @@ const ProviderLive = () =>
               );
             }
           }
+          // A member deleted moments ago (e.g. an App) can still count as
+          // live until Prisma's control plane catches up.
           yield* deleteBranch({
             branchId: output.branchId,
-          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              schedule: Schedule.exponential("500 millis"),
+              times: 6,
+            }),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
       };
     }),

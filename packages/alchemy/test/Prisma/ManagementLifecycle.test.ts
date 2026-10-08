@@ -956,10 +956,15 @@ const apiDatabase = (
 const makeDatabaseCloud = () => {
   const databases = new Map<string, ApiDatabase>();
   const calls: Array<[string, unknown?]> = [];
+  const project = { defaultRegion: null as string | null };
   let nextId = 1;
   // The same in-memory cloud, served over the wire for the Database resource.
   const fake = makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (segments.length === 3 && segments[1] === "projects" && request.method === "GET") {
+      return data(toWireProject(apiProject(segments[2]!, "app", project.defaultRegion)));
+    }
 
     if (request.pathname === "/v1/databases" && request.method === "GET") {
       return page(Array.from(databases.values()).map(toWireDatabase));
@@ -1048,7 +1053,7 @@ const makeDatabaseCloud = () => {
     return unhandled(request);
   });
 
-  return { fake, calls, databases };
+  return { fake, calls, databases, project };
 };
 
 const generatedDatabaseRecoveryCloud = makeDatabaseCloud();
@@ -1258,7 +1263,7 @@ const inheritedRegionCloud = makeDatabaseCloud();
 const inheritedRegion = Test.make({ providers: databaseLayer(inheritedRegionCloud.fake) });
 
 inheritedRegion.test.provider(
-  "Database region inherit is stable and follows the project default region",
+  "Database region inherit falls back to the default database region",
   (stack) =>
     Effect.gen(function* () {
       inheritedRegionCloud.databases.clear();

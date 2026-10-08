@@ -100,11 +100,14 @@ const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
         Effect.timeout("30 seconds"),
       );
       expect(identity.workflowName).toBe(expectedWorkflowName);
-      const rejected = yield* http.post(`${url}/workflow/start/world`, {
-        headers: {
-          "x-expected-workflow-name": `${expectedWorkflowName}-stale`,
-        },
-      });
+      // A ready `/workflow/identity` proves only one host has the new Worker;
+      // this request can still land on one serving the workers.dev
+      // placeholder 404.
+      const rejected = yield* requestWorker(
+        HttpClientRequest.post(`${url}/workflow/start/world`).pipe(
+          HttpClientRequest.setHeader("x-expected-workflow-name", `${expectedWorkflowName}-stale`),
+        ),
+      );
       yield* rejected.text;
       expect(rejected.status).toBe(409);
     }
@@ -905,7 +908,16 @@ test.provider(
             expect(binding.scriptIsOutput).toBe(true);
             expect(binding.workflowName).toBe(expected);
             expect(binding.scriptName).toBe(worker.workerName);
-            expect(yield* readWorkflowName(worker.workerName)).toBe(expected);
+            // Script settings can briefly report the previous version's
+            // bindings after an update.
+            const boundName = yield* readWorkflowName(worker.workerName).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (workflowName) => workflowName === expected,
+                times: 10,
+              }),
+            );
+            expect(boundName).toBe(expected);
             const observed = yield* workflows.getWorkflow({
               accountId,
               workflowName: binding.workflowName,
@@ -932,7 +944,17 @@ test.provider(
               workflow: observed,
               subscription: liveSubscription,
             });
-            const terminal = yield* runWorkflowToCompletion(worker.url!, expected);
+            // A just-deployed Workflow can fail its first instance before the
+            // Workflows engine sees the new script.
+            const terminal = yield* runWorkflowToCompletion(worker.url!, expected).pipe(
+              Effect.retry({
+                schedule: Schedule.spaced("3 seconds"),
+                times: 2,
+                while: (error) =>
+                  error instanceof Error &&
+                  error.message === 'workflow errored: {"message":"Worker not found."}',
+              }),
+            );
             expect(terminal.output?.workflowName).toBe(expected);
             const terminalObservedAt = yield* Clock.currentTimeMillis;
             yield* Effect.logInfo("Workflow terminal", {

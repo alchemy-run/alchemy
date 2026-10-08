@@ -21,7 +21,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -41,6 +41,7 @@ import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
@@ -52,6 +53,12 @@ import {
   makeFunctionImage,
 } from "./FunctionImage.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  HandlerContext,
+  TIMEOUT_MARGIN_ENV,
+  toTimeoutMarginMillis,
+  withInvocationDeadline,
+} from "./InvocationDeadline.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 
@@ -78,10 +85,6 @@ class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
     return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
   }
 }
-
-export class HandlerContext extends Context.Service<HandlerContext, lambda.Context>()(
-  "AWS.Lambda.HandlerContext",
-) {}
 
 export const isFunction = (value: any): value is Function => {
   return (
@@ -270,6 +273,25 @@ export interface FunctionCommonProps extends PlatformProps {
    */
   timeout?: Duration.Duration;
   /**
+   * How long before {@link timeout} telemetry is flushed for an invocation
+   * that is still running. A Lambda that hits its timeout is killed
+   * mid-flight and its buffered spans and logs are lost; at
+   * `timeout - timeoutMargin` the runtime ends the invocation's root span
+   * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
+   * the exporters, so the trace of the slow invocation is exported instead.
+   *
+   * The handler is never interrupted and the invocation's outcome is never
+   * changed. If it does finish inside the margin, its response goes out
+   * as normal; the root span is still exported once, as the timeout error
+   * marked `aws.lambda.timeout.imminent`.
+   *
+   * Size it for one export round-trip to your telemetry backend. Set to
+   * `Duration.zero` to disable.
+   *
+   * @default 500 millis
+   */
+  timeoutMargin?: Duration.Duration;
+  /**
    * Maximum number of concurrent executions reserved for this function.
    * Omit to remove the function-level reserved concurrency limit.
    */
@@ -293,6 +315,15 @@ export interface FunctionCommonProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Retention for the function's CloudWatch log group
+   * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
+   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
+   * log group so the policy applies before the first invocation, and
+   * deletes it with the function. When omitted the log group is left to
+   * Lambda, which creates it on first invoke with no expiry.
+   */
+  logging?: LogRetentionConfig;
 }
 
 export interface FunctionZipProps extends FunctionCommonProps {
@@ -1046,8 +1077,15 @@ export const Function: Platform<
                 // latency anyway — keep request finalizers fast. A failing
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
+                //
+                // The scope is ALSO what a timeout would take with it: Lambda
+                // kills the invocation mid-flight and the buffered telemetry
+                // never flushes. `withInvocationDeadline` flushes it
+                // `timeoutMargin` before that happens — without touching the
+                // handler or the invocation's outcome.
                 const scope = Scope.makeUnsafe();
                 const exit = await eff.pipe(
+                  withInvocationDeadline,
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
@@ -1334,6 +1372,14 @@ export const FunctionProvider = () =>
           ...env,
           NODE_OPTIONS: current ? `${current} --enable-source-maps` : "--enable-source-maps",
         };
+      };
+
+      // The runtime reads the invocation deadline margin per invocation
+      // (see `withInvocationDeadline`); only written when set so the
+      // runtime default applies otherwise.
+      const timeoutMarginEnv = (margin: Duration.Duration | undefined): Record<string, string> => {
+        const ms = toTimeoutMarginMillis(margin);
+        return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
       };
 
       const retryFunctionMutation = Effect.retry({
@@ -1651,14 +1697,13 @@ export const FunctionProvider = () =>
           Layers: isFunctionImageProps(news)
             ? undefined
             : (news.layers ?? []).map(layerVersionArnOf),
-          Environment: runtimeEnv
-            ? {
-                Variables: {
-                  ...runtimeEnv,
-                  ...alchemyEnv,
-                },
-              }
-            : undefined,
+          Environment: {
+            Variables: {
+              ...runtimeEnv,
+              ...alchemyEnv,
+              ...timeoutMarginEnv(news.timeoutMargin),
+            },
+          },
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
           // Always explicit so removing the `tracing` prop converges back to
@@ -1939,7 +1984,17 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the bundle hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
@@ -2023,6 +2078,11 @@ export const FunctionProvider = () =>
           if (toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)) {
             return { action: "update" };
           }
+          if (
+            toTimeoutMarginMillis(olds.timeoutMargin) !== toTimeoutMarginMillis(news.timeoutMargin)
+          ) {
+            return { action: "update" };
+          }
           if (olds.architecture !== news.architecture) {
             return { action: "update" };
           }
@@ -2039,6 +2099,12 @@ export const FunctionProvider = () =>
             layers: (props.layers ?? []).map(layerVersionArnOf),
           });
           if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            // Bindings (env / policies from `bind`) are not props. An explicit
+            // noop would skip the engine's binding comparison, so defer to it
+            // whenever they may have changed.
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
             return { action: "noop" };
           }
         }),
@@ -2350,6 +2416,17 @@ export const FunctionProvider = () =>
             functionName,
             config: news.eventInvokeConfig,
           });
+
+          // Lambda only auto-creates the log group on first invoke and with
+          // no expiry, so create (or adopt) it here to give the retention
+          // policy a group to attach to. The delete path already reaps it.
+          if (news.logging?.retention !== undefined) {
+            const logGroupName = `/aws/lambda/${functionName}`;
+            yield* logs
+              .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+            yield* syncLogGroupRetention({ logGroupName, retention: news.logging.retention });
+          }
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,

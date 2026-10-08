@@ -48,7 +48,7 @@ export const WAKU_SERVER_ENTRY_PATH = "dist/lib/vite-entries/entry.server.js";
  * (framework-core's `selectEntryByFacade`) and this module remains an
  * ordinary chunk the user entry imports.
  */
-export const WAKU_SERVER_ENTRY_MODULE = NodePath.join("server", "index.js");
+export const WAKU_SERVER_ENTRY_MODULE = "server/index.js";
 
 /**
  * The stable importable specifier for waku's server handler — the module a

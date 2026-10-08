@@ -17,12 +17,8 @@ import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { DistributiveOmit } from "../../Util/types.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import { DURABLE_SDK_MODULE, encodeDurableEnvelope, makeDurableListener } from "./DurableBridge.ts";
-import {
-  Function,
-  type FunctionProps,
-  type FunctionServices,
-  type HandlerContext,
-} from "./Function.ts";
+import { Function, type FunctionProps, type FunctionServices } from "./Function.ts";
+import type { HandlerContext } from "./InvocationDeadline.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
