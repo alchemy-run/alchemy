@@ -5,6 +5,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { Artifacts, createArtifactStore, makeScopedArtifacts } from "@/Artifacts.ts";
 import { resolveSource } from "@/Cloudflare/Workers/Source.ts";
 
@@ -15,7 +16,7 @@ const program = Effect.gen(function* () {
   }).pipe(
     Layer.provide(
       Credentials.fromApiToken({
-        apiToken: "unused-local-only",
+        apiToken: Redacted.make("unused-local-only"),
         apiBaseUrl: "http://127.0.0.1:1",
       }),
     ),
