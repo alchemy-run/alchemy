@@ -49,6 +49,7 @@ export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/foldki
 interface ViteBuilder {
   readonly config: {
     readonly root: string;
+    readonly base: string;
     readonly plugins: ReadonlyArray<Pick<Plugin, "name" | "api">>;
     readonly build: { readonly outDir: string };
   };
@@ -57,6 +58,7 @@ interface ViteBuilder {
     {
       readonly config: {
         readonly root: string;
+        readonly base: string;
         readonly build: { readonly outDir: string };
       };
     }
@@ -266,6 +268,7 @@ export const make: (
           const client = builder.environments.client?.config ?? builder.config;
           return {
             metadata,
+            assetBasePath: decodeURIComponent(new URL(client.base, "http://localhost").pathname),
             client: metadata?.clientDirectory ?? path.resolve(client.root, client.build.outDir),
           };
         },
@@ -278,6 +281,7 @@ export const make: (
         Core.applyDeployTargetFinish(target, collected.output, {
           ...context,
           entry: collected.entry,
+          assetBasePath: built.assetBasePath,
         }),
       ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     });

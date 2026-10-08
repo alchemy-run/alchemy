@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { makeNeonServeEntrySource } from "../../core/NeonServe.ts";
 import { makeNodeServeEntrySource } from "../../core/NodeServe.ts";
 import { makeAwsTarget } from "../aws.ts";
-import { metadataReader, readFoldkitOutput, type BuildMetadata } from "../Foldkit.ts";
+import { make, metadataReader, readFoldkitOutput, type BuildMetadata } from "../Foldkit.ts";
 import { target as makeNeonTarget } from "../neon.ts";
 import { makeNodeTarget } from "../node.ts";
 
@@ -59,19 +59,28 @@ const fixture = async () => {
 
 const assertRouting = async (
   fetcher: (pathname: string, init?: RequestInit) => Promise<Response>,
+  base = "",
 ) => {
-  expect(await (await fetcher("/")).text()).toBe("prerendered home");
-  expect(await (await fetcher("/about?count=7")).text()).toBe("prerendered about");
-  expect(await (await fetcher("/dynamic?count=7")).text()).toBe("GET:/dynamic?count=7:");
-  expect(await (await fetcher("/asset.txt")).text()).toBe("asset");
-  expect((await fetcher("/missing.js")).status).toBe(404);
-  expect(await (await fetcher("/about", { method: "POST", body: "payload" })).text()).toBe(
-    "POST:/about:payload",
+  const fetchAt = (pathname: string, init?: RequestInit) => fetcher(base + pathname, init);
+  expect(await (await fetchAt("/")).text()).toBe("prerendered home");
+  expect(await (await fetchAt("/about?count=7")).text()).toBe("prerendered about");
+  expect(await (await fetchAt("/dynamic?count=7")).text()).toBe(
+    "GET:" + base + "/dynamic?count=7:",
+  );
+  expect(await (await fetchAt("/asset.txt")).text()).toBe("asset");
+  expect((await fetchAt("/missing.js")).status).toBe(404);
+  expect(await (await fetchAt("/about", { method: "POST", body: "payload" })).text()).toBe(
+    "POST:" + base + "/about:payload",
   );
   for (const pathname of ["/", "/about", "/dynamic"]) {
-    const response = await fetcher(pathname, { method: "HEAD" });
+    const response = await fetchAt(pathname, { method: "HEAD" });
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("");
+  }
+  if (base) {
+    for (const pathname of ["/asset.txt", "/about", base + "lication/asset.txt"]) {
+      expect(await (await fetcher(pathname)).text()).toBe("GET:" + pathname + ":");
+    }
   }
 };
 
@@ -126,62 +135,82 @@ describe("Foldkit deployment targets", () => {
     ).toBe(output);
   });
 
-  it("serves prerendered root/nested paths before SSR on Node, preserving methods and queries", async () => {
-    const metadata = await fixture();
-    const { output, entry } = await run(
-      readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata),
-    );
-    const finished = await run(
-      makeNodeTarget().finish!(output, {
-        root: metadata.root,
-        framework: "foldkit",
-        entry,
-      }),
-    );
-    const servePath = path.join(finished.distDirectory!, finished.serverModules![0]!.name);
-    // Add only a readiness notification, leaving the generated request handling intact.
-    await fs.appendFile(
-      servePath,
-      '\nserver.on("listening", () => console.log(server.address().port));\n',
-    );
-    const child = spawn(process.execPath, [servePath], {
-      env: { ...process.env, PORT: "0", HOST: "127.0.0.1" },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let errors = "";
-    child.stderr.on("data", (chunk) => {
-      errors += String(chunk);
-    });
-    try {
-      const port = await new Promise<number>((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error("Node entry readiness timed out: " + errors)),
-          5000,
-        );
-        child.stdout.once("data", (chunk) => {
-          clearTimeout(timer);
-          resolve(Number(String(chunk).trim()));
-        });
-        child.once("error", (error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
-        child.once("exit", (code) => {
-          clearTimeout(timer);
-          reject(new Error("Node entry exited: " + code + errors));
-        });
+  it.each([
+    { base: "", ssr: true },
+    { base: "/app", ssr: true },
+    { base: "/app", ssr: false },
+  ])(
+    "serves Node assets at $base (SSR: $ssr) without changing handler URLs",
+    async ({ base, ssr }) => {
+      const metadata = await fixture();
+      const { output, entry } = await run(
+        readFoldkitOutput(metadata.root, metadata.clientDirectory, ssr ? metadata : undefined),
+      );
+      const finished = await run(
+        makeNodeTarget().finish!(output, {
+          root: metadata.root,
+          framework: "foldkit",
+          entry,
+          assetBasePath: base + "/",
+        }),
+      );
+      const servePath = path.join(finished.distDirectory!, finished.serverModules![0]!.name);
+      // Add only a readiness notification, leaving the generated request handling intact.
+      await fs.appendFile(
+        servePath,
+        '\nserver.on("listening", () => console.log(server.address().port));\n',
+      );
+      const child = spawn(process.execPath, [servePath], {
+        env: { ...process.env, PORT: "0", HOST: "127.0.0.1" },
+        stdio: ["ignore", "pipe", "pipe"],
       });
-      await assertRouting((pathname, init) => fetch(`http://127.0.0.1:${port}${pathname}`, init));
-    } finally {
-      if (child.exitCode === null) {
-        const exited = once(child, "exit");
-        child.kill();
-        await exited;
+      let errors = "";
+      child.stderr.on("data", (chunk) => {
+        errors += String(chunk);
+      });
+      try {
+        const port = await new Promise<number>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("Node entry readiness timed out: " + errors)),
+            5000,
+          );
+          child.stdout.once("data", (chunk) => {
+            clearTimeout(timer);
+            resolve(Number(String(chunk).trim()));
+          });
+          child.once("error", (error) => {
+            clearTimeout(timer);
+            reject(error);
+          });
+          child.once("exit", (code) => {
+            clearTimeout(timer);
+            reject(new Error("Node entry exited: " + code + errors));
+          });
+        });
+        const fetchAt = (pathname: string, init?: RequestInit) =>
+          fetch(`http://127.0.0.1:${port}${pathname}`, init);
+        if (ssr) {
+          await assertRouting(fetchAt, base);
+        } else {
+          expect(await (await fetchAt(base + "/asset.txt")).text()).toBe("asset");
+          expect(await (await fetchAt(base + "/deep/link")).text()).toBe("prerendered home");
+          expect(await (await fetchAt(base + "/deep/link", { method: "HEAD" })).text()).toBe("");
+          expect((await fetchAt(base + "/deep/link", { method: "POST" })).status).toBe(404);
+          expect((await fetchAt("/asset.txt")).status).toBe(404);
+          expect((await fetchAt("/deep/link")).status).toBe(404);
+          expect((await fetchAt(base + "lication/deep/link")).status).toBe(404);
+        }
+      } finally {
+        if (child.exitCode === null) {
+          const exited = once(child, "exit");
+          child.kill();
+          await exited;
+        }
       }
-    }
-  });
+    },
+  );
 
-  it("preserves the same routing in Neon's Fetch module", async () => {
+  it.each(["", "/app"])("preserves routing at base %j in Neon's Fetch module", async (base) => {
     const metadata = await fixture();
     const { output, entry } = await run(
       readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata),
@@ -191,13 +220,15 @@ describe("Foldkit deployment targets", () => {
         root: metadata.root,
         framework: "foldkit",
         entry,
+        assetBasePath: base + "/",
       }),
     );
     const module = await import(
       pathToFileURL(path.join(finished.distDirectory!, finished.serverModules![0]!.name)).href
     );
-    await assertRouting((pathname, init) =>
-      module.default.fetch(new Request("http://example.test" + pathname, init)),
+    await assertRouting(
+      (pathname, init) => module.default.fetch(new Request("http://example.test" + pathname, init)),
+      base,
     );
   });
 
@@ -219,6 +250,42 @@ describe("Foldkit deployment targets", () => {
       if (!notFoundHandling) expect(await response.text()).toBe("prerendered home");
     }
   });
+
+  it.each([undefined, "/override/"])(
+    "mounts SPA assets using the resolved Vite base (override %j)",
+    async (base) => {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "foldkit-base-"));
+      roots.push(root);
+      await fs.writeFile(path.join(root, "package.json"), '{"type":"module"}');
+      await fs.writeFile(path.join(root, "vite.config.js"), 'export default { base: "/app/" };');
+      await fs.writeFile(
+        path.join(root, "index.html"),
+        '<html><body><script type="module" src="/entry.js"></script></body></html>',
+      );
+      await fs.writeFile(path.join(root, "entry.js"), 'globalThis.assetMountExample = "mounted";');
+      const target = { ...makeNeonTarget(), build: undefined };
+      const output = await run(
+        Effect.gen(function* () {
+          const framework = yield* make({ root, target, vite: base ? { base } : undefined });
+          return yield* framework.build({ root });
+        }),
+      );
+      expect(output.nodeServe?.assetBasePath).toBe(base ?? "/app/");
+      const module = await import(
+        pathToFileURL(path.join(output.distDirectory!, output.serverModules![0]!.name)).href
+      );
+      const fetchAt = (pathname: string) =>
+        module.default.fetch(new Request("http://example.test" + pathname)) as Promise<Response>;
+      const mount = base ?? "/app/";
+      const home = await (await fetchAt(mount)).text();
+      expect(await (await fetchAt(mount + "deep/link")).text()).toBe(home);
+      const script = home.match(/src="([^"]+)"/)![1]!;
+      expect(script.startsWith(mount + "assets/")).toBe(true);
+      expect(await (await fetchAt(script)).text()).toContain("mounted");
+      expect((await fetchAt("/deep/link")).status).toBe(404);
+      expect((await fetchAt(script.slice(mount.length - 1))).status).toBe(404);
+    },
+  );
 
   it("adapts Foldkit's nested fetch entry to a buffered Lambda handler", async () => {
     const metadata = await fixture();
@@ -292,12 +359,14 @@ describe("Foldkit plugin metadata", () => {
     expect(makeNodeServeEntrySource(options)).toContain(
       'const isRoot = (urlPath === "/" || urlPath === "");',
     );
-    expect(makeNeonServeEntrySource(options)).toContain('handle === undefined || pathname !== "/"');
+    expect(makeNeonServeEntrySource(options)).toContain(
+      'handle === undefined || staticPath !== "/"',
+    );
     expect(makeNodeServeEntrySource({ ...options, serveRootIndex: true })).toContain(
       "const isRoot = false;",
     );
     expect(makeNeonServeEntrySource({ ...options, serveRootIndex: true })).toContain(
-      "lookup(pathname, true)",
+      "lookup(staticPath, true)",
     );
   });
 });

@@ -43,6 +43,7 @@ const makeNodeFinishTarget = (config: FoldkitTargetConfig = {}): FoldkitTarget =
           serveModuleName: `server/${NODE_SERVE_ENTRY_FILE_NAME}`,
           clientDirExpression: relativeClientDirExpression(servePath, output.clientDirectory),
           handler,
+          assetBasePath: context.assetBasePath,
           serveRootIndex: true,
           notFoundHandling:
             config.notFoundHandling ?? (handler || config.output === "static" ? "none" : "spa"),

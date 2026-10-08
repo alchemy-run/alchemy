@@ -88,6 +88,10 @@ allowing those URLs to render on request makes the deployment hybrid.
 Browser-only builds use SPA fallback. Server builds send unmatched requests to
 the handler. Explicit `assets.notFoundHandling` settings override these defaults.
 
+Vite's resolved `base` also mounts the client assets. With `base: "/app/"`,
+`/app/assets/main.js` serves `assets/main.js` from the client output. SPA fallback
+is limited to that prefix; server handlers receive the original URL.
+
 ## Define the stack
 
 ```typescript
