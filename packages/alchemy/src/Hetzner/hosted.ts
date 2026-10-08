@@ -440,13 +440,11 @@ WantedBy=multi-user.target
               Schedule.spaced(Duration.seconds(5)),
             ]),
           }),
-          Effect.catchIf(
-            (e) => e._tag === "AttachPending",
-            () =>
-              Hetzner.volumes.getVolume({ id: volumeId }).pipe(
-                Effect.map(({ volume }) => volume),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              ),
+          Effect.catchTag("AttachPending", () =>
+            Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+              Effect.map(({ volume }) => volume),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            ),
           ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );

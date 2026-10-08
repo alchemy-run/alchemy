@@ -234,10 +234,7 @@ export const QaScorecardsRevisionProvider = () =>
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
-            Effect.catchIf(
-              (error) => error._tag === "Conflict",
-              () => getByName(name),
-            ),
+            Effect.catchTag("Conflict", () => getByName(name)),
             // The scorecard's current revision is still settling; adopt it.
             Effect.catchTag("QaScorecardPreconditionFailed", () =>
               findExisting(news.parent, qaScorecardRevisionId),
