@@ -38,7 +38,7 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
           Effect.flatMap((resolve) => resolve),
           Effect.map((cfg) => Redacted.value(cfg.apiKey)),
         );
-    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN");
+    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
 
 /**

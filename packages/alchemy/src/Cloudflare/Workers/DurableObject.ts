@@ -1310,6 +1310,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               fromDurableObjectState({ storage: {} } as any),
             ),
           ),
+          Effect.asVoid,
         );
       }
       yield* (yield* Worker).export(namespace, {
