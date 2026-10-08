@@ -55,25 +55,23 @@ export const blobRandomAccess = (options: {
       const body = yield* options.blobs
         .get(options.key, { offset: start, length: windowBytes })
         .pipe(
-          Effect.mapError(
-            (error) =>
-              new StoreError({
-                reason: `incoming pack read ${options.key}: ${error.reason}`,
-              }),
+          Effect.mapError((error) =>
+            StoreError.make({
+              reason: `incoming pack read ${options.key}: ${error.reason}`,
+            }),
           ),
           Effect.provide(RuntimeContext.phantom),
         );
       if (body === null) {
         return yield* Effect.fail(
-          new StoreError({ reason: `incoming pack missing: ${options.key}` }),
+          StoreError.make({ reason: `incoming pack missing: ${options.key}` }),
         );
       }
       const bytes = yield* body.bytes.pipe(
-        Effect.mapError(
-          (error) =>
-            new StoreError({
-              reason: `incoming pack read ${options.key}: ${error.reason}`,
-            }),
+        Effect.mapError((error) =>
+          StoreError.make({
+            reason: `incoming pack read ${options.key}: ${error.reason}`,
+          }),
         ),
       );
       const slab = { start, bytes };

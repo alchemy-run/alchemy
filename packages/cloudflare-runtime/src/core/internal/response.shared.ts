@@ -30,7 +30,7 @@ export const decodeResponse = async <T>(response: Response) => {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new SystemError({
+    throw SystemError.make({
       subtag: "InvalidResponse",
       message: `Invalid response from server (${response.status} ${response.statusText})`,
       detail: { status: response.status, body: text },
@@ -43,7 +43,7 @@ export const decodeResponse = async <T>(response: Response) => {
   if (Result.isSuccess(decoded)) {
     throw decoded.success.error;
   }
-  throw new SystemError({
+  throw SystemError.make({
     subtag: "InvalidResponse",
     message: `Invalid response from server (${response.status} ${response.statusText})`,
     detail: { status: response.status, body: text },

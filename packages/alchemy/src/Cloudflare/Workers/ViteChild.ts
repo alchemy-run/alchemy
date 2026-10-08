@@ -238,7 +238,7 @@ export const runViteBuildChild = (
       if (exitCode !== 0) {
         const truncated = stderrLines > stderrTail.length;
         return yield* Effect.fail(
-          new BundleError({
+          BundleError.make({
             message: [
               `Vite build child exited with code ${exitCode}.`,
               ...(stderrTail.length === 0

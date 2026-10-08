@@ -181,7 +181,7 @@ export const makeStreamingSource = (options?: {
             : fallback !== undefined
               ? Effect.succeed(fallback)
               : Effect.fail(
-                  new StoreError({
+                  StoreError.make({
                     reason: "streaming source: bytes evicted and no fallback reader",
                   }),
                 ),
@@ -288,7 +288,9 @@ export const makeStreamingSource = (options?: {
       Effect.gen(function* () {
         if (failure !== undefined) return yield* Effect.fail(failure);
         if (ended) {
-          return yield* Effect.fail(new StoreError({ reason: "streaming source: push after end" }));
+          return yield* Effect.fail(
+            StoreError.make({ reason: "streaming source: push after end" }),
+          );
         }
         append(chunk);
         wake();

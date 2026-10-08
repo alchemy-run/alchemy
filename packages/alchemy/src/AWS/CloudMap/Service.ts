@@ -410,7 +410,7 @@ export const ServiceProvider = () =>
           }
           if (service?.Id === undefined || service.Arn === undefined) {
             return yield* Effect.fail(
-              new sd.ServiceNotFound({
+              sd.ServiceNotFound.make({
                 message: `service ${name} not visible after create`,
               }),
             );

@@ -211,7 +211,7 @@ export const AccessPolicyProvider = () =>
 
           if (detail?.name === undefined) {
             return yield* Effect.fail(
-              new aoss.ResourceNotFoundException({
+              aoss.ResourceNotFoundException.make({
                 message: `access policy ${name} not visible after reconcile`,
               }),
             );

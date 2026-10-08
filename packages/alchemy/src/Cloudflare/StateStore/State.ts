@@ -134,7 +134,7 @@ export const state = () =>
               return yield* upgrade;
             } else if (isCI) {
               return yield* Effect.die(
-                new AuthError({
+                AuthError.make({
                   message:
                     `Cloudflare State store is out of date ` +
                     `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
@@ -167,7 +167,7 @@ export const state = () =>
               const credentials = yield* loginWithCloudflare(profileName, true);
               if (!(yield* checkHttpStateStoreAuth(credentials))) {
                 return yield* Effect.die(
-                  new AuthError({
+                  AuthError.make({
                     message: `Cloudflare State store authentication failed, after refreshing credentials.`,
                   }),
                 );
@@ -208,7 +208,7 @@ export const state = () =>
           return yield* bootstrap();
         } else if (isCI) {
           return yield* Effect.die(
-            new AuthError({
+            AuthError.make({
               message: `Cloudflare State store not found. Run 'alchemy provider cloudflare bootstrap --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
@@ -735,7 +735,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
         if (!store) {
           return yield* Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: "No Secrets Store found on this account. Deploy the state store first.",
             }),
           );
@@ -773,12 +773,11 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           yield* credStore
             .write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, credentials)
             .pipe(
-              Effect.mapError(
-                (e) =>
-                  new AuthError({
-                    message: "Failed to write credentials",
-                    cause: e,
-                  }),
+              Effect.mapError((e) =>
+                AuthError.make({
+                  message: "Failed to write credentials",
+                  cause: e,
+                }),
               ),
             );
         }
@@ -791,7 +790,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
   }).pipe(
     Effect.catchTag("EdgeSessionError", (e) =>
       Effect.fail(
-        new AuthError({
+        AuthError.make({
           message: `Edge-preview secret read failed: ${e.message}`,
           cause: e.cause,
         }),

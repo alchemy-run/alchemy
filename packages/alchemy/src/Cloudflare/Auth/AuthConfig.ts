@@ -87,7 +87,7 @@ export const validateAccountId = (
     const command = yield* profileCommandHint("alchemy profile edit --reconfigure Cloudflare");
     if (trimmed.length === 0) {
       return yield* Effect.fail(
-        new AuthError({
+        AuthError.make({
           message:
             `Cloudflare account ID is missing (${source}). ` +
             `Re-run \`${command}\` and provide your account ID ` +
@@ -97,7 +97,7 @@ export const validateAccountId = (
     }
     if (!ACCOUNT_ID_PATTERN.test(trimmed)) {
       return yield* Effect.fail(
-        new AuthError({
+        AuthError.make({
           message:
             `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
             "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +

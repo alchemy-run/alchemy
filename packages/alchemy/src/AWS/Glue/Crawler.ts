@@ -397,7 +397,7 @@ export const CrawlerProvider = () =>
           });
           if (remaining !== undefined) {
             return yield* Effect.fail(
-              new glue.OperationTimeoutException({
+              glue.OperationTimeoutException.make({
                 message: `crawler ${name} remained visible after delete for 30 seconds`,
               }),
             );

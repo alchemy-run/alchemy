@@ -413,7 +413,7 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   // Construct an actual `Response.Usage` instance — `Schema.Class<Usage>`
   // encodes by going through the class constructor / `isInstance` check, so a
   // plain struct that "matches" the encoded shape isn't enough.
-  return new Response.Usage({
+  return Response.Usage.make({
     inputTokens: {
       uncached: cached !== undefined ? Math.max(0, promptTokens - cached) : promptTokens,
       total: promptTokens,
@@ -1171,7 +1171,7 @@ const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiErr
   AiError.AiError.make({
     module: "Cloudflare.AI.LanguageModel",
     method,
-    reason: new AiError.UnknownError({
+    reason: AiError.UnknownError.make({
       description: cause instanceof Error ? cause.message : "AI Gateway request failed",
     }),
   });

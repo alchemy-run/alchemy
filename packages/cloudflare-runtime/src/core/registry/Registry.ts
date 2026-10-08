@@ -197,16 +197,15 @@ export const RegistryLive = Layer.effect(
               Effect.forkScoped,
             ),
           ),
-          Effect.mapError(
-            (error) =>
-              new SystemError({
-                subtag: "RegistryWriteError",
-                message: "Failed to write registry entry",
-                detail: {
-                  entry,
-                },
-                cause: error,
-              }),
+          Effect.mapError((error) =>
+            SystemError.make({
+              subtag: "RegistryWriteError",
+              message: "Failed to write registry entry",
+              detail: {
+                entry,
+              },
+              cause: error,
+            }),
           ),
         );
       },

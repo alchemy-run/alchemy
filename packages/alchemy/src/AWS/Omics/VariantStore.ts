@@ -119,7 +119,7 @@ export const VariantStoreProvider = () =>
         );
         if (final.status === "FAILED") {
           return yield* Effect.fail(
-            new omics.ValidationException({
+            omics.ValidationException.make({
               message: `Variant store ${name} failed: ${final.statusMessage ?? "unknown"}`,
             }),
           );

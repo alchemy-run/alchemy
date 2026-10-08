@@ -163,7 +163,7 @@ const isReserved = (port: number) => {
 export const make = (options: PortsOptions) =>
   Effect.gen(function* () {
     const addressInUseError = (port: number) =>
-      new ConfigError({
+      ConfigError.make({
         subtag: "AddressInUse",
         message: `Could not bind to port ${port} (already in use).`,
         hint: "Pick a different port or stop the process using it.",
@@ -188,7 +188,7 @@ export const make = (options: PortsOptions) =>
             // socket churn, so stop the search outright.
             return resume(
               Effect.die(
-                new SystemError({
+                SystemError.make({
                   subtag: "PortBindFailed",
                   message: `Could not bind to port ${port} (${code}).`,
                   hint: "The system is out of socket resources (or the network stack rejected the bind). Free up resources and retry.",
@@ -244,7 +244,7 @@ export const make = (options: PortsOptions) =>
       }
       // This should essentially never happen, so it's a `die` rather than a `fail`.
       return yield* Effect.die(
-        new SystemError({
+        SystemError.make({
           subtag: "PortExhausted",
           message: `No available port found in the range ${start}-${limit}.`,
           hint: "Free up a port in this range or pick a different starting port.",

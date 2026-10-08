@@ -173,7 +173,7 @@ export const SigningKeyProvider = () =>
         // the key — eventual-consistency blip; fail typed so the engine
         // can retry the reconcile.
         return yield* Effect.fail(
-          new images.KeyNotFound({
+          images.KeyNotFound.make({
             code: 5404,
             message: `signing key ${name} not observable after create`,
           }),

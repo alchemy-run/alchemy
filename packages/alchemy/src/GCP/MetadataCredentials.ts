@@ -72,14 +72,14 @@ const metadataGet = (http: HttpClient.HttpClient, path: string) =>
       Effect.filterOrFail(
         (response) => response.status === 200,
         (response) =>
-          new ConfigError({
+          ConfigError.make({
             message: `GCE metadata ${path} returned HTTP ${response.status}`,
           }),
       ),
       Effect.mapError((cause) =>
         Schema.is(ConfigError)(cause)
           ? cause
-          : new ConfigError({
+          : ConfigError.make({
               message: `GCE metadata ${path} is unreachable: ${String(cause)}`,
             }),
       ),
@@ -90,11 +90,10 @@ export const fetchMetadataToken = (http: HttpClient.HttpClient) =>
   Effect.gen(function* () {
     const response = yield* metadataGet(http, "/instance/service-accounts/default/token");
     const body = yield* response.json.pipe(
-      Effect.mapError(
-        () =>
-          new ConfigError({
-            message: "GCE metadata token endpoint returned invalid JSON",
-          }),
+      Effect.mapError(() =>
+        ConfigError.make({
+          message: "GCE metadata token endpoint returned invalid JSON",
+        }),
       ),
     );
     const record =
@@ -102,7 +101,7 @@ export const fetchMetadataToken = (http: HttpClient.HttpClient) =>
         ? (body as { access_token?: unknown; expires_in?: unknown })
         : {};
     if (typeof record.access_token !== "string") {
-      return yield* new ConfigError({
+      return yield* ConfigError.make({
         message: "GCE metadata token endpoint returned no access_token",
       });
     }
@@ -119,11 +118,10 @@ export const fetchMetadataProject = (http: HttpClient.HttpClient) =>
   metadataGet(http, "/project/project-id").pipe(
     Effect.flatMap((response) => response.text),
     Effect.map((text) => text.trim()),
-    Effect.mapError(
-      () =>
-        new ConfigError({
-          message: "GCE metadata project-id endpoint returned no project",
-        }),
+    Effect.mapError(() =>
+      ConfigError.make({
+        message: "GCE metadata project-id endpoint returned no project",
+      }),
     ),
   );
 

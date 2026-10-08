@@ -98,7 +98,7 @@ export const envFile = Flag.Path("env-file", { typeName: "file" }).pipe(
         Effect.option,
       );
       if (Option.isSome(type) && type.value !== "File" && type.value !== "CharacterDevice") {
-        return yield* new CliError.InvalidValue({
+        return yield* CliError.InvalidValue.make({
           option: "env-file",
           value: path,
           expected: "a file or /dev/null",

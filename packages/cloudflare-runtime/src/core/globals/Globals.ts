@@ -88,15 +88,14 @@ export const GlobalsLive = Layer.effect(
     if (storageDiskPath !== undefined) {
       const persistPath = path.join(storageDiskPath, "email");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "Globals",
-              message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Globals",
+            message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       email = {
@@ -122,7 +121,7 @@ export const GlobalsLive = Layer.effect(
           return Result.isSuccess(parsed)
             ? Effect.succeed({ expression, cron: parsed.success })
             : Effect.fail(
-                new ConfigError({
+                ConfigError.make({
                   subtag: "InvalidCron",
                   message: `Invalid cron expression "${expression}": ${parsed.failure.message}`,
                   hint: 'Use a standard cron expression, e.g. "*/5 * * * *".',

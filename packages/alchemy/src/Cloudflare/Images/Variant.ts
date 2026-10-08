@@ -258,7 +258,7 @@ export const VariantProvider = () =>
         // surfaced the variant — eventual-consistency blip; fail typed so
         // the engine can retry the reconcile.
         return yield* Effect.fail(
-          new images.VariantNotFound({
+          images.VariantNotFound.make({
             code: 5401,
             message: `variant ${name} not observable after create`,
           }),

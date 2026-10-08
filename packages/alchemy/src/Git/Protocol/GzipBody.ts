@@ -64,7 +64,7 @@ export const gunzipStream = <E>(
         // runtime accepts Uint8Array chunks — bridge the variance mismatch.
         new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
       ) as ReadableStream<Uint8Array>,
-    onError: (error) => new GzipBodyError({ reason: `gunzip failed: ${errorReason(error)}` }),
+    onError: (error) => GzipBodyError.make({ reason: `gunzip failed: ${errorReason(error)}` }),
   });
 
 /**

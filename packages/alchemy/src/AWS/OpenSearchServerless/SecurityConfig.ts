@@ -353,7 +353,7 @@ export const SecurityConfigProvider = () =>
 
           if (detail?.id === undefined) {
             return yield* Effect.fail(
-              new aoss.ResourceNotFoundException({
+              aoss.ResourceNotFoundException.make({
                 message: `security config ${configId} not visible after reconcile`,
               }),
             );

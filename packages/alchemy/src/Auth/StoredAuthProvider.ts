@@ -80,7 +80,7 @@ export const validateFieldValues = (
     for (const key of Object.keys(values)) {
       if (!known.has(key)) {
         return yield* Effect.fail(
-          new AuthError({
+          AuthError.make({
             message:
               `${provider}: unknown field '${key}'. ` + `Valid fields: ${[...known].join(", ")}.`,
           }),
@@ -93,7 +93,7 @@ export const validateFieldValues = (
       if (raw === undefined || raw.length === 0) {
         if (field.optional) continue;
         return yield* Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `${provider}: missing required field '${field.name}' (${field.label}). Pass it with --set ${field.name}=<value>.`,
           }),
         );
@@ -101,7 +101,7 @@ export const validateFieldValues = (
       const invalid = field.validate?.(raw);
       if (invalid !== undefined) {
         return yield* Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `${provider}: invalid '${field.name}': ${invalid}`,
           }),
         );
@@ -220,7 +220,7 @@ export const makeStoredAuthProvider = <Resolved>(config: StoredAuthProviderConfi
               Effect.flatMap((values) => persist(profileName, values)),
             )
           : Effect.fail(
-              new AuthError({
+              AuthError.make({
                 message: `${provider}: unknown method '${input.method}'. Valid methods: stored.`,
               }),
             );

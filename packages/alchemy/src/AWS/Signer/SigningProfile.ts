@@ -308,7 +308,7 @@ export const SigningProfileProvider = () =>
           if (live === undefined) {
             // Extremely unlikely read-after-write miss; surface loudly.
             return yield* Effect.fail(
-              new signer.ResourceNotFoundException({
+              signer.ResourceNotFoundException.make({
                 message: `signing profile ${profileName} not visible after PutSigningProfile`,
               }),
             );
@@ -319,7 +319,7 @@ export const SigningProfileProvider = () =>
             // under this name. Only reachable with a user-fixed profileName
             // (generated names get a fresh random suffix per instance).
             return yield* Effect.fail(
-              new signer.SigningProfileAlreadyExists({
+              signer.SigningProfileAlreadyExists.make({
                 message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
               }),
             );

@@ -103,12 +103,11 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
     const readKeyFile = (path: string): Effect.Effect<ServiceAccountKey, AuthError> =>
       fs.readFileString(path).pipe(
         Effect.flatMap(parseServiceAccountKey),
-        Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: `Failed to read service-account key at ${path}`,
-              cause: e,
-            }),
+        Effect.mapError((e) =>
+          AuthError.make({
+            message: `Failed to read service-account key at ${path}`,
+            cause: e,
+          }),
         ),
       );
 
@@ -154,7 +153,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       const project = explicitProject ?? sa.project_id;
       if (!project) {
         return Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `Set ${GOOGLE_PROJECT_ID_ENV} (service-account JSON has no project_id)`,
           }),
         );
@@ -267,12 +266,11 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         Effect.flatMap((config) =>
           promptRegion.pipe(Effect.map((region) => ({ ...config, region }))),
         ),
-        Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: "failed to configure credentials",
-              cause: e,
-            }),
+        Effect.mapError((e) =>
+          AuthError.make({
+            message: "failed to configure credentials",
+            cause: e,
+          }),
         ),
       );
 
@@ -324,7 +322,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         });
       }
       return Effect.fail(
-        new AuthError({
+        AuthError.make({
           message: `GCP: unknown method '${input.method}'. Valid methods: env, serviceAccount. (stored is interactive-only.)`,
         }),
       );
@@ -337,7 +335,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         const token = yield* getEnvRedacted(GOOGLE_ACCESS_TOKEN_ENV);
         if (token) {
           if (!project) {
-            return yield* new AuthError({
+            return yield* AuthError.make({
               message: `GCP env credentials missing ${GOOGLE_PROJECT_ID_ENV}`,
             });
           }
@@ -350,7 +348,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         }
         const keyPath = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
         if (!keyPath) {
-          return yield* new AuthError({
+          return yield* AuthError.make({
             message: `GCP env credentials not found. Set ${GOOGLE_ACCESS_TOKEN_ENV}+${GOOGLE_PROJECT_ID_ENV} or ${GOOGLE_APPLICATION_CREDENTIALS_ENV}.`,
           });
         }
@@ -365,7 +363,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         const fromEnv = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
         const path = credentialsFile ?? fromEnv;
         if (!path) {
-          return yield* new AuthError({
+          return yield* AuthError.make({
             message: `GCP service-account key not found. Set ${GOOGLE_APPLICATION_CREDENTIALS_ENV}.`,
           });
         }
@@ -385,7 +383,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           GcpStoredCredentialsSchema,
         );
         if (creds == null) {
-          return yield* new NeedsReauth({
+          return yield* NeedsReauth.make({
             provider: GCP_AUTH_PROVIDER_NAME,
             profile: profileName,
             message: `GCP stored credentials not found. ${refreshHint(GCP_AUTH_PROVIDER_NAME, profileName)}`,
@@ -463,7 +461,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           ),
           Match.exhaustive,
         )
-        .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
+        .pipe(Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })));
 
     const details = (
       profileName: string,

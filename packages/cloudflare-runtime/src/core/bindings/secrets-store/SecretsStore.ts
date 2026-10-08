@@ -78,7 +78,7 @@ export const SecretsStoreLive = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "SecretsStore",
           message:
             "Cannot configure Secrets Store persistence: the Storage service has no disk path.",
@@ -87,15 +87,14 @@ export const SecretsStoreLive = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "secrets-store");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "SecretsStore",
-              message: `Failed to create Secrets Store persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "SecretsStore",
+            message: `Failed to create Secrets Store persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {

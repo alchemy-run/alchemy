@@ -15,7 +15,7 @@ import {
 import { SystemError } from "../RuntimeError.shared.ts";
 
 const failure = (message: string, cause?: unknown) =>
-  new SystemError({ subtag: "DockerLoopbackForwarder", message, cause });
+  SystemError.make({ subtag: "DockerLoopbackForwarder", message, cause });
 
 /**
  * Docker joins a helper to each networking sidecar's namespace; the runtime

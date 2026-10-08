@@ -269,7 +269,7 @@ export const IndicatorFeedProvider = () =>
       }
       if (!observed || observed.id == null) {
         return yield* Effect.fail(
-          new intel.IndicatorFeedNotFound({
+          intel.IndicatorFeedNotFound.make({
             code: 0,
             message: `Indicator feed "${name}" was not observable after creation`,
           }),
@@ -320,7 +320,7 @@ export const IndicatorFeedProvider = () =>
       const final = yield* getFeed(accountId, feedId);
       if (!final) {
         return yield* Effect.fail(
-          new intel.IndicatorFeedNotFound({
+          intel.IndicatorFeedNotFound.make({
             code: 0,
             message: `Indicator feed ${feedId} disappeared during reconcile`,
           }),

@@ -159,7 +159,7 @@ export const bytesToHex = (bytes: Uint8Array): string => {
  */
 export const hexToBytes = (hex: string): Uint8Array => {
   if (hex.length % 2 !== 0) {
-    throw new ObjectParseError({
+    throw ObjectParseError.make({
       reason: `odd-length hex string: ${hex.length}`,
     });
   }
@@ -167,7 +167,7 @@ export const hexToBytes = (hex: string): Uint8Array => {
   for (let i = 0; i < out.length; i++) {
     const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     if (Number.isNaN(byte)) {
-      throw new ObjectParseError({
+      throw ObjectParseError.make({
         reason: `invalid hex at position ${i * 2}`,
       });
     }
@@ -344,7 +344,7 @@ export const parseIdentity = (value: string): Effect.Effect<Identity, ObjectPars
   Effect.suspend(() => {
     const match = IDENTITY_REGEX.exec(value);
     if (match === null) {
-      return Effect.fail(new ObjectParseError({ reason: `malformed identity: ${value}` }));
+      return Effect.fail(ObjectParseError.make({ reason: `malformed identity: ${value}` }));
     }
     return Effect.succeed({
       name: match[1]!,
@@ -402,7 +402,7 @@ export const parseCommit = Effect.fn(function* (content: Uint8Array) {
     switch (key) {
       case "tree":
         if (!isOid(value)) {
-          return yield* new ObjectParseError({
+          return yield* ObjectParseError.make({
             reason: `commit tree is not a valid oid: ${value}`,
           });
         }
@@ -410,7 +410,7 @@ export const parseCommit = Effect.fn(function* (content: Uint8Array) {
         break;
       case "parent":
         if (!isOid(value)) {
-          return yield* new ObjectParseError({
+          return yield* ObjectParseError.make({
             reason: `commit parent is not a valid oid: ${value}`,
           });
         }
@@ -430,15 +430,15 @@ export const parseCommit = Effect.fn(function* (content: Uint8Array) {
     }
   }
   if (tree === undefined) {
-    return yield* new ObjectParseError({ reason: "commit has no tree header" });
+    return yield* ObjectParseError.make({ reason: "commit has no tree header" });
   }
   if (authorRaw === undefined) {
-    return yield* new ObjectParseError({
+    return yield* ObjectParseError.make({
       reason: "commit has no author header",
     });
   }
   if (committerRaw === undefined) {
-    return yield* new ObjectParseError({
+    return yield* ObjectParseError.make({
       reason: "commit has no committer header",
     });
   }
@@ -479,17 +479,17 @@ const TZ_REGEX = /^[+-]\d{4}$/;
 
 const validateIdentity = (role: string, id: Identity): ObjectParseError | undefined => {
   if (/[<>\n]/.test(id.name) || /[<>\n]/.test(id.email)) {
-    return new ObjectParseError({
+    return ObjectParseError.make({
       reason: `commit ${role} name/email must not contain '<', '>' or newline`,
     });
   }
   if (!Number.isInteger(id.when) || id.when < 0) {
-    return new ObjectParseError({
+    return ObjectParseError.make({
       reason: `commit ${role} timestamp is not a non-negative integer: ${id.when}`,
     });
   }
   if (!TZ_REGEX.test(id.tz)) {
-    return new ObjectParseError({
+    return ObjectParseError.make({
       reason: `commit ${role} timezone is not ±hhmm: ${id.tz}`,
     });
   }
@@ -505,7 +505,7 @@ export const encodeCommit = (fields: CommitFields): Effect.Effect<Uint8Array, Ob
   Effect.suspend(() => {
     if (!isOid(fields.tree)) {
       return Effect.fail(
-        new ObjectParseError({
+        ObjectParseError.make({
           reason: `commit tree is not a valid oid: ${fields.tree}`,
         }),
       );
@@ -513,7 +513,7 @@ export const encodeCommit = (fields: CommitFields): Effect.Effect<Uint8Array, Ob
     for (const parent of fields.parents) {
       if (!isOid(parent)) {
         return Effect.fail(
-          new ObjectParseError({
+          ObjectParseError.make({
             reason: `commit parent is not a valid oid: ${parent}`,
           }),
         );
@@ -551,7 +551,7 @@ export const parseTag = Effect.fn(function* (content: Uint8Array) {
     switch (key) {
       case "object":
         if (!isOid(value)) {
-          return yield* new ObjectParseError({
+          return yield* ObjectParseError.make({
             reason: `tag object is not a valid oid: ${value}`,
           });
         }
@@ -560,7 +560,7 @@ export const parseTag = Effect.fn(function* (content: Uint8Array) {
       case "type": {
         const t = objectTypeOf(value);
         if (t === undefined) {
-          return yield* new ObjectParseError({
+          return yield* ObjectParseError.make({
             reason: `tag has invalid target type: ${value}`,
           });
         }
@@ -578,7 +578,7 @@ export const parseTag = Effect.fn(function* (content: Uint8Array) {
     }
   }
   if (object === undefined || targetType === undefined || tag === undefined) {
-    return yield* new ObjectParseError({
+    return yield* ObjectParseError.make({
       reason: "tag is missing object/type/tag header",
     });
   }
@@ -643,7 +643,7 @@ export const parseTree = (
       const spaceIdx = content.indexOf(0x20, pos);
       if (spaceIdx === -1) {
         return Effect.fail(
-          new ObjectParseError({
+          ObjectParseError.make({
             reason: `tree entry at ${pos}: no space after mode`,
           }),
         );
@@ -651,7 +651,7 @@ export const parseTree = (
       const mode = utf8Decode(content.subarray(pos, spaceIdx));
       if (!/^[0-7]{1,6}$/.test(mode)) {
         return Effect.fail(
-          new ObjectParseError({
+          ObjectParseError.make({
             reason: `tree entry at ${pos}: bad mode ${mode}`,
           }),
         );
@@ -659,18 +659,18 @@ export const parseTree = (
       const nulIdx = content.indexOf(0x00, spaceIdx + 1);
       if (nulIdx === -1) {
         return Effect.fail(
-          new ObjectParseError({
+          ObjectParseError.make({
             reason: `tree entry at ${pos}: no NUL after name`,
           }),
         );
       }
       const name = utf8Decode(content.subarray(spaceIdx + 1, nulIdx));
       if (name.length === 0) {
-        return Effect.fail(new ObjectParseError({ reason: `tree entry at ${pos}: empty name` }));
+        return Effect.fail(ObjectParseError.make({ reason: `tree entry at ${pos}: empty name` }));
       }
       if (nulIdx + 21 > content.length) {
         return Effect.fail(
-          new ObjectParseError({
+          ObjectParseError.make({
             reason: `tree entry at ${pos}: truncated sha`,
           }),
         );
@@ -715,12 +715,12 @@ export const encodeTree = (
       for (const entry of sorted) {
         const mode = entry.mode.replace(/^0+(?=\d)/, "");
         if (!/^[0-7]{1,6}$/.test(mode)) {
-          throw new ObjectParseError({
+          throw ObjectParseError.make({
             reason: `invalid tree entry mode: ${entry.mode}`,
           });
         }
         if (!isOid(entry.oid)) {
-          throw new ObjectParseError({
+          throw ObjectParseError.make({
             reason: `invalid tree entry oid: ${entry.oid}`,
           });
         }
@@ -733,7 +733,7 @@ export const encodeTree = (
     } catch (error) {
       return Schema.is(ObjectParseError)(error)
         ? Effect.fail(error)
-        : Effect.fail(new ObjectParseError({ reason: String(error) }));
+        : Effect.fail(ObjectParseError.make({ reason: String(error) }));
     }
   });
 
@@ -760,12 +760,12 @@ export interface TypeSizeHeader {
  */
 export const decodeTypeSize = (buf: Uint8Array, offset: number): TypeSizeHeader => {
   if (offset >= buf.length) {
-    throw new ObjectParseError({ reason: "truncated pack entry header" });
+    throw ObjectParseError.make({ reason: "truncated pack entry header" });
   }
   let b = buf[offset]!;
   const rawType = (b >> 4) & 0x07;
   if (rawType === 0 || rawType === 5) {
-    throw new ObjectParseError({
+    throw ObjectParseError.make({
       reason: `invalid pack entry type ${rawType} at offset ${offset}`,
     });
   }
@@ -775,10 +775,10 @@ export const decodeTypeSize = (buf: Uint8Array, offset: number): TypeSizeHeader 
   let i = offset + 1;
   while ((b & 0x80) !== 0) {
     if (i >= buf.length) {
-      throw new ObjectParseError({ reason: "truncated pack entry header" });
+      throw ObjectParseError.make({ reason: "truncated pack entry header" });
     }
     if (shift > 53) {
-      throw new ObjectParseError({ reason: "pack entry size varint overflow" });
+      throw ObjectParseError.make({ reason: "pack entry size varint overflow" });
     }
     b = buf[i]!;
     i += 1;
@@ -827,10 +827,10 @@ export const decodeSizeVarint = (buf: Uint8Array, offset: number): Varint => {
   let i = offset;
   for (;;) {
     if (i >= buf.length) {
-      throw new ObjectParseError({ reason: "truncated size varint" });
+      throw ObjectParseError.make({ reason: "truncated size varint" });
     }
     if (shift > 53) {
-      throw new ObjectParseError({ reason: "size varint overflow" });
+      throw ObjectParseError.make({ reason: "size varint overflow" });
     }
     const b = buf[i]!;
     i += 1;
@@ -872,7 +872,7 @@ export const encodeSizeVarint = (value: number): Uint8Array => {
  */
 export const decodeOfsDeltaOffset = (buf: Uint8Array, offset: number): Varint => {
   if (offset >= buf.length) {
-    throw new ObjectParseError({ reason: "truncated ofs-delta offset" });
+    throw ObjectParseError.make({ reason: "truncated ofs-delta offset" });
   }
   let i = offset;
   let b = buf[i]!;
@@ -880,13 +880,13 @@ export const decodeOfsDeltaOffset = (buf: Uint8Array, offset: number): Varint =>
   let n = b & 0x7f;
   while ((b & 0x80) !== 0) {
     if (i >= buf.length) {
-      throw new ObjectParseError({ reason: "truncated ofs-delta offset" });
+      throw ObjectParseError.make({ reason: "truncated ofs-delta offset" });
     }
     b = buf[i]!;
     i += 1;
     n = (n + 1) * 128 + (b & 0x7f);
     if (!Number.isSafeInteger(n)) {
-      throw new ObjectParseError({ reason: "ofs-delta offset overflow" });
+      throw ObjectParseError.make({ reason: "ofs-delta offset overflow" });
     }
   }
   return { value: n, next: i };

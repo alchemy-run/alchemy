@@ -391,7 +391,7 @@ const freshObserved = (accountId: string, slug: string) =>
           // succeeded and this read except via an out-of-band delete racing
           // us — surface that as the typed not-found the API would raise.
           Effect.fail(
-            new workers.ObservabilityDestinationNotFound({
+            workers.ObservabilityDestinationNotFound.make({
               code: 0,
               message: `observability destination "${slug}" disappeared during reconcile`,
             }),

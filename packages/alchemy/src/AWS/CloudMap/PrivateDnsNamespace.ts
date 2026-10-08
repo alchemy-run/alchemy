@@ -217,7 +217,7 @@ export const PrivateDnsNamespaceProvider = () =>
           }
           if (namespace?.Id === undefined) {
             return yield* Effect.fail(
-              new sd.NamespaceNotFound({
+              sd.NamespaceNotFound.make({
                 message: `namespace ${name} not visible after create`,
               }),
             );

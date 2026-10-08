@@ -123,7 +123,7 @@ const selectAccount = (accessToken: string) =>
     const interaction = Interaction.accessors;
     const accounts = yield* listVisibleAccounts;
     if (accounts.length === 0) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message:
           "No Cloudflare accounts are visible to this credential. " +
           "Ensure the authorized OAuth scopes include 'memberships.read'.",
@@ -334,7 +334,7 @@ export const CloudflareAuth = AuthProviderLayer<
         Effect.mapError((e) =>
           Schema.is(AuthError)(e)
             ? e
-            : new AuthError({ message: "Cloudflare: could not list accounts", cause: e }),
+            : AuthError.make({ message: "Cloudflare: could not list accounts", cause: e }),
         ),
       );
 
@@ -377,7 +377,7 @@ export const CloudflareAuth = AuthProviderLayer<
         Effect.mapError((e) =>
           Schema.is(AuthError)(e)
             ? e
-            : new AuthError({ message: "failed to configure credentials", cause: e }),
+            : AuthError.make({ message: "failed to configure credentials", cause: e }),
         ),
       );
 
@@ -414,7 +414,7 @@ export const CloudflareAuth = AuthProviderLayer<
             Effect.gen(function* () {
               if (!("scopes" in cfg)) {
                 return yield* Effect.fail(
-                  new NeedsReauth({
+                  NeedsReauth.make({
                     provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
                     profile: profileName,
                     message: `Cloudflare OAuth scopes need to be selected. ${reauth}`,
@@ -435,7 +435,7 @@ export const CloudflareAuth = AuthProviderLayer<
               };
               if (!OAuthClient.usesCurrentClient(creds)) {
                 return yield* Effect.fail(
-                  new NeedsReauth({
+                  NeedsReauth.make({
                     provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
                     profile: profileName,
                     message: `Cloudflare OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
@@ -450,14 +450,13 @@ export const CloudflareAuth = AuthProviderLayer<
                 creds.expires > now + 10_000
                   ? creds
                   : yield* OAuthClient.refresh(creds).pipe(
-                      Effect.mapError(
-                        (e) =>
-                          new NeedsReauth({
-                            provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-                            profile: profileName,
-                            message: `Cloudflare OAuth refresh failed. ${reauth}`,
-                            cause: e,
-                          }),
+                      Effect.mapError((e) =>
+                        NeedsReauth.make({
+                          provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                          profile: profileName,
+                          message: `Cloudflare OAuth refresh failed. ${reauth}`,
+                          cause: e,
+                        }),
                       ),
                     );
               if (fresh !== creds) {
@@ -507,7 +506,7 @@ export const CloudflareAuth = AuthProviderLayer<
           source: { type: "env" as const },
         };
       }
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message:
           "Cloudflare CI credentials not found. Set CLOUDFLARE_API_TOKEN, or CLOUDFLARE_API_KEY with CLOUDFLARE_EMAIL/CLOUDFLARE_ACCOUNT_EMAIL.",
       });
@@ -576,7 +575,7 @@ export const CloudflareAuth = AuthProviderLayer<
                     const { valid, dropped } = partitionOAuthScopes(c.scopes);
                     if (valid.length === 0) {
                       return yield* Effect.fail(
-                        new AuthError({
+                        AuthError.make({
                           message:
                             `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
                             `Scopes must be picked again. ${reconfigure}`,
@@ -654,7 +653,7 @@ export const CloudflareAuth = AuthProviderLayer<
           // A blanket mapError must never swallow the NeedsReauth tag —
           // the profile UI matches on it to render "needs re-login".
           Effect.mapError((e) =>
-            Schema.is(NeedsReauth)(e) ? e : new AuthError({ message: "login failed", cause: e }),
+            Schema.is(NeedsReauth)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
           ),
         );
 
@@ -723,7 +722,7 @@ export const CloudflareAuth = AuthProviderLayer<
           .pipe(Effect.ignore, Effect.as(config));
       if (input.method !== "stored") {
         return Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `Cloudflare: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
           }),
         );
@@ -752,7 +751,7 @@ export const CloudflareAuth = AuthProviderLayer<
             });
           }
           return Effect.fail(
-            new AuthError({
+            AuthError.make({
               message:
                 "Cloudflare: pass either --set apiToken=<token>, or both --set apiKey=<key> and --set email=<email>.",
             }),

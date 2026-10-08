@@ -151,7 +151,7 @@ export const AnnotationStoreProvider = () =>
         );
         if (final.status === "FAILED") {
           return yield* Effect.fail(
-            new omics.ValidationException({
+            omics.ValidationException.make({
               message: `Annotation store ${name} failed: ${final.statusMessage ?? "unknown"}`,
             }),
           );

@@ -200,7 +200,7 @@ export const ApiKeyProvider = () =>
                     const existing = yield* readByName(id, name);
                     if (existing) return existing;
                     return yield* Effect.fail(
-                      new ag.ConflictException({
+                      ag.ConflictException.make({
                         message: `API key '${name}' already exists and is not managed by alchemy`,
                       }),
                     );

@@ -205,7 +205,7 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const want of wants) {
       const wantMeta = wantMetas.get(want);
       if (wantMeta === undefined) {
-        return yield* Effect.fail(new StoreError({ reason: `want not found: ${want}` }));
+        return yield* Effect.fail(StoreError.make({ reason: `want not found: ${want}` }));
       }
       let meta: ObjectMeta = wantMeta;
       let hops = 0;
@@ -228,7 +228,7 @@ export const computeClosure = (options: ClosureOptions) =>
             hops += 1;
             if (hops > MAX_TAG_CHAIN) {
               return yield* Effect.fail(
-                new StoreError({ reason: `tag chain too deep at ${meta.oid}` }),
+                StoreError.make({ reason: `tag chain too deep at ${meta.oid}` }),
               );
             }
             if (!tagSet.has(meta.oid)) {
@@ -237,17 +237,16 @@ export const computeClosure = (options: ClosureOptions) =>
             }
             const content: Uint8Array = yield* objects.readContent(meta.oid);
             const parsed: ParsedTag = yield* parseTag(content).pipe(
-              Effect.mapError(
-                (error) =>
-                  new StoreError({
-                    reason: `bad tag ${meta.oid}: ${error.reason}`,
-                  }),
+              Effect.mapError((error) =>
+                StoreError.make({
+                  reason: `bad tag ${meta.oid}: ${error.reason}`,
+                }),
               ),
             );
             const target: ObjectMeta | undefined = yield* objects.getMeta(parsed.object);
             if (target === undefined) {
               return yield* Effect.fail(
-                new StoreError({
+                StoreError.make({
                   reason: `tag ${meta.oid} targets missing object ${parsed.object}`,
                 }),
               );
@@ -298,7 +297,7 @@ export const computeClosure = (options: ClosureOptions) =>
         const node = nodes.get(oid);
         if (node === undefined) {
           return yield* Effect.fail(
-            new StoreError({ reason: `commit graph missing commit ${oid}` }),
+            StoreError.make({ reason: `commit graph missing commit ${oid}` }),
           );
         }
         candidateOrder.push(node);
@@ -329,7 +328,7 @@ export const computeClosure = (options: ClosureOptions) =>
         }
       }
       if (candidateOrder.length > cap) {
-        return yield* Effect.fail(new ManifestTooLarge({ count: candidateOrder.length, cap }));
+        return yield* Effect.fail(ManifestTooLarge.make({ count: candidateOrder.length, cap }));
       }
       frontier = next;
     }
@@ -397,7 +396,7 @@ export const computeClosure = (options: ClosureOptions) =>
     let total = newCommits.length + tagOrder.length;
 
     const failIfOverCap = (count: number) =>
-      count > cap ? Effect.fail(new ManifestTooLarge({ count, cap })) : Effect.void;
+      count > cap ? Effect.fail(ManifestTooLarge.make({ count, cap })) : Effect.void;
 
     for (const blob of wantBlobs) {
       if (!visitedObjects.has(blob)) {
@@ -437,12 +436,12 @@ export const computeClosure = (options: ClosureOptions) =>
         const content = contents.get(tree);
         if (content === undefined) {
           return yield* Effect.fail(
-            new StoreError({ reason: `tree ${tree} vanished during closure` }),
+            StoreError.make({ reason: `tree ${tree} vanished during closure` }),
           );
         }
         const entries = yield* parseTree(content).pipe(
-          Effect.mapError(
-            (error) => new StoreError({ reason: `bad tree ${tree}: ${error.reason}` }),
+          Effect.mapError((error) =>
+            StoreError.make({ reason: `bad tree ${tree}: ${error.reason}` }),
           ),
         );
         for (const entry of entries) {
@@ -482,7 +481,7 @@ export const computeClosure = (options: ClosureOptions) =>
       const meta = metas.get(oid);
       if (meta === undefined) {
         return yield* Effect.fail(
-          new StoreError({ reason: `object ${oid} vanished during closure` }),
+          StoreError.make({ reason: `object ${oid} vanished during closure` }),
         );
       }
       entries.push(meta);
@@ -505,7 +504,7 @@ export const makeClosureSource = (options: ClosureOptions): ClosureSource => {
       compute(request).pipe(
         Effect.catchTag("ManifestTooLarge", (error) =>
           Effect.fail(
-            new StoreError({
+            StoreError.make({
               reason: `manifest exceeds ${error.cap} objects (v1 cap; got ${error.count})`,
             }),
           ),

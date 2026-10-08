@@ -273,7 +273,7 @@ export const CollectionGroupProvider = () =>
 
           if (detail?.id === undefined || detail.arn === undefined) {
             return yield* Effect.fail(
-              new aoss.ResourceNotFoundException({
+              aoss.ResourceNotFoundException.make({
                 message: `collection group ${name} not visible after reconcile`,
               }),
             );

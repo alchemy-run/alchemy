@@ -68,14 +68,14 @@ const selectOrganization = (accessToken: string) =>
     const response = yield* list({});
     const orgs = response.data;
     if (orgs.length === 0) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: "Planetscale: no organizations found for this credential.",
       });
     }
     if (orgs.length === 1) {
       const org = orgs[0];
       if (org === undefined) {
-        return yield* new AuthError({
+        return yield* AuthError.make({
           message: "Planetscale: organization response was unexpectedly empty.",
         });
       }
@@ -272,12 +272,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
 
     const configureCredentials = (profileName: string) =>
       configureInteractive(profileName).pipe(
-        Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: "failed to configure credentials",
-              cause: e,
-            }),
+        Effect.mapError((e) =>
+          AuthError.make({
+            message: "failed to configure credentials",
+            cause: e,
+          }),
         ),
       );
 
@@ -319,7 +318,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             Effect.tap(() => interaction.output.success("Planetscale: credentials saved.")),
           )
         : Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: `Planetscale: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
             }),
           );
@@ -353,7 +352,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
               };
               if (!OAuthClient.usesCurrentClient(creds)) {
                 return yield* Effect.fail(
-                  new NeedsReauth({
+                  NeedsReauth.make({
                     provider: PLANETSCALE_AUTH_PROVIDER_NAME,
                     profile: profileName,
                     message: `Planetscale OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
@@ -371,14 +370,13 @@ export const PlanetscaleAuth = AuthProviderLayer<
                       // Only the refresh round-trip maps to NeedsReauth — a
                       // failed persist afterwards is a local I/O AuthError and
                       // passes through untouched.
-                      Effect.mapError(
-                        (e) =>
-                          new NeedsReauth({
-                            provider: PLANETSCALE_AUTH_PROVIDER_NAME,
-                            profile: profileName,
-                            message: `Planetscale OAuth refresh failed. ${reauth}`,
-                            cause: e,
-                          }),
+                      Effect.mapError((e) =>
+                        NeedsReauth.make({
+                          provider: PLANETSCALE_AUTH_PROVIDER_NAME,
+                          profile: profileName,
+                          message: `Planetscale OAuth refresh failed. ${reauth}`,
+                          cause: e,
+                        }),
                       ),
                     );
               if (fresh !== creds) {
@@ -460,7 +458,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
           ),
           Match.exhaustive,
         )
-        .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
+        .pipe(Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })));
 
     const details = (
       profileName: string,

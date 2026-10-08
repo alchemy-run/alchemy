@@ -385,7 +385,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
     const missingDefault = options.main === DEFAULT_ENTRYPOINT && !entrypointExists;
     if (!entrypointExists && !missingDefault) {
       return yield* Effect.fail(
-        new AuthError({ message: `Stack entrypoint '${options.main}' does not exist.` }),
+        AuthError.make({ message: `Stack entrypoint '${options.main}' does not exist.` }),
       );
     }
     if (!missingDefault) {
@@ -403,7 +403,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
           return suppressed
             ? Effect.void
             : Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: `Could not load auth providers from '${options.main}'.`,
                   cause,
                 }),

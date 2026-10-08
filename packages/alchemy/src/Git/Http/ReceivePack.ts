@@ -32,7 +32,7 @@ export const probeResponse = () => HttpServerResponse.empty({ status: 200, heade
 export const decode = (request: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {
     const web = yield* HttpServerRequest.toWeb(request).pipe(
-      Effect.mapError((error) => new StoreError({ reason: `incoming body: ${error.message}` })),
+      Effect.mapError((error) => StoreError.make({ reason: `incoming body: ${error.message}` })),
     );
     const feeder = makeStreamingSource();
     const gzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
@@ -50,13 +50,13 @@ export const decode = (request: HttpServerRequest.HttpServerRequest) =>
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         state.active = false;
-        feeder.fail(new StoreError({ reason: "push scope closed" }));
+        feeder.fail(StoreError.make({ reason: "push scope closed" }));
         yield* Fiber.interrupt(receiving);
       }),
     );
     const head = yield* feeder.source.read(0, HEAD_BYTES);
     if (!gzip && head[0] === 0x1f && head[1] === 0x8b) {
-      return yield* new StoreError({
+      return yield* StoreError.make({
         reason: "gzip-encoded push without content-encoding",
       });
     }

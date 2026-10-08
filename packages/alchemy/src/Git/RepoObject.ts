@@ -940,7 +940,7 @@ export const parseUploadPackRequest = (
           }
         }
         if (!isOid(rest)) {
-          return Effect.fail(new WireProtocolError({ reason: `malformed want line: ${text}` }));
+          return Effect.fail(WireProtocolError.make({ reason: `malformed want line: ${text}` }));
         }
         wants.push(rest);
         continue;
@@ -954,7 +954,7 @@ export const parseUploadPackRequest = (
         const oid = text.slice(8);
         if (!isOid(oid)) {
           return Effect.fail(
-            new WireProtocolError({
+            WireProtocolError.make({
               reason: `malformed shallow line: ${text}`,
             }),
           );
@@ -965,25 +965,25 @@ export const parseUploadPackRequest = (
       if (text.startsWith("deepen ")) {
         const n = Number.parseInt(text.slice(7), 10);
         if (!Number.isInteger(n) || n <= 0) {
-          return Effect.fail(new WireProtocolError({ reason: `malformed deepen line: ${text}` }));
+          return Effect.fail(WireProtocolError.make({ reason: `malformed deepen line: ${text}` }));
         }
         depth = n;
         continue;
       }
       if (text.startsWith("deepen-since ") || text.startsWith("deepen-not ")) {
         return Effect.fail(
-          new WireProtocolError({
+          WireProtocolError.make({
             reason: `${text.split(" ")[0]} is not supported`,
           }),
         );
       }
       if (text.startsWith("filter ")) {
-        return Effect.fail(new WireProtocolError({ reason: "filter is not supported" }));
+        return Effect.fail(WireProtocolError.make({ reason: "filter is not supported" }));
       }
       // ignore unknown lines defensively
     }
     if (wants.length === 0) {
-      return Effect.fail(new WireProtocolError({ reason: "upload-pack request has no wants" }));
+      return Effect.fail(WireProtocolError.make({ reason: "upload-pack request has no wants" }));
     }
     return Effect.succeed({
       wants,
@@ -1042,7 +1042,7 @@ export const parseReceivePackRequest = (
           });
         }
         return Effect.fail(
-          new WireProtocolError({
+          WireProtocolError.make({
             reason: "receive-pack request ended before flush",
           }),
         );
@@ -1050,7 +1050,7 @@ export const parseReceivePackRequest = (
       const r = readPktLineAt(body, pos);
       if (r._tag === "incomplete" || r._tag === "invalid") {
         return Effect.fail(
-          new WireProtocolError({
+          WireProtocolError.make({
             reason: r._tag === "invalid" ? r.reason : "truncated receive-pack request",
           }),
         );
@@ -1089,7 +1089,7 @@ export const parseReceivePackRequest = (
         text[81] !== " " ||
         !REF_NAME_REGEX.test(ref)
       ) {
-        return Effect.fail(new WireProtocolError({ reason: `malformed command line: ${text}` }));
+        return Effect.fail(WireProtocolError.make({ reason: `malformed command line: ${text}` }));
       }
       commands.push({ oldOid, newOid, ref });
     }
@@ -1350,11 +1350,10 @@ export const ingestPackFrom = (
       switch (type) {
         case ObjectType.commit: {
           const parsed = yield* parseCommit(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad commit ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad commit ${oid}: ${error.reason}`,
+              }),
             ),
           );
           commits.push({
@@ -1369,11 +1368,10 @@ export const ingestPackFrom = (
         }
         case ObjectType.tree: {
           const parsed = yield* parseTree(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad tree ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad tree ${oid}: ${error.reason}`,
+              }),
             ),
           );
           for (const entry of parsed) {
@@ -1385,11 +1383,10 @@ export const ingestPackFrom = (
         }
         case ObjectType.tag: {
           const parsed = yield* parseTag(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad tag ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad tag ${oid}: ${error.reason}`,
+              }),
             ),
           );
           referenced.add(parsed.object);
@@ -1521,7 +1518,7 @@ export const ingestPackFrom = (
           }
           if (entry.type !== ObjectType.blob) {
             if (entry.content === undefined) {
-              return yield* new PackIngestError({
+              return yield* PackIngestError.make({
                 reason: `no content for ${entry.oid} (type ${entry.type})`,
               });
             }
@@ -1545,7 +1542,7 @@ export const ingestPackFrom = (
         const wanted = hasher.chunkBytes ?? partBytes;
         const hashBytes = wanted < partBytes && partBytes % wanted === 0 ? wanted : partBytes;
         const asIngest = (error: { readonly _tag: string; readonly reason?: string }) =>
-          new PackIngestError({
+          PackIngestError.make({
             reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
           });
         const header = yield* source.read(0, 12);
@@ -1556,7 +1553,7 @@ export const ingestPackFrom = (
           header[2] !== 0x43 ||
           header[3] !== 0x4b
         ) {
-          return yield* new PackIngestError({ reason: "bad pack magic" });
+          return yield* PackIngestError.make({ reason: "bad pack magic" });
         }
         const count = new DataView(header.buffer, header.byteOffset).getUint32(8);
         // Trailer SHA-1 over [0, total − 20): hash with a 20-byte lag, so
@@ -1781,11 +1778,10 @@ export const ingestPackFrom = (
                   1,
                 )(
                   spill.blobs.uploadPart(spill.key, settled.uploadId, partNumber, bytes).pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new PackIngestError({
-                          reason: `spill part ${partNumber}: ${error.reason}`,
-                        }),
+                    Effect.mapError((error) =>
+                      PackIngestError.make({
+                        reason: `spill part ${partNumber}: ${error.reason}`,
+                      }),
                     ),
                     Effect.provide(RuntimeContext.phantom),
                   ),
@@ -1805,11 +1801,10 @@ export const ingestPackFrom = (
               const ended = spill.feeder.source.ended();
               if (!(ended && spill.feeder.source.size <= spill.threshold)) {
                 upload = yield* spill.blobs.multipart(spill.key).pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new PackIngestError({
-                        reason: `spill: ${error.reason}`,
-                      }),
+                  Effect.mapError((error) =>
+                    PackIngestError.make({
+                      reason: `spill: ${error.reason}`,
+                    }),
                   ),
                   Effect.provide(RuntimeContext.phantom),
                 );
@@ -2069,7 +2064,7 @@ export const ingestPackFrom = (
         phases.chunks = chunks.length;
         phases.regions = regionCalls;
         if (staged !== count) {
-          return yield* new PackIngestError({
+          return yield* PackIngestError.make({
             reason: `pack declared ${count} entries, scanned ${staged}`,
           });
         }
@@ -2078,21 +2073,21 @@ export const ingestPackFrom = (
             ? source.size
             : yield* source.awaitEnd.pipe(Effect.mapError(asIngest));
         if (consumedTo !== total - 20) {
-          return yield* new PackIngestError({
+          return yield* PackIngestError.make({
             reason: `pack has ${total - 20 - consumedTo} unconsumed bytes after ${count} entries`,
           });
         }
         // Everything read so far went through `feed`; the last part's
         // bytes did too, so the lag now holds the trailer.
         if (lag.length !== 20) {
-          return yield* new PackIngestError({
+          return yield* PackIngestError.make({
             reason: "truncated pack trailer",
           });
         }
         const expected = bytesToHex(lag);
         const actual = trailerSha.digestHex();
         if (expected !== actual) {
-          return yield* new PackIngestError({
+          return yield* PackIngestError.make({
             reason: `pack checksum mismatch: expected ${expected}, got ${actual}`,
           });
         }
@@ -2127,11 +2122,10 @@ export const ingestPackFrom = (
             const writeStarted = Date.now();
             const writing = yield* Effect.forkDetach(
               spill.blobs.put(key, bytes).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new PackIngestError({
-                      reason: `resolved pack: ${error.reason}`,
-                    }),
+                Effect.mapError((error) =>
+                  PackIngestError.make({
+                    reason: `resolved pack: ${error.reason}`,
+                  }),
                 ),
                 Effect.provide(RuntimeContext.phantom),
               ),
@@ -2215,7 +2209,7 @@ export const ingestPackFrom = (
             });
           }
           if (ready.length === 0) {
-            return yield* new PackIngestError({
+            return yield* PackIngestError.make({
               reason: `delta base not found for ${next.length} entries`,
             });
           }
@@ -2328,11 +2322,10 @@ export const ingestPackFrom = (
           const uploaded: Array<UploadedPart> = [];
           for (const part of parts) uploaded.push(yield* part);
           yield* settled.complete(uploaded).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `spill complete: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `spill complete: ${error.reason}`,
+              }),
             ),
             Effect.provide(RuntimeContext.phantom),
           );
@@ -2381,7 +2374,7 @@ export const ingestPackFrom = (
             Effect.mapError((error) =>
               error._tag === "StoreError" || error._tag === "PackIngestError"
                 ? error
-                : new PackIngestError({ reason: packParserReason(error) }),
+                : PackIngestError.make({ reason: packParserReason(error) }),
             ),
           );
 
@@ -2439,15 +2432,15 @@ export const ingestPack = (
   Effect.gen(function* () {
     const { store, pushId } = options;
     if (pack.length < 12 + 20) {
-      return yield* new PackIngestError({ reason: "pack too small" });
+      return yield* PackIngestError.make({ reason: "pack too small" });
     }
     if (pack[0] !== 0x50 || pack[1] !== 0x41 || pack[2] !== 0x43 || pack[3] !== 0x4b) {
-      return yield* new PackIngestError({ reason: "bad pack signature" });
+      return yield* PackIngestError.make({ reason: "bad pack signature" });
     }
     const view = new DataView(pack.buffer, pack.byteOffset, pack.byteLength);
     const version = view.getUint32(4);
     if (version !== 2) {
-      return yield* new PackIngestError({
+      return yield* PackIngestError.make({
         reason: `unsupported pack version ${version}`,
       });
     }
@@ -2460,7 +2453,7 @@ export const ingestPack = (
     sha.update(pack.subarray(0, pack.length - 20));
     const actual = sha.digestHex();
     if (actual !== trailer) {
-      return yield* new PackIngestError({ reason: "pack checksum mismatch" });
+      return yield* PackIngestError.make({ reason: "pack checksum mismatch" });
     }
 
     const cache = makeContentCache(CACHE_BUDGET);
@@ -2477,11 +2470,10 @@ export const ingestPack = (
       switch (type) {
         case ObjectType.commit: {
           const parsed = yield* parseCommit(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad commit ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad commit ${oid}: ${error.reason}`,
+              }),
             ),
           );
           commits.push({
@@ -2498,11 +2490,10 @@ export const ingestPack = (
         }
         case ObjectType.tree: {
           const parsed = yield* parseTree(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad tree ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad tree ${oid}: ${error.reason}`,
+              }),
             ),
           );
           for (const entry of parsed) {
@@ -2514,11 +2505,10 @@ export const ingestPack = (
         }
         case ObjectType.tag: {
           const parsed = yield* parseTag(content).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackIngestError({
-                  reason: `bad tag ${oid}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackIngestError.make({
+                reason: `bad tag ${oid}: ${error.reason}`,
+              }),
             ),
           );
           referenced.add(parsed.object);
@@ -2548,7 +2538,7 @@ export const ingestPack = (
     // ── Pass 1: scan entries, stage non-deltas verbatim ─────────────────────
     let offset = 12;
     const zlibToIngest = (error: Zlib.ZlibError): PackIngestError =>
-      new PackIngestError({ reason: error.reason });
+      PackIngestError.make({ reason: error.reason });
 
     for (let i = 0; i < count; i++) {
       const entryStart = offset;
@@ -2556,19 +2546,19 @@ export const ingestPack = (
       try {
         header = decodeTypeSize(pack, offset);
       } catch (error) {
-        return yield* new PackIngestError({
+        return yield* PackIngestError.make({
           reason: `entry ${i}: ${String(error)}`,
         });
       }
       if (!isDeltaType(header.type)) {
         if (header.size > MAX_OBJECT_SIZE) {
-          return yield* new PackIngestError({ reason: "object too large" });
+          return yield* PackIngestError.make({ reason: "object too large" });
         }
         const inflated = yield* Zlib.inflateEntry(pack, header.next, {
           maxOutput: header.size,
         }).pipe(Effect.mapError(zlibToIngest));
         if (inflated.content.length !== header.size) {
-          return yield* new PackIngestError({
+          return yield* PackIngestError.make({
             reason: `entry ${i}: size mismatch (${inflated.content.length} != ${header.size})`,
           });
         }
@@ -2602,20 +2592,20 @@ export const ingestPack = (
           try {
             decoded = decodeOfsDeltaOffset(pack, header.next);
           } catch (error) {
-            return yield* new PackIngestError({
+            return yield* PackIngestError.make({
               reason: `entry ${i}: ${String(error)}`,
             });
           }
           baseOffset = entryStart - decoded.value;
           if (baseOffset < 12) {
-            return yield* new PackIngestError({
+            return yield* PackIngestError.make({
               reason: `entry ${i}: ofs-delta base offset out of range`,
             });
           }
           zstart = decoded.next;
         } else {
           if (header.next + 20 > pack.length) {
-            return yield* new PackIngestError({
+            return yield* PackIngestError.make({
               reason: `entry ${i}: truncated ref-delta base id`,
             });
           }
@@ -2642,13 +2632,13 @@ export const ingestPack = (
         offset = zstart + inflated.bytesConsumed;
       }
       if (offset > pack.length - 20) {
-        return yield* new PackIngestError({
+        return yield* PackIngestError.make({
           reason: `entry ${i}: pack truncated`,
         });
       }
     }
     if (offset !== pack.length - 20) {
-      return yield* new PackIngestError({
+      return yield* PackIngestError.make({
         reason: "trailing garbage between entries and pack trailer",
       });
     }
@@ -2663,7 +2653,7 @@ export const ingestPack = (
     > =>
       Effect.gen(function* () {
         if (depth > MAX_DELTA_DEPTH) {
-          return yield* new PackIngestError({ reason: "delta chain too deep" });
+          return yield* PackIngestError.make({ reason: "delta chain too deep" });
         }
         if (entry.oid !== undefined && entry.resolvedType !== undefined) {
           const cached = cache.get(entry.oid);
@@ -2683,7 +2673,7 @@ export const ingestPack = (
         if (entry.kind === "ofs") {
           const baseEntry = byOffset.get(entry.baseOffset!);
           if (baseEntry === undefined) {
-            return yield* new PackIngestError({
+            return yield* PackIngestError.make({
               reason: "ofs-delta base is not an entry boundary",
             });
           }
@@ -2696,12 +2686,12 @@ export const ingestPack = (
             // Thin base: must exist in the live store.
             const meta = yield* store.getMeta(entry.baseOid!);
             if (meta === undefined) {
-              return yield* new PackIngestError({
+              return yield* PackIngestError.make({
                 reason: `missing thin-pack base ${entry.baseOid}`,
               });
             }
             if (meta.size > MAX_OBJECT_SIZE) {
-              return yield* new PackIngestError({ reason: "object too large" });
+              return yield* PackIngestError.make({ reason: "object too large" });
             }
             const baseContent = yield* store.readContent(entry.baseOid!);
             cache.set(entry.baseOid!, baseContent);
@@ -2712,10 +2702,10 @@ export const ingestPack = (
           maxOutput: entry.declaredSize,
         }).pipe(Effect.mapError(zlibToIngest));
         const content = yield* applyDelta(base.content, delta.content).pipe(
-          Effect.mapError((error) => new PackIngestError({ reason: error.reason })),
+          Effect.mapError((error) => PackIngestError.make({ reason: error.reason })),
         );
         if (content.length > MAX_OBJECT_SIZE) {
-          return yield* new PackIngestError({ reason: "object too large" });
+          return yield* PackIngestError.make({ reason: "object too large" });
         }
         return { content, type: base.type };
       });
@@ -2818,7 +2808,7 @@ export const gunzipIfNeeded = (
       )
         .arrayBuffer()
         .then((buffer) => new Uint8Array(buffer)),
-    catch: (error) => new PackIngestError({ reason: `gzip decompression failed: ${error}` }),
+    catch: (error) => PackIngestError.make({ reason: `gzip decompression failed: ${error}` }),
   });
 };
 
@@ -2991,7 +2981,7 @@ export const GitRepoLive = GitRepo.make(
         read.pipe(
           Effect.flatMap((meta) =>
             meta === undefined
-              ? Effect.fail(new RepoNotFound({ owner: "", repo: "" }))
+              ? Effect.fail(RepoNotFound.make({ owner: "", repo: "" }))
               : Effect.succeed(meta),
           ),
         );
@@ -3017,7 +3007,7 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(current);
             const parsed = yield* parseTag(content).pipe(
-              Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              Effect.mapError((error) => StoreError.make({ reason: error.reason })),
             );
             current = parsed.object;
           }
@@ -3042,7 +3032,7 @@ export const GitRepoLive = GitRepo.make(
           );
           if (row !== undefined) return row.oid;
         }
-        return yield* new RefNotFound({ ref: refName });
+        return yield* RefNotFound.make({ ref: refName });
       });
 
       /** Resolves a revision all the way to a COMMIT oid (peels tags). */
@@ -3054,19 +3044,19 @@ export const GitRepoLive = GitRepo.make(
         const oid = yield* resolveRevision(defaultBranch, rev);
         const objects = storeFor(repoId);
         const meta = yield* objects.getMeta(oid);
-        if (meta === undefined) return yield* new ObjectNotFound({ oid });
+        if (meta === undefined) return yield* ObjectNotFound.make({ oid });
         if (meta.type === ObjectType.commit) return oid;
         if (meta.type === ObjectType.tag) {
           const peeled = yield* peelOid(repoId, oid);
           if (peeled === undefined) {
-            return yield* new ObjectNotFound({ oid });
+            return yield* ObjectNotFound.make({ oid });
           }
           const peeledMeta = yield* objects.getMeta(peeled);
           if (peeledMeta === undefined) {
-            return yield* new ObjectNotFound({ oid: peeled });
+            return yield* ObjectNotFound.make({ oid: peeled });
           }
           if (peeledMeta.type !== ObjectType.commit) {
-            return yield* new WrongObjectType({
+            return yield* WrongObjectType.make({
               oid: peeled,
               expected: "commit",
               actual: objectTypeName(peeledMeta.type),
@@ -3074,7 +3064,7 @@ export const GitRepoLive = GitRepo.make(
           }
           return peeled;
         }
-        return yield* new WrongObjectType({
+        return yield* WrongObjectType.make({
           oid,
           expected: "commit",
           actual: objectTypeName(meta.type),
@@ -3348,7 +3338,7 @@ export const GitRepoLive = GitRepo.make(
           full.length <= "refs/heads/".length ||
           !REF_NAME_REGEX.test(full)
         ) {
-          return yield* new ValidationError({
+          return yield* ValidationError.make({
             message: `not a branch name: ${name} (only refs/heads/* is legal)`,
           });
         }
@@ -3374,7 +3364,7 @@ export const GitRepoLive = GitRepo.make(
       const loadPull = Effect.fn(function* (number: number) {
         const row = yield* sql.first<PullRow>(`SELECT * FROM pulls WHERE number = ?`, number);
         if (row === undefined) {
-          return yield* new PullNotFound({ number });
+          return yield* PullNotFound.make({ number });
         }
         return row;
       });
@@ -3479,7 +3469,7 @@ export const GitRepoLive = GitRepo.make(
           oid,
         );
         if (row === undefined) {
-          return yield* new StoreError({
+          return yield* StoreError.make({
             reason: `commit ${oid} missing from the commit graph`,
           });
         }
@@ -3667,7 +3657,7 @@ export const GitRepoLive = GitRepo.make(
             const found = yield* blobs
               .head(bundle.key)
               .pipe(
-                Effect.mapError((error) => new StoreError({ reason: `bundle: ${error.reason}` })),
+                Effect.mapError((error) => StoreError.make({ reason: `bundle: ${error.reason}` })),
               );
             if (found !== null) {
               return HttpServerResponse.empty({
@@ -3941,7 +3931,7 @@ export const GitRepoLive = GitRepo.make(
           repoShallow: shallowRoots,
         }).pipe(
           Effect.catchTag("ManifestTooLarge", (error) =>
-            Effect.fail(new StoreError({ reason: `bundle: ${error._tag}` })),
+            Effect.fail(StoreError.make({ reason: `bundle: ${error._tag}` })),
           ),
         );
         const info = yield* runBundleJob({
@@ -4017,21 +4007,20 @@ export const GitRepoLive = GitRepo.make(
               pushId,
               allowMissingParents: true,
             }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new StoreError({
-                    reason:
-                      error._tag === "PackIngestError"
-                        ? `import ingest: ${error.reason}`
-                        : error.reason,
-                  }),
+              Effect.mapError((error) =>
+                StoreError.make({
+                  reason:
+                    error._tag === "PackIngestError"
+                      ? `import ingest: ${error.reason}`
+                      : error.reason,
+                }),
               ),
             );
             // Connectivity: hard edges only — shallow imports may lack
             // parent commits (they become walk boundaries).
             const missing = yield* objects.missingObjects([...ingest.referenced], pushId);
             if (missing.length > 0) {
-              return yield* new StoreError({
+              return yield* StoreError.make({
                 reason: `import produced ${missing.length} dangling objects`,
               });
             }
@@ -4064,7 +4053,7 @@ export const GitRepoLive = GitRepo.make(
           });
           const rejected = results.find((ref) => !ref.ok);
           if (rejected !== undefined) {
-            return yield* new StoreError({
+            return yield* StoreError.make({
               reason: `import ref ${rejected.ref}: ${rejected.reason}`,
             });
           }
@@ -4129,15 +4118,15 @@ export const GitRepoLive = GitRepo.make(
           // RuntimeContext is genuinely satisfied here (we run inside the
           // DO); discharge the coloring so the purge job's deps stay R=never.
           forkCount: registryStub.bumpForkCount(meta.repoId, 0).pipe(
-            Effect.mapError((error) => new StoreError({ reason: String(error) })),
+            Effect.mapError((error) => StoreError.make({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
           deleteAllStorage: state.storage.deleteAll().pipe(
-            Effect.mapError((error) => new StoreError({ reason: String(error) })),
+            Effect.mapError((error) => StoreError.make({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
           removeRegistryRow: registryStub.removeRow(meta.repoId).pipe(
-            Effect.mapError((error) => new StoreError({ reason: String(error) })),
+            Effect.mapError((error) => StoreError.make({ reason: String(error) })),
             Effect.provide(RuntimeContext.phantom),
           ),
         });
@@ -4201,7 +4190,7 @@ export const GitRepoLive = GitRepo.make(
               `refs/heads/${patch.defaultBranch}`,
             );
             if (ref === undefined) {
-              return yield* new RefNotFound({
+              return yield* RefNotFound.make({
                 ref: `refs/heads/${patch.defaultBranch}`,
               });
             }
@@ -4246,7 +4235,7 @@ export const GitRepoLive = GitRepo.make(
           const meta = yield* requireMeta;
           const row = yield* sql.first<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, name);
           if (row === undefined) {
-            return yield* new RefNotFound({ ref: name });
+            return yield* RefNotFound.make({ ref: name });
           }
           const peeled = name.startsWith("refs/tags/")
             ? yield* peelOid(meta.repoId, row.oid)
@@ -4259,12 +4248,12 @@ export const GitRepoLive = GitRepo.make(
         updateRef: Effect.fn(function* (input: UpdateRefInput) {
           const meta = yield* requireMeta;
           if (meta.readOnly) {
-            return yield* new ReadOnlyRepo();
+            return yield* ReadOnlyRepo.make({});
           }
           const objects = storeFor(meta.repoId);
           const exists = yield* objects.has(input.newOid);
           if (!exists) {
-            return yield* new ObjectNotFound({ oid: input.newOid });
+            return yield* ObjectNotFound.make({ oid: input.newOid });
           }
           yield* sql.transactionSync<void, RefConflict>((raw, rollback) => {
             const rows = raw
@@ -4275,7 +4264,7 @@ export const GitRepoLive = GitRepo.make(
               const expected = input.expectedOid; // string | null
               if (current !== expected) {
                 rollback(
-                  new RefConflict({
+                  RefConflict.make({
                     ref: input.name,
                     currentOid: current === null ? null : asOid(current),
                   }),
@@ -4296,19 +4285,19 @@ export const GitRepoLive = GitRepo.make(
         removeRef: Effect.fn(function* (input: RemoveRefInput) {
           const meta = yield* requireMeta;
           if (meta.readOnly) {
-            return yield* new ReadOnlyRepo();
+            return yield* ReadOnlyRepo.make({});
           }
           yield* sql.transactionSync<void, RefConflict | RefNotFound>((raw, rollback) => {
             const rows = raw
               .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, input.name)
               .toArray();
             if (rows.length === 0) {
-              rollback(new RefNotFound({ ref: input.name }));
+              rollback(RefNotFound.make({ ref: input.name }));
             }
             const current = rows[0]!.oid;
             if (input.expectedOid !== undefined && current !== input.expectedOid) {
               rollback(
-                new RefConflict({
+                RefConflict.make({
                   ref: input.name,
                   currentOid: asOid(current),
                 }),
@@ -4373,7 +4362,7 @@ export const GitRepoLive = GitRepo.make(
             input.pushId,
           );
           if (missing.length > 0)
-            return yield* new StoreError({
+            return yield* StoreError.make({
               reason: `missing objects (${missing.length})`,
             });
         }),
@@ -4385,7 +4374,7 @@ export const GitRepoLive = GitRepo.make(
             pushId,
           );
           if (push?.state !== "staging")
-            return yield* new StoreError({
+            return yield* StoreError.make({
               reason: "push is no longer active",
             });
           return yield* storeFor(meta.repoId).readPrepared(pushId, oid, maxBytes);
@@ -4485,11 +4474,11 @@ export const GitRepoLive = GitRepo.make(
           const objects = storeFor(meta.repoId);
           const objectMeta = yield* objects.getMeta(input.oid);
           if (objectMeta === undefined) {
-            return yield* new ObjectNotFound({ oid: input.oid });
+            return yield* ObjectNotFound.make({ oid: input.oid });
           }
           const actual = objectTypeName(objectMeta.type);
           if (input.expect !== undefined && actual !== input.expect) {
-            return yield* new WrongObjectType({
+            return yield* WrongObjectType.make({
               oid: input.oid,
               expected: input.expect,
               actual,
@@ -4534,7 +4523,7 @@ export const GitRepoLive = GitRepo.make(
           // The start may be a tag — peel to a commit.
           const startMeta = yield* objects.getMeta(start);
           if (startMeta === undefined) {
-            return yield* new RefNotFound({ ref: input.ref ?? "HEAD" });
+            return yield* RefNotFound.make({ ref: input.ref ?? "HEAD" });
           }
           const startCommit =
             startMeta.type === ObjectType.tag
@@ -4567,7 +4556,7 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(oid);
             const parsed = yield* parseCommit(content).pipe(
-              Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              Effect.mapError((error) => StoreError.make({ reason: error.reason })),
             );
             items.push({
               oid,
@@ -4603,10 +4592,10 @@ export const GitRepoLive = GitRepo.make(
           const readCommitOrFail = Effect.fn(function* (oid: string) {
             const objectMeta = yield* objects.getMeta(oid);
             if (objectMeta === undefined) {
-              return yield* new ObjectNotFound({ oid });
+              return yield* ObjectNotFound.make({ oid });
             }
             if (objectMeta.type !== ObjectType.commit) {
-              return yield* new WrongObjectType({
+              return yield* WrongObjectType.make({
                 oid,
                 expected: "commit",
                 actual: objectTypeName(objectMeta.type),
@@ -4614,7 +4603,7 @@ export const GitRepoLive = GitRepo.make(
             }
             const content = yield* objects.readContent(oid);
             return yield* parseCommit(content).pipe(
-              Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              Effect.mapError((error) => StoreError.make({ reason: error.reason })),
             );
           });
 
@@ -4664,7 +4653,7 @@ export const GitRepoLive = GitRepo.make(
           for (const oid of new Set([baseOid, headOid])) {
             const row = yield* rowOf(oid);
             if (row === undefined) {
-              return yield* new ObjectNotFound({ oid });
+              return yield* ObjectNotFound.make({ oid });
             }
             heapPush(heap, { oid, gen: row.gen, time: row.commit_time });
             timeOf.set(oid, row.commit_time);
@@ -4716,7 +4705,7 @@ export const GitRepoLive = GitRepo.make(
             }
           }
           if (mergeBase === undefined) {
-            return yield* new NoMergeBase({
+            return yield* NoMergeBase.make({
               base: asOid(baseOid),
               head: asOid(headOid),
             });
@@ -4729,7 +4718,7 @@ export const GitRepoLive = GitRepo.make(
           for (const oid of commitOids) {
             const content = yield* objects.readContent(oid);
             const parsed = yield* parseCommit(content).pipe(
-              Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              Effect.mapError((error) => StoreError.make({ reason: error.reason })),
             );
             commits.push({
               oid,
@@ -4758,7 +4747,7 @@ export const GitRepoLive = GitRepo.make(
               oid,
             );
             if (row === undefined) {
-              return yield* new StoreError({
+              return yield* StoreError.make({
                 reason: `commit ${oid} missing from the commit graph`,
               });
             }
@@ -4793,7 +4782,7 @@ export const GitRepoLive = GitRepo.make(
           for (let hops = 0; hops < 16; hops++) {
             const objectMeta = yield* objects.getMeta(current);
             if (objectMeta === undefined) {
-              return yield* new ObjectNotFound({ oid: current });
+              return yield* ObjectNotFound.make({ oid: current });
             }
             if (objectMeta.type === ObjectType.tree) {
               rootTree = current;
@@ -4802,46 +4791,46 @@ export const GitRepoLive = GitRepo.make(
             const content = yield* objects.readContent(current);
             if (objectMeta.type === ObjectType.commit) {
               const parsed = yield* parseCommit(content).pipe(
-                Effect.mapError((error) => new StoreError({ reason: error.reason })),
+                Effect.mapError((error) => StoreError.make({ reason: error.reason })),
               );
               rootTree = parsed.tree;
               break;
             }
             if (objectMeta.type === ObjectType.tag) {
               const parsed = yield* parseTag(content).pipe(
-                Effect.mapError((error) => new StoreError({ reason: error.reason })),
+                Effect.mapError((error) => StoreError.make({ reason: error.reason })),
               );
               current = parsed.object;
               continue;
             }
-            return yield* new ObjectNotFound({ oid: current });
+            return yield* ObjectNotFound.make({ oid: current });
           }
           if (rootTree === undefined) {
-            return yield* new ObjectNotFound({ oid: current });
+            return yield* ObjectNotFound.make({ oid: current });
           }
 
           const segments = input.path.split("/").filter(Boolean);
           if (segments.length === 0) {
-            return yield* new ObjectNotFound({ oid: rootTree });
+            return yield* ObjectNotFound.make({ oid: rootTree });
           }
           let treeOid = rootTree;
           for (let i = 0; i < segments.length; i++) {
             const content = yield* objects.readContent(treeOid);
             const entries = yield* parseTree(content).pipe(
-              Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              Effect.mapError((error) => StoreError.make({ reason: error.reason })),
             );
             const entry = entries.find((e) => e.name === segments[i]);
             if (entry === undefined) {
-              return yield* new ObjectNotFound({ oid: `${input.path}` });
+              return yield* ObjectNotFound.make({ oid: `${input.path}` });
             }
             const kind = treeEntryKind(entry.mode);
             if (i === segments.length - 1) {
               if (kind !== "blob") {
-                return yield* new ObjectNotFound({ oid: input.path });
+                return yield* ObjectNotFound.make({ oid: input.path });
               }
               const blobMeta = yield* objects.getMeta(entry.oid);
               if (blobMeta === undefined) {
-                return yield* new ObjectNotFound({ oid: entry.oid });
+                return yield* ObjectNotFound.make({ oid: entry.oid });
               }
               const blob = yield* objects.readContent(entry.oid);
               return {
@@ -4852,12 +4841,12 @@ export const GitRepoLive = GitRepo.make(
               } satisfies FileData;
             }
             if (kind !== "tree") {
-              return yield* new ObjectNotFound({ oid: input.path });
+              return yield* ObjectNotFound.make({ oid: input.path });
             }
             treeOid = entry.oid;
           }
           // unreachable — the loop returns or fails
-          return yield* new ObjectNotFound({ oid: input.path });
+          return yield* ObjectNotFound.make({ oid: input.path });
         }),
 
         createPull: Effect.fn(function* (input: CreatePullInput) {
@@ -4865,14 +4854,14 @@ export const GitRepoLive = GitRepo.make(
           const baseRef = yield* normalizeBranchRef(input.base);
           const headRef = yield* normalizeBranchRef(input.head);
           if (baseRef === headRef) {
-            return yield* new ValidationError({
+            return yield* ValidationError.make({
               message: "base and head must be different branches",
             });
           }
           for (const ref of [baseRef, headRef]) {
             const row = yield* sql.first<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, ref);
             if (row === undefined) {
-              return yield* new BranchMissing({ ref });
+              return yield* BranchMissing.make({ ref });
             }
           }
           const duplicate = yield* sql.first<{ number: number }>(
@@ -4881,7 +4870,7 @@ export const GitRepoLive = GitRepo.make(
             headRef,
           );
           if (duplicate !== undefined) {
-            return yield* new PullExists({ number: duplicate.number });
+            return yield* PullExists.make({ number: duplicate.number });
           }
           const now = Date.now();
           // Allocate the number and insert the row in ONE transaction —
@@ -5056,7 +5045,7 @@ export const GitRepoLive = GitRepo.make(
           const row = yield* loadPull(input.number);
           const current = pullStateOf(row.state);
           if (input.state !== undefined && current === "merged") {
-            return yield* new PullStateConflict({
+            return yield* PullStateConflict.make({
               number: input.number,
               state: "merged",
             });
@@ -5078,12 +5067,12 @@ export const GitRepoLive = GitRepo.make(
         mergePull: Effect.fn(function* (input: MergePullInput) {
           const meta = yield* requireMeta;
           if (meta.readOnly) {
-            return yield* new ReadOnlyRepo();
+            return yield* ReadOnlyRepo.make({});
           }
           const row = yield* loadPull(input.number);
           const state = pullStateOf(row.state);
           if (state !== "open") {
-            return yield* new PullStateConflict({
+            return yield* PullStateConflict.make({
               number: input.number,
               state,
             });
@@ -5095,32 +5084,32 @@ export const GitRepoLive = GitRepo.make(
             row.base_ref,
           );
           if (baseRow === undefined) {
-            return yield* new BranchMissing({ ref: row.base_ref });
+            return yield* BranchMissing.make({ ref: row.base_ref });
           }
           const headRow = yield* sql.first<RefRow>(
             `SELECT name, oid FROM refs WHERE name = ?`,
             row.head_ref,
           );
           if (headRow === undefined) {
-            return yield* new BranchMissing({ ref: row.head_ref });
+            return yield* BranchMissing.make({ ref: row.head_ref });
           }
           const baseTip = baseRow.oid;
           if (input.expectedBaseOid !== undefined && input.expectedBaseOid !== baseTip) {
-            return yield* new RefConflict({
+            return yield* RefConflict.make({
               ref: row.base_ref,
               currentOid: asOid(baseTip),
             });
           }
           const headTip = headRow.oid;
           if (input.expectedHeadOid !== undefined && input.expectedHeadOid !== headTip) {
-            return yield* new RefConflict({
+            return yield* RefConflict.make({
               ref: row.head_ref,
               currentOid: asOid(headTip),
             });
           }
           const cmp = yield* paintWalk(baseTip, headTip, MAX_PULL_MERGE_WALK);
           if (cmp.mergeBase === headTip) {
-            return yield* new NothingToMerge({ number: input.number });
+            return yield* NothingToMerge.make({ number: input.number });
           }
           const now = Date.now();
 
@@ -5136,7 +5125,7 @@ export const GitRepoLive = GitRepo.make(
               const currentOid = rows.length > 0 ? rows[0]!.oid : null;
               if (currentOid !== baseTip) {
                 rollback(
-                  new RefConflict({
+                  RefConflict.make({
                     ref: row.base_ref,
                     currentOid: currentOid === null ? null : asOid(currentOid),
                   }),
@@ -5174,7 +5163,7 @@ export const GitRepoLive = GitRepo.make(
           if (cmp.mergeBase === undefined) {
             // Unrelated histories (or a saturated walk): conservative
             // conflict — the server never guesses.
-            return yield* new MergeConflict({
+            return yield* MergeConflict.make({
               number: input.number,
               paths: [],
             });
@@ -5187,14 +5176,14 @@ export const GitRepoLive = GitRepo.make(
           if (baseChanges.truncated || headChanges.truncated) {
             // A truncated diff hides changes — conflict detection would be
             // unsound, so refuse conservatively.
-            return yield* new MergeConflict({
+            return yield* MergeConflict.make({
               number: input.number,
               paths: [],
             });
           }
           const conflicts = conflictingPaths(baseChanges.files, headChanges.files);
           if (conflicts.length > 0) {
-            return yield* new MergeConflict({
+            return yield* MergeConflict.make({
               number: input.number,
               paths: conflicts.slice(0, MAX_CONFLICT_PATHS),
             });
@@ -5221,7 +5210,7 @@ export const GitRepoLive = GitRepo.make(
             author: identity,
             committer: identity,
             message,
-          }).pipe(Effect.mapError((e) => new StoreError({ reason: e.reason })));
+          }).pipe(Effect.mapError((e) => StoreError.make({ reason: e.reason })));
           const mergeOid = yield* hashObject(ObjectType.commit, commitContent);
 
           // Stage under a synthetic push id WITH a pushes staging row first,
@@ -5234,7 +5223,7 @@ export const GitRepoLive = GitRepo.make(
             now,
           );
           const zlibToStore = (error: Zlib.ZlibError): StoreError =>
-            new StoreError({ reason: error.reason });
+            StoreError.make({ reason: error.reason });
           const staged: Array<StagedObject> = [];
           for (const tree of applied.newTrees) {
             staged.push({
@@ -5289,7 +5278,7 @@ export const GitRepoLive = GitRepo.make(
               `SELECT name, oid FROM refs WHERE name = ?`,
               row.base_ref,
             );
-            return yield* new RefConflict({
+            return yield* RefConflict.make({
               ref: row.base_ref,
               currentOid: current === undefined ? null : asOid(current.oid),
             });

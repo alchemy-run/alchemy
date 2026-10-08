@@ -80,7 +80,7 @@ const asOid = (value: string): Oid => value as Oid;
 
 /** Maps the Repo DO's plain metadata onto the REST `Repo` schema class. */
 const toRepo = (meta: RepoMetaData): Repo =>
-  new Repo({
+  Repo.make({
     owner: meta.owner,
     name: meta.name,
     repoId: meta.repoId,
@@ -91,15 +91,15 @@ const toRepo = (meta: RepoMetaData): Repo =>
     forkOf: meta.forkOf,
     status: meta.status,
     createdAt: meta.createdAt,
-    objects: new ObjectStats(meta.objects),
-    lastPush: meta.lastPush === null ? null : new PushStats(meta.lastPush),
+    objects: ObjectStats.make(meta.objects),
+    lastPush: meta.lastPush === null ? null : PushStats.make(meta.lastPush),
   });
 
 /** Maps a DO ref onto the REST `Ref` schema class. */
 const toRef = (ref: RefData): Ref =>
   ref.peeled === undefined
-    ? new Ref({ name: ref.name, oid: asOid(ref.oid) })
-    : new Ref({
+    ? Ref.make({ name: ref.name, oid: asOid(ref.oid) })
+    : Ref.make({
         name: ref.name,
         oid: asOid(ref.oid),
         peeled: asOid(ref.peeled),
@@ -107,7 +107,7 @@ const toRef = (ref: RefData): Ref =>
 
 /** Maps a DO diff entry onto the REST `DiffEntry` schema class. */
 const toDiffEntry = (entry: DiffEntryData): DiffEntry =>
-  new DiffEntry({
+  DiffEntry.make({
     path: entry.path,
     status: entry.status,
     oldOid: entry.oldOid === undefined ? undefined : asOid(entry.oldOid),
@@ -120,7 +120,7 @@ const toDiffEntry = (entry: DiffEntryData): DiffEntry =>
 
 /** Maps a DO pull row onto the REST `Pull` schema class. */
 const toPull = (pull: PullData): Pull =>
-  new Pull({
+  Pull.make({
     number: pull.number,
     title: pull.title,
     body: pull.body,
@@ -135,7 +135,7 @@ const toPull = (pull: PullData): Pull =>
 
 /** Maps a DO pull detail onto the REST `PullDetail` schema class. */
 const toPullDetail = (pull: PullDetailData): PullDetail =>
-  new PullDetail({
+  PullDetail.make({
     number: pull.number,
     title: pull.title,
     body: pull.body,
@@ -157,7 +157,7 @@ const toPullDetail = (pull: PullDetailData): PullDetail =>
 
 /** Maps a DO commit onto the REST `CommitInfo` schema class. */
 const toCommitInfo = (commit: CommitData): CommitInfo =>
-  new CommitInfo({
+  CommitInfo.make({
     oid: asOid(commit.oid),
     tree: asOid(commit.tree),
     parents: commit.parents.map(asOid),
@@ -172,7 +172,7 @@ const toCommitInfo = (commit: CommitData): CommitInfo =>
  * between the Registry insert and `initRepo`).
  */
 const registryFallbackRepo = (entry: RegistryEntry): Repo =>
-  new Repo({
+  Repo.make({
     owner: entry.owner,
     name: entry.name,
     repoId: entry.repoId,
@@ -184,7 +184,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     status: entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
-    objects: new ObjectStats({
+    objects: ObjectStats.make({
       loose: 0,
       resident: 0,
       packed: 0,
@@ -251,7 +251,7 @@ export const makeOperations = Effect.gen(function* () {
       Effect.catchTag("StoreError", (error: StoreError) => Effect.die(error)),
       Effect.flatMap((entry) =>
         entry === undefined
-          ? Effect.fail(new RepoNotFound({ owner, repo }))
+          ? Effect.fail(RepoNotFound.make({ owner, repo }))
           : Effect.succeed(entry),
       ),
     );
@@ -265,7 +265,7 @@ export const makeOperations = Effect.gen(function* () {
     resolveIncludingDeleting(owner, repo).pipe(
       Effect.filterOrFail(
         (entry) => entry.deletedAt === null,
-        () => new RepoNotFound({ owner, repo }),
+        () => RepoNotFound.make({ owner, repo }),
       ),
     );
 
@@ -355,7 +355,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
           );
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
@@ -377,7 +377,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -404,7 +404,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -477,7 +477,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -485,7 +485,7 @@ export const makeOperations = Effect.gen(function* () {
             ),
           );
         if (sourceMeta.status !== "ready") {
-          return yield* new RepoNotReady({ status: sourceMeta.status });
+          return yield* RepoNotReady.make({ status: sourceMeta.status });
         }
         const entry = yield* registryStub()
           .createRepo({
@@ -500,7 +500,7 @@ export const makeOperations = Effect.gen(function* () {
             // owner) — surface it as the closest declared conflict.
             Effect.catchTag("ValidationError", () =>
               Effect.fail(
-                new RepoAlreadyExists({
+                RepoAlreadyExists.make({
                   owner: payload.targetOwner,
                   repo: payload.targetName,
                 }),
@@ -523,7 +523,7 @@ export const makeOperations = Effect.gen(function* () {
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
@@ -538,7 +538,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -558,7 +558,7 @@ export const makeOperations = Effect.gen(function* () {
             // `import` declares no ValidationError — a reserved owner
             // is an import that can never succeed.
             Effect.catchTag("ValidationError", (error) =>
-              Effect.fail(new ImportFailed({ reason: error.message })),
+              Effect.fail(ImportFailed.make({ reason: error.message })),
             ),
           );
         const init = yield* repos
@@ -580,7 +580,7 @@ export const makeOperations = Effect.gen(function* () {
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
@@ -598,7 +598,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -617,7 +617,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -644,7 +644,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -670,7 +670,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -691,7 +691,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -700,7 +700,7 @@ export const makeOperations = Effect.gen(function* () {
           );
         // A stored commit that fails to parse is corrupt — a defect.
         const parsed = yield* parseCommit(data.content).pipe(Effect.orDie);
-        return new CommitInfo({
+        return CommitInfo.make({
           oid: params.oid,
           tree: asOid(parsed.tree),
           parents: parsed.parents.map(asOid),
@@ -733,7 +733,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -756,7 +756,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -766,14 +766,13 @@ export const makeOperations = Effect.gen(function* () {
         const entries = yield* parseTree(data.content).pipe(Effect.orDie);
         return {
           oid: params.oid,
-          entries: entries.map(
-            (item) =>
-              new TreeEntry({
-                mode: item.mode,
-                name: item.name,
-                oid: asOid(item.oid),
-                type: treeEntryKind(item.mode),
-              }),
+          entries: entries.map((item) =>
+            TreeEntry.make({
+              mode: item.mode,
+              name: item.name,
+              oid: asOid(item.oid),
+              type: treeEntryKind(item.mode),
+            }),
           ),
         };
       }),
@@ -787,7 +786,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -795,7 +794,7 @@ export const makeOperations = Effect.gen(function* () {
             ),
           );
         if (data.size > MAX_JSON_BLOB_BYTES) {
-          return yield* new ObjectTooLarge({
+          return yield* ObjectTooLarge.make({
             oid: params.oid,
             size: data.size,
           });
@@ -817,14 +816,14 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
               ),
             ),
           );
-        return new CommitDiff({
+        return CommitDiff.make({
           oid: params.oid,
           parent: data.parent === null ? null : asOid(data.parent),
           files: data.files.map(toDiffEntry),
@@ -844,14 +843,14 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
               ),
             ),
           );
-        return new Comparison({
+        return Comparison.make({
           base: asOid(data.base),
           head: asOid(data.head),
           mergeBase: asOid(data.mergeBase),
@@ -884,7 +883,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -910,7 +909,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -933,7 +932,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -960,7 +959,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
@@ -986,14 +985,14 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
-                new RepoNotFound({
+                RepoNotFound.make({
                   owner: params.owner,
                   repo: params.repo,
                 }),
               ),
             ),
           );
-        return new MergeResult({
+        return MergeResult.make({
           method: result.method,
           oid: asOid(result.oid),
           pull: toPull(result.pull),

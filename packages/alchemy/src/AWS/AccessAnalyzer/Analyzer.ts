@@ -233,7 +233,7 @@ export const AnalyzerProvider = () =>
           }
           if (analyzer === undefined) {
             return yield* Effect.fail(
-              new aa.ResourceNotFoundException({
+              aa.ResourceNotFoundException.make({
                 message: `analyzer ${name} not visible after create`,
                 resourceId: name,
                 resourceType: "AWS::AccessAnalyzer::Analyzer",

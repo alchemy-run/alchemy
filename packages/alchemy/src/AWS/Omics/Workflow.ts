@@ -165,7 +165,7 @@ export const WorkflowProvider = () =>
         );
         if (final.status === "FAILED") {
           return yield* Effect.fail(
-            new omics.ValidationException({
+            omics.ValidationException.make({
               message: `Workflow ${workflowId} failed: ${final.statusMessage ?? "unknown"}`,
             }),
           );

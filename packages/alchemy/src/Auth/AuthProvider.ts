@@ -433,15 +433,14 @@ export const AuthProvider =
         decodeConfig: (profileName, config) =>
           Effect.gen(function* () {
             return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AuthError({
-                    message:
-                      `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                      `for this version of alchemy. ` +
-                      `${reconfigureHint(name, profileName)}`,
-                    cause,
-                  }),
+              Effect.mapError((cause) =>
+                AuthError.make({
+                  message:
+                    `Stored ${name} configuration in profile '${profileName}' is not valid ` +
+                    `for this version of alchemy. ` +
+                    `${reconfigureHint(name, profileName)}`,
+                  cause,
+                }),
               ),
             );
           }),
@@ -480,7 +479,7 @@ export const getAuthProvider = <
   AuthProviders.use((registry) =>
     registry[name] == null
       ? Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
           }),
         )

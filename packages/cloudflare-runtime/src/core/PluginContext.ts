@@ -99,7 +99,7 @@ export const make = (
       get: Effect.fn(function* (service) {
         const plugin = plugins.get(service.key);
         if (!plugin) {
-          return yield* new ConfigError({
+          return yield* ConfigError.make({
             subtag: "PluginNotFound",
             message: `Plugin "${service.key}" not found`,
             hint: `The plugin "${service.key}" is not registered in the current context.`,

@@ -384,7 +384,7 @@ export const JobTemplateProvider = () =>
                 : yield* observeByName(name);
             if (jt?.id === undefined) {
               return yield* Effect.fail(
-                new emrc.ResourceNotFoundException({
+                emrc.ResourceNotFoundException.make({
                   message: `job template ${name} not visible after create`,
                 }),
               );

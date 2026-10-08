@@ -291,7 +291,7 @@ export const LocalWorkerProvider = () =>
           if (type === "SourceMap") continue;
           if (type === "Data" || type === "Wasm") {
             if (!(file.content instanceof Uint8Array)) {
-              return yield* new WorkerValidationError({
+              return yield* WorkerValidationError.make({
                 message: `Expected Uint8Array for ${file.path} (${type})`,
                 value: file.content,
               });

@@ -77,7 +77,7 @@ export const QueueLive = Layer.effect(
             consumer.maxBatchTimeout !== undefined &&
             (consumer.maxBatchTimeout < 0 || consumer.maxBatchTimeout > 60)
           ) {
-            return yield* new ConfigError({
+            return yield* ConfigError.make({
               subtag: "Queue",
               message: `Invalid maxBatchTimeout for queue "${consumer.queueName}": must be between 0 and 60 seconds`,
               hint: "Set `maxBatchTimeout` to a value between 0 and 60 (seconds).",
@@ -91,7 +91,7 @@ export const QueueLive = Layer.effect(
             consumer.deadLetterQueue !== undefined &&
             consumer.deadLetterQueue === consumer.queueName
           ) {
-            return yield* new ConfigError({
+            return yield* ConfigError.make({
               subtag: "Queue",
               message: `Dead letter queue for queue "${consumer.queueName}" cannot be itself`,
               hint: "Point `deadLetterQueue` at a different queue name.",

@@ -183,7 +183,7 @@ const sandboxApi = <A, E, R>(
       const original: unknown =
         failure._tag === "Some" ? failure.value : Result.isSuccess(defect) ? defect.success : cause;
       return Effect.fail(
-        new ApiError({
+        ApiError.make({
           subtag,
           message,
           cause: original,
@@ -193,7 +193,7 @@ const sandboxApi = <A, E, R>(
     Effect.timeout(30_000),
     Effect.catchTag("TimeoutError", () =>
       Effect.fail(
-        new ApiError({
+        ApiError.make({
           subtag,
           message,
           hint: "The request timed out after 30 seconds.",

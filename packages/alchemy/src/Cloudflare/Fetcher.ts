@@ -257,8 +257,8 @@ export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): S
               }) as Socket.InputTransformStream,
           ),
         catch: (cause) =>
-          new Socket.SocketError({
-            reason: new Socket.SocketOpenError({ kind: "Unknown", cause }),
+          Socket.SocketError.make({
+            reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
           }),
       }),
     ),

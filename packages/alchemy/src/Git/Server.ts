@@ -160,7 +160,7 @@ const makeCore = Effect.gen(function* () {
       const result = yield* effect;
       const request = yield* HttpServerRequest.HttpServerRequest;
       const host = request.headers.host;
-      return new RepoCreated({
+      return RepoCreated.make({
         repo: result.repo,
         remote:
           host === undefined

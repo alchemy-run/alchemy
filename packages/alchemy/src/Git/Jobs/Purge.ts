@@ -64,7 +64,7 @@ const r2ToStore =
   (what: string) =>
   <A>(effect: Effect.Effect<A, BlobStoreError, RuntimeContext>): Effect.Effect<A, StoreError> =>
     effect.pipe(
-      Effect.mapError((error) => new StoreError({ reason: `${what}: ${error.reason}` })),
+      Effect.mapError((error) => StoreError.make({ reason: `${what}: ${error.reason}` })),
       Effect.provide(RuntimeContext.phantom),
     );
 

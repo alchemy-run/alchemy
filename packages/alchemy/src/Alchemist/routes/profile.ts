@@ -132,12 +132,11 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
         includeProviderStatus
           ? inspectProvider(input.name, provider, config, registered, (updated) =>
               profiles.setProviderConfig(input.name, provider, updated).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new AuthError({
-                      message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
-                      cause,
-                    }),
+                Effect.mapError((cause) =>
+                  AuthError.make({
+                    message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
+                    cause,
+                  }),
                 ),
               ),
             )
@@ -354,12 +353,11 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       yield* provider.decodeConfig(input.profile, config),
       (updated) =>
         profiles.setProviderConfig(input.profile, name, updated).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
+              cause,
+            }),
           ),
         ),
     );

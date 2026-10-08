@@ -266,7 +266,7 @@ export const VirtualClusterProvider = () =>
                 : yield* observeByName(name);
             if (vc?.id === undefined) {
               return yield* Effect.fail(
-                new emrc.ResourceNotFoundException({
+                emrc.ResourceNotFoundException.make({
                   message: `virtual cluster ${name} not visible after create`,
                 }),
               );

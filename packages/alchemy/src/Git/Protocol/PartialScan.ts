@@ -163,7 +163,7 @@ export const scanPart = (
       } catch (error) {
         // A header cut by the buffer edge: stop here, carry the tail.
         if (lenient || buf.length - pos < 16) break;
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: Schema.is(ObjectParseError)(error)
             ? `entry at ${offset}: ${error.reason}`
             : `entry at ${offset}: ${String(error)}`,
@@ -171,7 +171,7 @@ export const scanPart = (
       }
       if (header.size > options.maxObjectSize) {
         if (lenient) break;
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: header.size,
           limit: options.maxObjectSize,
         });
@@ -185,7 +185,7 @@ export const scanPart = (
           ofs = decodeOfsDeltaOffset(buf, at);
         } catch {
           if (lenient || buf.length - at < 16) break;
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry at ${offset}: bad ofs-delta`,
           });
         }
@@ -214,7 +214,7 @@ export const scanPart = (
       if (at + bytesConsumed >= buf.length) break;
       if (payload.length !== header.size) {
         if (lenient) break;
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `entry at ${offset}: inflated ${payload.length} bytes, header declared ${header.size}`,
         });
       }
@@ -245,22 +245,21 @@ export const scanPart = (
           });
         } else {
           const content = yield* applyDelta(found.content, payload).pipe(
-            Effect.mapError(
-              (error) =>
-                new PackFormatError({
-                  reason: `entry at ${offset}: ${error.reason}`,
-                }),
+            Effect.mapError((error) =>
+              PackFormatError.make({
+                reason: `entry at ${offset}: ${error.reason}`,
+              }),
             ),
           );
           if (content.length > options.maxObjectSize) {
-            return yield* new ObjectTooLargeError({
+            return yield* ObjectTooLargeError.make({
               size: content.length,
               limit: options.maxObjectSize,
             });
           }
           const oid = hashObjectSync(found.type, content);
           const zdata = yield* deflate(content).pipe(
-            Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+            Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
           );
           entries.push({
             oid,
@@ -338,14 +337,14 @@ export const scanBounds = (
         header = decodeTypeSize(buf, pos);
       } catch (error) {
         if (buf.length - pos < 16) break;
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: Schema.is(ObjectParseError)(error)
             ? `entry at ${offset}: ${error.reason}`
             : `entry at ${offset}: ${String(error)}`,
         });
       }
       if (header.size > options.maxObjectSize) {
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: header.size,
           limit: options.maxObjectSize,
         });
@@ -359,7 +358,7 @@ export const scanBounds = (
           ofs = decodeOfsDeltaOffset(buf, at);
         } catch {
           if (buf.length - at < 16) break;
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry at ${offset}: bad ofs-delta`,
           });
         }
@@ -377,7 +376,7 @@ export const scanBounds = (
       if (inflated === undefined) break;
       if (at + inflated.bytesConsumed >= buf.length) break;
       if (inflated.content.length !== header.size) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `entry at ${offset}: inflated ${inflated.content.length} bytes, header declared ${header.size}`,
         });
       }
@@ -423,11 +422,10 @@ export const hashBounds = (
         buf.subarray(b.dataOffset - options.base, b.dataOffset - options.base + b.span),
         b.size,
       ).pipe(
-        Effect.mapError(
-          (error) =>
-            new PackFormatError({
-              reason: `entry at ${b.offset}: ${error.reason}`,
-            }),
+        Effect.mapError((error) =>
+          PackFormatError.make({
+            reason: `entry at ${b.offset}: ${error.reason}`,
+          }),
         ),
       );
     for (const b of bounds) {
@@ -461,22 +459,21 @@ export const hashBounds = (
         continue;
       }
       const content = yield* applyDelta(found.content, payload).pipe(
-        Effect.mapError(
-          (error) =>
-            new PackFormatError({
-              reason: `entry at ${b.offset}: ${error.reason}`,
-            }),
+        Effect.mapError((error) =>
+          PackFormatError.make({
+            reason: `entry at ${b.offset}: ${error.reason}`,
+          }),
         ),
       );
       if (content.length > options.maxObjectSize) {
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: content.length,
           limit: options.maxObjectSize,
         });
       }
       const oid = hashObjectSync(found.type, content);
       const zdata = yield* deflate(content).pipe(
-        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+        Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
       );
       entries.push({
         oid,
@@ -623,14 +620,14 @@ export const resolveDeltas = (
         if (cached !== undefined) return cached;
         const base = bases[index];
         if (base === undefined) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `delta base ${index} missing`,
           });
         }
         const content = base.isContent
           ? base.bytes
           : yield* inflate(base.bytes).pipe(
-              Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+              Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
             );
         inflated.set(index, content);
         return content;
@@ -639,20 +636,20 @@ export const resolveDeltas = (
     for (const job of jobs) {
       const base = yield* baseContent(job.base);
       const delta = yield* inflate(job.delta).pipe(
-        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+        Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
       );
       const content = yield* applyDelta(base, delta).pipe(
-        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+        Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
       );
       if (content.length > options.maxObjectSize) {
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: content.length,
           limit: options.maxObjectSize,
         });
       }
       const oid = hashObjectSync(job.type, content);
       const zdata = yield* deflate(content).pipe(
-        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
+        Effect.mapError((error) => PackFormatError.make({ reason: error.reason })),
       );
       out.push({
         id: job.id,

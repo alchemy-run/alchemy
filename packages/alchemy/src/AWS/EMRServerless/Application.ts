@@ -346,7 +346,7 @@ export const ApplicationProvider = () =>
               created?.applicationId ?? (yield* observeByName(name))?.applicationId;
             if (applicationId === undefined) {
               return yield* Effect.fail(
-                new emr.ResourceNotFoundException({
+                emr.ResourceNotFoundException.make({
                   message: `application ${name} not visible after create`,
                 }),
               );

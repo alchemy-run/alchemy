@@ -346,13 +346,13 @@ const readU32BE = (buf: Uint8Array, offset: number): number =>
  */
 export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
   if (Number.isFinite(source.size) && source.size < 12 + 20) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `pack too small: ${source.size} bytes`,
     });
   }
   const header = yield* source.read(0, 12);
   if (header.length < 12) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `pack too small: ${header.length} bytes`,
     });
   }
@@ -363,11 +363,11 @@ export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
     header[2] !== 0x43 || // C
     header[3] !== 0x4b // K
   ) {
-    return yield* new PackFormatError({ reason: "bad pack magic" });
+    return yield* PackFormatError.make({ reason: "bad pack magic" });
   }
   const version = readU32BE(header, 4);
   if (version !== 2) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `unsupported pack version ${version}`,
     });
   }
@@ -436,7 +436,7 @@ export const ingestPack = <E, R>(
     const inflateOwn = (entry: IndexedEntry): Effect.Effect<Uint8Array, PackIngestError> =>
       Effect.suspend((): Effect.Effect<Uint8Array, PackIngestError> =>
         source.evictedBeforeEnd?.(entry.dataOffset) === true
-          ? Effect.fail(new BaseEvictedError({ offset: entry.dataOffset }))
+          ? Effect.fail(BaseEvictedError.make({ offset: entry.dataOffset }))
           : source.read(entry.dataOffset, entry.span).pipe(Effect.flatMap((z) => inflate(z))),
       );
 
@@ -459,7 +459,7 @@ export const ingestPack = <E, R>(
           const payload = yield* timed("inflate", inflateOwn(entry));
           const content = yield* timed("delta", applyDelta(base.content, payload));
           if (content.length > maxObjectSize) {
-            return yield* new ObjectTooLargeError({
+            return yield* ObjectTooLargeError.make({
               size: content.length,
               limit: maxObjectSize,
             });
@@ -476,7 +476,7 @@ export const ingestPack = <E, R>(
         if (entry.baseOffset !== undefined) {
           const base = byOffset.get(entry.baseOffset);
           if (base === undefined) {
-            return yield* new PackFormatError({
+            return yield* PackFormatError.make({
               reason: `ofs-delta at ${entry.offset} points at ${entry.baseOffset}, not an entry boundary`,
             });
           }
@@ -491,10 +491,10 @@ export const ingestPack = <E, R>(
         if (cachedThin !== undefined) return cachedThin;
         const live = yield* store.readBase(baseOid);
         if (live === undefined) {
-          return yield* new MissingDeltaBaseError({ baseOid });
+          return yield* MissingDeltaBaseError.make({ baseOid });
         }
         if (live.content.length > maxObjectSize) {
-          return yield* new ObjectTooLargeError({
+          return yield* ObjectTooLargeError.make({
             size: live.content.length,
             limit: maxObjectSize,
             oid: baseOid,
@@ -562,7 +562,7 @@ export const ingestPack = <E, R>(
       try {
         header = decodeTypeSize(window, 0);
       } catch (error) {
-        return new PackFormatError({
+        return PackFormatError.make({
           reason: Schema.is(ObjectParseError)(error)
             ? `entry ${i}: ${error.reason}`
             : `entry ${i}: ${String(error)}`,
@@ -570,7 +570,7 @@ export const ingestPack = <E, R>(
       }
       if (isDeltaType(header.type)) return undefined;
       if (header.size > maxObjectSize) {
-        return new ObjectTooLargeError({
+        return ObjectTooLargeError.make({
           size: header.size,
           limit: maxObjectSize,
         });
@@ -583,7 +583,7 @@ export const ingestPack = <E, R>(
       if (inflated === undefined) return undefined;
       const { bytesConsumed, content } = inflated;
       if (content.length !== header.size) {
-        return new PackFormatError({
+        return PackFormatError.make({
           reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
         });
       }
@@ -622,7 +622,7 @@ export const ingestPack = <E, R>(
     let offset = 12;
     for (let i = 0; i < count; i++) {
       if (offset >= dataEnd) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `truncated pack: entry ${i} of ${count} starts past the trailer`,
         });
       }
@@ -656,7 +656,7 @@ export const ingestPack = <E, R>(
       }
       let window = yield* source.read(offset, probeLength);
       if (window.length === 0) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `truncated pack: entry ${i} of ${count} starts past the end`,
         });
       }
@@ -675,7 +675,7 @@ export const ingestPack = <E, R>(
       try {
         header = decodeTypeSize(window, 0);
       } catch (error) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: Schema.is(ObjectParseError)(error)
             ? `entry ${i}: ${error.reason}`
             : `entry ${i}: ${String(error)}`,
@@ -689,7 +689,7 @@ export const ingestPack = <E, R>(
         try {
           ofs = decodeOfsDeltaOffset(window, pos);
         } catch (error) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: Schema.is(ObjectParseError)(error)
               ? `entry ${i}: ${error.reason}`
               : `entry ${i}: ${String(error)}`,
@@ -698,20 +698,20 @@ export const ingestPack = <E, R>(
         pos = ofs.next;
         baseOffset = offset - ofs.value;
         if (baseOffset < 12) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry ${i}: ofs-delta offset ${ofs.value} points before the first entry`,
           });
         }
       } else if (header.type === 7) {
         if (pos + 20 > window.length) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry ${i}: truncated ref-delta base id`,
           });
         }
         baseOid = bytesToHex(window.subarray(pos, pos + 20));
         pos += 20;
       } else if (header.size > maxObjectSize) {
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: header.size,
           limit: maxObjectSize,
         });
@@ -742,7 +742,7 @@ export const ingestPack = <E, R>(
       }
       const { bytesConsumed, content } = attempt.success;
       if (content.length !== header.size) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
         });
       }
@@ -807,7 +807,7 @@ export const ingestPack = <E, R>(
     yield* flushPending;
     if (!Number.isFinite(dataEnd)) {
       if (source.awaitEnd === undefined) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: "pack source has unknown size and no awaitEnd",
         });
       }
@@ -828,7 +828,7 @@ export const ingestPack = <E, R>(
             firstMissing ??= result.failure;
             next.push(entry);
           } else if (Schema.is(BaseEvictedError)(result.failure)) {
-            return yield* new PackFormatError({
+            return yield* PackFormatError.make({
               reason: `delta base at ${result.failure.offset} unreadable after the body ended`,
             });
           } else {
@@ -843,7 +843,7 @@ export const ingestPack = <E, R>(
       pending = next;
     }
     if (offset !== dataEnd) {
-      return yield* new PackFormatError({
+      return yield* PackFormatError.make({
         reason: `pack has ${dataEnd - offset} unconsumed bytes after ${count} entries`,
       });
     }
@@ -851,12 +851,12 @@ export const ingestPack = <E, R>(
     // ── trailer verification ─────────────────────────────────────────────────
     const trailer = yield* source.read(dataEnd, 20);
     if (trailer.length < 20) {
-      return yield* new PackFormatError({ reason: "truncated pack trailer" });
+      return yield* PackFormatError.make({ reason: "truncated pack trailer" });
     }
     const expected = bytesToHex(trailer);
     const actual = yield* Effect.sync(() => trailerSha.digestHex());
     if (expected !== actual) {
-      return yield* new PackChecksumMismatch({ expected, actual });
+      return yield* PackChecksumMismatch.make({ expected, actual });
     }
 
     return { count, oids } satisfies IngestSummary;

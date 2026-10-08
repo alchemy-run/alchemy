@@ -246,13 +246,13 @@ const attachDemandContext =
           `These resources require ${demand.provider} credentials:\n` +
           resourceLines(demand);
         return error._tag === "NeedsReauth"
-          ? new NeedsReauth({
+          ? NeedsReauth.make({
               provider: error.provider,
               profile: error.profile,
               message,
               cause: error.cause,
             })
-          : new AuthError({ message, cause: error.cause });
+          : AuthError.make({ message, cause: error.cause });
       }),
     );
 
@@ -332,9 +332,8 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function
           Effect.provideService(ProfileStore, profile),
           Effect.provideService(SuppressMissingProviderConfig, true),
           Effect.catchTag("MissingProviderConfig", () => credentialsRequired(demand, profileName)),
-          Effect.catchTag(
-            "ProfileError",
-            (error) => new AuthError({ message: error.message, cause: error }),
+          Effect.catchTag("ProfileError", (error) =>
+            AuthError.make({ message: error.message, cause: error }),
           ),
         );
         yield* resolved.resolve.pipe(attachDemandContext(demand));

@@ -382,7 +382,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
         Effect.mapError((e) =>
           Schema.is(AuthError)(e)
             ? e
-            : new AuthError({
+            : AuthError.make({
                 message: "failed to configure credentials",
                 cause: e,
               }),
@@ -411,7 +411,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             const region = storedValueText(values.region) ?? "";
             if (accessKeyId === undefined || secretAccessKey === undefined) {
               return yield* Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: "AWS: required key fields are missing.",
                 }),
               );
@@ -422,12 +422,11 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
               sessionToken,
               region,
             }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AuthError({
-                    message: "AWS: failed to verify credentials via STS GetCallerIdentity.",
-                    cause,
-                  }),
+              Effect.mapError((cause) =>
+                AuthError.make({
+                  message: "AWS: failed to verify credentials via STS GetCallerIdentity.",
+                  cause,
+                }),
               ),
             );
             return {
@@ -454,7 +453,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
               .pipe(Effect.catch(() => Effect.succeed(undefined)));
             if (profile == null) {
               return yield* Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
                 }),
               );
@@ -482,7 +481,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
         ),
         Match.orElse(() =>
           Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: `AWS: unknown method '${input.method}'. Valid methods: stored, sso, console-login.`,
             }),
           ),
@@ -530,7 +529,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 if (profile?.sso_account_id == null) {
                   const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
                   return yield* Effect.fail(
-                    new AuthError({
+                    AuthError.make({
                       message:
                         profile == null
                           ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
@@ -544,7 +543,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 const region = profile.region ?? (yield* getEnv("AWS_REGION"));
                 if (!region) {
                   return yield* Effect.fail(
-                    new AuthError({
+                    AuthError.make({
                       message: `AWS SSO profile '${config.ssoProfile}' has no region in ~/.aws/config and AWS_REGION is not set.`,
                     }),
                   );
@@ -585,12 +584,11 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
                 const auth = yield* DistilledAuth.Default;
                 const profile = yield* loadLoginProfile(config.loginProfile).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new AuthError({
-                        message: `${cause.message} ${reconfigure}`,
-                        cause,
-                      }),
+                  Effect.mapError((cause) =>
+                    AuthError.make({
+                      message: `${cause.message} ${reconfigure}`,
+                      cause,
+                    }),
                   ),
                 );
                 const region =
@@ -599,7 +597,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                   (yield* getEnv("AWS_DEFAULT_REGION"));
                 if (!region) {
                   return yield* Effect.fail(
-                    new AuthError({
+                    AuthError.make({
                       message: `AWS profile '${config.loginProfile}' has no region. Set one with \`aws configure set region <region> --profile ${config.loginProfile}\` or set AWS_REGION.`,
                     }),
                   );
@@ -652,7 +650,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             Effect.mapError((e) =>
               e._tag === "AuthError"
                 ? e
-                : new AuthError({
+                : AuthError.make({
                     message: "failed to resolve AWS credentials",
                     cause: e,
                   }),
@@ -689,13 +687,13 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             return error._tag === "Alchemy::AWS::ExpiredSSOToken" ||
               error._tag === "Alchemy::AWS::InvalidSSOToken" ||
               consoleLoginExpired
-              ? new NeedsReauth({
+              ? NeedsReauth.make({
                   provider: AWS_AUTH_PROVIDER_NAME,
                   profile: profileName,
                   message: `AWS ${consoleLoginExpired ? "console login" : "SSO"} credentials need to be refreshed. ${reauth}`,
                   cause: error,
                 })
-              : new AuthError({
+              : AuthError.make({
                   message: "failed to load AWS credentials",
                   cause: error,
                 });
@@ -764,8 +762,8 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           Match.exhaustive,
         )
         .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: `login failed: ${e.message}`, cause: e }),
+          Effect.mapError((e) =>
+            AuthError.make({ message: `login failed: ${e.message}`, cause: e }),
           ),
         );
 
@@ -777,7 +775,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
         Effect.flatMap((value) => (value ? Effect.succeed(value) : getEnv("AWS_DEFAULT_REGION"))),
       );
       if (!region) {
-        return yield* new AuthError({
+        return yield* AuthError.make({
           message: "AWS CI region not found. Set AWS_REGION or AWS_DEFAULT_REGION.",
         });
       }
@@ -806,7 +804,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
       Effect.mapError((cause) =>
         Schema.is(AuthError)(cause)
           ? cause
-          : new AuthError({
+          : AuthError.make({
               message: "Failed to resolve AWS credentials from the CI environment.",
               cause,
             }),
@@ -866,7 +864,7 @@ const runSsoCommand = (command: "login" | "logout", ssoProfile: string) =>
     });
     const exit = yield* handle.exitCode;
     if (exit !== 0) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: `aws sso ${command} exited with code ${exit}`,
       });
     }
@@ -879,7 +877,7 @@ const runAws = (args: ReadonlyArray<string>) =>
     Effect.flatMap(({ exitCode, stdout, stderr }) => {
       if (exitCode === 0) return Effect.void;
       const detail = stderr.trim() || stdout.trim();
-      return new AuthError({
+      return AuthError.make({
         message: `aws ${args.join(" ")} exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
       });
     }),
@@ -895,7 +893,7 @@ const loadLoginProfile = (loginProfile: string) =>
     Effect.flatMap((profile) =>
       profile?.login_session
         ? Effect.succeed(profile)
-        : new AuthError({
+        : AuthError.make({
             message: `AWS profile '${loginProfile}' has no login_session in ~/.aws/config. Run \`aws login --profile ${loginProfile}\` (AWS CLI v2.32+).`,
           }),
     ),
@@ -995,7 +993,7 @@ const loginSSO = (
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();
           return yield* Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: `aws sso login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
             }),
           );
@@ -1007,7 +1005,7 @@ const loginSSO = (
           Fiber.join(processFiber).pipe(
             Effect.flatMap(() =>
               Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: "AWS SSO login completed without providing an authorization URL.",
                 }),
               ),
@@ -1022,7 +1020,7 @@ const loginSSO = (
                 Fiber.join(processFiber).pipe(
                   Effect.flatMap(() =>
                     Effect.fail(
-                      new AuthError({
+                      AuthError.make({
                         message:
                           "AWS SSO device login completed without providing an authorization code.",
                       }),
@@ -1124,7 +1122,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();
           return yield* Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: `aws login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
             }),
           );
@@ -1136,7 +1134,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
           Fiber.join(processFiber).pipe(
             Effect.flatMap(() =>
               Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: "AWS console login completed without providing an authorization URL.",
                 }),
               ),

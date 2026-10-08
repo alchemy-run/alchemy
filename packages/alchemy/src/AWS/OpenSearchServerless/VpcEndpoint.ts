@@ -181,7 +181,7 @@ export const VpcEndpointProvider = () =>
             const endpointId = created?.id ?? (yield* findByName(name))?.id;
             if (endpointId === undefined) {
               return yield* Effect.fail(
-                new aoss.ResourceNotFoundException({
+                aoss.ResourceNotFoundException.make({
                   message: `VPC endpoint ${name} not visible after create`,
                 }),
               );

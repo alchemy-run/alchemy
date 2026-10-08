@@ -173,18 +173,18 @@ export const createProfileHint = (name?: string) =>
   );
 
 const profileNotFound = Effect.fn(function* (name: string) {
-  return new ProfileError({
+  return ProfileError.make({
     message: `Profile '${name}' does not exist. ${yield* createProfileHint(name)}`,
   });
 });
 
 export const cannotDeleteDefaultProfile = () =>
-  new ProfileError({
+  ProfileError.make({
     message: `Cannot delete the built-in '${DEFAULT_PROFILE_NAME}' profile.`,
   });
 
 export const cannotRenameDefaultProfile = () =>
-  new ProfileError({
+  ProfileError.make({
     message: `Cannot rename the built-in '${DEFAULT_PROFILE_NAME}' profile.`,
   });
 
@@ -194,7 +194,7 @@ export const validateProfileName = (name: string): Effect.Effect<string, Profile
   PROFILE_NAME_PATTERN.test(name)
     ? Effect.succeed(name)
     : Effect.fail(
-        new ProfileError({
+        ProfileError.make({
           message:
             `Invalid profile name '${name}'. Profile names must start with an ASCII letter or number, ` +
             "contain only letters, numbers, '.', '_' or '-', and be at most 64 characters.",
@@ -205,7 +205,7 @@ const validateProviderName = (name: string): Effect.Effect<string, ProfileError>
   PROFILE_NAME_PATTERN.test(name)
     ? Effect.succeed(name)
     : Effect.fail(
-        new ProfileError({
+        ProfileError.make({
           message: `Invalid provider id '${name}'. Provider ids must be safe as filenames.`,
         }),
       );
@@ -264,12 +264,11 @@ export const ProfileStoreLive = Layer.effect(
     const decodeJson = (file: string) =>
       fs.readFileString(file).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
-        Effect.mapError(
-          (cause) =>
-            new ProfileError({
-              message: `Could not parse '${file}'.`,
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ProfileError.make({
+            message: `Could not parse '${file}'.`,
+            cause,
+          }),
         ),
       );
 
@@ -490,18 +489,17 @@ export const ProfileStoreLive = Layer.effect(
         const fullPath = pathService.join(profileDirPath(profile), file);
         const json = yield* decodeJson(fullPath);
         const document = yield* Schema.decodeUnknownEffect(ProviderProfileFileSchema)(json).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProfileError({
-                message: `Invalid provider profile at '${fullPath}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            ProfileError.make({
+              message: `Invalid provider profile at '${fullPath}'.`,
+              cause,
+            }),
           ),
         );
         const filenameProvider = file.slice(0, -".json".length);
         if (document.provider.toLowerCase() !== filenameProvider) {
           return yield* Effect.fail(
-            new ProfileError({
+            ProfileError.make({
               message: `Provider '${document.provider}' in '${fullPath}' does not match lowercase filename '${filenameProvider}'.`,
             }),
           );
@@ -563,7 +561,7 @@ export const ProfileStoreLive = Layer.effect(
                 const existing = (yield* readManifest).profiles[name];
                 if (existing !== undefined) {
                   return yield* Effect.fail(
-                    new ProfileError({
+                    ProfileError.make({
                       message: `Profile '${name}' already exists.`,
                     }),
                   );
@@ -592,14 +590,14 @@ export const ProfileStoreLive = Layer.effect(
               const manifest = yield* readManifest;
               if (manifest.profiles[name] === undefined) {
                 return yield* Effect.fail(
-                  new ProfileError({
+                  ProfileError.make({
                     message: `Profile '${name}' does not exist.`,
                   }),
                 );
               }
               if (manifest.profiles[newName] !== undefined) {
                 return yield* Effect.fail(
-                  new ProfileError({
+                  ProfileError.make({
                     message: `Profile '${newName}' already exists.`,
                   }),
                 );
@@ -617,12 +615,11 @@ export const ProfileStoreLive = Layer.effect(
     const current: Effect.Effect<ProfileSelection, ProfileError | PlatformError> = Effect.gen(
       function* () {
         const configured = yield* Config.option(ALCHEMY_PROFILE).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProfileError({
-                message: "Could not resolve ALCHEMY_PROFILE.",
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            ProfileError.make({
+              message: "Could not resolve ALCHEMY_PROFILE.",
+              cause,
+            }),
           ),
         );
         if (Option.isSome(configured)) {
@@ -716,7 +713,7 @@ export const ProfileStoreLive = Layer.effect(
         }
         if (yield* SuppressMissingProviderConfig) {
           return yield* Effect.fail(
-            new MissingProviderConfig({
+            MissingProviderConfig.make({
               provider: auth.name,
               profileName,
               message: `Provider '${auth.name}' is not configured in profile '${profileName}'.`,
@@ -727,7 +724,7 @@ export const ProfileStoreLive = Layer.effect(
           `alchemy profile edit --profile ${profileName} --add ${auth.name}`,
         );
         return yield* Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `Provider '${auth.name}' is not configured in profile '${profileName}'. Run \`${command}\`.`,
           }),
         );

@@ -138,7 +138,7 @@ export default {
     } catch (e) {
       if (e instanceof BindingNotFoundError) {
         return makeErrorResponse(
-          new ConfigError({
+          ConfigError.make({
             subtag: "BindingNotFound",
             message: e.message,
             hint: e.bindingName
@@ -151,7 +151,7 @@ export default {
       }
       const message = e instanceof Error ? e.message : String(e);
       return makeErrorResponse(
-        new SystemError({
+        SystemError.make({
           subtag: "RemoteBindingProxy",
           message: `Remote binding handler threw an error: ${message}`,
           cause: e,

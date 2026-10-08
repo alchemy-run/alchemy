@@ -555,7 +555,7 @@ const mapUsage = (usage: bedrock.TokenUsage | undefined): Response.Usage => {
   const input = usage?.inputTokens ?? 0;
   const cacheRead = usage?.cacheReadInputTokens ?? 0;
   const cacheWrite = usage?.cacheWriteInputTokens ?? 0;
-  return new Response.Usage({
+  return Response.Usage.make({
     inputTokens: {
       uncached: input,
       total: input + cacheRead + cacheWrite,
@@ -832,6 +832,6 @@ const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiErr
   return AiError.AiError.make({
     module: "AWS.Bedrock.LanguageModel",
     method,
-    reason: new AiError.UnknownError({ description }),
+    reason: AiError.UnknownError.make({ description }),
   });
 };

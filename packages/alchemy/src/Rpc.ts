@@ -184,8 +184,8 @@ export const fromRpcReadableStream = (
       onError: (cause) =>
         Socket.isSocketError(cause)
           ? cause
-          : new Socket.SocketError({
-              reason: new Socket.SocketReadError({ cause }),
+          : Socket.SocketError.make({
+              reason: Socket.SocketReadError.make({ cause }),
             }),
     }),
     encoding,

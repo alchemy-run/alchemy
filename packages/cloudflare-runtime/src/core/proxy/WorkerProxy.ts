@@ -129,7 +129,7 @@ const connect = (to: Upstream) =>
     const failed = (cause: Error) =>
       resume(
         Effect.fail(
-          new SystemError({
+          SystemError.make({
             subtag: "WorkerProxyConnect",
             message: `Failed to reach the worker (upstream address: ${to.url})`,
             cause,
@@ -163,7 +163,7 @@ interface Relay {
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   let current = Deferred.makeUnsafe<Upstream, SystemError>();
-  const timedOut = new SystemError({
+  const timedOut = SystemError.make({
     subtag: "WorkerProxyUpstream",
     message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
   });
@@ -314,7 +314,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }),
     fail: (message) =>
       settle((deferred) =>
-        Deferred.fail(deferred, new SystemError({ subtag: "WorkerProxyUpstream", message })),
+        Deferred.fail(deferred, SystemError.make({ subtag: "WorkerProxyUpstream", message })),
       ),
     close: Fiber.interruptAll(connections),
   };
@@ -328,12 +328,12 @@ const listen = (relay: Relay, host: string, port: number) =>
         resume(
           Effect.fail(
             error.code === "EADDRINUSE" || error.code === "EACCES"
-              ? new ConfigError({
+              ? ConfigError.make({
                   subtag: "AddressInUse",
                   message: `Address ${host}:${port} is already in use.`,
                   cause: error,
                 })
-              : new SystemError({
+              : SystemError.make({
                   subtag: "WorkerProxyListen",
                   message: `Failed to listen on ${host}:${port} for the worker proxy.`,
                   cause: error,

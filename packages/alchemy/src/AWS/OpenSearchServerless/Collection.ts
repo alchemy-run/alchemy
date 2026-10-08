@@ -284,7 +284,7 @@ export const CollectionProvider = () =>
             const collectionId = created?.id ?? (yield* observeByName(name))?.id;
             if (collectionId === undefined) {
               return yield* Effect.fail(
-                new aoss.ResourceNotFoundException({
+                aoss.ResourceNotFoundException.make({
                   message: `collection ${name} not visible after create`,
                 }),
               );
