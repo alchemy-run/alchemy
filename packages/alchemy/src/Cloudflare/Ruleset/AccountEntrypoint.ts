@@ -175,8 +175,10 @@ export const AccountEntrypointProvider = () =>
           rulesets.getPhasForAccount({ accountId, rulesetPhase: entry.phase }).pipe(
             Effect.map((ruleset) => toAttributes(accountId, ruleset)),
             // Removed/empty out-of-band or plan-gated phases are skipped.
-            Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              RulesetNotFound: () => Effect.succeed(undefined),
+              Forbidden: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );

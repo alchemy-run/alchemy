@@ -240,8 +240,10 @@ export const OriginCloudRegionProvider = () =>
           originIP: output.originIp,
         })
         .pipe(
-          Effect.catchTag("OriginCloudRegionNotFound", () => Effect.void),
-          Effect.catchTag("InvalidRoute", () => Effect.void),
+          Effect.catchTags({
+            OriginCloudRegionNotFound: () => Effect.void,
+            InvalidRoute: () => Effect.void,
+          }),
         );
     }),
   });

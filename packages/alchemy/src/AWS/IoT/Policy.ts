@@ -222,21 +222,22 @@ export const PolicyProvider = () =>
             );
           });
           yield* iot.deletePolicy({ policyName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("DeleteConflictException", () =>
-              detachTargets.pipe(
-                Effect.andThen(
-                  iot
-                    .deletePolicy({ policyName })
-                    .pipe(
-                      Effect.catchTag(
-                        ["ResourceNotFoundException", "DeleteConflictException"],
-                        () => Effect.void,
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              DeleteConflictException: () =>
+                detachTargets.pipe(
+                  Effect.andThen(
+                    iot
+                      .deletePolicy({ policyName })
+                      .pipe(
+                        Effect.catchTag(
+                          ["ResourceNotFoundException", "DeleteConflictException"],
+                          () => Effect.void,
+                        ),
                       ),
-                    ),
+                  ),
                 ),
-              ),
-            ),
+            }),
           );
         }),
       });

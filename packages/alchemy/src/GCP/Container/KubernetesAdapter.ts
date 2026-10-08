@@ -465,11 +465,9 @@ export const GkeKubernetesAdapter = () =>
         // instead of skipping Service deletion.
         const apiGone = cluster?.status === "STOPPING" && !apiServerEndpoint(cluster.endpoint);
         if (!cluster || apiGone) {
-          return yield* Effect.fail(
-            new ClusterNotFoundError({
-              message: `GKE cluster '${auth.clusterId}' no longer exists`,
-            }),
-          );
+          return yield* new ClusterNotFoundError({
+            message: `GKE cluster '${auth.clusterId}' no longer exists`,
+          });
         }
         return cluster;
       });

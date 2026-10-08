@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { PushDenied, RefConflict, RepoNotFound } from "./Api/Schema.ts";
@@ -39,9 +40,9 @@ import { sliceRandomAccess } from "./Store/PackSource.ts";
 const path = (repo: RepoMetaData) => ({ owner: repo.owner, repo: repo.name });
 
 const asStoreError = (error: { readonly _tag: string; readonly reason?: string }) =>
-  error instanceof StoreError
+  Schema.is(StoreError)(error)
     ? error
-    : new StoreError({
+    : StoreError.make({
         reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
       });
 
@@ -81,7 +82,7 @@ const make = Effect.gen(function* () {
         repo: path.repo.toLowerCase().replace(/\.git$/, ""),
       };
       const entry = yield* operations.resolveCached(name.owner, name.repo);
-      if (entry === undefined || entry.deletedAt !== null) return yield* new RepoNotFound(name);
+      if (entry === undefined || entry.deletedAt !== null) return yield* RepoNotFound.make(name);
       return yield* repos.getByName(entry.repoId).getRepoMeta();
     });
 
@@ -119,7 +120,7 @@ const make = Effect.gen(function* () {
           }),
       );
       if (begun._tag === "denied")
-        return yield* new PushDenied({
+        return yield* PushDenied.make({
           ref: input.updates[0]?.ref ?? "",
           reason: begun.reason,
         });
@@ -130,7 +131,7 @@ const make = Effect.gen(function* () {
         (acquired) => (Option.isSome(acquired) ? Semaphore.release(gate, permits) : Effect.void),
       );
       if (Option.isNone(acquired))
-        return yield* new StoreError({ reason: "push admission timed out" });
+        return yield* StoreError.make({ reason: "push admission timed out" });
       const started = Date.now();
       const stageGate = yield* Semaphore.make(6);
       const bases = new Map<string, Effect.Success<ReturnType<typeof stub.readPushBase>>>();
@@ -138,16 +139,14 @@ const make = Effect.gen(function* () {
         insertStagedBatch: (id, objects) =>
           Effect.gen(function* () {
             const encoded = encodeStagedBatch(objects);
-            const fiber = yield* Effect.forkDetach(
-              Semaphore.withPermits(
-                stageGate,
-                1,
-              )(
-                stub
-                  .stagePush(id, encoded)
-                  .pipe(Effect.mapError(asStoreError), Effect.provide(RuntimeContext.phantom)),
-              ),
-            );
+            const fiber = yield* stub
+              .stagePush(id, encoded)
+              .pipe(
+                Effect.mapError(asStoreError),
+                Effect.provide(RuntimeContext.phantom),
+                Semaphore.withPermits(stageGate, 1),
+                Effect.forkDetach,
+              );
             staging.push(fiber);
           }),
         settle: Effect.gen(function* () {
@@ -169,7 +168,7 @@ const make = Effect.gen(function* () {
       };
       const probe = yield* feeder.source.read(packStart, 12);
       if (probe.length > 0 && probe.length < 12) {
-        return yield* new StoreError({ reason: "truncated pack header" });
+        return yield* StoreError.make({ reason: "truncated pack header" });
       }
       const hasPack = probe.length === 12;
       if (hasPack) {
@@ -261,7 +260,7 @@ const make = Effect.gen(function* () {
         input.expectedOid !== undefined &&
         input.expectedOid !== (current === "0".repeat(40) ? null : current)
       )
-        return yield* new RefConflict({
+        return yield* RefConflict.make({
           ref: input.ref,
           currentOid: current as import("./Api.ts").Oid,
         });
@@ -282,7 +281,7 @@ const make = Effect.gen(function* () {
       const stub = repos.getByName(repo.repoId);
       const current = yield* stub.getRef(input.ref);
       if (input.expectedOid !== undefined && input.expectedOid !== current.oid)
-        return yield* new RefConflict({
+        return yield* RefConflict.make({
           ref: input.ref,
           currentOid: current.oid as import("./Api.ts").Oid,
         });

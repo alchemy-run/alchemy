@@ -212,16 +212,15 @@ const requestJson = Effect.fn(function* ({
     // Error bodies can echo the request. Scrub only failures —
     // a successful dry-run is the object we compare for drift.
     const responseBody = yield* Effect.sync(() => scrubSecrets(response.body, prepared.secrets));
-    return yield* Effect.fail(
-      response.statusCode === 404
-        ? new KubernetesNotFound({ method, path, body: responseBody })
-        : new KubernetesApiError({
-            method,
-            path,
-            statusCode: response.statusCode,
-            body: responseBody,
-          }),
-    );
+    if (response.statusCode === 404) {
+      return yield* new KubernetesNotFound({ method, path, body: responseBody });
+    }
+    return yield* new KubernetesApiError({
+      method,
+      path,
+      statusCode: response.statusCode,
+      body: responseBody,
+    });
   }
 
   if (!response.body.trim()) return undefined;
@@ -285,13 +284,11 @@ export const resolveKindSpec = Effect.fn(function* ({
   );
 
   if (!resource?.name) {
-    return yield* Effect.fail(
-      new KubernetesNotFound({
-        method: "GET",
-        path: discoveryPath,
-        body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
-      }),
-    );
+    return yield* new KubernetesNotFound({
+      method: "GET",
+      path: discoveryPath,
+      body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
+    });
   }
 
   const spec: KubernetesObjectKindSpec = {

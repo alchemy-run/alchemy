@@ -560,13 +560,11 @@ export const make = (
       FrameworkCore.FrameworkError
     > = Effect.fn(function* (target: WakuTarget, context: WakuTargetContext) {
       if (typeof target.adapter !== "function" || typeof target.vitePlugins !== "function") {
-        return yield* Effect.fail(
-          fail(
-            `Deploy target "${target.platform}" does not implement the waku target hooks ` +
-              "(adapter, vitePlugins) required to drive waku " +
-              context.phase,
-          )(undefined),
-        );
+        return yield* fail(
+          `Deploy target "${target.platform}" does not implement the waku target hooks ` +
+            "(adapter, vitePlugins) required to drive waku " +
+            context.phase,
+        )(undefined);
       }
       const [adapterPath, plugins] = yield* Effect.all(
         [target.adapter(context), target.vitePlugins(context)],
@@ -665,16 +663,14 @@ export const make = (
         mergeViteConfig: project.vite.mergeConfig,
       });
       if (userConfig?.unstable_adapter !== undefined) {
-        return yield* Effect.fail(
-          fail(
-            `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
-              "but the deploy target owns the server adapter " +
-              `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
-              "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
-              "integration's waku options); to change the deploy platform, pass a different " +
-              "deploy target to the integration instead.",
-          )(undefined),
-        );
+        return yield* fail(
+          `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
+            "but the deploy target owns the server adapter " +
+            `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
+            "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
+            "integration's waku options); to change the deploy platform, pass a different " +
+            "deploy target to the integration instead.",
+        )(undefined);
       }
       return project.internals.unstable_resolveConfig(
         makeWakuConfigInput({
@@ -841,9 +837,7 @@ export const make = (
         );
         const resolved = server.resolvedUrls?.local[0];
         if (resolved === undefined) {
-          return yield* Effect.fail(
-            fail("Could not determine the URL of the waku dev server")(undefined),
-          );
+          return yield* fail("Could not determine the URL of the waku dev server")(undefined);
         }
         // Vite's `resolvedUrls.local[0]` is `http://host:port/` — strip
         // the trailing slash so callers can concatenate paths (`${url}/`)

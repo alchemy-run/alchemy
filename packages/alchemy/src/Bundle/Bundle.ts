@@ -421,7 +421,7 @@ export function bundleOutputFromRolldownOutputBundle(
   // These are sanity checks - with rolldown, the first file is always an entry chunk.
   if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
     return Effect.fail(
-      new BundleError({
+      BundleError.make({
         message: "Invalid bundle output",
       }),
     );
@@ -452,7 +452,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
 
 export function bundleErrorFromUnknown(error: unknown): BundleError {
   const message = error instanceof Error ? error.message : String(error);
-  return new BundleError({
+  return BundleError.make({
     message,
     cause: error,
   });

@@ -258,7 +258,7 @@ export const WorkerRouteProviderLive = () =>
             Effect.gen(function* () {
               const match = yield* findByPattern(zoneId, news.pattern);
               if (!match) {
-                return yield* Effect.fail(originalError);
+                return yield* originalError;
               }
               return match;
             }),

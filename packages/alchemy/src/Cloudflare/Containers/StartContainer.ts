@@ -90,7 +90,8 @@ export const startContainer = Effect.fn(function* <Image extends Container.Decl.
     | undefined;
   const bound = yield* bindEff ?? (containerEff as any as Effect.Effect<any, never, never>);
   const container: Container = Effect.isEffect(bound)
-    ? yield* bound as Effect.Effect<Container>
+    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped container binding; requirements are ambient at bind time
+      yield* bound as Effect.Effect<Container>
     : (bound as Container);
 
   // Every constant below is taken directly from Cloudflare's own
@@ -377,6 +378,7 @@ export const startContainer = Effect.fn(function* <Image extends Container.Decl.
   // eagerly start the container when in runtime, no-op during planning
   if (phase === "runtime") {
     // erase the RuntimeContext color (we are applying it eagerly as an optimization only during runtime)
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext; only run eagerly in the runtime phase
     yield* ensureRunning as Effect.Effect<void>;
   }
 

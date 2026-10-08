@@ -84,31 +84,31 @@ export const GlobalsLive = Layer.effect(
     // logged file paths point at real files. Miniflare persists replies via
     // its loopback `store-temp-file` endpoint instead.
     const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
-    const email =
-      storageDiskPath === undefined
-        ? undefined
-        : yield* Effect.gen(function* () {
-            const persistPath = path.join(storageDiskPath, "email");
-            yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ConfigError({
-                    subtag: "Globals",
-                    message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
-                    hint: "Ensure the storage directory is writable.",
-                    detail: { persistPath },
-                    cause,
-                  }),
-              ),
-            );
-            return {
-              persistPath,
-              service: {
-                name: SERVICE_EMAIL_STORAGE,
-                disk: { path: persistPath, writable: true },
-              } satisfies WorkerdConfig.Service,
-            };
-          });
+    const createEmailStorage = Effect.gen(function* () {
+      if (storageDiskPath === undefined) {
+        return undefined;
+      }
+      const persistPath = path.join(storageDiskPath, "email");
+      yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Globals",
+            message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
+        ),
+      );
+      return {
+        persistPath,
+        service: {
+          name: SERVICE_EMAIL_STORAGE,
+          disk: { path: persistPath, writable: true },
+        } satisfies WorkerdConfig.Service,
+      };
+    });
+    const email = yield* createEmailStorage;
     return Globals.of(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;
@@ -124,7 +124,7 @@ export const GlobalsLive = Layer.effect(
           return Result.isSuccess(parsed)
             ? Effect.succeed({ expression, cron: parsed.success })
             : Effect.fail(
-                new ConfigError({
+                ConfigError.make({
                   subtag: "InvalidCron",
                   message: `Invalid cron expression "${expression}": ${parsed.failure.message}`,
                   hint: 'Use a standard cron expression, e.g. "*/5 * * * *".',

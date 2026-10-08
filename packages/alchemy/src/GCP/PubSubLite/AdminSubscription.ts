@@ -353,13 +353,11 @@ export const AdminSubscriptionProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* retryInUse(
-        ignoreMissing(
-          pubsublite.deleteAdminProjectsLocationsSubscriptions({
-            name: output.name,
-          }),
-        ),
-      );
+      yield* pubsublite
+        .deleteAdminProjectsLocationsSubscriptions({
+          name: output.name,
+        })
+        .pipe(ignoreMissing, retryInUse);
       yield* waitUntilGone(getSubscription(output.name));
     }),
   });

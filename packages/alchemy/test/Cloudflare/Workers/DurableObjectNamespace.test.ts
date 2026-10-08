@@ -101,6 +101,47 @@ test(
 );
 
 test(
+  "get, idFromName, idFromString and newUniqueId address the expected instance",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/addressing?name=addressing-probe`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as {
+      idFromName: string;
+      byName: string;
+      byId: string;
+      byIdString: string;
+      uniqueId: string;
+      unique: string;
+      otherUnique: string;
+    };
+
+    // `get(idFromName(name))` and the string round-trip reach the same
+    // instance as `getByName(name)`.
+    expect(body.byName).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.idFromName).toBe(body.byName);
+    expect(body.byId).toBe(body.byName);
+    expect(body.byIdString).toBe(body.byName);
+    // `newUniqueId()` addresses a fresh instance each time.
+    expect(body.unique).toBe(body.uniqueId);
+    expect(body.unique).not.toBe(body.byName);
+    expect(body.otherUnique).not.toBe(body.unique);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+test(
   "calling an undefined durable object RPC method fails",
   Effect.gen(function* () {
     const { url } = yield* stack;

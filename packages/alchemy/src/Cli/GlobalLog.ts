@@ -101,9 +101,7 @@ export const GlobalLogLive = Layer.unwrap(
 
     // Prune stale run logs so the directory stays bounded.
     const now = yield* Clock.currentTimeMillis;
-    const entries = yield* fs
-      .readDirectory(dir)
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+    const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => [] as string[]));
     yield* Effect.forEach(
       entries,
       (entry) =>
@@ -128,12 +126,12 @@ export const GlobalLogLive = Layer.unwrap(
         makeConsoleLogger(consoleLogFloor(process.argv.slice(2))),
         Logger.formatLogFmt.pipe(
           Logger.toFile(file, { flag: "a" }),
-          Effect.catch(() => Effect.succeed(noopLogger)),
+          Effect.orElseSucceed(() => noopLogger),
         ),
       ]),
       Layer.succeed(MinimumLogLevel, "Debug"),
     );
-  }).pipe(Effect.catch(() => Effect.succeed(Layer.empty))),
+  }).pipe(Effect.orElseSucceed(() => Layer.empty)),
 );
 
 /** First line of every run log: enough context to read it standalone. */

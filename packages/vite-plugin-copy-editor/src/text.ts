@@ -12,6 +12,7 @@
  * new words are escaped.
  */
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- package does not depend on effect; thrown and caught with try/catch
 export class CopyEditError extends Error {
   constructor(
     message: string,

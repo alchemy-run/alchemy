@@ -198,7 +198,7 @@ export const VpcServiceProvider = () =>
             accountId: acct,
             serviceId: output.serviceId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
       }
       if (!observed) {
         const match = yield* findServiceByName(name);
@@ -274,7 +274,7 @@ export const VpcServiceProvider = () =>
           })
           .pipe(
             Effect.map((s) => formatVpcService(s, output.accountId)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
       const name = yield* createServiceName(id, olds?.name);

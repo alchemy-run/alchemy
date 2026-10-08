@@ -449,12 +449,10 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
     }),
   );
   if (files.length > MAX_ASSET_COUNT) {
-    return yield* Effect.fail(
-      new SourceProviderError({
-        provider: PROVIDER,
-        message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
-      }),
-    );
+    return yield* new SourceProviderError({
+      provider: PROVIDER,
+      message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
+    });
   }
   const entries = yield* Effect.forEach(
     files.sort(),
@@ -462,12 +460,10 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
       const file = NodePath.join(directory, name);
       const content = yield* fs.readFile(file);
       if (content.byteLength > MAX_ASSET_SIZE) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: `Asset ${name} is too large (the maximum size is 25 MB)`,
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: `Asset ${name} is too large (the maximum size is 25 MB)`,
+        });
       }
       const hash = (yield* sha256Hex(content)).slice(0, 32);
       return [`/${name.replaceAll("\\", "/")}`, { hash, size: content.byteLength }] as const;
@@ -592,20 +588,16 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
         } satisfies SvelteKitBuildChildConfig,
       }).pipe(Effect.mapError(wrapFrameworkError));
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "The SvelteKit build produced no server modules",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "The SvelteKit build produced no server modules",
+        });
       }
       if (output.clientDirectory === undefined) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "The SvelteKit build produced no client directory",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "The SvelteKit build produced no client directory",
+        });
       }
       const files = output.serverModules.map((module): SourceBundleFile => ({
         path: module.name,
