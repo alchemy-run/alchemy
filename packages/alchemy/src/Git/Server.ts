@@ -359,7 +359,7 @@ const makeCore = Effect.gen(function* () {
     if (Result.isFailure(bodyResult)) return undefined;
     const req = yield* decodePktLines(new Uint8Array(bodyResult.success)).pipe(
       Effect.flatMap(parseUploadPackRequest),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (req === undefined) return undefined;
     if (

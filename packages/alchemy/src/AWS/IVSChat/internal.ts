@@ -24,7 +24,7 @@ export const toTagRecord = (
 export const readIvsChatTags = Effect.fn(function* (arn: string) {
   const response = yield* ivschat
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

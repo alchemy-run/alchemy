@@ -372,7 +372,7 @@ export const TrailProvider = () =>
             }
             return tags;
           }),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       const readTrail = (name: string) =>

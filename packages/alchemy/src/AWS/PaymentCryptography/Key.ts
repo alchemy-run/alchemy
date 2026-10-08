@@ -253,7 +253,7 @@ const fetchKeyTags = (keyArn: string) =>
   paymentcryptography.listTagsForResource.items({ ResourceArn: keyArn }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => tagsToRecord(Array.from(chunk))),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 
 export const KeyProvider = () =>

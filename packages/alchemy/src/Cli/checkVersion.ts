@@ -95,7 +95,7 @@ const readCache = Effect.fn(
     const parsed = yield* Effect.try(() => JSON.parse(raw) as VersionCheckCache | null | undefined);
     return typeof parsed?.checkedAt === "number" ? parsed : undefined;
   },
-  Effect.catch(() => Effect.succeed(undefined)),
+  Effect.orElseSucceed(() => undefined),
 );
 
 const writeCache = Effect.fn(
@@ -137,7 +137,7 @@ const refreshDistTags = Effect.fn(function* (cachePath: string) {
   );
   return yield* Fiber.join(fetch).pipe(
     Effect.timeout(SYNC_WAIT),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 });
 

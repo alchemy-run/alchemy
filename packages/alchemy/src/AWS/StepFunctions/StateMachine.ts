@@ -538,7 +538,7 @@ export const StateMachineProvider = () =>
             type,
             severity: "ERROR",
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         if (report !== undefined && report.result === "FAIL") {
           return yield* new InvalidStateMachineDefinition({
             diagnostics: report.diagnostics.map((diagnostic) => ({

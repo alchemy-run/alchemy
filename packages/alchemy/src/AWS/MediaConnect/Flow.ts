@@ -538,9 +538,7 @@ export const FlowProvider = () =>
           }
           // Wait for any in-flight transition (STOPPING/UPDATING) to settle,
           // then delete. A flow already DELETING (or gone) is success.
-          const settled = yield* waitUntilSettled(arn).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          const settled = yield* waitUntilSettled(arn).pipe(Effect.orElseSucceed(() => undefined));
           if (settled !== undefined) {
             yield* mediaconnect.deleteFlow({ FlowArn: arn }).pipe(
               // Status races (e.g. a transition that began after our read)

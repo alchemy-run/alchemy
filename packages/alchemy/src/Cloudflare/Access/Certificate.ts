@@ -254,7 +254,7 @@ const findCertificateByName = (acct: string, name: string) =>
     Stream.filter((c): c is ObservedCertificate => c.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 const sameMembers = (a: readonly string[], b: readonly string[]) =>

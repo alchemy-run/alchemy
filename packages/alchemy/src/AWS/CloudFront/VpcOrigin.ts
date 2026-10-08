@@ -378,7 +378,7 @@ export const VpcOriginProvider = () =>
             observed.vpcOrigin.Status === "Deployed"
               ? observed
               : yield* waitForDeployment(output.vpcOriginId).pipe(
-                  Effect.catch(() => Effect.succeed(observed)),
+                  Effect.orElseSucceed(() => observed),
                 );
           yield* cloudfront
             .deleteVpcOrigin({

@@ -608,7 +608,7 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // InvalidClusterStateFault — wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
-          yield* waitUntilSettled(identifier).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          yield* waitUntilSettled(identifier).pipe(Effect.orElseSucceed(() => undefined));
           yield* retryWhileClusterTransitioning(
             redshift
               .deleteCluster({

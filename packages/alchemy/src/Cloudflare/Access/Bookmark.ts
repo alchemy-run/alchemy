@@ -236,7 +236,7 @@ const findBookmarkByName = (acct: string, name: string) =>
     Stream.filter((b): b is ObservedBookmark => b.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 /** RFC-4122-shaped v4 UUID derived deterministically from a seed string. */

@@ -1307,7 +1307,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       }),
       Effect.timeoutOption(Duration.millis(requestTimeoutMs)),
       Effect.map(Option.getOrUndefined),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (response) {
       lastStatus = response.status;
@@ -1323,7 +1323,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       if (remainingBeforeBody > 0) {
         const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
           Effect.timeoutOption(Duration.millis(Math.min(2_000, remainingBeforeBody))),
-          Effect.catch(() => Effect.succeed(Option.none<string>())),
+          Effect.orElseSucceed(() => Option.none<string>()),
         );
         if (Option.isSome(bodyPrefix)) {
           lastBody = bodyPrefix.value;

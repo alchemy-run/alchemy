@@ -208,7 +208,7 @@ export const CollectionGroupProvider = () =>
             return undefined;
           }
           const attrs = toAttributes(detail);
-          const tags = yield* observeTags(detail.arn).pipe(Effect.catch(() => Effect.succeed({})));
+          const tags = yield* observeTags(detail.arn).pipe(Effect.orElseSucceed(() => ({})));
           return (yield* hasAlchemyTags(
             id,
             Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),

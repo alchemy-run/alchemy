@@ -338,7 +338,7 @@ export const LogGroupProvider = () =>
                 ),
               ),
             ),
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
           );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

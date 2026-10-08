@@ -257,7 +257,7 @@ export const SpaceProvider = () =>
       const readSpaceTags = Effect.fn(function* (arn: string) {
         const response = yield* repostspace
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         const tags: Record<string, string> = {};
         for (const [key, value] of Object.entries(response?.tags ?? {})) {
           if (value !== undefined) tags[key] = value;

@@ -35,7 +35,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
   const openUrl = Effect.runPromiseWith(services);
   const openFailed = yield* Interaction.openUrl(options.url).pipe(
     Effect.as(false),
-    Effect.catch(() => Effect.succeed(true)),
+    Effect.orElseSucceed(() => true),
   );
   return yield* Effect.raceFirst(
     // A callback server that cannot start (e.g. the port is taken) must not

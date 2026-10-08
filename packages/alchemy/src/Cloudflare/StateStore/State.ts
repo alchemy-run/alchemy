@@ -828,7 +828,7 @@ const isStateStoreServing = (accountId: string) =>
       Effect.map(({ subdomain }) =>
         subdomain ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev` : undefined,
       ),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (url === undefined) return false;
     const { observed } = yield* checkStateStoreVersion(url);
@@ -914,7 +914,7 @@ const checkStateStoreVersion = (url: string) =>
       Effect.retry({
         schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
       }),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     const matches = result?.version === STATE_STORE_VERSION;
     yield* Effect.annotateCurrentSpan({
@@ -979,7 +979,7 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
       headers: session.headers,
     });
     if (response.status !== 200) {
-      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+      const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
       // TEMP(sam): dump the full body so we can capture the exact
       // Cloudflare error page when the probe fails in the wild. Drop
       // this once we've confirmed the routing fix covers all the

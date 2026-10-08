@@ -158,7 +158,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       const runOpenUrl = Effect.runPromiseWith(services);
       const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
-        Effect.catch(() => Effect.succeed(true)),
+        Effect.orElseSucceed(() => true),
       );
 
       const cancel = withAnonymous(cancelLoginSession(code)).pipe(Effect.catch(() => Effect.void));

@@ -233,7 +233,7 @@ export const CollectionProvider = () =>
           const attrs = toAttributes(detail);
           const tags = yield* aoss.listTagsForResource({ resourceArn: detail.arn }).pipe(
             Effect.map((r) => r.tags),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           return (yield* hasAlchemyTags(
             id,

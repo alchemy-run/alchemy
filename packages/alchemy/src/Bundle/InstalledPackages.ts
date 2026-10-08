@@ -1583,7 +1583,7 @@ const readArtifactFiles = (directory: string) =>
       const absolutePath = path.join(directory, relativePath);
       const linkTarget = yield* fs
         .readLink(absolutePath)
-        .pipe(Effect.catch(() => Effect.succeed(undefined)));
+        .pipe(Effect.orElseSucceed(() => undefined));
       if (linkTarget !== undefined) {
         files.push({
           path: relativePath.replaceAll("\\", "/"),

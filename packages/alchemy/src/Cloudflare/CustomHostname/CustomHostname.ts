@@ -363,7 +363,7 @@ export const CustomHostnameProvider = () =>
             Effect.catch((originalError) =>
               Effect.gen(function* () {
                 const existing = yield* findByHostname(zoneId, news.hostname).pipe(
-                  Effect.catch(() => Effect.succeed(undefined)),
+                  Effect.orElseSucceed(() => undefined),
                 );
                 if (!existing) return yield* originalError;
                 return existing;

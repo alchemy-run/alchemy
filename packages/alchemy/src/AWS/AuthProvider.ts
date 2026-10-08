@@ -448,7 +448,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             const auth = yield* DistilledAuth.Default;
             const profile = yield* auth
               .loadProfile(ssoProfile)
-              .pipe(Effect.catch(() => Effect.succeed(undefined)));
+              .pipe(Effect.orElseSucceed(() => undefined));
             if (profile == null) {
               return yield* AuthError.make({
                 message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
@@ -521,7 +521,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 const auth = yield* DistilledAuth.Default;
                 const profile = yield* auth
                   .loadProfile(config.ssoProfile)
-                  .pipe(Effect.catch(() => Effect.succeed(undefined)));
+                  .pipe(Effect.orElseSucceed(() => undefined));
                 if (profile?.sso_account_id == null) {
                   const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
                   return yield* AuthError.make({
@@ -879,7 +879,7 @@ const runAws = (args: ReadonlyArray<string>) =>
  */
 const loadLoginProfile = (loginProfile: string) =>
   DistilledAuth.loadProfile(loginProfile).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
     Effect.flatMap((profile) =>
       profile?.login_session
         ? Effect.succeed(profile)
@@ -1020,7 +1020,7 @@ const loginSSO = (
           : undefined;
       const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
-        Effect.catch(() => Effect.succeed(true)),
+        Effect.orElseSucceed(() => true),
       );
       yield* Fiber.join(processFiber).pipe(
         Effect.raceFirst(
@@ -1059,7 +1059,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
       const services = yield* Effect.context<ChildProcessSpawner>();
       const runOpenUrl = Effect.runPromiseWith(services);
       const existing = yield* DistilledAuth.loadProfile(config.loginProfile).pipe(
-        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.orElseSucceed(() => undefined),
       );
       const region =
         existing?.region ??
@@ -1130,7 +1130,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
       );
       const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
-        Effect.catch(() => Effect.succeed(true)),
+        Effect.orElseSucceed(() => true),
       );
       yield* Fiber.join(processFiber).pipe(
         Effect.raceFirst(

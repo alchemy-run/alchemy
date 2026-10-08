@@ -229,7 +229,7 @@ export const RuleProvider = () =>
             // Distilled tags transport errors but not the live Cloudflare 404
             // for a missing rule. Swallow generically so the reconcile flow
             // falls through to recreate.
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           if (r === undefined) return undefined;
           return narrowRule(r as Parameters<typeof narrowRule>[0]);

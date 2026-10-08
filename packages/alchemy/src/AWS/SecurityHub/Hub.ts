@@ -107,7 +107,7 @@ export const HubProvider = () =>
       const readTags = (arn: string) =>
         securityhub.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) => tagRecord(r.Tags)),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       return {

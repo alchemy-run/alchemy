@@ -218,7 +218,7 @@ export const VaultProvider = () =>
       const readVaultTags = (vaultName: string) =>
         glacier.listTagsForVault({ accountId: ACCOUNT, vaultName }).pipe(
           Effect.map((r) => (r.Tags ?? {}) as Record<string, string>),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       return Vault.Provider.of({

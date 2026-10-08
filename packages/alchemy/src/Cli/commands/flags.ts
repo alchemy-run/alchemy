@@ -28,7 +28,7 @@ export const userStage = (kind: "live" | "dev" | "test") =>
       const safe = user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
       return `${kind}_${safe || "unknown"}`;
     }),
-    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
+    Effect.orElseSucceed(() => `${kind}_unknown`),
   );
 
 export const ALCHEMY_STAGE = Config.String("ALCHEMY_STAGE").pipe(
@@ -73,7 +73,7 @@ export const resolveStage = Effect.fn(function* (
   const provider = yield* loadConfigProvider(envFile);
   const configured = yield* ALCHEMY_STAGE.pipe(
     Effect.provideService(ConfigProvider.ConfigProvider, provider),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
   if (configured !== undefined && configured !== "") {
     if (!STAGE_NAME_PATTERN.test(configured)) {

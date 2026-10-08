@@ -245,7 +245,7 @@ export const fetchObservedTags = Effect.fn("AWS.CloudMap.fetchObservedTags")(fun
 ) {
   const tags = yield* sd.listTagsForResource({ ResourceARN: resourceArn }).pipe(
     Effect.map((response) => response.Tags ?? []),
-    Effect.catch(() => Effect.succeed([] as sd.Tag[])),
+    Effect.orElseSucceed(() => [] as sd.Tag[]),
   );
   return Object.fromEntries(tags.map((tag) => [tag.Key, tag.Value]));
 });

@@ -294,7 +294,7 @@ export const ServerlessCacheProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* elasticache
           .listTagsForResource({ ResourceName: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.TagList);
       });
 

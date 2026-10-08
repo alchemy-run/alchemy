@@ -170,7 +170,7 @@ export const waitForAliasSettled = Effect.fn("AWS.LexV2.waitForAliasSettled")(fu
 export const readLexTags = Effect.fn("AWS.LexV2.readLexTags")(function* (arn: string) {
   const response = yield* lexm
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

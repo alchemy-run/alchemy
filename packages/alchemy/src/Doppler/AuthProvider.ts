@@ -87,7 +87,7 @@ export const login = Effect.gen(function* () {
 
   const openFailed = yield* Interaction.openUrl(authorization.auth_url).pipe(
     Effect.as(false),
-    Effect.catch(() => Effect.succeed(true)),
+    Effect.orElseSucceed(() => true),
   );
 
   // Show the "waiting" prompt for as long as polling takes; the prompt itself

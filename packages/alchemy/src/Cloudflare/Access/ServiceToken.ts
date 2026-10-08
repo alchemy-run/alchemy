@@ -345,7 +345,7 @@ const findTokenByName = (acct: string, name: string) =>
     Stream.filter((t): t is ObservedToken => t.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 // Skip no-op PUTs while treating an unset prop as "keep whatever Cloudflare

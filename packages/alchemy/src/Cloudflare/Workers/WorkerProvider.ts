@@ -1340,7 +1340,7 @@ export const LiveWorkerProvider = () =>
                   : [],
               ),
             ),
-            Effect.catch(() => Effect.succeed([])),
+            Effect.orElseSucceed(() => []),
           );
 
           const desiredSet = new Set(desired);
@@ -1397,7 +1397,7 @@ export const LiveWorkerProvider = () =>
               Effect.map((r) =>
                 (r.result ?? []).find((d) => d.hostname === hostname && d.service !== scriptName),
               ),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.orElseSucceed(() => undefined),
             );
             if (otherOwner?.id) {
               return yield* Effect.die(
@@ -1457,7 +1457,7 @@ export const LiveWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const deployments = yield* workers.listScriptDeployments({ accountId, scriptName }).pipe(
           Effect.map((response) => response.deployments ?? []),
-          Effect.catch(() => Effect.succeed([])),
+          Effect.orElseSucceed(() => []),
         );
         const latest = [...deployments].sort((a, b) => b.createdOn.localeCompare(a.createdOn))[0];
         const version = latest?.versions?.reduce(
@@ -1571,7 +1571,7 @@ export const LiveWorkerProvider = () =>
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(Effect.orElseSucceed(() => undefined));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1661,7 +1661,7 @@ export const LiveWorkerProvider = () =>
               : [];
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(Effect.orElseSucceed(() => undefined));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -1794,7 +1794,7 @@ export const LiveWorkerProvider = () =>
                     : [],
                 ),
               ),
-              Effect.catch(() => Effect.succeed([])),
+              Effect.orElseSucceed(() => []),
             ),
           ),
           // Bounded: this issues one request per zone, so a Worker with routes
@@ -1869,7 +1869,7 @@ export const LiveWorkerProvider = () =>
 
             const zoneRoutes = yield* workers.listRoutes({ zoneId: route.zoneId }).pipe(
               Effect.map((response) => response.result ?? []),
-              Effect.catch(() => Effect.succeed([])),
+              Effect.orElseSucceed(() => []),
             );
             const otherOwner = zoneRoutes.find(
               (candidate) =>
@@ -1911,7 +1911,7 @@ export const LiveWorkerProvider = () =>
                             candidate.pattern === route.pattern && candidate.script === scriptName,
                         ),
                       ),
-                      Effect.catch(() => Effect.succeed(undefined)),
+                      Effect.orElseSucceed(() => undefined),
                     );
                     if (!match?.id) {
                       return yield* originalError;
@@ -3382,7 +3382,7 @@ export const LiveWorkerProvider = () =>
           existingSettings ??
           (yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }).pipe(
             Effect.map((s) => s as typeof s | undefined),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           ));
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
@@ -3984,7 +3984,7 @@ export const LiveWorkerProvider = () =>
           const live = new Set(
             yield* workers.listDomains({ accountId, service: name }).pipe(
               Effect.map((r) => (r.result ?? []).flatMap((d) => (d.hostname ? [d.hostname] : []))),
-              Effect.catch(() => Effect.succeed([] as string[])),
+              Effect.orElseSucceed(() => [] as string[]),
             ),
           );
           const serving = [
@@ -4016,7 +4016,7 @@ export const LiveWorkerProvider = () =>
                 d.hostname && d.zoneId ? [[d.hostname, d.zoneId] as const] : [],
               ),
             ),
-            Effect.catch(() => Effect.succeed([])),
+            Effect.orElseSucceed(() => []),
           );
           const reconciled = yield* reconcileDomains(
             name,
@@ -5249,7 +5249,7 @@ export const LiveWorkerProvider = () =>
             .listDomains({ accountId: output.accountId, service: output.workerName })
             .pipe(
               Effect.map((r) => r.result ?? []),
-              Effect.catch(() => Effect.succeed([])),
+              Effect.orElseSucceed(() => []),
             );
           // Remove our redirect rules from each affected zone's dynamic
           // redirect entrypoint *before* detaching the domains — the live

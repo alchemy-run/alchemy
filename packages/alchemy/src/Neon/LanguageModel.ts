@@ -281,7 +281,7 @@ const httpError = (
     // Never retain upstream bodies, headers or request objects in public errors.
     const body = yield* response.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ErrorBody)),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     const status = response.status;
     if (status === 403 && body?.error.message === "ai gateway not enabled for account")

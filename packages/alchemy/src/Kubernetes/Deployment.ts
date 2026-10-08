@@ -612,7 +612,7 @@ export const DeploymentProvider = () =>
             Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             // Transient unreachability must not read as "gone" — keep the
             // persisted state and let reconcile converge.
-            Effect.catch(() => Effect.succeed("unreachable" as const)),
+            Effect.orElseSucceed(() => "unreachable" as const),
           );
           if (transport === undefined) return undefined;
           if (transport === "unreachable") return output;
@@ -623,7 +623,7 @@ export const DeploymentProvider = () =>
           if (!anchor) return output;
           const observed = yield* readObject({ transport, object: anchor }).pipe(
             Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-            Effect.catch(() => Effect.succeed(output)),
+            Effect.orElseSucceed(() => output),
           );
           if (observed === undefined) return undefined;
           return output;
@@ -830,7 +830,7 @@ export const DeploymentProvider = () =>
           // resources that outlive it (image repository, identity role).
           const transport = yield* adapter
             .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(Effect.orElseSucceed(() => undefined));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] }).pipe(
               Effect.catch(() => Effect.void),

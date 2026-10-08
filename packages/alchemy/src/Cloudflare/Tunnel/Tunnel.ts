@@ -248,7 +248,7 @@ export const TunnelProvider = () =>
             accountId: acct,
             tunnelId: output.tunnelId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
       }
       if (!observed) {
         observed = yield* findTunnelByName(name);
@@ -357,7 +357,7 @@ export const TunnelProvider = () =>
                   })),
                 ),
             ),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
       const name = yield* createTunnelName(id, olds?.name);

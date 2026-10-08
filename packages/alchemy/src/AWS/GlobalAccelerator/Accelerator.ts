@@ -202,7 +202,7 @@ const findAcceleratorByName = Effect.fn(function* (name: string) {
 const fetchTags = Effect.fn(function* (resourceArn: string) {
   return yield* withGaRegion(ga.listTagsForResource({ ResourceArn: resourceArn })).pipe(
     Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 });
 

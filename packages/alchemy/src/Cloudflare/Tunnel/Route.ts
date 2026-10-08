@@ -253,7 +253,7 @@ export const RouteProvider = () =>
           // Idempotent delete: distilled doesn't tag NotFound on
           // teamnet/routes/{id}, so we swallow read-side failure
           // wholesale. A "delete a deleted route" is not an error.
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         );
     }),
     list: Effect.fn(function* () {
@@ -337,7 +337,7 @@ const findRouteByNetwork = (
       // canonical `Tunnel.ts` template: swallow read-side
       // errors so observation falls through to "missing" and
       // the ensure step can recover.
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
 
 const toObserved = (r: {
@@ -372,7 +372,7 @@ const observe = Effect.fn(function* (
     // error and fall through to the list scan.
     const raw = yield* zeroTrust
       .getNetworkRoute({ accountId: acct, routeId })
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      .pipe(Effect.orElseSucceed(() => undefined));
     const got = raw ? toObserved(raw) : undefined;
     if (got) return got;
   }

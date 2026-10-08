@@ -34,7 +34,7 @@ export const AccessLive = Layer.effect(
             (response.headers.get("location")?.includes("cloudflareaccess.com") ?? false),
         ),
         Effect.timeout(1000),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       ),
     );
     const login = (domain: string) =>

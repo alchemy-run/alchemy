@@ -173,7 +173,7 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
         Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make(result.value) })),
       ),
       Effect.map(({ status }) => status),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     return {
       id: result.id ?? "unknown",

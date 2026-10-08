@@ -230,7 +230,7 @@ export const ReplicationSubnetGroupProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dms
           .listTagsForResource({ ResourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.TagList);
       });
 

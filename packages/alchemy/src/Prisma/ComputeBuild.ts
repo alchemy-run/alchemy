@@ -564,7 +564,7 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
   }
   const indexStat = yield* fs
     .stat(path.join(sourceDir, indexPage))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   if (indexStat?.type !== "File") {
     return yield* Effect.fail(
       new Error(`Static site build did not produce ${indexPage} inside ${sourceDir}.`),
@@ -841,7 +841,7 @@ const resolveNestjsCompiledEntrypoint = Effect.fn(function* (appPath: string) {
   for (const candidate of candidates) {
     const stat = yield* fs
       .stat(path.join(appPath, candidate))
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      .pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type === "File") return candidate;
   }
 
@@ -1019,7 +1019,7 @@ const readDirectoryEntries = Effect.fn(function* (directory: string) {
       const file = path.join(directory, name);
       const isSymlink = yield* fs.readLink(file).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (isSymlink) {
         return { name, type: "SymbolicLink" } satisfies DirectoryEntry;
@@ -1048,7 +1048,7 @@ const materializeBunNodeModuleAliases = Effect.fn(function* (
 
   for (const entry of yield* fs.readDirectory(aliasRoot)) {
     const source = path.join(aliasRoot, entry);
-    const stat = yield* fs.stat(source).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const stat = yield* fs.stat(source).pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type !== "Directory") continue;
 
     if (entry.startsWith("@")) {
@@ -1240,9 +1240,7 @@ const makeTempArtifactDir = Effect.fn(function* (leaf = "app") {
 
 const hasRootFile = Effect.fn(function* (appPath: string, filenames: readonly string[]) {
   const fs = yield* FileSystem.FileSystem;
-  const entries = yield* fs
-    .readDirectory(appPath)
-    .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+  const entries = yield* fs.readDirectory(appPath).pipe(Effect.orElseSucceed(() => [] as string[]));
   return entries.some((entry) => filenames.includes(entry));
 });
 
@@ -1302,9 +1300,7 @@ const readNestjsOutDir = Effect.fn(function* (appPath: string) {
   const path = yield* Path.Path;
   for (const fileName of NEST_TSCONFIG_FILENAMES) {
     const filePath = path.join(appPath, fileName);
-    const text = yield* fs
-      .readFileString(filePath)
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const text = yield* fs.readFileString(filePath).pipe(Effect.orElseSucceed(() => undefined));
     if (text === undefined) continue;
     const outDir = yield* parseTsconfigOutDir(text);
     if (outDir !== undefined) return outDir;
@@ -1319,7 +1315,7 @@ const parseTsconfigOutDir = Effect.fn(function* (content: string) {
         compilerOptions?: { outDir?: unknown };
       },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-  }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  }).pipe(Effect.orElseSucceed(() => undefined));
   const outDir = parsed?.compilerOptions?.outDir;
   return typeof outDir === "string" ? normalizeRelativePath(outDir) : undefined;
 });
@@ -1329,7 +1325,7 @@ const readJsonObjectFile = Effect.fn(function* (directory: string, fileName: str
   const path = yield* Path.Path;
   const text = yield* fs
     .readFileString(path.join(directory, fileName))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return undefined;
   return yield* Effect.try({
     try: () => {
@@ -1337,12 +1333,12 @@ const readJsonObjectFile = Effect.fn(function* (directory: string, fileName: str
       return isRecord(parsed) ? parsed : undefined;
     },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-  }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  }).pipe(Effect.orElseSucceed(() => undefined));
 });
 
 const directoryExists = Effect.fn(function* (dirPath: string) {
   const fs = yield* FileSystem.FileSystem;
-  const stat = yield* fs.stat(dirPath).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const stat = yield* fs.stat(dirPath).pipe(Effect.orElseSucceed(() => undefined));
   return stat?.type === "Directory";
 });
 
@@ -1355,10 +1351,8 @@ const stageTracedPath = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const symlinkTarget = yield* fs
-    .readLink(sourcePath)
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
-  const stat = yield* fs.stat(sourcePath).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const symlinkTarget = yield* fs.readLink(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
+  const stat = yield* fs.stat(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
   if (stat === undefined && symlinkTarget === undefined) {
     return yield* Effect.fail(
       new Error(`NestJS dependency disappeared while staging: ${sourcePath}`),
@@ -1485,7 +1479,7 @@ const assertSafeStagingDestination = Effect.fn(function* (destination: string, t
   while (!(yield* fs.exists(existingAncestor))) {
     const isDanglingSymlink = yield* fs.readLink(existingAncestor).pipe(
       Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
+      Effect.orElseSucceed(() => false),
     );
     if (isDanglingSymlink) {
       return yield* Effect.fail(
@@ -1630,7 +1624,7 @@ const packageCliCommand = Effect.fn(function* (
     ),
   );
   for (const candidate of candidates) {
-    const stat = yield* fs.stat(candidate).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const stat = yield* fs.stat(candidate).pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type === "File" && (process.platform === "win32" || (stat.mode & 0o111) !== 0)) {
       const argText = args.map(shellQuote).join(" ");
       // Package-manager shims resolve dependencies relative to their own path.
