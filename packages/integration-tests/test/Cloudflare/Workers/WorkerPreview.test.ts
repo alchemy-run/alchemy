@@ -15,12 +15,13 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
 
-const envScript = `export default { fetch(_request, env) { return Response.json({ linear: env.LINEAR, namedCurve: env.SIGNING_KEY.algorithm.namedCurve }); } };`;
+const envScript = `export default { fetch(_request, env) { return new Response([env.LINEAR.teamIds.FIN, env.LINEAR.stateIds["FIN/Triage"], env.LINEAR.stateIds["In Review"], env.SIGNING_KEY.algorithm.namedCurve].join("|")); } };`;
 
 const linearConfig = {
   teamIds: { FIN: "team-fin" },
   stateIds: { "FIN/Triage": "state-1", "In Review": "state-2" },
 };
+const envMarker = "team-fin|state-1|state-2|P-256";
 
 const ECDSA_P256_JWK = {
   kty: "EC",
@@ -139,11 +140,10 @@ describe.concurrent(
             }),
           );
 
-          const expected = JSON.stringify({ linear: linearConfig, namedCurve: "P-256" });
-          yield* expectUrlContains(parent.url!, expected, {
+          yield* expectUrlContains(parent.url!, envMarker, {
             label: "parent sees the payloads as declared",
           });
-          yield* expectUrlContains(preview.url!, expected, {
+          yield* expectUrlContains(preview.url!, envMarker, {
             label: "Preview sees the same payloads as its parent",
           });
 
