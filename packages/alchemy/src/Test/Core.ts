@@ -372,7 +372,7 @@ export const toEffect = <A, ROut = any>(
         : body;
     return yield* locally.pipe(
       provideFreshArtifactStore,
-      Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
+      Effect.provideService(ConfigProvider, configProvider),
       Effect.provideService(StackConfigOverrides, { profile: options.profile }),
     );
   }).pipe(
@@ -646,7 +646,7 @@ export const scratchStack = <ROut>(
           Effect.provide(compiled.services),
         ),
       ),
-      Effect.provide(Layer.succeed(Stage, stage)),
+      Effect.provideService(Stage, stage),
       provideFreshArtifactStore,
     );
 
@@ -659,7 +659,7 @@ export const scratchStack = <ROut>(
       Effect.flatMap((compiled: any) =>
         pinToFloci(Plan.make(compiled, planOptions ?? {})).pipe(Effect.provide(compiled.services)),
       ),
-      Effect.provide(Layer.succeed(Stage, stage)),
+      Effect.provideService(Stage, stage),
       provideFreshArtifactStore,
     );
 

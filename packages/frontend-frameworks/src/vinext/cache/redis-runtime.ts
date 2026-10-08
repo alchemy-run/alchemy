@@ -38,9 +38,7 @@ const open = (url: string): Promise<Connection> => {
   const existing = connections.get(url);
   if (existing) return existing;
   const scope = Scope.makeUnsafe();
-  const created = Effect.runPromise(
-    connect(url).pipe(Effect.provide(Layer.succeed(Scope.Scope, scope))),
-  );
+  const created = Effect.runPromise(connect(url).pipe(Effect.provideService(Scope.Scope, scope)));
   connections.set(url, created);
   created.catch(() => connections.delete(url));
   return created;

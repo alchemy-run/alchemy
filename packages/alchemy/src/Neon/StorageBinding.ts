@@ -147,7 +147,7 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
       });
       const client = Effect.gen(function* () {
         return yield* makeStorageClient(yield* config, yield* required(bucketKey));
-      }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
+      }).pipe(Effect.provideService(HttpClient.HttpClient, http));
       return {
         get: (key: string) => client.pipe(Effect.flatMap((c) => c.get(key))),
         head: (key: string) => client.pipe(Effect.flatMap((c) => c.head(key))),
