@@ -352,7 +352,9 @@ export const AuthProvider =
       const environment =
         service.environment === undefined
           ? []
-          : Schema.decodeUnknownSync(EnvironmentVariables)(service.environment);
+          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+              Effect.orDie,
+            );
       if (service.readEnvironment !== undefined && environment.length === 0) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements readEnvironment but does not ` +

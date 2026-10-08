@@ -8,6 +8,8 @@ const ErrorEnvelope = Schema.Struct({
 });
 type ErrorEnvelope = typeof ErrorEnvelope.Type;
 
+// Shared by sync/Promise call sites (Response.json, node:http), not Effect code.
+// oxlint-disable-next-line effecttsgo/schema-sync
 const encodeErrorResponse = Schema.encodeSync(ErrorEnvelope);
 const decodeErrorResponse = Schema.decodeUnknownResult(ErrorEnvelope);
 

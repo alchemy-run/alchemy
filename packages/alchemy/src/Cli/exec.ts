@@ -240,9 +240,11 @@ export const devKeepAlive = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Ef
     ),
   );
 
-const makeExec = () => {
-  const options = Schema.decodeSync(DevOptions)(JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!));
-  return Effect.gen(function* () {
+const makeExec = () =>
+  Effect.gen(function* () {
+    const options = yield* Schema.decodeEffect(Schema.fromJsonString(DevOptions))(
+      process.env.ALCHEMY_EXEC_OPTIONS!,
+    ).pipe(Effect.orDie);
     yield* installShutdownFeedback;
     // Subscribe to the spawner's sidecar log stream BEFORE the stack runs:
     // this process owns the terminal renderer, so sidecar output printed
@@ -260,7 +262,6 @@ const makeExec = () => {
         ? runBunDevWatcher(options)
         : runNodeDevWatcher(options);
   }).pipe(Effect.provide(services), Effect.scoped, handleCliErrors);
-};
 
 /** Fully wired sidecar CLI program. */
 export const exec: () => Effect.Effect<void, Effect.Error<ReturnType<typeof makeExec>>> = makeExec;
