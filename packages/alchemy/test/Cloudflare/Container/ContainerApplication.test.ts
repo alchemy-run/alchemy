@@ -1,4 +1,5 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { assert, describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -94,6 +95,68 @@ export class Box extends DurableObject {
 }
 export default { fetch() { return new Response("ok"); } };
 `;
+
+/**
+ * A Worker whose Durable Object reports the images its application pins
+ * (\`ctx.container.images\`, name to reference) at \`/images\`, and on any other
+ * path starts the pinned \`echo\` image and proxies the request to the echo
+ * server on its port 8080.
+ */
+const pinnedImagesScript = `
+import { DurableObject } from "cloudflare:workers";
+export class Box extends DurableObject {
+  async fetch(request) {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/images") return Response.json(this.ctx.container.images);
+    if (!this.ctx.container.running) {
+      this.ctx.container.start({ image: this.ctx.container.images.echo, enableInternet: false });
+    }
+    const port = this.ctx.container.getTcpPort(8080);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await port.fetch("http://container" + pathname);
+      } catch (error) {
+        if (attempt >= 90) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+}
+export default {
+  fetch(request, env) {
+    return env.BOX.get(env.BOX.idFromName("one")).fetch(request);
+  },
+};
+`;
+
+/** The application after a destroy: polled until Cloudflare no longer knows it. */
+const applicationAfterDestroy = (accountId: string, applicationId: string) =>
+  Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (app) => app === undefined,
+      times: 8,
+    }),
+  );
+
+/** `GET url`, repeated until the Worker answers 200 with a body that `ready` accepts. */
+const bodyWhenReady = (url: string, ready: (body: string) => boolean) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* Effect.gen(function* () {
+      const response = yield* client.get(url);
+      return { status: response.status, body: yield* response.text };
+    }).pipe(
+      Effect.timeout("150 seconds"),
+      Effect.repeat({
+        schedule: Schedule.spaced("3 seconds"),
+        until: (response) => response.status === 200 && ready(response.body),
+        times: 40,
+      }),
+      Effect.map((response) => response.body),
+    );
+  });
 
 /** Rewrite the persisted attributes of the scratch row for `fqn`. */
 const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) => A) =>
@@ -1760,20 +1823,138 @@ describe.concurrent(
           });
 
           yield* scratch.destroy();
-          const deleted = yield* Containers.getContainerApplication({
-            accountId,
-            applicationId: namespaceId,
-          }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              until: (app) => app === undefined,
-              times: 8,
-            }),
-          );
-          expect(deleted).toBeUndefined();
+          expect(yield* applicationAfterDestroy(accountId, namespaceId)).toBeUndefined();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:worker"], timeout: 300_000 },
+    );
+
+    // The Worker and the application form a cycle. When an existing Worker
+    // gains the container, the application's first reconcile sees the Worker's
+    // previous namespaces, which have none for the class; the converge pass
+    // creates the application once the Worker's upload has made the namespace.
+    test.provider(
+      "an existing Worker gains a durable_object application without an image",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          const program = (attached: boolean) =>
+            Effect.gen(function* () {
+              const container = Cloudflare.Container("GainedBox", {
+                className: "Box",
+                schedulingPolicy: "durable_object",
+              });
+              const worker = yield* Cloudflare.Worker("GainedBoxWorker", {
+                script: imagelessScript,
+                env: attached ? { BOX: container } : {},
+              });
+              return {
+                namespaces: worker.durableObjectNamespaces,
+                app: attached ? yield* container.Application : undefined,
+              };
+            });
+
+          const before = yield* scratch.deploy(program(false));
+          expect(before.namespaces.Box).toBeUndefined();
+
+          const after = yield* scratch.deploy(program(true));
+          const namespaceId = after.namespaces.Box;
+          assert(namespaceId);
+          expect(after.app?.applicationId).toBe(namespaceId);
+          expect(
+            yield* Containers.getContainerApplication({ accountId, applicationId: namespaceId }),
+          ).toMatchObject({
+            name: after.app?.applicationName,
+            schedulingPolicy: "durable_object",
+            durableObjects: { namespaceId },
+          });
+
+          const unchanged = yield* scratch.plan(program(true));
+          expect(unchanged.resources.GainedBox.action).toBe("noop");
+          expect(unchanged.resources.GainedBoxWorker.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* applicationAfterDestroy(accountId, namespaceId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker"], timeout: 300_000 },
+    );
+
+    test.provider(
+      "pins images that the Durable Object of an imageless application can start",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          // An image in the account's registry, pushed by an ordinary application.
+          const source = Cloudflare.Container("PinnedSource", {
+            image: "mendhak/http-https-echo:latest",
+          });
+          const pushed = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { app: yield* source.Application };
+            }),
+          );
+          const pushedRef = pushed.app.configuration.image!;
+          expect(pushedRef).toMatch(/^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/);
+
+          const program = Effect.gen(function* () {
+            const container = Cloudflare.Container("PinnedBox", {
+              className: "Box",
+              schedulingPolicy: "durable_object",
+              images: { echo: { image: pushedRef } },
+            });
+            const worker = yield* Cloudflare.Worker("PinnedBoxWorker", {
+              script: pinnedImagesScript,
+              env: { BOX: container },
+            });
+            // The source stays, so its image stays in the registry.
+            yield* source.Application;
+            const app = yield* container.Application;
+            return {
+              workerId: worker.workerId,
+              url: worker.url.as<string>(),
+              namespaces: worker.durableObjectNamespaces,
+              app,
+            };
+          });
+
+          const deployed = yield* scratch.deploy(program);
+          const namespaceId = deployed.namespaces.Box;
+          assert(namespaceId);
+          expect(deployed.app.applicationId).toBe(namespaceId);
+          expect(deployed.app.images).toEqual({ echo: pushedRef });
+
+          // The Worker version names the application and carries its images,
+          // as wrangler's does.
+          const version = yield* workers.getBetaWorkerVersion({
+            accountId,
+            workerId: deployed.workerId,
+            versionId: "latest",
+          });
+          expect(version.containers).toEqual([
+            { className: "Box", name: deployed.app.applicationName, images: { echo: pushedRef } },
+          ]);
+
+          // The Durable Object sees the pinned image by name, and starts it.
+          const images = yield* bodyWhenReady(`${deployed.url}/images`, (body) =>
+            body.includes(pushedRef),
+          );
+          expect(JSON.parse(images)).toEqual({ echo: pushedRef });
+          const echoed = yield* bodyWhenReady(`${deployed.url}/echo`, (body) =>
+            body.includes('"path"'),
+          );
+          expect(JSON.parse(echoed)).toMatchObject({ path: "/echo" });
+
+          const unchanged = yield* scratch.plan(program);
+          expect(unchanged.resources.PinnedBox.action).toBe("noop");
+          expect(unchanged.resources.PinnedBoxWorker.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* applicationAfterDestroy(accountId, namespaceId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker"], timeout: 900_000 },
     );
   },
 );
