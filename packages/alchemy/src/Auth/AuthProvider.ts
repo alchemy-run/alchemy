@@ -431,19 +431,17 @@ export const AuthProvider =
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
-          Effect.gen(function* () {
-            return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
-              Effect.mapError((cause) =>
-                AuthError.make({
-                  message:
-                    `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                    `for this version of alchemy. ` +
-                    `${reconfigureHint(name, profileName)}`,
-                  cause,
-                }),
-              ),
-            );
-          }),
+          Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
+            Effect.mapError((cause) =>
+              AuthError.make({
+                message:
+                  `Stored ${name} configuration in profile '${profileName}' is not valid ` +
+                  `for this version of alchemy. ` +
+                  `${reconfigureHint(name, profileName)}`,
+                cause,
+              }),
+            ),
+          ),
       };
 
       providers[name] = provider;

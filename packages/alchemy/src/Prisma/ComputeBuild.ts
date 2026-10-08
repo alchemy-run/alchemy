@@ -573,35 +573,33 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
 
   const temp = yield* makeTempArtifactDir();
   const budget = makeStagingBudget();
-  const build = Effect.gen(function* () {
-    return yield* withStagingDeadline(
-      Effect.gen(function* () {
-        const publicDir = path.join(temp.artifactDir, "public");
-        yield* copyDirectoryPreserveSymlinks(sourceDir, publicDir, temp.artifactDir, cwd, budget);
-        const entrypoint = "server.mjs";
-        const serverPath = path.join(temp.artifactDir, entrypoint);
-        const source = staticSiteServerSource({
-          indexPage,
-          spa: options.spa ?? false,
-        });
-        yield* accountStagingEntry(
-          budget,
-          serverPath,
-          yield* Effect.sync(() => new TextEncoder().encode(source).byteLength),
-        );
-        yield* fs.writeFileString(serverPath, source);
-        return {
-          directory: temp.artifactDir,
-          entrypoint,
-          defaultPort: 8080,
-          archiveIgnorePrefix: "public",
-          requiredFiles: [`public/${indexPage}`],
-          cleanup: temp.cleanup,
-        };
-      }),
-      budget,
-    );
-  });
+  const build = withStagingDeadline(
+    Effect.gen(function* () {
+      const publicDir = path.join(temp.artifactDir, "public");
+      yield* copyDirectoryPreserveSymlinks(sourceDir, publicDir, temp.artifactDir, cwd, budget);
+      const entrypoint = "server.mjs";
+      const serverPath = path.join(temp.artifactDir, entrypoint);
+      const source = staticSiteServerSource({
+        indexPage,
+        spa: options.spa ?? false,
+      });
+      yield* accountStagingEntry(
+        budget,
+        serverPath,
+        yield* Effect.sync(() => new TextEncoder().encode(source).byteLength),
+      );
+      yield* fs.writeFileString(serverPath, source);
+      return {
+        directory: temp.artifactDir,
+        entrypoint,
+        defaultPort: 8080,
+        archiveIgnorePrefix: "public",
+        requiredFiles: [`public/${indexPage}`],
+        cleanup: temp.cleanup,
+      };
+    }),
+    budget,
+  );
 
   return yield* build.pipe(
     Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
@@ -722,52 +720,50 @@ const buildFramework = Effect.fn(function* (options: {
 
   const temp = yield* makeTempArtifactDir();
   const budget = makeStagingBudget();
-  const build = Effect.gen(function* () {
-    return yield* withStagingDeadline(
-      Effect.gen(function* () {
-        yield* copyDirectoryPreserveSymlinks(
-          path.join(options.appPath, options.sourceDir),
-          temp.artifactDir,
-          temp.artifactDir,
-          options.appPath,
-          budget,
-        );
-        yield* materializeBunNodeModuleAliases(
-          temp.artifactDir,
-          path.join(options.appPath, options.sourceDir),
-          budget,
-        );
-        const entrypoint = yield* resolveFrameworkEntrypoint(
-          temp.artifactDir,
-          options.entrypoint,
-          options.allowNestedEntrypoint ?? false,
-        );
-        const extrasBaseDir = options.extrasRelativeToEntrypoint
-          ? path.dirname(path.join(temp.artifactDir, entrypoint))
-          : temp.artifactDir;
-        for (const extra of options.extras ?? []) {
-          const extraSource = path.join(options.appPath, extra.from);
-          if (yield* directoryExists(extraSource)) {
-            const extraTarget = path.join(extrasBaseDir, extra.to);
-            yield* copyDirectoryPreserveSymlinks(
-              extraSource,
-              extraTarget,
-              temp.artifactDir,
-              options.appPath,
-              budget,
-            );
-          }
+  const build = withStagingDeadline(
+    Effect.gen(function* () {
+      yield* copyDirectoryPreserveSymlinks(
+        path.join(options.appPath, options.sourceDir),
+        temp.artifactDir,
+        temp.artifactDir,
+        options.appPath,
+        budget,
+      );
+      yield* materializeBunNodeModuleAliases(
+        temp.artifactDir,
+        path.join(options.appPath, options.sourceDir),
+        budget,
+      );
+      const entrypoint = yield* resolveFrameworkEntrypoint(
+        temp.artifactDir,
+        options.entrypoint,
+        options.allowNestedEntrypoint ?? false,
+      );
+      const extrasBaseDir = options.extrasRelativeToEntrypoint
+        ? path.dirname(path.join(temp.artifactDir, entrypoint))
+        : temp.artifactDir;
+      for (const extra of options.extras ?? []) {
+        const extraSource = path.join(options.appPath, extra.from);
+        if (yield* directoryExists(extraSource)) {
+          const extraTarget = path.join(extrasBaseDir, extra.to);
+          yield* copyDirectoryPreserveSymlinks(
+            extraSource,
+            extraTarget,
+            temp.artifactDir,
+            options.appPath,
+            budget,
+          );
         }
-        return {
-          directory: temp.artifactDir,
-          entrypoint,
-          defaultPort: options.defaultPort,
-          cleanup: temp.cleanup,
-        };
-      }),
-      budget,
-    );
-  });
+      }
+      return {
+        directory: temp.artifactDir,
+        entrypoint,
+        defaultPort: options.defaultPort,
+        cleanup: temp.cleanup,
+      };
+    }),
+    budget,
+  );
 
   return yield* build.pipe(
     Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),

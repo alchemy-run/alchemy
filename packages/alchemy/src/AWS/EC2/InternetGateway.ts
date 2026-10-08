@@ -483,31 +483,29 @@ const waitForInternetGatewayDeleted = (
   internetGatewayId: string,
   session: ScopedPlanStatusSession,
 ) =>
-  Effect.gen(function* () {
-    yield* Effect.retry(
-      Effect.gen(function* () {
-        const result = yield* ec2
-          .describeInternetGateways({ InternetGatewayIds: [internetGatewayId] })
-          .pipe(
-            Effect.tapError(Effect.logDebug),
-            Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
-              Effect.succeed({ InternetGateways: [] }),
-            ),
-          );
-
-        if (!result.InternetGateways || result.InternetGateways.length === 0) {
-          return; // Successfully deleted
-        }
-
-        // Still exists, fail to trigger retry
-        return yield* Effect.fail(new Error("Internet gateway still exists"));
-      }),
-      {
-        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
-          Schedule.tap(({ attempt }) =>
-            session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
+  Effect.retry(
+    Effect.gen(function* () {
+      const result = yield* ec2
+        .describeInternetGateways({ InternetGatewayIds: [internetGatewayId] })
+        .pipe(
+          Effect.tapError(Effect.logDebug),
+          Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+            Effect.succeed({ InternetGateways: [] }),
           ),
+        );
+
+      if (!result.InternetGateways || result.InternetGateways.length === 0) {
+        return; // Successfully deleted
+      }
+
+      // Still exists, fail to trigger retry
+      return yield* Effect.fail(new Error("Internet gateway still exists"));
+    }),
+    {
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
         ),
-      },
-    );
-  });
+      ),
+    },
+  );

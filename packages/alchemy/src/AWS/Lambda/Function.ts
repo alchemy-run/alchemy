@@ -1794,11 +1794,7 @@ export const FunctionProvider = () =>
 
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
-          Effect.tapError((e) =>
-            Effect.gen(function* () {
-              yield* Effect.logDebug(e);
-            }),
-          ),
+          Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
             while: (e) => isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(Schedule.tap(() => noteCreateDependencyWait())),

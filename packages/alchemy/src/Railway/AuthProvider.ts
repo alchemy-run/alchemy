@@ -292,32 +292,30 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       profileName: string,
       config: RailwayAuthConfig,
     ): Effect.Effect<RailwayResolvedCredentials, AuthError | NeedsReauth> =>
-      Effect.gen(function* () {
-        return yield* Match.value(config).pipe(
-          Match.when(
-            { method: "env" },
-            Effect.fn(function* () {
-              const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
-              if (!token) {
-                return yield* AuthError.make({
-                  message: `Railway env credentials not found. Set ${RAILWAY_API_TOKEN_ENV}.`,
-                });
-              }
-              const apiBaseUrl = yield* resolveApiBaseUrl();
-              return {
-                type: "token" as const,
-                token,
-                tokenKind: "account" as const,
-                apiBaseUrl,
-                source: { type: "env" as const, details: RAILWAY_API_TOKEN_ENV },
-              } satisfies RailwayResolvedCredentials;
-            }),
-          ),
-          Match.when({ method: "stored" }, readStoredToken),
-          Match.when({ method: "oauth" }, readStoredToken),
-          Match.exhaustive,
-        );
-      });
+      Match.value(config).pipe(
+        Match.when(
+          { method: "env" },
+          Effect.fn(function* () {
+            const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
+            if (!token) {
+              return yield* AuthError.make({
+                message: `Railway env credentials not found. Set ${RAILWAY_API_TOKEN_ENV}.`,
+              });
+            }
+            const apiBaseUrl = yield* resolveApiBaseUrl();
+            return {
+              type: "token" as const,
+              token,
+              tokenKind: "account" as const,
+              apiBaseUrl,
+              source: { type: "env" as const, details: RAILWAY_API_TOKEN_ENV },
+            } satisfies RailwayResolvedCredentials;
+          }),
+        ),
+        Match.when({ method: "stored" }, readStoredToken),
+        Match.when({ method: "oauth" }, readStoredToken),
+        Match.exhaustive,
+      );
 
     const logout = (_profileName: string, config: RailwayAuthConfig) =>
       Match.value(config).pipe(

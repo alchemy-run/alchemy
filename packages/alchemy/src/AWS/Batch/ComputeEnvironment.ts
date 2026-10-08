@@ -589,8 +589,8 @@ export const ComputeEnvironmentProvider = () =>
 
           // Ensure — create if missing, then wait until the environment
           // settles to VALID (Fargate CEs settle in seconds).
-          const create = Effect.gen(function* () {
-            yield* batch.createComputeEnvironment({
+          const create = Effect.asVoid(
+            batch.createComputeEnvironment({
               computeEnvironmentName: name,
               type: desiredManagementType,
               state: desiredState,
@@ -607,8 +607,8 @@ export const ComputeEnvironmentProvider = () =>
                   : undefined,
               serviceRole: news.serviceRole,
               tags: desiredTags,
-            });
-          });
+            }),
+          );
 
           /**
            * Tear down a CE we created in *this* reconcile that settled
