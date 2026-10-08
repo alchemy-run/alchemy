@@ -227,9 +227,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
             ],
             () => Effect.succeed(false),
           ),
-          Effect.catchTag("HttpClientError", (error) =>
-            error.reason._tag === "TransportError" ? Effect.succeed(false) : Effect.fail(error),
-          ),
+          Effect.catchReason("HttpClientError", "TransportError", () => Effect.succeed(false)),
           Effect.repeat({
             times: 8,
             schedule: Schedule.spaced("2 seconds"),

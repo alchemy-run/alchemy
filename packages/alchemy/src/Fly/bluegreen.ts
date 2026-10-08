@@ -443,9 +443,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
             Retry.none,
             Effect.timeout("30 seconds"),
             Effect.catchTag(["Conflict", "GatewayTimeout", "TimeoutError"], () => readback),
-            Effect.catchTag("HttpClientError", (error) =>
-              error.reason._tag === "TransportError" ? readback : Effect.fail(error),
-            ),
+            Effect.catchReason("HttpClientError", "TransportError", () => readback),
           );
       }
       if (!current?.id) return yield* new ReplicaNotCreated({ appName: input.appName, name });
