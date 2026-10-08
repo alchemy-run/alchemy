@@ -88,9 +88,10 @@ const scheduleCompileCacheFlush = (() => {
  * the real CommonJS loader without reading it; that loader's `require()`
  * calls reach the hook again, now in a require context, and are transpiled
  * there. Returning `source: null` directly is rejected by synchronous hooks
- * on older 24.x; Node's default load defers from 24.11.1, alchemy's minimum.
- * A namespaced (reloaded) graph loses its freshness for such files: the
- * CommonJS cache is keyed by path.
+ * on older 24.x; Node's default load defers from 24.11.1 and 25.1
+ * (nodejs/node#59929), alchemy's minimums. A namespaced (reloaded) graph
+ * keeps such files fresh by evicting them from the path-keyed CommonJS
+ * cache between generations (see ../watch/import-watcher.ts).
  */
 const importedCommonJsNeedsNodeLoader = (() => {
   const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
@@ -133,19 +134,24 @@ const resolveSpecifier = (
 };
 
 /**
- * Key for memoizing a resolution, or `undefined` when it must not be. The
- * result of resolving a specifier depends on the importing module's
- * directory, not the module itself (node_modules lookup, package scope,
- * tsconfig discovery and relative paths are all per directory), and on the
- * conditions. A graph of thousands of modules repeats the same handful of
- * specifiers per directory, so each is resolved once.
+ * Key for memoizing a resolution, or `undefined` when it must not be. Inside
+ * `node_modules` the result of resolving a specifier depends on the
+ * importing module's directory, not the module itself (package scope,
+ * node_modules lookup and relative paths are all per directory), and on the
+ * conditions; a graph of thousands of modules repeats the same handful of
+ * specifiers per directory, so each is resolved once. Project files are
+ * keyed individually: a solution-style tsconfig can assign two files of one
+ * directory to different referenced projects with different `paths`.
  */
 const resolutionKey = (specifier: string, context: ResolveHookContext) => {
   const { parentURL } = context;
   if (parentURL === undefined || isForeignSpecifier(specifier)) return undefined;
   const queryIndex = parentURL.search(/[?#]/);
   const parent = queryIndex === -1 ? parentURL : parentURL.slice(0, queryIndex);
-  return `${parent.slice(0, parent.lastIndexOf("/") + 1)}\0${specifier}\0${context.conditions.join(",")}`;
+  const scope = parent.includes("/node_modules/")
+    ? parent.slice(0, parent.lastIndexOf("/") + 1)
+    : parent;
+  return `${scope}\0${specifier}\0${context.conditions.join(",")}`;
 };
 
 /**

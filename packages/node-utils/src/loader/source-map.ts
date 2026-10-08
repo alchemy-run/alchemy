@@ -1,4 +1,5 @@
 import * as inspector from "node:inspector";
+import * as NodeModule from "node:module";
 import { pathToFileURL } from "node:url";
 import type { transformSync } from "rolldown/utils";
 
@@ -63,4 +64,43 @@ export const attachSourceMap = (code: string, map: SourceMapRef, readSource: () 
     );
   }
   return code + (map.file === undefined ? inlineComment(map.text()) : fileComment(map.file));
+};
+
+const supportKey = Symbol.for("@alchemy.run/node-utils/source-map-support");
+
+interface SourceMapSupportLease {
+  holders: number;
+  readonly previous: ReturnType<typeof NodeModule.getSourceMapsSupport>;
+}
+
+/**
+ * Turns Node's source-map support on for as long as any holder of a lease
+ * keeps it, and restores the previous setting once the last one releases
+ * theirs. Transformed sources only reference their maps; Node reads and
+ * applies them to stack traces when this is on. `nodeModules` stays on: a
+ * published alchemy runs its own `lib/` from `node_modules`, and ships maps
+ * back to its `src/`. Leases are counted on `globalThis` because a checkout
+ * can load this module twice (src/ and lib/).
+ */
+export const leaseSourceMapSupport = (): (() => void) => {
+  const leases = globalThis as typeof globalThis & { [supportKey]?: SourceMapSupportLease };
+  let lease = leases[supportKey];
+  if (lease === undefined) {
+    const previous = NodeModule.getSourceMapsSupport();
+    NodeModule.setSourceMapsSupport(true, {
+      nodeModules: true,
+      generatedCode: previous.generatedCode,
+    });
+    lease = leases[supportKey] = { holders: 0, previous };
+  }
+  lease.holders++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--lease.holders > 0) return;
+    delete leases[supportKey];
+    const { enabled, ...options } = lease.previous;
+    NodeModule.setSourceMapsSupport(enabled, options);
+  };
 };

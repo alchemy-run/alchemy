@@ -42,28 +42,37 @@ const withNamespace = (url: string, namespace: string) => {
  * it from the importing module's URL. Specifiers from any other graph pass
  * straight through, and the underlying hooks never see a namespace: it is
  * stripped before they run and added back to what they resolve.
+ *
+ * CommonJS members are the exception to inheritance by URL: Node's CommonJS
+ * loader addresses modules by path, so a member's `require()` calls arrive
+ * with a plain file URL as parent and what they load has none either. The
+ * graph therefore also remembers its members by clean URL, so those files
+ * are resolved by the same hooks and reported through `onImport` too. They
+ * do stay in Node's path-keyed CommonJS cache across generations.
  */
 export const namespaced = (hooks: LoaderHooks, options: NamespaceOptions): LoaderHooks => {
   const { namespace, shouldInvalidate = () => true, onImport } = options;
+  const members = new Set<string>();
   return {
     resolve(specifier, context, nextResolve) {
-      if ((namespaceOf(specifier) ?? namespaceOf(context.parentURL)) !== namespace) {
-        return nextResolve(specifier, context);
-      }
-      const resolved = hooks.resolve(withoutNamespace(specifier), context, nextResolve);
       const parentURL =
         context.parentURL === undefined ? undefined : withoutNamespace(context.parentURL);
-      if (
-        resolved.url.startsWith("file:") &&
-        shouldInvalidate(withoutNamespace(resolved.url), parentURL)
-      ) {
-        return { ...resolved, url: withNamespace(resolved.url, namespace) };
-      }
-      return resolved;
+      const inGraph =
+        namespaceOf(specifier) === namespace ||
+        namespaceOf(context.parentURL) === namespace ||
+        (parentURL !== undefined && members.has(parentURL));
+      if (!inGraph) return nextResolve(specifier, context);
+
+      const resolved = hooks.resolve(withoutNamespace(specifier), context, nextResolve);
+      if (!resolved.url.startsWith("file:")) return resolved;
+      const clean = withoutNamespace(resolved.url);
+      if (!shouldInvalidate(clean, parentURL)) return resolved;
+      members.add(clean);
+      return { ...resolved, url: withNamespace(resolved.url, namespace) };
     },
     load(url, context, nextLoad) {
-      if (namespaceOf(url) !== namespace) return nextLoad(url, context);
       const clean = withoutNamespace(url);
+      if (namespaceOf(url) !== namespace && !members.has(clean)) return nextLoad(url, context);
       onImport?.(clean);
       return hooks.load(clean, context, nextLoad);
     },

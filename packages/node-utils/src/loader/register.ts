@@ -1,7 +1,9 @@
 import * as NodeModule from "node:module";
 import { createHooks, type LoaderOptions } from "./hooks.ts";
+import { leaseSourceMapSupport } from "./source-map.ts";
 
-export type { LoaderHooks, LoaderOptions } from "./hooks.ts";
+export { createHooks, type LoaderHooks, type LoaderOptions } from "./hooks.ts";
+export { importNamespaced, namespaced, type NamespaceOptions } from "./namespace.ts";
 
 export interface OxcLoader {
   unregister(): void;
@@ -25,23 +27,14 @@ export const registerOxc = (options: LoaderOptions = {}): OxcLoader => {
   const existing = registrations[registrationKey];
   if (existing !== undefined) return existing;
 
-  // Transformed sources reference their source maps (see ./source-map.ts);
-  // Node only reads and applies them to stack traces once source-map
-  // support is on. `nodeModules` stays on: a published alchemy runs its own
-  // `lib/` from `node_modules`, and ships maps back to its `src/`.
-  const previousSourceMaps = NodeModule.getSourceMapsSupport();
-  NodeModule.setSourceMapsSupport(true, {
-    nodeModules: true,
-    generatedCode: previousSourceMaps.generatedCode,
-  });
+  const releaseSourceMaps = leaseSourceMapSupport();
   const hooks = NodeModule.registerHooks(createHooks(options));
 
   const loader: OxcLoader = {
     unregister() {
       hooks.deregister();
       if (registrations[registrationKey] === loader) delete registrations[registrationKey];
-      const { enabled, ...options } = previousSourceMaps;
-      NodeModule.setSourceMapsSupport(enabled, options);
+      releaseSourceMaps();
     },
   };
   registrations[registrationKey] = loader;

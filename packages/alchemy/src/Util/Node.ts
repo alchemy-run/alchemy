@@ -79,8 +79,9 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * (`module.registerHooks`) the way `bin/register-dev-mode.js` needs them.
  * Before 24.5 (nodejs/node#59011) a resolve hook's `conditions` were
  * ignored, so the `bun` condition never reached Node's resolver; before
- * 24.11.1 an imported CommonJS module could not `require()` TypeScript
- * (see `importedCommonJsNeedsNodeLoader` in node-utils' register-oxc).
+ * 24.11.1 and 25.1 (nodejs/node#59929) an imported CommonJS module could
+ * not `require()` TypeScript (see `importedCommonJsNeedsNodeLoader` in
+ * node-utils' loader/hooks.ts).
  *
  * This is THE capability gate for running the CLI from source under
  * node: with the hooks installed, the Oxc loader handles every `.ts`/`.tsx`
@@ -91,7 +92,11 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  */
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
-  return (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) || major >= 25;
+  return (
+    (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
+    (major === 25 && minor >= 1) ||
+    major >= 26
+  );
 };
 
 /**

@@ -25,13 +25,19 @@ export interface ImportWatcherOptions
  * evaluates the same files again as new modules; the previous generation's
  * hooks are deregistered once the new one is in.
  *
+ * CommonJS members of the graph live in Node's path-keyed `require` cache,
+ * which no namespace reaches; a new generation evicts the previous one's
+ * files from it so they are evaluated again too.
+ *
  * Bun callers use `BunImportTracker` (./bun-import-tracker.ts): Bun cannot
  * evict evaluated modules, so a change there restarts the process instead.
  */
 export class ImportWatcher<T = unknown> extends DependencyWatcher {
   readonly #specifier: string;
   readonly #options: ImportWatcherOptions;
+  readonly #require = NodeModule.createRequire(import.meta.url);
   #registration: ReturnType<typeof NodeModule.registerHooks> | undefined;
+  #releaseSourceMaps: (() => void) | undefined;
   #closed = false;
 
   constructor(specifier: string, options: ImportWatcherOptions) {
@@ -44,10 +50,14 @@ export class ImportWatcher<T = unknown> extends DependencyWatcher {
     if (this.#closed) throw new Error("ImportWatcher is closed");
     // Loaded here, not at module scope: the exec child imports this file on
     // both runtimes, and the loader's Node hooks do not exist under Bun.
-    const [{ createHooks }, { importNamespaced, namespaced }] = await Promise.all([
-      import("../loader/hooks.ts"),
-      import("../loader/namespace.ts"),
-    ]);
+    const [{ createHooks }, { importNamespaced, namespaced }, { leaseSourceMapSupport }] =
+      await Promise.all([
+        import("../loader/hooks.ts"),
+        import("../loader/namespace.ts"),
+        import("../loader/source-map.ts"),
+      ]);
+    this.#releaseSourceMaps ??= leaseSourceMapSupport();
+    for (const file of this.dependencies) delete this.#require.cache[file];
     const namespace = randomUUID();
     const dependencies = new Set<string>();
     let current = false;
@@ -83,6 +93,7 @@ export class ImportWatcher<T = unknown> extends DependencyWatcher {
     if (this.#closed) return;
     this.#closed = true;
     this.#registration?.deregister();
+    this.#releaseSourceMaps?.();
     await super.close();
   }
 }
