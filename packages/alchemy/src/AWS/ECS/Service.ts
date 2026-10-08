@@ -73,14 +73,11 @@ import {
 export type ServiceName = string;
 export type ServiceArn = `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
-export const isService = (value: any): value is Service => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.ECS.Service"
-  );
-};
+export const isService = (value: any): value is Service =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.ECS.Service";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Managed load balancer (owned + shared) — types

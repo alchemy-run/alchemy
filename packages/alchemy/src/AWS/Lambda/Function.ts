@@ -86,14 +86,11 @@ class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   }
 }
 
-export const isFunction = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.Lambda.Function"
-  );
-};
+export const isFunction = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.Lambda.Function";
 
 /**
  * True for any Alchemy host that accepts the `{ env, policyStatements }`
@@ -110,18 +107,15 @@ export const isFunction = (value: any): value is Function => {
  * `host.LogicalId` are ever touched inside the guarded block, so downstream
  * typing is unchanged while the runtime check widens to all three.
  */
-export const isBindingHost = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    (value.Type === "AWS.Lambda.Function" ||
-      value.Type === "AWS.ECS.Task" ||
-      value.Type === "AWS.ECS.Service" ||
-      value.Type === "Kubernetes.Deployment" ||
-      value.Type === "Kubernetes.Job")
-  );
-};
+export const isBindingHost = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value.Type === "AWS.Lambda.Function" ||
+    value.Type === "AWS.ECS.Task" ||
+    value.Type === "AWS.ECS.Service" ||
+    value.Type === "Kubernetes.Deployment" ||
+    value.Type === "Kubernetes.Job");
 
 export interface FunctionBuildOptions
   extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {

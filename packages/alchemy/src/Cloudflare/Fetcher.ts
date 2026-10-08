@@ -208,8 +208,8 @@ export const toHttpClient = (fetcher: {
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 }) =>
-  HttpClient.make((request) => {
-    return Effect.suspend(() =>
+  HttpClient.make((request) =>
+    Effect.suspend(() =>
       // Rebuild the server request on every attempt so a retry re-serializes
       // the body instead of replaying a consumed one.
       fetcher
@@ -238,8 +238,8 @@ export const toHttpClient = (fetcher: {
           }),
         );
       }),
-    );
-  });
+    ),
+  );
 
 export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
   // `fromTransformStream` snapshots fiber context, then waits to acquire

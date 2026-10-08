@@ -171,37 +171,35 @@ export const renderNukeDelete =
 export const nukePlan = (
   targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
   options: { mode: ProviderMode },
-): PlanTreeData => {
-  return {
-    defaultMode: options.mode,
-    rows: targets
-      .map((target, index) => ({
-        key: `nuke/${index}`,
-        type: "resource" as const,
-        id: target.providerId,
-        resourceType: target.providerId,
-        detail:
-          target.displayName && target.displayName !== "unknown" ? target.displayName : undefined,
-        depth: 0,
-        action: "delete" as const,
-        providerMode: options.mode,
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id) || (a.detail ?? "").localeCompare(b.detail ?? "")),
-    summary: {
-      counts: {
-        create: 0,
-        update: 0,
-        adopted: 0,
-        delete: targets.length,
-        orphaned: 0,
-        replace: 0,
-        noop: 0,
-      },
-      taskCounts: { run: 0, delete: 0, noop: 0 },
-      bindingChanges: 0,
+): PlanTreeData => ({
+  defaultMode: options.mode,
+  rows: targets
+    .map((target, index) => ({
+      key: `nuke/${index}`,
+      type: "resource" as const,
+      id: target.providerId,
+      resourceType: target.providerId,
+      detail:
+        target.displayName && target.displayName !== "unknown" ? target.displayName : undefined,
+      depth: 0,
+      action: "delete" as const,
+      providerMode: options.mode,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id) || (a.detail ?? "").localeCompare(b.detail ?? "")),
+  summary: {
+    counts: {
+      create: 0,
+      update: 0,
+      adopted: 0,
+      delete: targets.length,
+      orphaned: 0,
+      replace: 0,
+      noop: 0,
     },
-  };
-};
+    taskCounts: { run: 0, delete: 0, noop: 0 },
+    bindingChanges: 0,
+  },
+});
 
 export const reviewNuke = Effect.fn(function* (
   targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,

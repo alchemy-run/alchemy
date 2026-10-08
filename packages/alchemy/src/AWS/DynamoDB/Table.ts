@@ -1016,11 +1016,11 @@ export const TableProvider = () =>
           progressMessage = `DynamoDB Table provider: table ${tableName} still deleting (status=${response.Table?.TableStatus ?? "undefined"})`;
           return yield* Effect.fail(new TableStillDeleting());
         }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => {
-            return session.note(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            session.note(
               `DynamoDB Table provider: table ${tableName} deletion confirmed (${formatPollingElapsed(elapsedSeconds)})`,
-            );
-          }),
+            ),
+          ),
           Effect.retry({
             while: (error) =>
               error._tag === "TableStillDeleting" || isRetryableControlPlaneError(error),

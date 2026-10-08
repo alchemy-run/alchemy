@@ -173,22 +173,22 @@ export const RegistryLive = Layer.effect(
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
           updateLock.withPermits(1),
-          Effect.tap(() => {
-            // Remove the entry from the filesystem when the scope closes — but
-            // only while the file still holds THIS write's content. A
-            // replacement instance of the same script re-registers under the
-            // same key; a graceful handoff closes the old scope after the new
-            // instance has already overwritten the file, and removing it here
-            // would unregister the live replacement.
-            return Effect.addFinalizer(() =>
+          // Remove the entry from the filesystem when the scope closes — but
+          // only while the file still holds THIS write's content. A
+          // replacement instance of the same script re-registers under the
+          // same key; a graceful handoff closes the old scope after the new
+          // instance has already overwritten the file, and removing it here
+          // would unregister the live replacement.
+          Effect.tap(() =>
+            Effect.addFinalizer(() =>
               fs.readFileString(entryPath).pipe(
                 Effect.flatMap((current) =>
                   current === serialized ? fs.remove(entryPath) : Effect.void,
                 ),
                 Effect.ignore,
               ),
-            );
-          }),
+            ),
+          ),
           Effect.tap(() =>
             // Update the `mtime` every 30 seconds so the entry is not considered stale.
             DateTime.nowAsDate.pipe(

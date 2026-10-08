@@ -51,14 +51,11 @@ import {
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
-export const isDeployment = (value: any): value is Deployment => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "Kubernetes.Deployment"
-  );
-};
+export const isDeployment = (value: any): value is Deployment =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "Kubernetes.Deployment";
 
 /**
  * The image-source props shared by the workload platforms. Exactly one of

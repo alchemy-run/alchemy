@@ -119,74 +119,72 @@ const RESOLVED_VIRTUAL_USER_CONFIG = `\0${VIRTUAL_USER_CONFIG}`;
  * `dist/server/vocs.config.js`, without separately resolving or serializing
  * the user's configuration in Alchemy.
  */
-const workerdConfigBridge = (configPath: string | undefined): vite.Plugin => {
-  return {
-    name: "@alchemy.run/frontend-frameworks/vocs:workerd-config-bridge",
-    resolveId(id) {
-      if (id === VIRTUAL_USER_CONFIG) return RESOLVED_VIRTUAL_USER_CONFIG;
-      return;
-    },
-    load(id) {
-      if (id === RESOLVED_VIRTUAL_USER_CONFIG) {
-        return configPath === undefined
-          ? "export default {};"
-          : `export { default } from ${JSON.stringify(configPath)};`;
-      }
-      return;
-    },
-    transform(code, id) {
-      // In the production build the modules are vocs's shipped
-      // `dist/internal/*.js`; in dev, vite serves vocs's TS sources
-      // (`src/internal/*.ts`) through the module runner, so both shapes (and
-      // the raw-TS formatting, which user plugins see before vite's esbuild
-      // transform) must match.
-      // Strip the query (dev serves ids like `.../config.js?v=<hash>`).
-      const normalized = (id.split("?")[0] ?? id).replaceAll("\\", "/");
-      const isVocsInternal = (name: string) =>
-        normalized.endsWith(`/vocs/dist/internal/${name}.js`) ||
-        normalized.endsWith(`/vocs/src/internal/${name}.ts`);
-      const mustReplace = (source: string, pattern: RegExp, replacement: string): string => {
-        if (!pattern.test(source)) {
-          throw new Error(
-            `@alchemy.run/frontend-frameworks/vocs: ${normalized} no longer matches the workerd config bridge ` +
-              `pattern ${pattern} — update the transform in packages/frontend-frameworks/src/vocs/Vocs.ts ` +
-              "for the installed vocs version",
-          );
-        }
-        return source.replace(pattern, replacement);
-      };
-      // `deserializeFunctions` revives `_vocs-fn_`-serialized config functions
-      // with `new Function`, which workerd forbids. Vocs' server runtime does
-      // not need the browser-side search callbacks that take this path, so
-      // degrade them to `undefined` when dynamic evaluation is unavailable.
-      // Node paths (SSG and dev tooling) still revive them normally.
-      if (isVocsInternal("config-serializer")) {
-        return mustReplace(
-          code,
-          // Avoid the escaped copy inside `deserializeFunctionsStringified`.
-          /return new Function\(`return \$\{value\.slice\(9\)\}`\)\(\);?/,
-          "try { return new Function(`return ${value.slice(9)}`)(); } catch { return undefined; }",
+const workerdConfigBridge = (configPath: string | undefined): vite.Plugin => ({
+  name: "@alchemy.run/frontend-frameworks/vocs:workerd-config-bridge",
+  resolveId(id) {
+    if (id === VIRTUAL_USER_CONFIG) return RESOLVED_VIRTUAL_USER_CONFIG;
+    return;
+  },
+  load(id) {
+    if (id === RESOLVED_VIRTUAL_USER_CONFIG) {
+      return configPath === undefined
+        ? "export default {};"
+        : `export { default } from ${JSON.stringify(configPath)};`;
+    }
+    return;
+  },
+  transform(code, id) {
+    // In the production build the modules are vocs's shipped
+    // `dist/internal/*.js`; in dev, vite serves vocs's TS sources
+    // (`src/internal/*.ts`) through the module runner, so both shapes (and
+    // the raw-TS formatting, which user plugins see before vite's esbuild
+    // transform) must match.
+    // Strip the query (dev serves ids like `.../config.js?v=<hash>`).
+    const normalized = (id.split("?")[0] ?? id).replaceAll("\\", "/");
+    const isVocsInternal = (name: string) =>
+      normalized.endsWith(`/vocs/dist/internal/${name}.js`) ||
+      normalized.endsWith(`/vocs/src/internal/${name}.ts`);
+    const mustReplace = (source: string, pattern: RegExp, replacement: string): string => {
+      if (!pattern.test(source)) {
+        throw new Error(
+          `@alchemy.run/frontend-frameworks/vocs: ${normalized} no longer matches the workerd config bridge ` +
+            `pattern ${pattern} — update the transform in packages/frontend-frameworks/src/vocs/Vocs.ts ` +
+            "for the installed vocs version",
         );
       }
-      if (!isVocsInternal("config")) return;
-      let result = mustReplace(
+      return source.replace(pattern, replacement);
+    };
+    // `deserializeFunctions` revives `_vocs-fn_`-serialized config functions
+    // with `new Function`, which workerd forbids. Vocs' server runtime does
+    // not need the browser-side search callbacks that take this path, so
+    // degrade them to `undefined` when dynamic evaluation is unavailable.
+    // Node paths (SSG and dev tooling) still revive them normally.
+    if (isVocsInternal("config-serializer")) {
+      return mustReplace(
         code,
-        /const \{ server, rootDir = process\.cwd\(\) \} = options;?/,
-        "const { server } = options;\n" +
-          "  const rootDir = options.rootDir ?? (() => { try { return process.cwd(); } catch { return '/'; } })();",
+        // Avoid the escaped copy inside `deserializeFunctionsStringified`.
+        /return new Function\(`return \$\{value\.slice\(9\)\}`\)\(\);?/,
+        "try { return new Function(`return ${value.slice(9)}`)(); } catch { return undefined; }",
       );
-      result = mustReplace(
-        result,
-        /if \(server && process\.env\['NODE_ENV'\] === 'production'\) \{\s*const configPath = path\.resolve\(import\.meta\.dirname, '\.\.\/vocs\.config\.js'\);?\s*const resolved = \(await import\(\/\* @vite-ignore \*\/ configPath\)\)\.default( as define\.Options)?;?\s*return define\(\{ \.\.\.resolved, rootDir \}\);?\s*\}/,
-        "if (server) {\n" +
-          `    const resolved = (await import(${JSON.stringify(VIRTUAL_USER_CONFIG)})).default;\n` +
-          "    return define(resolved);\n" +
-          "  }",
-      );
-      return result;
-    },
-  };
-};
+    }
+    if (!isVocsInternal("config")) return;
+    let result = mustReplace(
+      code,
+      /const \{ server, rootDir = process\.cwd\(\) \} = options;?/,
+      "const { server } = options;\n" +
+        "  const rootDir = options.rootDir ?? (() => { try { return process.cwd(); } catch { return '/'; } })();",
+    );
+    result = mustReplace(
+      result,
+      /if \(server && process\.env\['NODE_ENV'\] === 'production'\) \{\s*const configPath = path\.resolve\(import\.meta\.dirname, '\.\.\/vocs\.config\.js'\);?\s*const resolved = \(await import\(\/\* @vite-ignore \*\/ configPath\)\)\.default( as define\.Options)?;?\s*return define\(\{ \.\.\.resolved, rootDir \}\);?\s*\}/,
+      "if (server) {\n" +
+        `    const resolved = (await import(${JSON.stringify(VIRTUAL_USER_CONFIG)})).default;\n` +
+        "    return define(resolved);\n" +
+        "  }",
+    );
+    return result;
+  },
+});
 
 /**
  * Replicates waku's `cmd-build.ts` `startPreviewServerImpl`: the SSG step of

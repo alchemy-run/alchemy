@@ -15,26 +15,23 @@ import type { Scope } from "effect/Scope";
 import * as Http from "../../Http.ts";
 import { withInvocationDeadline } from "./InvocationDeadline.ts";
 
-export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
-  return event.requestContext?.http?.method !== undefined;
-};
+export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
+  event.requestContext?.http?.method !== undefined;
 
 /**
  * REST API (v1) AWS_PROXY events have a top-level `httpMethod` and a
  * `requestContext.resourcePath` field. They lack the `requestContext.http.*`
  * shape of Function URL / HTTP API (v2) events.
  */
-export const isApiGatewayProxyEvent = (event: any): event is APIGatewayProxyEvent => {
-  return typeof event?.httpMethod === "string" && event?.requestContext?.resourcePath !== undefined;
-};
+export const isApiGatewayProxyEvent = (event: any): event is APIGatewayProxyEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.resourcePath !== undefined;
 
 /**
  * Application Load Balancer target events carry a `requestContext.elb` marker
  * (the target group ARN) and a top-level `httpMethod` + `path`.
  */
-export const isAlbEvent = (event: any): event is ALBEvent => {
-  return typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
-};
+export const isAlbEvent = (event: any): event is ALBEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 
 // `HttpMiddleware.tracer` records the request on the `http.server` span only
 // when the request finishes. A span the deadline flush ends early would ship

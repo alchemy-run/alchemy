@@ -136,20 +136,20 @@ export const RuntimeLive = Layer.effect(
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
             Effect.andThen(docker.validate(tag)),
-            Effect.tap(() => {
-              // Each start cleans up ONLY its own image tag when its scope
-              // closes. Do NOT prune other same-name tags as "stale" here: a
-              // dev session starts the worker more than once (precreate stub
-              // → reconcile), and a cleanup that guesses which sibling tags
-              // are dead can untag the tag a live workerd is about to
-              // `docker create` from — every container start then fails and
-              // the session serves 500s until redeploy.
-              return Effect.addFinalizer(() =>
+            // Each start cleans up ONLY its own image tag when its scope
+            // closes. Do NOT prune other same-name tags as "stale" here: a
+            // dev session starts the worker more than once (precreate stub
+            // → reconcile), and a cleanup that guesses which sibling tags
+            // are dead can untag the tag a live workerd is about to
+            // `docker create` from — every container start then fails and
+            // the session serves 500s until redeploy.
+            Effect.tap(() =>
+              Effect.addFinalizer(() =>
                 docker
                   .removeContainer(tag)
                   .pipe(Effect.andThen(docker.removeImageTag(tag)), Effect.ignore),
-              );
-            }),
+              ),
+            ),
             Effect.tap(() => registerImage(className, tag, container.env)),
           );
         },

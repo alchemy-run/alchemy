@@ -568,13 +568,10 @@ export const collection = <
     };
   }) as any;
 
-export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService => {
-  return (
-    Predicate.isObject(value) &&
-    Predicate.hasProperty(value, "kind") &&
-    value.kind === "ProviderCollection"
-  );
-};
+export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService =>
+  Predicate.isObject(value) &&
+  Predicate.hasProperty(value, "kind") &&
+  value.kind === "ProviderCollection";
 
 /**
  * Structural check for a {@link ProviderService} living in the Effect

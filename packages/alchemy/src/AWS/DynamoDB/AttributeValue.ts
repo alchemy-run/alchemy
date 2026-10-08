@@ -214,9 +214,8 @@ const getType = (value: any): ValueType | ValueType[] => {
   }
 };
 
-export const isScalarAttributeType = (type: string): type is ScalarAttributeType => {
-  return type === "S" || type === "N" || type === "B";
-};
+export const isScalarAttributeType = (type: string): type is ScalarAttributeType =>
+  type === "S" || type === "N" || type === "B";
 
 export const toAttributeType = (schema: S.Schema<any>) => {
   if (isStringSchema(schema)) {

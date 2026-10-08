@@ -60,8 +60,8 @@ export type RpcUnwrapped<T> =
 export const wrapRpcHandlers = <T extends Record<string, any>>(
   handlers: T,
   streamKeys?: Array<keyof T>,
-): RpcWrapped<T> => {
-  return Object.fromEntries(
+): RpcWrapped<T> =>
+  Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
       typeof value === "function"
@@ -73,13 +73,12 @@ export const wrapRpcHandlers = <T extends Record<string, any>>(
           : value,
     ]),
   ) as RpcWrapped<T>;
-};
 
 export const unwrapRpcHandlers = <T extends Record<string, any>>(
   handlers: RpcWrapped<T>,
   streamKeys?: Array<keyof T>,
-): RpcUnwrapped<T> => {
-  return Object.fromEntries(
+): RpcUnwrapped<T> =>
+  Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
       typeof value === "function"
@@ -91,7 +90,6 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
           : value,
     ]),
   ) as RpcUnwrapped<T>;
-};
 
 const serializeError = (value: unknown) =>
   Schema.encodeEffect(Schema.Defect())(value).pipe(Effect.orDie);

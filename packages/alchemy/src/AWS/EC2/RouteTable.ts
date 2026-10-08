@@ -450,9 +450,7 @@ export const RouteTableProvider = () =>
               // Retry on dependency violations (associations still being deleted)
               Effect.retry({
                 // DependencyViolation means there are still dependent resources
-                while: (e) => {
-                  return e._tag === "DependencyViolation";
-                },
+                while: (e) => e._tag === "DependencyViolation",
                 schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(10)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),

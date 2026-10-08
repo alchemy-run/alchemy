@@ -94,9 +94,7 @@ export const make = (
         };
       }),
       start: Effect.fn(function* (ports) {
-        yield* Effect.forEach(plugins.values(), (plugin) => {
-          return plugin.start?.(ports) ?? Effect.void;
-        });
+        yield* Effect.forEach(plugins.values(), (plugin) => plugin.start?.(ports) ?? Effect.void);
       }),
       get: Effect.fn(function* (service) {
         const plugin = plugins.get(service.key);

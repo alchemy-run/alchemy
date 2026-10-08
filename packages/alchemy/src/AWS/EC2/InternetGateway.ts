@@ -386,12 +386,9 @@ export const InternetGatewayProvider = () =>
               // draining EKS/HyperPod control plane's ENIs can take
               // several minutes to release — 5s x 60 = ~5 min.
               Effect.retry({
-                while: (e) => {
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" && e.message?.includes("DependencyViolation"))
-                  );
-                },
+                while: (e) =>
+                  e._tag === "DependencyViolation" ||
+                  (e._tag === "ValidationError" && e.message?.includes("DependencyViolation")),
                 schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),

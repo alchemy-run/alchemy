@@ -39,14 +39,11 @@ export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
 export type InstanceArn<ID extends InstanceId = InstanceId> =
   `arn:aws:ec2:${RegionID}:${AccountID}:instance/${ID}`;
 
-export const isInstance = (value: any): value is Instance => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.EC2.Instance"
-  );
-};
+export const isInstance = (value: any): value is Instance =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.EC2.Instance";
 
 export interface InstanceProps extends PlatformProps {
   /**
@@ -559,26 +556,24 @@ export const InstanceProvider = () =>
           instanceProfileName?: string;
         },
         tags: Record<string, string>,
-      ): ec2.RunInstancesRequest => {
-        return {
-          ...hosted.buildLaunchTemplateData(
-            {
-              imageId: news.imageId,
-              instanceType: news.instanceType,
-              keyName: news.keyName as string | undefined,
-              subnetId: news.subnetId as string | undefined,
-              securityGroupIds: news.securityGroupIds as string[] | undefined,
-              associatePublicIpAddress: news.associatePublicIpAddress,
-              privateIpAddress: news.privateIpAddress,
-              availabilityZone: news.availabilityZone,
-              tags,
-            },
-            runtime,
-          ),
-          MinCount: 1,
-          MaxCount: 1,
-        };
-      };
+      ): ec2.RunInstancesRequest => ({
+        ...hosted.buildLaunchTemplateData(
+          {
+            imageId: news.imageId,
+            instanceType: news.instanceType,
+            keyName: news.keyName as string | undefined,
+            subnetId: news.subnetId as string | undefined,
+            securityGroupIds: news.securityGroupIds as string[] | undefined,
+            associatePublicIpAddress: news.associatePublicIpAddress,
+            privateIpAddress: news.privateIpAddress,
+            availabilityZone: news.availabilityZone,
+            tags,
+          },
+          runtime,
+        ),
+        MinCount: 1,
+        MaxCount: 1,
+      });
 
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],

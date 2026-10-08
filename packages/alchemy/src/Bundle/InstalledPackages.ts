@@ -1264,8 +1264,8 @@ const parseYarnV1Lockfile = (content: string): JsonRecord => {
 const stripYarnQuotes = (value: string): string =>
   value.startsWith('"') && value.endsWith('"') && value.length >= 2 ? value.slice(1, -1) : value;
 
-const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
-  return Object.entries(parseYarnLockfile(content)).flatMap(
+const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> =>
+  Object.entries(parseYarnLockfile(content)).flatMap(
     ([selectorList, value]): ReadonlyArray<YarnLockEntry> => {
       if (selectorList === "__metadata") return [];
       const entry = asRecord(value);
@@ -1287,7 +1287,6 @@ const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
       ];
     },
   );
-};
 
 const findYarnEntry = (
   entries: ReadonlyArray<YarnLockEntry>,

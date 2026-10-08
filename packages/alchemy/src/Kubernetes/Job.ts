@@ -43,14 +43,8 @@ import {
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
-export const isJob = (value: any): value is Job => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "Kubernetes.Job"
-  );
-};
+export const isJob = (value: any): value is Job =>
+  typeof value === "object" && value !== null && "Type" in value && value.Type === "Kubernetes.Job";
 
 export interface JobPropsBase extends PlatformProps {
   /**
