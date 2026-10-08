@@ -600,46 +600,52 @@ export const CloudflareAuth = AuthProviderLayer<
                     };
                   });
 
-                  // The silent refresh rotates a single-use refresh token, so
-                  // its read-refresh-persist section runs under the profile
-                  // lock — a concurrent `read` refreshing the same token would
-                  // double-spend it. The lock is held only for this API
-                  // round-trip, never across the browser wait below.
-                  let outcome;
-                  if (creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)) {
-                    outcome = yield* withProfileCredentialsLock(
-                      profileName,
-                      interaction.output.info("Cloudflare: refreshing OAuth credentials...").pipe(
-                        Effect.andThen(OAuthClient.refresh(creds)),
-                        Effect.flatMap((credentials) => {
-                          const config = {
-                            ...c,
-                            clientId: credentials.clientId,
-                            access: Redacted.value(credentials.access),
-                            refresh: Redacted.value(credentials.refresh),
-                            expires: credentials.expires,
-                            scopes: credentials.scopes,
-                          };
-                          return (updateConfig?.(config) ?? Effect.void).pipe(
-                            Effect.as({ type: "refreshed" as const, config }),
-                          );
-                        }),
-                        Effect.tap(() =>
-                          interaction.output.success("Cloudflare: OAuth credentials refreshed."),
-                        ),
-                        Effect.catchTag("OAuthError", () =>
-                          Effect.succeed({ type: "browser" as const }),
-                        ),
-                      ),
-                    );
-                  } else {
+                  const fallBackToBrowserLogin = Effect.gen(function* () {
                     if (creds.type === "oauth") {
                       yield* interaction.output.warning(
                         "Cloudflare: removed OAuth credentials issued to the previous client.",
                       );
                     }
-                    outcome = { type: "browser" as const };
-                  }
+                    return { type: "browser" as const };
+                  });
+
+                  // The silent refresh rotates a single-use refresh token, so
+                  // its read-refresh-persist section runs under the profile
+                  // lock — a concurrent `read` refreshing the same token would
+                  // double-spend it. The lock is held only for this API
+                  // round-trip, never across the browser wait below.
+                  const outcome =
+                    creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
+                      ? yield* withProfileCredentialsLock(
+                          profileName,
+                          interaction.output
+                            .info("Cloudflare: refreshing OAuth credentials...")
+                            .pipe(
+                              Effect.andThen(OAuthClient.refresh(creds)),
+                              Effect.flatMap((credentials) => {
+                                const config = {
+                                  ...c,
+                                  clientId: credentials.clientId,
+                                  access: Redacted.value(credentials.access),
+                                  refresh: Redacted.value(credentials.refresh),
+                                  expires: credentials.expires,
+                                  scopes: credentials.scopes,
+                                };
+                                return (updateConfig?.(config) ?? Effect.void).pipe(
+                                  Effect.as({ type: "refreshed" as const, config }),
+                                );
+                              }),
+                              Effect.tap(() =>
+                                interaction.output.success(
+                                  "Cloudflare: OAuth credentials refreshed.",
+                                ),
+                              ),
+                              Effect.catchTag("OAuthError", () =>
+                                Effect.succeed({ type: "browser" as const }),
+                              ),
+                            ),
+                        )
+                      : yield* fallBackToBrowserLogin;
                   if (outcome.type === "browser") {
                     return yield* fullLogin;
                   }

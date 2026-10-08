@@ -2123,18 +2123,18 @@ const ProviderLive = () =>
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.local) return output;
           const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
-          let app;
-          if (appId) {
-            app = yield* getService({ serviceId: appId }).pipe(
-              Effect.map((response) => response.data),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            );
-          } else {
+          const findAppInProject = Effect.gen(function* () {
             const projectId = unresolvedProjectIdOf(olds.project);
-            app = projectId
+            return projectId
               ? yield* findApp(projectId, yield* createAppName(id, olds.appName), olds)
               : undefined;
-          }
+          });
+          const app = appId
+            ? yield* getService({ serviceId: appId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : yield* findAppInProject;
           if (!app) return undefined;
           const readDeployment = (id: string) =>
             observeDeployment(id).pipe(

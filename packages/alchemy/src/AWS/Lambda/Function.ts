@@ -1644,24 +1644,24 @@ export const FunctionProvider = () =>
 
         const tags = yield* createInternalTags(id);
 
-        let codeLocation: CreateFunctionRequest["Code"];
-        if (code.packageType === "Image") {
-          codeLocation = { ImageUri: code.imageUri };
-        } else {
+        const resolveCodeLocation = Effect.gen(function* () {
+          if (code.packageType === "Image") {
+            return { ImageUri: code.imageUri } as const;
+          }
           // Try to use S3 if the assets bucket is available, otherwise fall
           // back to an inline ZipFile.
           const assets = (yield* Effect.serviceOption(Assets)).pipe(Option.getOrUndefined);
           if (!assets) {
-            codeLocation = { ZipFile: code.archive };
-          } else {
-            const key = yield* assets.uploadAsset(code.hash, code.archive);
-            yield* Effect.logDebug(`Using S3 for code: s3://${yield* assets.bucketName}/${key}`);
-            codeLocation = {
-              S3Bucket: yield* assets.bucketName,
-              S3Key: key,
-            };
+            return { ZipFile: code.archive } as const;
           }
-        }
+          const key = yield* assets.uploadAsset(code.hash, code.archive);
+          yield* Effect.logDebug(`Using S3 for code: s3://${yield* assets.bucketName}/${key}`);
+          return {
+            S3Bucket: yield* assets.bucketName,
+            S3Key: key,
+          } as const;
+        });
+        const codeLocation = yield* resolveCodeLocation;
         const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {

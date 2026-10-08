@@ -189,8 +189,7 @@ export const FunctionProvider = () =>
           // newly created function lives in DEVELOPMENT; we publish it to
           // LIVE below, in the same flow that handles already-existing
           // functions.
-          let developmentEtag = observedDevelopment?.ETag;
-          if (!observedDevelopment) {
+          const createDevelopmentFunction = Effect.gen(function* () {
             const created = yield* cloudfront
               .createFunction({
                 Name: name,
@@ -219,8 +218,11 @@ export const FunctionProvider = () =>
                   schedule: cappedCloudFrontRetrySchedule,
                 }),
               );
-            developmentEtag = created.ETag;
-          }
+            return created.ETag;
+          });
+          const developmentEtag = observedDevelopment
+            ? observedDevelopment.ETag
+            : yield* createDevelopmentFunction;
 
           // Sync — push desired config/code to DEVELOPMENT when the
           // function already existed. Skip when we just created it (the

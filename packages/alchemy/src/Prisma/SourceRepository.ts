@@ -258,36 +258,40 @@ const verifyRepositoryLink = Effect.fn(function* (
       ),
     );
   }
-  const branches: GetProjectBranchesResponse["data"][number][] = [];
-  let cursor: string | undefined;
-  while (true) {
-    const page = yield* getProjectBranches(
-      cursor === undefined
-        ? {
-            projectId: repo.projectId,
-            gitName: observed.defaultBranch,
-            limit: 100,
-          }
-        : {
-            projectId: repo.projectId,
-            gitName: observed.defaultBranch,
-            limit: 100,
-            cursor,
-          },
-    );
-    branches.push(...page.data);
-    const nextCursor = page.pagination.nextCursor;
-    if (!page.pagination.hasMore) break;
-    if (nextCursor === null) {
-      return yield* Effect.fail(
-        new PrismaPaginationError({
-          message:
-            "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
-        }),
+  const listDefaultBranches = Effect.gen(function* () {
+    const items: GetProjectBranchesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getProjectBranches(
+        cursor === undefined
+          ? {
+              projectId: repo.projectId,
+              gitName: observed.defaultBranch,
+              limit: 100,
+            }
+          : {
+              projectId: repo.projectId,
+              gitName: observed.defaultBranch,
+              limit: 100,
+              cursor,
+            },
       );
+      items.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
     }
-    cursor = nextCursor;
-  }
+    return items;
+  });
+  const branches = yield* listDefaultBranches;
   const defaults = branches.filter(
     (branch) => branch.gitName === observed.defaultBranch && branch.isDefault === true,
   );
@@ -343,23 +347,27 @@ const ProviderLive = () =>
       return {
         stables: ["sourceRepositoryId"],
         list: Effect.fn(function* () {
-          const projects: GetProjectsResponse["data"][number][] = [];
-          let cursor: string | undefined;
-          while (true) {
-            const page = yield* getProjects(cursor === undefined ? {} : { cursor });
-            projects.push(...page.data);
-            const nextCursor = page.pagination.nextCursor;
-            if (!page.pagination.hasMore) break;
-            if (nextCursor === null) {
-              return yield* Effect.fail(
-                new PrismaPaginationError({
-                  message:
-                    "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
-                }),
-              );
+          const listProjects = Effect.gen(function* () {
+            const items: GetProjectsResponse["data"][number][] = [];
+            let cursor: string | undefined;
+            while (true) {
+              const page = yield* getProjects(cursor === undefined ? {} : { cursor });
+              items.push(...page.data);
+              const nextCursor = page.pagination.nextCursor;
+              if (!page.pagination.hasMore) break;
+              if (nextCursor === null) {
+                return yield* Effect.fail(
+                  new PrismaPaginationError({
+                    message:
+                      "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
+                  }),
+                );
+              }
+              cursor = nextCursor;
             }
-            cursor = nextCursor;
-          }
+            return items;
+          });
+          const projects = yield* listProjects;
           const repositories = yield* Effect.forEach(
             projects,
             (project) =>
@@ -412,18 +420,18 @@ const ProviderLive = () =>
           const sourceRepositoryId = isPrismaDevId(output?.sourceRepositoryId)
             ? undefined
             : output?.sourceRepositoryId;
-          let repo;
-          if (sourceRepositoryId) {
-            repo = yield* getSourceRepository({
-              id: sourceRepositoryId,
-            }).pipe(
-              Effect.map((response) => response.data),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            );
-          } else {
+          const findRepositoryInProject = Effect.gen(function* () {
             const projectId = unresolvedProjectIdOf(olds.project);
-            repo = projectId ? yield* findRepository(projectId) : undefined;
-          }
+            return projectId ? yield* findRepository(projectId) : undefined;
+          });
+          const repo = sourceRepositoryId
+            ? yield* getSourceRepository({
+                id: sourceRepositoryId,
+              }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : yield* findRepositoryInProject;
           if (!repo) return undefined;
           const attrs = attrsFrom(repo);
           return sourceRepositoryId === undefined ? Unowned(attrs) : attrs;
@@ -449,50 +457,56 @@ const ProviderLive = () =>
             );
           }
           if (!repo) {
-            const unassignedApps: GetServicesResponse["data"][number][] = [];
-            let appsCursor: string | undefined;
-            while (true) {
-              const appsPage = yield* getServices(
-                appsCursor === undefined
-                  ? { projectId, branchId: "unassigned", limit: 100 }
-                  : { projectId, branchId: "unassigned", limit: 100, cursor: appsCursor },
-              );
-              unassignedApps.push(...appsPage.data);
-              const appsNextCursor = appsPage.pagination.nextCursor;
-              if (!appsPage.pagination.hasMore) break;
-              if (appsNextCursor === null) {
-                return yield* Effect.fail(
-                  new PrismaPaginationError({
-                    message:
-                      "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-                  }),
+            const listUnassignedApps = Effect.gen(function* () {
+              const items: GetServicesResponse["data"][number][] = [];
+              let cursor: string | undefined;
+              while (true) {
+                const page = yield* getServices(
+                  cursor === undefined
+                    ? { projectId, branchId: "unassigned", limit: 100 }
+                    : { projectId, branchId: "unassigned", limit: 100, cursor },
                 );
+                items.push(...page.data);
+                const nextCursor = page.pagination.nextCursor;
+                if (!page.pagination.hasMore) break;
+                if (nextCursor === null) {
+                  return yield* Effect.fail(
+                    new PrismaPaginationError({
+                      message:
+                        "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+                    }),
+                  );
+                }
+                cursor = nextCursor;
               }
-              appsCursor = appsNextCursor;
-            }
-            const previouslyUnassignedApps = unassignedApps.map((app) => app.id);
-            const projectDatabases: GetProjectDatabasesResponse["data"][number][] = [];
-            let databasesCursor: string | undefined;
-            while (true) {
-              const databasesPage = yield* getProjectDatabases(
-                databasesCursor === undefined
-                  ? { projectId, limit: 100 }
-                  : { projectId, limit: 100, cursor: databasesCursor },
-              );
-              projectDatabases.push(...databasesPage.data);
-              const databasesNextCursor = databasesPage.pagination.nextCursor;
-              if (!databasesPage.pagination.hasMore) break;
-              if (databasesNextCursor === null) {
-                return yield* Effect.fail(
-                  new PrismaPaginationError({
-                    message:
-                      "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-                  }),
+              return items;
+            });
+            const previouslyUnassignedApps = (yield* listUnassignedApps).map((app) => app.id);
+            const listProjectDatabases = Effect.gen(function* () {
+              const items: GetProjectDatabasesResponse["data"][number][] = [];
+              let cursor: string | undefined;
+              while (true) {
+                const page = yield* getProjectDatabases(
+                  cursor === undefined
+                    ? { projectId, limit: 100 }
+                    : { projectId, limit: 100, cursor },
                 );
+                items.push(...page.data);
+                const nextCursor = page.pagination.nextCursor;
+                if (!page.pagination.hasMore) break;
+                if (nextCursor === null) {
+                  return yield* Effect.fail(
+                    new PrismaPaginationError({
+                      message:
+                        "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+                    }),
+                  );
+                }
+                cursor = nextCursor;
               }
-              databasesCursor = databasesNextCursor;
-            }
-            const previouslyUnassignedDatabases = projectDatabases
+              return items;
+            });
+            const previouslyUnassignedDatabases = (yield* listProjectDatabases)
               .filter((database) => database.branchId === null)
               .map((database) => database.id);
             repo = yield* createSourceRepository({

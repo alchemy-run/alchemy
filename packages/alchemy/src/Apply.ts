@@ -691,33 +691,33 @@ const executeNode = (
 
     // ── instance ID ──
 
-    let instanceId: string;
-    if (node.action === "create" && !node.state?.instanceId) {
-      const id = yield* generateInstanceId();
-      yield* commit<CreatingResourceState>({
-        status: "creating",
-        fqn,
-        logicalId,
-        instanceId: id,
-        downstream: node.downstream,
-        props: node.props,
-        providerVersion: node.provider.version ?? 0,
-        resourceType: node.resource.Type,
-        bindings: excludeDeletedBindings(node.bindings),
-        removalPolicy: node.resource.RemovalPolicy,
-        providerMode: node.mode,
-        adoptionBlocked: node.adoptionBlocked,
-      });
-      instanceId = id;
-    } else if (node.action === "replace") {
-      if (
-        (node.state.status === "replaced" || node.state.status === "replacing") &&
-        !node.restart
-      ) {
-        // Ordinary replacement recovery keeps using the same replacement
-        // generation. Only `restart` is allowed to mint a new instance id.
-        instanceId = node.state.instanceId;
-      } else {
+    const resolveInstanceId = Effect.gen(function* () {
+      if (node.action === "create" && !node.state?.instanceId) {
+        const id = yield* generateInstanceId();
+        yield* commit<CreatingResourceState>({
+          status: "creating",
+          fqn,
+          logicalId,
+          instanceId: id,
+          downstream: node.downstream,
+          props: node.props,
+          providerVersion: node.provider.version ?? 0,
+          resourceType: node.resource.Type,
+          bindings: excludeDeletedBindings(node.bindings),
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
+        });
+        return id;
+      } else if (node.action === "replace") {
+        if (
+          (node.state.status === "replaced" || node.state.status === "replacing") &&
+          !node.restart
+        ) {
+          // Ordinary replacement recovery keeps using the same replacement
+          // generation. Only `restart` is allowed to mint a new instance id.
+          return node.state.instanceId;
+        }
         const id = yield* generateInstanceId();
         yield* commit<ReplacingResourceState>({
           status: "replacing",
@@ -734,15 +734,15 @@ const executeNode = (
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
         });
-        instanceId = id;
+        return id;
+      } else if (node.state?.instanceId) {
+        return node.state.instanceId;
       }
-    } else if (node.state?.instanceId) {
-      instanceId = node.state.instanceId;
-    } else {
       return yield* Effect.die(
         `Instance ID not found for resource '${logicalId}' and action is '${node.action}'`,
       );
-    }
+    });
+    const instanceId = yield* resolveInstanceId;
 
     // ── lifecycle ──
 

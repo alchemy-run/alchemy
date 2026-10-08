@@ -319,20 +319,21 @@ export const ImageProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Resolve the target repository: user-supplied URI, or an
           // auto-created repository owned by this Image.
-          let repositoryName: string;
-          let repositoryUri: string;
-          let ownsRepository: boolean;
-          if (news.repositoryUri) {
-            repositoryName = repositoryNameFromUri(news.repositoryUri);
-            repositoryUri = news.repositoryUri;
-            ownsRepository = false;
-          } else {
-            repositoryName = output?.ownsRepository
+          const resolveRepository = Effect.gen(function* () {
+            if (news.repositoryUri) {
+              return {
+                repositoryName: repositoryNameFromUri(news.repositoryUri),
+                repositoryUri: news.repositoryUri,
+                ownsRepository: false,
+              };
+            }
+            const repositoryName = output?.ownsRepository
               ? output.repositoryName
               : yield* toOwnedRepositoryName(id);
-            repositoryUri = yield* ensureOwnedRepository(id, repositoryName);
-            ownsRepository = true;
-          }
+            const repositoryUri = yield* ensureOwnedRepository(id, repositoryName);
+            return { repositoryName, repositoryUri, ownsRepository: true };
+          });
+          const { repositoryName, repositoryUri, ownsRepository } = yield* resolveRepository;
 
           const { context, dockerfile } = yield* resolveDockerBuildPaths({
             context: news.context,

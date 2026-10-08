@@ -230,15 +230,15 @@ const ProviderLive = () =>
           const customDomainId = isPrismaDevId(output?.customDomainId)
             ? undefined
             : output?.customDomainId;
-          let domain;
-          if (customDomainId) {
-            domain = yield* client
-              .getCustomDomain(customDomainId)
-              .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
-          } else {
+          const findDomainInApp = Effect.gen(function* () {
             const appId = unresolvedAppIdOf(olds.app);
-            domain = appId ? yield* findDomain(client, appId, olds.hostname) : undefined;
-          }
+            return appId ? yield* findDomain(client, appId, olds.hostname) : undefined;
+          });
+          const domain = customDomainId
+            ? yield* client
+                .getCustomDomain(customDomainId)
+                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+            : yield* findDomainInApp;
           if (!domain) return undefined;
           const attrs = attrsFrom(domain);
           return customDomainId === undefined ? Unowned(attrs) : attrs;

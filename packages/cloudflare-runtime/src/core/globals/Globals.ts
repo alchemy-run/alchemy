@@ -84,8 +84,10 @@ export const GlobalsLive = Layer.effect(
     // logged file paths point at real files. Miniflare persists replies via
     // its loopback `store-temp-file` endpoint instead.
     const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
-    let email: { persistPath: string; service: WorkerdConfig.Service } | undefined;
-    if (storageDiskPath !== undefined) {
+    const createEmailStorage = Effect.gen(function* () {
+      if (storageDiskPath === undefined) {
+        return undefined;
+      }
       const persistPath = path.join(storageDiskPath, "email");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
         Effect.mapError((cause) =>
@@ -98,14 +100,15 @@ export const GlobalsLive = Layer.effect(
           }),
         ),
       );
-      email = {
+      return {
         persistPath,
         service: {
           name: SERVICE_EMAIL_STORAGE,
           disk: { path: persistPath, writable: true },
         } satisfies WorkerdConfig.Service,
       };
-    }
+    });
+    const email = yield* createEmailStorage;
     return Globals.of(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;

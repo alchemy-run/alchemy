@@ -2517,10 +2517,10 @@ export const LiveWorkerProvider = () =>
         message: string | undefined;
       }) {
         const { accountId, scriptName, versionId, traffic } = params;
-        let split: { versionId: string; percentage: number }[];
-        if (traffic >= 100) {
-          split = [{ versionId, percentage: 100 }];
-        } else {
+        const resolveSplit = Effect.gen(function* () {
+          if (traffic >= 100) {
+            return [{ versionId, percentage: 100 }];
+          }
           const { deployments } = yield* workers.listScriptDeployments({ accountId, scriptName });
           // Deployments are returned newest-first; the live version is the
           // highest-percentage version of the most recent deployment.
@@ -2529,14 +2529,14 @@ export const LiveWorkerProvider = () =>
             .sort((a, b) => b.percentage - a.percentage)[0];
           if (!stable) {
             // Nothing to split against (first deployment of this script).
-            split = [{ versionId, percentage: 100 }];
-          } else {
-            split = [
-              { versionId, percentage: traffic },
-              { versionId: stable.versionId, percentage: 100 - traffic },
-            ];
+            return [{ versionId, percentage: 100 }];
           }
-        }
+          return [
+            { versionId, percentage: traffic },
+            { versionId: stable.versionId, percentage: 100 - traffic },
+          ];
+        });
+        const split = yield* resolveSplit;
         const deployment = yield* workers.createScriptDeployment({
           accountId,
           scriptName,
@@ -4276,20 +4276,19 @@ export const LiveWorkerProvider = () =>
             props.preview?.of != null
               ? (resolvePreviewParentName(props.preview) ?? output.previewOf)
               : undefined;
-          let selfUrl: string | undefined;
-          if (hasSelfUrlBinding(bindings)) {
+          const resolveBoundSelfUrl = Effect.gen(function* () {
             if (previewParent !== undefined) {
-              selfUrl = output.url;
-            } else if (versionParent !== undefined) {
-              const alias = yield* resolveVersionAlias(id, props, versionParent);
-              selfUrl =
-                alias !== undefined
-                  ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-                  : undefined;
-            } else {
-              selfUrl = yield* resolveSelfUrl(output.workerName, props, accountId);
+              return output.url;
             }
-          }
+            if (versionParent !== undefined) {
+              const alias = yield* resolveVersionAlias(id, props, versionParent);
+              return alias !== undefined
+                ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+                : undefined;
+            }
+            return yield* resolveSelfUrl(output.workerName, props, accountId);
+          });
+          const selfUrl = hasSelfUrlBinding(bindings) ? yield* resolveBoundSelfUrl : undefined;
           const metadataHash = yield* resolveWorkerMetadataHash({
             props,
             bindings,

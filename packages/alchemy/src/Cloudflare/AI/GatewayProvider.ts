@@ -224,15 +224,15 @@ export const GatewayProviderProvider = () =>
       if (gatewayId === undefined) return undefined;
 
       const configs = yield* listProviderConfigs(acct, gatewayId);
-      let match;
-      if (output?.providerConfigId) {
-        match = configs.find((c) => c.id === output.providerConfigId);
-      } else {
-        // Cold read — recover from lost state by matching the
-        // deterministic alias.
+      // Cold read — recover from lost state by matching the
+      // deterministic alias.
+      const findConfigByAlias = Effect.gen(function* () {
         const alias = yield* createAlias(id, olds?.alias);
-        match = configs.find((c) => c.alias === alias && c.providerSlug === olds?.providerSlug);
-      }
+        return configs.find((c) => c.alias === alias && c.providerSlug === olds?.providerSlug);
+      });
+      const match = output?.providerConfigId
+        ? configs.find((c) => c.id === output.providerConfigId)
+        : yield* findConfigByAlias;
       return match ? toAttributes(match, acct) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {

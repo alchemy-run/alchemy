@@ -533,9 +533,12 @@ export const Aurora = (id: string, props: AuroraProps) =>
         { concurrency: "unbounded" },
       );
 
-      let proxy: AuroraDatabase["proxy"];
-      if (proxyConfig !== undefined) {
-        const proxyRole = yield* IAM.Role("ProxyRole", {
+      const createProxy = Effect.gen(function* () {
+        if (proxyConfig === undefined) {
+          return undefined;
+        }
+
+        const role = yield* IAM.Role("ProxyRole", {
           assumeRolePolicyDocument: {
             Version: "2012-10-17",
             Statement: [
@@ -564,7 +567,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
           tags: mergeTags(commonTags, undefined),
         });
 
-        const dbProxy = yield* DBProxy("Proxy", {
+        const proxy = yield* DBProxy("Proxy", {
           dbProxyName: proxyConfig.dbProxyName,
           engineFamily: inferProxyEngineFamily(engine),
           auth: proxyConfig.auth ?? [
@@ -574,7 +577,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
               IAMAuth: "DISABLED",
             },
           ],
-          roleArn: proxyRole.roleArn,
+          roleArn: role.roleArn,
           vpcSubnetIds: subnetIds,
           vpcSecurityGroupIds: securityGroupIds,
           requireTLS: proxyConfig.requireTLS ?? true,
@@ -585,19 +588,19 @@ export const Aurora = (id: string, props: AuroraProps) =>
           tags: mergeTags(commonTags, proxyConfig.tags),
         });
 
-        const proxyTargetGroup = yield* DBProxyTargetGroup("ProxyTargetGroup", {
+        const targetGroup = yield* DBProxyTargetGroup("ProxyTargetGroup", {
           targetGroupName: proxyConfig.targetGroup?.targetGroupName,
-          dbProxyName: dbProxy.dbProxyName,
+          dbProxyName: proxy.dbProxyName,
           dbClusterIdentifiers: [cluster.dbClusterIdentifier],
           dbInstanceIdentifiers: proxyConfig.targetGroup?.dbInstanceIdentifiers,
           connectionPoolConfig: proxyConfig.targetGroup?.connectionPoolConfig,
         });
 
-        const proxyEndpoint =
+        const endpoint =
           proxyConfig.endpoint === undefined
             ? undefined
             : yield* DBProxyEndpoint("ProxyEndpoint", {
-                dbProxyName: dbProxy.dbProxyName,
+                dbProxyName: proxy.dbProxyName,
                 vpcSubnetIds: subnetIds,
                 vpcSecurityGroupIds: securityGroupIds,
                 ...(proxyConfig.endpoint === true ? {} : proxyConfig.endpoint),
@@ -607,13 +610,14 @@ export const Aurora = (id: string, props: AuroraProps) =>
                 ),
               });
 
-        proxy = {
-          role: proxyRole,
-          proxy: dbProxy,
-          targetGroup: proxyTargetGroup,
-          endpoint: proxyEndpoint,
+        return {
+          role,
+          proxy,
+          targetGroup,
+          endpoint,
         };
-      }
+      });
+      const proxy = yield* createProxy;
 
       return {
         secret,
