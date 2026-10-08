@@ -1,8 +1,9 @@
-import * as Neon from "@/Neon/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Neon from "@/Neon/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -12,7 +13,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
 
 const { test } = Test.make({ providers: Neon.providers() });
 
@@ -22,9 +22,7 @@ describe.sequential(
   () => {
     for (const mode of foldkitModes) {
       for (const check of foldkitChecks) {
-        test.provider.skipIf(
-          !!process.env.FAST || (check === "browser" && !browserEnabled),
-        )(
+        test.provider.skipIf(!!process.env.FAST || (check === "browser" && !browserEnabled))(
           `${mode}: ${check === "browser" ? "browser hydration" : "HTTP rendering"} and cleanup`,
           (stack) =>
             Effect.gen(function* () {
@@ -45,12 +43,9 @@ describe.sequential(
                 branch_id: fn.branchId,
                 slug: fn.slug,
               });
-              expect(found.function.active_deployment?.id).toBe(
-                fn.activeDeploymentId,
-              );
+              expect(found.function.active_deployment?.id).toBe(fn.activeDeploymentId);
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* getProject({ project_id: fn.projectId })
                 .pipe(

@@ -1,10 +1,9 @@
+import { Button } from "@foldkit/ui";
 import { Schema } from "effect";
 import { Runtime, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
-
-import { Button } from "@foldkit/ui";
 
 // MODEL
 
@@ -44,24 +43,16 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: `Counter: ${model.count}`,
   body: h.div(
+    [h.Class("min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6")],
     [
-      h.Class(
-        "min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6",
-      ),
-    ],
-    [
-      h.p(
-        [h.Class("text-6xl font-bold text-gray-800")],
-        [model.count.toString()],
-      ),
+      h.p([h.Class("text-6xl font-bold text-gray-800")], [model.count.toString()]),
       h.div(
         [h.Class("flex flex-wrap justify-center gap-4")],
         [
           Button.view(
             {
               onClick: Message.ClickedDecrement(),
-              toView: (attributes) =>
-                h.button([...attributes.button, h.Class(buttonStyle)], ["-"]),
+              toView: (attributes) => h.button([...attributes.button, h.Class(buttonStyle)], ["-"]),
             },
             h,
           ),
@@ -69,18 +60,14 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             {
               onClick: Message.ClickedReset(),
               toView: (attributes) =>
-                h.button(
-                  [...attributes.button, h.Class(buttonStyle)],
-                  ["Reset"],
-                ),
+                h.button([...attributes.button, h.Class(buttonStyle)], ["Reset"]),
             },
             h,
           ),
           Button.view(
             {
               onClick: Message.ClickedIncrement(),
-              toView: (attributes) =>
-                h.button([...attributes.button, h.Class(buttonStyle)], ["+"]),
+              toView: (attributes) => h.button([...attributes.button, h.Class(buttonStyle)], ["+"]),
             },
             h,
           ),
@@ -92,5 +79,4 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
 
 // STYLE
 
-const buttonStyle =
-  "bg-black text-white hover:bg-gray-700 px-4 py-2 transition";
+const buttonStyle = "bg-black text-white hover:bg-gray-700 px-4 py-2 transition";

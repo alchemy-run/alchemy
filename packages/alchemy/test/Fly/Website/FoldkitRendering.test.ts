@@ -1,8 +1,9 @@
-import * as Fly from "@/Fly/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import * as api from "@distilled.cloud/fly-io/machines";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -12,7 +13,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import * as api from "@distilled.cloud/fly-io/machines";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -22,9 +22,7 @@ describe.sequential(
   () => {
     for (const mode of foldkitModes) {
       for (const check of foldkitChecks) {
-        test.provider.skipIf(
-          !!process.env.FAST || (check === "browser" && !browserEnabled),
-        )(
+        test.provider.skipIf(!!process.env.FAST || (check === "browser" && !browserEnabled))(
           `${mode}: ${check === "browser" ? "browser hydration" : "HTTP rendering"} and cleanup`,
           (stack) =>
             Effect.gen(function* () {
@@ -40,12 +38,9 @@ describe.sequential(
               expect(site.url).toBeDefined();
               expect(site.app).toBeDefined();
               const appName = site.app!.appName;
-              expect((yield* api.getApp({ app_name: appName })).name).toBe(
-                appName,
-              );
+              expect((yield* api.getApp({ app_name: appName })).name).toBe(appName);
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* api
                 .getApp({ app_name: appName })

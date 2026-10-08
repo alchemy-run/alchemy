@@ -1,7 +1,7 @@
-import { viteBuildOutputPlugin } from "@/Bundle/Vite";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { viteBuildOutputPlugin } from "@/Bundle/Vite";
 
 /** The subset of a Vite build environment the output plugin reads. */
 const environment = (name: string, outDir: string) => ({
@@ -30,11 +30,7 @@ const writeBundle = (
     if (typeof hook !== "function") {
       throw new Error("writeBundle is not a function");
     }
-    await hook.call(
-      { environment: env, getModuleIds: () => [] as Array<string> },
-      {},
-      bundle,
-    );
+    await hook.call({ environment: env, getModuleIds: () => [] as Array<string> }, {}, bundle);
   });
 
 describe("viteBuildOutputPlugin", { tags: ["unit", "local"] }, () => {
@@ -45,22 +41,14 @@ describe("viteBuildOutputPlugin", { tags: ["unit", "local"] }, () => {
           entryEnvironment: "ssr",
         });
 
-        yield* writeBundle(
-          output.plugin,
-          environment("client", "dist/client"),
-          {
-            "index.html": {
-              type: "asset",
-              fileName: "index.html",
-              source: "<!-->",
-            },
+        yield* writeBundle(output.plugin, environment("client", "dist/client"), {
+          "index.html": {
+            type: "asset",
+            fileName: "index.html",
+            source: "<!-->",
           },
-        );
-        yield* writeBundle(
-          output.plugin,
-          environment("ssr", "dist/ssr"),
-          entryChunk("worker.js"),
-        );
+        });
+        yield* writeBundle(output.plugin, environment("ssr", "dist/ssr"), entryChunk("worker.js"));
 
         const result = yield* output.output;
         const bundle = yield* result.serverBundle;
@@ -76,17 +64,13 @@ describe("viteBuildOutputPlugin", { tags: ["unit", "local"] }, () => {
           entryEnvironment: "ssr",
         });
 
-        yield* writeBundle(
-          output.plugin,
-          environment("client", "dist/client"),
-          {
-            "index.html": {
-              type: "asset",
-              fileName: "index.html",
-              source: "<!-->",
-            },
+        yield* writeBundle(output.plugin, environment("client", "dist/client"), {
+          "index.html": {
+            type: "asset",
+            fileName: "index.html",
+            source: "<!-->",
           },
-        );
+        });
 
         const result = yield* output.output;
 

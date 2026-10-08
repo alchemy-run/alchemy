@@ -2,25 +2,19 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { runBuildChild } from "../core/BuildChild.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
   relativeClientDirExpression,
   writeNodeServeEntry,
 } from "../core/NodeServe.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
-import {
-  make,
-  type FoldkitTarget,
-  type FoldkitTargetConfig,
-} from "./Foldkit.ts";
+import { make, type FoldkitTarget, type FoldkitTargetConfig } from "./Foldkit.ts";
 
 const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "node", message, cause });
 
-const makeNodeFinishTarget = (
-  config: FoldkitTargetConfig = {},
-): FoldkitTarget =>
+const makeNodeFinishTarget = (config: FoldkitTargetConfig = {}): FoldkitTarget =>
   makeDeployTarget({
     platform: "node",
     config,
@@ -30,15 +24,10 @@ const makeNodeFinishTarget = (
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (!output.distDirectory || !output.clientDirectory)
-          return yield* Effect.fail(
-            fail("Foldkit produced no deployment or client directory."),
-          );
+          return yield* Effect.fail(fail("Foldkit produced no deployment or client directory."));
         const server = path.join(output.distDirectory, "server");
         yield* fs.makeDirectory(server, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(server, "package.json"),
-          '{"type":"module"}\n',
-        );
+        yield* fs.writeFileString(path.join(server, "package.json"), '{"type":"module"}\n');
         const servePath = path.join(server, NODE_SERVE_ENTRY_FILE_NAME);
         const handler =
           context.entry === undefined
@@ -52,15 +41,11 @@ const makeNodeFinishTarget = (
           output,
           servePath,
           serveModuleName: `server/${NODE_SERVE_ENTRY_FILE_NAME}`,
-          clientDirExpression: relativeClientDirExpression(
-            servePath,
-            output.clientDirectory,
-          ),
+          clientDirExpression: relativeClientDirExpression(servePath, output.clientDirectory),
           handler,
           serveRootIndex: true,
           notFoundHandling:
-            config.notFoundHandling ??
-            (handler || config.output === "static" ? "none" : "spa"),
+            config.notFoundHandling ?? (handler || config.output === "static" ? "none" : "spa"),
           htmlHandling: config.htmlHandling,
           platform: "node",
         });
@@ -85,9 +70,7 @@ export const buildInChild = (input: {
     return yield* framework.build({ root: input.rootDir });
   });
 
-export const makeNodeTarget = (
-  config: FoldkitTargetConfig = {},
-): FoldkitTarget => ({
+export const makeNodeTarget = (config: FoldkitTargetConfig = {}): FoldkitTarget => ({
   ...makeNodeFinishTarget(config),
   build: (context) =>
     runBuildChild({

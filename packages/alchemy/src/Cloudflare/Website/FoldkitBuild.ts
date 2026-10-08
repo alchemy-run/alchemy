@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import type { Plugin } from "vite";
-import type { AssetsConfig } from "../Workers/Assets.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
+import type { AssetsConfig } from "../Workers/Assets.ts";
 
 /** The versioned manifest returned by Foldkit's completed-build API. */
 export const FoldkitBuildManifest = Schema.Struct({
@@ -44,10 +44,7 @@ export const foldkitBuildMetadataReader = (
         "Foldkit's build plugin does not expose getBuildMetadata(). Upgrade @foldkit/vite-plugin to 0.25.0 or newer.",
     });
   }
-  return () =>
-    Schema.decodeUnknownSync(FoldkitBuildMetadata)(
-      plugin.api.getBuildMetadata(),
-    );
+  return () => Schema.decodeUnknownSync(FoldkitBuildMetadata)(plugin.api.getBuildMetadata());
 };
 
 /**
@@ -59,6 +56,4 @@ export const foldkitBuildMetadataReader = (
 export const foldkitAssetsFromManifest = (
   manifest: FoldkitBuildManifest | undefined,
 ): AssetsConfig | undefined =>
-  manifest === undefined
-    ? { notFoundHandling: "single-page-application" }
-    : undefined;
+  manifest === undefined ? { notFoundHandling: "single-page-application" } : undefined;

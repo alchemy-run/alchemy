@@ -1,11 +1,9 @@
+import { Button } from "@foldkit/ui";
 import { Effect, Schema } from "effect";
 import { Command, Runtime, type Update } from "foldkit";
 import { type Document, type HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
-
-import { Button } from "@foldkit/ui";
-
 import { COUNT_COOKIE } from "./cookie";
 
 // MODEL
@@ -75,9 +73,7 @@ export const PersistCount = Command.define("PersistCount", {
 
 // INIT
 
-export const init: Runtime.ApplicationInit<Model, Message, Flags> = (
-  flags,
-) => ({
+export const init: Runtime.ApplicationInit<Model, Message, Flags> = (flags) => ({
   model: {
     count: flags.initialCount,
     renderedAt: flags.renderedAt,
@@ -90,36 +86,24 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = (
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: `Count ${model.count}`,
   body: h.div(
+    [h.Class("min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6")],
     [
-      h.Class(
-        "min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6",
-      ),
-    ],
-    [
-      h.h1(
-        [h.Class("text-2xl font-semibold text-gray-800")],
-        ["Server-rendered counter"],
-      ),
-      h.p(
-        [h.Id("count"), h.Class("text-6xl font-bold text-gray-800")],
-        [model.count.toString()],
-      ),
+      h.h1([h.Class("text-2xl font-semibold text-gray-800")], ["Server-rendered counter"]),
+      h.p([h.Id("count"), h.Class("text-6xl font-bold text-gray-800")], [model.count.toString()]),
       h.div(
         [h.Class("flex flex-wrap justify-center gap-4")],
         [
           Button.view(
             {
               onClick: Message.ClickedDecrement(),
-              toView: (attributes) =>
-                h.button([...attributes.button, h.Class(buttonStyle)], ["-"]),
+              toView: (attributes) => h.button([...attributes.button, h.Class(buttonStyle)], ["-"]),
             },
             h,
           ),
           Button.view(
             {
               onClick: Message.ClickedIncrement(),
-              toView: (attributes) =>
-                h.button([...attributes.button, h.Class(buttonStyle)], ["+"]),
+              toView: (attributes) => h.button([...attributes.button, h.Class(buttonStyle)], ["+"]),
             },
             h,
           ),
@@ -142,5 +126,4 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
 
 // STYLE
 
-const buttonStyle =
-  "bg-black text-white hover:bg-gray-700 px-4 py-2 transition";
+const buttonStyle = "bg-black text-white hover:bg-gray-700 px-4 py-2 transition";

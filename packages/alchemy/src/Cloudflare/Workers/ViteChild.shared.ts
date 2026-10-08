@@ -5,8 +5,8 @@ import type {
   RuntimeWorker,
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
 import type { BundleOutput } from "../../Bundle/Bundle.ts";
+import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 

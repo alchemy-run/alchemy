@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { Server } from "foldkit/experimental";
-
 import { Flags, init, view } from "./main.ts";
 
 export { prerenderPaths } from "./prerender.ts";

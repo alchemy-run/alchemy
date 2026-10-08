@@ -5,14 +5,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { UrlRequest, load, pushUrl } from "foldkit/navigation";
 import { modifyFields } from "foldkit/struct";
 import { Url, toString as urlToString } from "foldkit/url";
-
-import {
-  AppRoute,
-  aboutRouter,
-  counterRouter,
-  homeRouter,
-  urlToAppRoute,
-} from "./route";
+import { AppRoute, aboutRouter, counterRouter, homeRouter, urlToAppRoute } from "./route";
 
 // MODEL
 
@@ -41,10 +34,7 @@ export type Message = typeof Message.Type;
 
 // INIT
 
-export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
-  flags,
-  url,
-) => ({
+export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (flags, url) => ({
   model: { route: urlToAppRoute(url), count: flags.initialCount },
 });
 
@@ -53,15 +43,13 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
 const NavigateInternal = Command.define("NavigateInternal", {
   args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
-  execute: ({ url }) =>
-    pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
+  execute: ({ url }) => pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 });
 
 const LoadExternal = Command.define("LoadExternal", {
   args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
-  execute: ({ href }) =>
-    load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
+  execute: ({ href }) => load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
 });
 
 // UPDATE
@@ -124,19 +112,10 @@ const pageView = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.section(
         [h.Class("grid gap-4")],
         [
-          h.h1(
-            [h.Id("page-title"), h.Class("text-4xl font-bold")],
-            ["Statically generated home"],
-          ),
-          h.p(
-            [],
-            ["This route was rendered during the build and hydrated in place."],
-          ),
+          h.h1([h.Id("page-title"), h.Class("text-4xl font-bold")], ["Statically generated home"]),
+          h.p([], ["This route was rendered during the build and hydrated in place."]),
           h.button(
-            [
-              h.OnClick(Message.ClickedIncrement()),
-              h.Class("w-fit bg-black px-4 py-2 text-white"),
-            ],
+            [h.OnClick(Message.ClickedIncrement()), h.Class("w-fit bg-black px-4 py-2 text-white")],
             [`Count: ${model.count}`],
           ),
         ],
@@ -149,32 +128,21 @@ const pageView = (model: Model, h: HtmlBuilder<Message>): Html =>
             [h.Id("page-title"), h.Class("text-4xl font-bold")],
             ["Statically generated about page"],
           ),
-          h.p(
-            [],
-            [
-              "The same renderPage function produced this route in the same build.",
-            ],
-          ),
+          h.p([], ["The same renderPage function produced this route in the same build."]),
         ],
       ),
     Counter: () =>
       h.section(
         [h.Class("grid gap-4")],
         [
-          h.h1(
-            [h.Id("page-title"), h.Class("text-4xl font-bold")],
-            ["Request-rendered counter"],
-          ),
+          h.h1([h.Id("page-title"), h.Class("text-4xl font-bold")], ["Request-rendered counter"]),
           h.p(
             [],
             [
               "Open /counter?count=7 directly or reload it: the count arrives in the HTML, then hydrates in the browser.",
             ],
           ),
-          h.p(
-            [h.Id("count"), h.Class("text-6xl font-bold")],
-            [model.count.toString()],
-          ),
+          h.p([h.Id("count"), h.Class("text-6xl font-bold")], [model.count.toString()]),
           h.button(
             [
               h.Id("increment"),
@@ -189,10 +157,7 @@ const pageView = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.section(
         [h.Class("grid gap-4")],
         [
-          h.h1(
-            [h.Id("page-title"), h.Class("text-4xl font-bold")],
-            ["Not found"],
-          ),
+          h.h1([h.Id("page-title"), h.Class("text-4xl font-bold")], ["Not found"]),
           h.p([], [`No statically generated page exists for ${path}.`]),
         ],
       ),

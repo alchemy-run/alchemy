@@ -59,9 +59,7 @@ describe("Neon Fetch entry", () => {
         const head = yield* call(module, "/missing", "HEAD");
         expect(head.status).toBe(404);
         expect(yield* text(head)).toBe("");
-        expect(yield* text(yield* call(module, "/missing", "POST"))).toBe(
-          "POST",
-        );
+        expect(yield* text(yield* call(module, "/missing", "POST"))).toBe("POST");
       }),
     ));
 

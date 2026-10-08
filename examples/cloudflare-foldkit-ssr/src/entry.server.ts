@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { Server } from "foldkit/experimental";
-
 import { readCountCookie } from "./cookie";
 import { Flags, init, view } from "./main";
 

@@ -1,9 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as workers from "@distilled.cloud/cloudflare/workers";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -13,7 +14,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import { expectWorkerExists } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -24,9 +24,7 @@ describe.sequential(
   () => {
     for (const mode of foldkitModes) {
       for (const check of foldkitChecks) {
-        test.provider.skipIf(
-          !!process.env.FAST || (check === "browser" && !browserEnabled),
-        )(
+        test.provider.skipIf(!!process.env.FAST || (check === "browser" && !browserEnabled))(
           `${mode}: ${check === "browser" ? "browser hydration" : "HTTP rendering"} and cleanup`,
           (stack) =>
             Effect.gen(function* () {
@@ -47,16 +45,14 @@ describe.sequential(
               expect(site.url).toBeDefined();
               yield* expectWorkerExists(site.workerName, accountId);
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* workers
                 .getScript({ accountId, scriptName: site.workerName })
                 .pipe(
                   Effect.as(false),
-                  Effect.catchTag(
-                    ["WorkerNotFound", "WorkerHasNoVersions"],
-                    () => Effect.succeed(true),
+                  Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
+                    Effect.succeed(true),
                   ),
                   Effect.repeat({
                     schedule: Schedule.spaced("1 second"),

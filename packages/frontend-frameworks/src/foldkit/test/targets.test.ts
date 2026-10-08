@@ -1,35 +1,26 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeNeonServeEntrySource } from "../../core/NeonServe.ts";
 import { makeNodeServeEntrySource } from "../../core/NodeServe.ts";
 import { makeAwsTarget } from "../aws.ts";
-import {
-  metadataReader,
-  readFoldkitOutput,
-  type BuildMetadata,
-} from "../Foldkit.ts";
+import { metadataReader, readFoldkitOutput, type BuildMetadata } from "../Foldkit.ts";
 import { target as makeNeonTarget } from "../neon.ts";
 import { makeNodeTarget } from "../node.ts";
 
-const run = <A, E>(
-  effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
-) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(
-    roots
-      .splice(0)
-      .map((root) => fs.rm(root, { recursive: true, force: true })),
-  );
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
 const fixture = async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "foldkit-target-"));
@@ -40,14 +31,8 @@ const fixture = async () => {
   const serverEntry = path.join(serverDirectory, "nested", "fetch.js");
   await fs.mkdir(path.join(clientDirectory, "about"), { recursive: true });
   await fs.mkdir(path.dirname(serverEntry), { recursive: true });
-  await fs.writeFile(
-    path.join(clientDirectory, "index.html"),
-    "prerendered home",
-  );
-  await fs.writeFile(
-    path.join(clientDirectory, "about", "index.html"),
-    "prerendered about",
-  );
+  await fs.writeFile(path.join(clientDirectory, "index.html"), "prerendered home");
+  await fs.writeFile(path.join(clientDirectory, "about", "index.html"), "prerendered about");
   await fs.writeFile(path.join(clientDirectory, "asset.txt"), "asset");
   await fs.writeFile(
     serverEntry,
@@ -76,17 +61,13 @@ const assertRouting = async (
   fetcher: (pathname: string, init?: RequestInit) => Promise<Response>,
 ) => {
   expect(await (await fetcher("/")).text()).toBe("prerendered home");
-  expect(await (await fetcher("/about?count=7")).text()).toBe(
-    "prerendered about",
-  );
-  expect(await (await fetcher("/dynamic?count=7")).text()).toBe(
-    "GET:/dynamic?count=7:",
-  );
+  expect(await (await fetcher("/about?count=7")).text()).toBe("prerendered about");
+  expect(await (await fetcher("/dynamic?count=7")).text()).toBe("GET:/dynamic?count=7:");
   expect(await (await fetcher("/asset.txt")).text()).toBe("asset");
   expect((await fetcher("/missing.js")).status).toBe(404);
-  expect(
-    await (await fetcher("/about", { method: "POST", body: "payload" })).text(),
-  ).toBe("POST:/about:payload");
+  expect(await (await fetcher("/about", { method: "POST", body: "payload" })).text()).toBe(
+    "POST:/about:payload",
+  );
   for (const pathname of ["/", "/about", "/dynamic"]) {
     const response = await fetcher(pathname, { method: "HEAD" });
     expect(response.status).toBe(200);
@@ -97,30 +78,17 @@ const assertRouting = async (
 describe("Foldkit deployment targets", () => {
   it("packages only client/server artifacts with a portable, entry-first layout", async () => {
     const metadata = await fixture();
-    await fs.writeFile(
-      path.join(metadata.root, ".env"),
-      "PRIVATE=not-deployed",
-    );
+    await fs.writeFile(path.join(metadata.root, ".env"), "PRIVATE=not-deployed");
     const { output, entry } = await run(
       readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata),
     );
-    expect(await fs.readdir(output.distDirectory!)).toEqual([
-      "client",
-      "server",
-    ]);
+    expect(await fs.readdir(output.distDirectory!)).toEqual(["client", "server"]);
     expect(output.serverModules?.[0]?.name).toBe("server/nested/fetch.js");
-    expect(entry).toBe(
-      path.join(output.distDirectory!, "server", "nested", "fetch.js"),
+    expect(entry).toBe(path.join(output.distDirectory!, "server", "nested", "fetch.js"));
+    expect(await fs.readFile(path.join(output.clientDirectory!, "about/index.html"), "utf8")).toBe(
+      "prerendered about",
     );
-    expect(
-      await fs.readFile(
-        path.join(output.clientDirectory!, "about/index.html"),
-        "utf8",
-      ),
-    ).toBe("prerendered about");
-    const spa = await run(
-      readFoldkitOutput(metadata.root, metadata.clientDirectory),
-    );
+    const spa = await run(readFoldkitOutput(metadata.root, metadata.clientDirectory));
     expect(spa.output.serverModules).toBeUndefined();
     expect(await fs.readdir(spa.output.distDirectory!)).toEqual(["client"]);
   });
@@ -128,24 +96,10 @@ describe("Foldkit deployment targets", () => {
   it("rejects mismatched AWS topology and keeps static SSG assets only", async () => {
     const metadata = await fixture();
     await expect(
-      run(
-        readFoldkitOutput(
-          metadata.root,
-          metadata.clientDirectory,
-          metadata,
-          "spa",
-        ),
-      ),
+      run(readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata, "spa")),
     ).rejects.toThrow('Set output: "server"');
     await expect(
-      run(
-        readFoldkitOutput(
-          metadata.root,
-          metadata.clientDirectory,
-          undefined,
-          "server",
-        ),
-      ),
+      run(readFoldkitOutput(metadata.root, metadata.clientDirectory, undefined, "server")),
     ).rejects.toThrow("no server handler");
     await expect(
       run(
@@ -158,12 +112,7 @@ describe("Foldkit deployment targets", () => {
       ),
     ).rejects.toThrow("requires prerendered pages");
     const { output } = await run(
-      readFoldkitOutput(
-        metadata.root,
-        metadata.clientDirectory,
-        metadata,
-        "static",
-      ),
+      readFoldkitOutput(metadata.root, metadata.clientDirectory, metadata, "static"),
     );
     expect(output.serverModules).toBeUndefined();
     expect(await fs.readdir(output.distDirectory!)).toEqual(["client"]);
@@ -189,10 +138,7 @@ describe("Foldkit deployment targets", () => {
         entry,
       }),
     );
-    const servePath = path.join(
-      finished.distDirectory!,
-      finished.serverModules![0]!.name,
-    );
+    const servePath = path.join(finished.distDirectory!, finished.serverModules![0]!.name);
     // Add only a readiness notification, leaving the generated request handling intact.
     await fs.appendFile(
       servePath,
@@ -225,9 +171,7 @@ describe("Foldkit deployment targets", () => {
           reject(new Error("Node entry exited: " + code + errors));
         });
       });
-      await assertRouting((pathname, init) =>
-        fetch(`http://127.0.0.1:${port}${pathname}`, init),
-      );
+      await assertRouting((pathname, init) => fetch(`http://127.0.0.1:${port}${pathname}`, init));
     } finally {
       if (child.exitCode === null) {
         const exited = once(child, "exit");
@@ -250,9 +194,7 @@ describe("Foldkit deployment targets", () => {
       }),
     );
     const module = await import(
-      pathToFileURL(
-        path.join(finished.distDirectory!, finished.serverModules![0]!.name),
-      ).href
+      pathToFileURL(path.join(finished.distDirectory!, finished.serverModules![0]!.name)).href
     );
     await assertRouting((pathname, init) =>
       module.default.fetch(new Request("http://example.test" + pathname, init)),
@@ -262,9 +204,7 @@ describe("Foldkit deployment targets", () => {
   it("preserves SPA fallback and explicit 404 overrides without a Foldkit handler", async () => {
     for (const notFoundHandling of [undefined, "none"] as const) {
       const metadata = await fixture();
-      const { output } = await run(
-        readFoldkitOutput(metadata.root, metadata.clientDirectory),
-      );
+      const { output } = await run(readFoldkitOutput(metadata.root, metadata.clientDirectory));
       const finished = await run(
         makeNeonTarget({ notFoundHandling }).finish!(output, {
           root: metadata.root,
@@ -272,16 +212,11 @@ describe("Foldkit deployment targets", () => {
         }),
       );
       const module = await import(
-        pathToFileURL(
-          path.join(finished.distDirectory!, finished.serverModules![0]!.name),
-        ).href
+        pathToFileURL(path.join(finished.distDirectory!, finished.serverModules![0]!.name)).href
       );
-      const response = await module.default.fetch(
-        new Request("http://example.test/deep/link"),
-      );
+      const response = await module.default.fetch(new Request("http://example.test/deep/link"));
       expect(response.status).toBe(notFoundHandling ? 404 : 200);
-      if (!notFoundHandling)
-        expect(await response.text()).toBe("prerendered home");
+      if (!notFoundHandling) expect(await response.text()).toBe("prerendered home");
     }
   });
 
@@ -298,9 +233,7 @@ describe("Foldkit deployment targets", () => {
       }),
     );
     const module = await import(
-      pathToFileURL(
-        path.join(finished.distDirectory!, finished.serverModules![0]!.name),
-      ).href
+      pathToFileURL(path.join(finished.distDirectory!, finished.serverModules![0]!.name)).href
     );
     const response = await module.handler({
       version: "2.0",
@@ -359,14 +292,12 @@ describe("Foldkit plugin metadata", () => {
     expect(makeNodeServeEntrySource(options)).toContain(
       'const isRoot = (urlPath === "/" || urlPath === "");',
     );
-    expect(makeNeonServeEntrySource(options)).toContain(
-      'handle === undefined || pathname !== "/"',
+    expect(makeNeonServeEntrySource(options)).toContain('handle === undefined || pathname !== "/"');
+    expect(makeNodeServeEntrySource({ ...options, serveRootIndex: true })).toContain(
+      "const isRoot = false;",
     );
-    expect(
-      makeNodeServeEntrySource({ ...options, serveRootIndex: true }),
-    ).toContain("const isRoot = false;");
-    expect(
-      makeNeonServeEntrySource({ ...options, serveRootIndex: true }),
-    ).toContain("lookup(pathname, true)");
+    expect(makeNeonServeEntrySource({ ...options, serveRootIndex: true })).toContain(
+      "lookup(pathname, true)",
+    );
   });
 });

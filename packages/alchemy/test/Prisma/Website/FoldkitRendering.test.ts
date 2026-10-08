@@ -1,8 +1,9 @@
-import * as Prisma from "@/Prisma/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Prisma from "@/Prisma/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -12,7 +13,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import { getProject, getService } from "@distilled.cloud/prisma/management";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -44,8 +44,7 @@ describe.sequential(
               const compute = site.compute!;
               yield* getService({ serviceId: compute.appId });
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* getService({ serviceId: compute.appId })
                 .pipe(

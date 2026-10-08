@@ -1,16 +1,12 @@
 import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
+import { Assets } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { resolveSource } from "@/Cloudflare/Workers/Source.ts";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "@/Artifacts.ts";
-import { Assets } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "@/Artifacts.ts";
+import { resolveSource } from "@/Cloudflare/Workers/Source.ts";
 
 const mode = process.argv[2];
 const program = Effect.gen(function* () {
@@ -59,18 +55,12 @@ const program = Effect.gen(function* () {
     fetch(new URL(mode === "ssr" ? "/?count=7" : "/", handle.url)),
   );
   const html = yield* Effect.promise(() => response.text());
-  if (
-    response.status !== 200 ||
-    !html.includes(mode === "ssr" ? ">7<" : "Foldkit Fixture")
-  ) {
+  if (response.status !== 200 || !html.includes(mode === "ssr" ? ">7<" : "Foldkit Fixture")) {
     throw new Error(`Unexpected dev response: ${response.status} ${html}`);
   }
   yield* Effect.log("foldkit-dev-ok");
 }).pipe(
-  Effect.provideService(
-    Artifacts,
-    makeScopedArtifacts(createArtifactStore(), "DevProbe"),
-  ),
+  Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), "DevProbe")),
   Effect.scoped,
   Effect.provide(NodeServices.layer),
 );

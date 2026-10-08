@@ -5,11 +5,8 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type { Plugin } from "vite";
 import * as Core from "../core/index.ts";
+import type { NodeServeHtmlHandling, NodeServeNotFoundHandling } from "../core/NodeServe.ts";
 import { make as makeVite, type ViteBuildConfig } from "../vite/Vite.ts";
-import type {
-  NodeServeHtmlHandling,
-  NodeServeNotFoundHandling,
-} from "../core/NodeServe.ts";
 
 /** The completed-build contract exposed by @foldkit/vite-plugin >= 0.25.0. */
 export const BuildMetadata = Schema.Struct({
@@ -38,10 +35,7 @@ export interface FoldkitTargetConfig {
   readonly htmlHandling?: NodeServeHtmlHandling | undefined;
 }
 export interface FoldkitTarget extends Core.DeployTarget<FoldkitTargetConfig> {}
-export type FoldkitTargetInput = Core.DeployTargetInput<
-  FoldkitTarget,
-  FoldkitTargetConfig
->;
+export type FoldkitTargetInput = Core.DeployTargetInput<FoldkitTarget, FoldkitTargetConfig>;
 export interface FoldkitOptions extends FoldkitTargetConfig {
   /** Project directory. @default process.cwd() */
   readonly root?: string | undefined;
@@ -50,8 +44,7 @@ export interface FoldkitOptions extends FoldkitTargetConfig {
   /** Native Vite development server options. */
   readonly dev?: { readonly port?: number | undefined } | undefined;
 }
-export const DEFAULT_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/foldkit/aws";
+export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/foldkit/aws";
 
 interface ViteBuilder {
   readonly config: {
@@ -71,9 +64,7 @@ interface ViteBuilder {
   readonly buildApp: () => Promise<unknown>;
 }
 interface ViteModule {
-  readonly createBuilder: (
-    config: Record<string, unknown>,
-  ) => Promise<ViteBuilder>;
+  readonly createBuilder: (config: Record<string, unknown>) => Promise<ViteBuilder>;
 }
 const fail = (message: string, cause?: unknown) =>
   new Core.FrameworkError({ framework: "foldkit", message, cause });
@@ -83,12 +74,9 @@ export const metadataReader = (plugins: ViteBuilder["config"]["plugins"]) => {
   const plugin = plugins.find((plugin) => plugin.name === "foldkit:build");
   if (!plugin) return undefined;
   if (typeof plugin.api?.getBuildMetadata !== "function") {
-    throw fail(
-      "Foldkit SSR requires @foldkit/vite-plugin >= 0.25.0 with getBuildMetadata().",
-    );
+    throw fail("Foldkit SSR requires @foldkit/vite-plugin >= 0.25.0 with getBuildMetadata().");
   }
-  return () =>
-    Schema.decodeUnknownSync(BuildMetadata)(plugin.api.getBuildMetadata());
+  return () => Schema.decodeUnknownSync(BuildMetadata)(plugin.api.getBuildMetadata());
 };
 
 /** Package only deployment artifacts, including independently configured client/server directories. */
@@ -115,11 +103,7 @@ export const readFoldkitOutput = (
         ),
       );
     }
-    if (
-      output === "static" &&
-      metadata &&
-      metadata.manifest.prerendered.length === 0
-    ) {
+    if (output === "static" && metadata && metadata.manifest.prerendered.length === 0) {
       return yield* Effect.fail(
         fail(
           'Static Foldkit output requires prerendered pages. Configure ssr.build.prerender or use output: "server".',
@@ -131,19 +115,11 @@ export const readFoldkitOutput = (
       const relative = path.relative(parent, child);
       return (
         relative === "" ||
-        (!relative.startsWith(`..${path.sep}`) &&
-          relative !== ".." &&
-          !path.isAbsolute(relative))
+        (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
       );
     };
-    for (const directory of [
-      clientDirectory,
-      ...(metadata ? [metadata.serverDirectory] : []),
-    ]) {
-      if (
-        isWithin(distDirectory, directory) ||
-        isWithin(directory, distDirectory)
-      ) {
+    for (const directory of [clientDirectory, ...(metadata ? [metadata.serverDirectory] : [])]) {
+      if (isWithin(distDirectory, directory) || isWithin(directory, distDirectory)) {
         return yield* Effect.fail(
           fail(
             "Foldkit output directories must not overlap .alchemy/foldkit, which is reserved for deployment packaging.",
@@ -157,9 +133,7 @@ export const readFoldkitOutput = (
         metadata.serverEntry === metadata.serverDirectory)
     ) {
       return yield* Effect.fail(
-        fail(
-          "Foldkit's server entry must be inside its server output directory.",
-        ),
+        fail("Foldkit's server entry must be inside its server output directory."),
       );
     }
     yield* fs.remove(distDirectory, { recursive: true, force: true });
@@ -188,9 +162,7 @@ export const readFoldkitOutput = (
     });
     if (!modules.some((module) => module.name === `server/${entryName}`)) {
       return yield* Effect.fail(
-        fail(
-          "Foldkit's generated server entry is missing from the build output.",
-        ),
+        fail("Foldkit's generated server entry is missing from the build output."),
       );
     }
     return {
@@ -213,41 +185,34 @@ export const readFoldkitOutput = (
 /** Build with the project's plugin and host its native development server. */
 export const make: (
   options?: FoldkitOptions,
-) => Effect.Effect<
-  Core.Framework["Service"],
-  never,
-  FileSystem.FileSystem | Path.Path
-> = Effect.fnUntraced(function* (options: FoldkitOptions = {}) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const baseRoot = options.root ?? process.cwd();
-  const config: FoldkitTargetConfig = {
-    vite: options.vite,
-    output: options.output,
-    notFoundHandling: options.notFoundHandling,
-    htmlHandling: options.htmlHandling,
-  };
-  const native = yield* makeVite({
-    root: baseRoot,
-    vite: options.vite,
-    dev: options.dev,
-  });
-  const provide = <A, E>(
-    effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
-  ) =>
-    effect.pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    );
-  const build: Core.Framework["Service"]["build"] = Effect.fn(
-    function* (buildOptions) {
-      const root = path.resolve(buildOptions?.root ?? baseRoot);
-      const target = yield* Core.resolveDeployTarget<
-        FoldkitTarget,
-        FoldkitTargetConfig
-      >(root, options.target ?? DEFAULT_TARGET_SPECIFIER, config).pipe(
-        Effect.mapError((error) => fail(error.message, error.cause)),
+) => Effect.Effect<Core.Framework["Service"], never, FileSystem.FileSystem | Path.Path> =
+  Effect.fnUntraced(function* (options: FoldkitOptions = {}) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const baseRoot = options.root ?? process.cwd();
+    const config: FoldkitTargetConfig = {
+      vite: options.vite,
+      output: options.output,
+      notFoundHandling: options.notFoundHandling,
+      htmlHandling: options.htmlHandling,
+    };
+    const native = yield* makeVite({
+      root: baseRoot,
+      vite: options.vite,
+      dev: options.dev,
+    });
+    const provide = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
+      effect.pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
       );
+    const build: Core.Framework["Service"]["build"] = Effect.fn(function* (buildOptions) {
+      const root = path.resolve(buildOptions?.root ?? baseRoot);
+      const target = yield* Core.resolveDeployTarget<FoldkitTarget, FoldkitTargetConfig>(
+        root,
+        options.target ?? DEFAULT_TARGET_SPECIFIER,
+        config,
+      ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
       const context = { root, framework: "foldkit", env: buildOptions?.env };
       if (target.build)
         return yield* provide(target.build(context)).pipe(
@@ -291,9 +256,7 @@ export const make: (
             ...(options.vite?.configFile !== undefined
               ? { configFile: path.resolve(root, options.vite.configFile) }
               : {}),
-            ...(options.vite?.base !== undefined
-              ? { base: options.vite.base }
-              : {}),
+            ...(options.vite?.base !== undefined ? { base: options.vite.base } : {}),
             ...(outDir !== undefined ? { build: { outDir } } : {}),
             plugins: [outputPlugin],
           });
@@ -303,9 +266,7 @@ export const make: (
           const client = builder.environments.client?.config ?? builder.config;
           return {
             metadata,
-            client:
-              metadata?.clientDirectory ??
-              path.resolve(client.root, client.build.outDir),
+            client: metadata?.clientDirectory ?? path.resolve(client.root, client.build.outDir),
           };
         },
         catch: (cause) => fail("Failed to build Foldkit", cause),
@@ -319,10 +280,9 @@ export const make: (
           entry: collected.entry,
         }),
       ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
-    },
-  );
-  return Core.Framework.of({ build, dev: native.dev });
-});
+    });
+    return Core.Framework.of({ build, dev: native.dev });
+  });
 
 export const layer = (
   options?: FoldkitOptions,

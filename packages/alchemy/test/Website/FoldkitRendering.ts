@@ -2,10 +2,10 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
 
 export type FoldkitMode = "spa" | "ssg" | "ssr" | "hybrid" | "static";
@@ -13,13 +13,7 @@ export const foldkitModes = ["spa", "ssg", "ssr", "hybrid"] as const;
 export const foldkitChecks = ["http", "browser"] as const;
 export const browserEnabled = process.env.FOLDKIT_WEBSITE_BROWSER === "1";
 export const foldkitMemo = {
-  include: [
-    "index.html",
-    "src/**",
-    "public/**",
-    "package.json",
-    "vite.config.ts",
-  ],
+  include: ["index.html", "src/**", "public/**", "package.json", "vite.config.ts"],
 };
 
 /** Private copies let each lifecycle choose its rendering mode without mutating a shared fixture. */
@@ -45,10 +39,7 @@ export const foldkitFixture = (mode: FoldkitMode) =>
       },
     );
     yield* fs.makeDirectory(path.join(root, "public"));
-    yield* fs.writeFileString(
-      path.join(root, "public/foldkit-probe.txt"),
-      "FOLDKIT_STATIC_ASSET",
-    );
+    yield* fs.writeFileString(path.join(root, "public/foldkit-probe.txt"), "FOLDKIT_STATIC_ASSET");
     if (mode === "static") {
       yield* fs.writeFileString(
         path.join(root, "public/404.html"),
@@ -79,10 +70,7 @@ export const foldkitFixture = (mode: FoldkitMode) =>
         const config = path.join(root, "vite.config.ts");
         yield* fs.writeFileString(
           config,
-          (yield* fs.readFileString(config)).replace(
-            "prerender: true",
-            "prerender: false",
-          ),
+          (yield* fs.readFileString(config)).replace("prerender: true", "prerender: false"),
         );
       }
     }
@@ -120,9 +108,7 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
       Effect.flatMap((result) =>
         result.status === 200 && result.body === "FOLDKIT_STATIC_ASSET"
           ? Effect.void
-          : Effect.fail(
-              new Error("Foldkit deployment is not serving its asset yet"),
-            ),
+          : Effect.fail(new Error("Foldkit deployment is not serving its asset yet")),
       ),
       Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
       Effect.timeout("60 seconds"),
@@ -139,25 +125,17 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
         expect(response.body).toContain("Foldkit Fixture");
         expect(response.body).not.toMatch(/id="count"/);
       } else {
-        expect(response.body).toMatch(
-          new RegExp(`id="count"[^>]*>${route.count}<`),
-        );
+        expect(response.body).toMatch(new RegExp(`id="count"[^>]*>${route.count}<`));
       }
       const script = response.body.match(/<script[^>]+src="([^" ]+)"/);
       expect(script).not.toBeNull();
-      const javascript = yield* request(
-        new URL(script![1]!, base + route.path).href,
-      );
+      const javascript = yield* request(new URL(script![1]!, base + route.path).href);
       expect(javascript.status).toBe(200);
       expect(javascript.type).toMatch(/javascript/);
       if (mode !== "spa") {
-        const stylesheet = response.body.match(
-          /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/,
-        );
+        const stylesheet = response.body.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/);
         expect(stylesheet).not.toBeNull();
-        const css = yield* request(
-          new URL(stylesheet![1]!, base + route.path).href,
-        );
+        const css = yield* request(new URL(stylesheet![1]!, base + route.path).href);
         expect(css.status).toBe(200);
         expect(css.type).toMatch(/text\/css/);
       }
@@ -175,9 +153,7 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
       expect((yield* request(`${base}/assets/missing.js`)).status).toBe(404);
     }
     if (mode === "ssg") {
-      expect(
-        (yield* request(`${base}/about/`, { method: "POST" })).status,
-      ).toBe(405);
+      expect((yield* request(`${base}/about/`, { method: "POST" })).status).toBe(405);
       expect((yield* request(`${base}/assets/missing.js`)).status).toBe(404);
     }
     if (mode === "static" || mode === "ssg")
@@ -198,8 +174,7 @@ const command = (args: string[]) =>
       ],
       { concurrency: 3 },
     );
-    if (code !== 0)
-      return yield* Effect.fail(new Error(`Browser command failed: ${stderr}`));
+    if (code !== 0) return yield* Effect.fail(new Error(`Browser command failed: ${stderr}`));
     return stdout;
   }).pipe(Effect.scoped, Effect.timeout("10 seconds"));
 
@@ -208,10 +183,7 @@ export const verifyFoldkitBrowser = (origin: string, mode: FoldkitMode) =>
   Effect.gen(function* () {
     for (const route of routes(mode)) {
       yield* Effect.gen(function* () {
-        const opened = yield* command([
-          "new-tab",
-          origin.replace(/\/+$/, "") + route.path,
-        ]);
+        const opened = yield* command(["new-tab", origin.replace(/\/+$/, "") + route.path]);
         const browser = yield* Effect.try(
           () =>
             JSON.parse(opened) as {
@@ -220,33 +192,15 @@ export const verifyFoldkitBrowser = (origin: string, mode: FoldkitMode) =>
               tabs?: { id: number; active: boolean }[];
             },
         );
-        const tab =
-          browser.openedTab ?? browser.tabs?.find((tab) => tab.active)?.id;
+        const tab = browser.openedTab ?? browser.tabs?.find((tab) => tab.active)?.id;
         if (tab === undefined)
-          return yield* Effect.fail(
-            new Error("Browser did not report its active tab"),
-          );
+          return yield* Effect.fail(new Error("Browser did not report its active tab"));
         const action = (...args: string[]) =>
-          command([
-            "action",
-            "--browser",
-            browser.key,
-            "--tab",
-            String(tab),
-            "--",
-            ...args,
-          ]);
+          command(["action", "--browser", browser.key, "--tab", String(tab), "--", ...args]);
         yield* Effect.addFinalizer(() =>
           action("close").pipe(
             Effect.andThen(
-              command([
-                "action",
-                "--browser",
-                browser.key,
-                "--tab",
-                String(tab),
-                "done",
-              ]),
+              command(["action", "--browser", browser.key, "--tab", String(tab), "done"]),
             ),
             Effect.ignore,
           ),
@@ -261,9 +215,7 @@ export const verifyFoldkitBrowser = (origin: string, mode: FoldkitMode) =>
               times: 8,
               until: (text) => text.includes("FOLDKIT_COUNT_OK"),
             }),
-            Effect.tap((text) =>
-              Effect.sync(() => expect(text).toContain("FOLDKIT_COUNT_OK")),
-            ),
+            Effect.tap((text) => Effect.sync(() => expect(text).toContain("FOLDKIT_COUNT_OK"))),
           );
         yield* countIs(route.count);
         yield* action("click", "#increment");

@@ -3,10 +3,8 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 import { viteFrameworkOptions, type ViteProps } from "./Vite.ts";
 
-export const FOLDKIT_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/foldkit";
-export const FOLDKIT_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/foldkit/aws";
+export const FOLDKIT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/foldkit";
+export const FOLDKIT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/foldkit/aws";
 
 /** Configuration for a Foldkit website on AWS. */
 export interface FoldkitProps extends FrameworkSiteProps {

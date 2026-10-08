@@ -1,5 +1,5 @@
-import { CF_ROUTER_INJECTION } from "@/AWS/Website/cfcode.ts";
 import { describe, expect, it } from "alchemy-test";
+import { CF_ROUTER_INJECTION } from "@/AWS/Website/cfcode.ts";
 
 const route = async (
   method: string,
@@ -23,13 +23,11 @@ const route = async (
     kvs: () => ({
       async get(key: string) {
         lookups++;
-        if (options.match !== false && key === "site:/about/index.html")
-          return "1";
+        if (options.match !== false && key === "site:/about/index.html") return "1";
         throw new Error("Not Found");
       },
     }),
-    updateRequestOrigin: (origin: { domainName: string }) =>
-      origins.push(origin),
+    updateRequestOrigin: (origin: { domainName: string }) => origins.push(origin),
   };
   const metadata = {
     s3: {
@@ -37,10 +35,7 @@ const route = async (
       dir: "/site",
       routes: options.prefix ? ["/about"] : undefined,
     },
-    servers:
-      options.server === false
-        ? undefined
-        : [["server.lambda-url.example.com"]],
+    servers: options.server === false ? undefined : [["server.lambda-url.example.com"]],
     custom404: options.custom404 ? "/404.html" : undefined,
   };
   const run = new Function(
@@ -64,9 +59,7 @@ describe("AWS website asset routing", { tags: ["unit", "local"] }, () => {
   for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
     it(`${method} reaches the server despite static pages, route prefixes or a 404 page`, async () => {
       const result = await route(method, { prefix: true, custom404: true });
-      expect(result.origins[0]?.domainName).toBe(
-        "server.lambda-url.example.com",
-      );
+      expect(result.origins[0]?.domainName).toBe("server.lambda-url.example.com");
       expect(result.lookups).toBe(0);
       expect(result.request.uri).toBe("/about/");
       expect(result.request.cookies.session.value).toBe("counter");
@@ -79,8 +72,8 @@ describe("AWS website asset routing", { tags: ["unit", "local"] }, () => {
     );
   });
   it("preserves asset-only routing without a server origin", async () => {
-    expect(
-      (await route("POST", { server: false })).origins[0]?.domainName,
-    ).toBe("assets.s3.example.com");
+    expect((await route("POST", { server: false })).origins[0]?.domainName).toBe(
+      "assets.s3.example.com",
+    );
   });
 });

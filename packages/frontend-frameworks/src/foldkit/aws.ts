@@ -1,7 +1,7 @@
+import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
@@ -9,11 +9,7 @@ import {
   readServerModulesFromDisk,
   sortServerModules,
 } from "../core/index.ts";
-import {
-  make,
-  type FoldkitTarget,
-  type FoldkitTargetConfig,
-} from "./Foldkit.ts";
+import { make, type FoldkitTarget, type FoldkitTargetConfig } from "./Foldkit.ts";
 
 export interface FoldkitAwsTargetConfig extends FoldkitTargetConfig {
   /** Stream Lambda responses. @default true */
@@ -23,9 +19,7 @@ const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "aws", message, cause });
 
 /** Use the same web Request/Response adapter as the other Lambda framework targets. */
-const makeAwsFinishTarget = (
-  config: FoldkitAwsTargetConfig = {},
-): FoldkitTarget =>
+const makeAwsFinishTarget = (config: FoldkitAwsTargetConfig = {}): FoldkitTarget =>
   makeDeployTarget({
     platform: "aws",
     config,
@@ -39,16 +33,11 @@ const makeAwsFinishTarget = (
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (!output.distDirectory)
-          return yield* Effect.fail(
-            fail("Foldkit produced no deployment directory."),
-          );
+          return yield* Effect.fail(fail("Foldkit produced no deployment directory."));
         const server = path.join(output.distDirectory, "server");
         const adapter = yield* Effect.try({
           try: () =>
-            fileURLToPath(
-              import.meta
-                .resolve("@alchemy.run/frontend-frameworks/aws-lambda"),
-            ),
+            fileURLToPath(import.meta.resolve("@alchemy.run/frontend-frameworks/aws-lambda")),
           catch: (cause) => fail("Failed to resolve the Lambda adapter", cause),
         });
         const source = yield* fs.readFileString(adapter);
@@ -56,14 +45,8 @@ const makeAwsFinishTarget = (
           path.join(server, "foldkit-aws-lambda.mjs"),
           source.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
         );
-        yield* fs.writeFileString(
-          path.join(server, "package.json"),
-          '{"type":"module"}\n',
-        );
-        const wrap =
-          config.streaming === false
-            ? "toBufferedLambdaHandler"
-            : "toLambdaHandler";
+        yield* fs.writeFileString(path.join(server, "package.json"), '{"type":"module"}\n');
+        const wrap = config.streaming === false ? "toBufferedLambdaHandler" : "toLambdaHandler";
         yield* fs.writeFileString(
           path.join(server, "index.mjs"),
           `import entry from ${JSON.stringify("./" + path.relative(server, context.entry).replaceAll("\\", "/"))};
@@ -98,9 +81,7 @@ export const buildInChild = (input: {
     });
     return yield* framework.build({ root: input.rootDir });
   });
-export const makeAwsTarget = (
-  config: FoldkitAwsTargetConfig = {},
-): FoldkitTarget => ({
+export const makeAwsTarget = (config: FoldkitAwsTargetConfig = {}): FoldkitTarget => ({
   ...makeAwsFinishTarget(config),
   build: (context) =>
     runBuildChild({

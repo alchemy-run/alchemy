@@ -1,8 +1,9 @@
-import * as Hetzner from "@/Hetzner/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import * as api from "@distilled.cloud/hetzner/servers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -12,7 +13,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import * as api from "@distilled.cloud/hetzner/servers";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -44,8 +44,7 @@ describe.sequential(
               const serverId = site.server!.serverId;
               yield* api.getServer({ id: serverId });
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* api
                 .getServer({ id: serverId })

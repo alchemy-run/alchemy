@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { make } from "@alchemy.run/frontend-frameworks/foldkit";
 import { makeAwsTarget } from "@alchemy.run/frontend-frameworks/foldkit/aws";
 import { makeNodeTarget } from "@alchemy.run/frontend-frameworks/foldkit/node";
@@ -6,18 +7,16 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
-import { pathToFileURL } from "node:url";
+import * as Stream from "effect/Stream";
 import { foldkitFixture } from "./FoldkitRendering.ts";
 
 const probe = (script: string) =>
   Effect.gen(function* () {
-    const child = yield* ChildProcess.make(
-      "node",
-      ["--input-type=module", "-e", script],
-      { stdout: "pipe", stderr: "pipe" },
-    );
+    const child = yield* ChildProcess.make("node", ["--input-type=module", "-e", script], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [code, stdout, stderr] = yield* Effect.all(
       [
         child.exitCode,
@@ -53,29 +52,16 @@ layer(NodeServices.layer)("Foldkit provider build contracts", (it) => {
               vite: { outDir: "custom-output" },
             });
             const output = yield* framework.build();
-            expect(output.distDirectory).toBe(
-              path.join(root, ".alchemy/foldkit"),
+            expect(output.distDirectory).toBe(path.join(root, ".alchemy/foldkit"));
+            expect(yield* fs.exists(path.join(root, "custom-output/client/about/index.html"))).toBe(
+              mode !== "ssr",
             );
-            expect(
-              yield* fs.exists(
-                path.join(root, "custom-output/client/about/index.html"),
-              ),
-            ).toBe(mode !== "ssr");
-            expect(
-              yield* fs.exists(
-                path.join(root, "custom-output/server/fetch.js"),
-              ),
-            ).toBe(true);
+            expect(yield* fs.exists(path.join(root, "custom-output/server/fetch.js"))).toBe(true);
             if (mode !== "ssr")
               expect(
-                yield* fs.readFileString(
-                  path.join(output.clientDirectory!, "about/index.html"),
-                ),
+                yield* fs.readFileString(path.join(output.clientDirectory!, "about/index.html")),
               ).toContain(">0<");
-            const entry = path.join(
-              output.distDirectory!,
-              output.serverModules![0]!.name,
-            );
+            const entry = path.join(output.distDirectory!, output.serverModules![0]!.name);
             const routes = [
               ["/?count=7", mode === "ssr" ? ">7<" : ">0<"],
               ["/about?count=7", mode === "ssr" ? ">7<" : ">0<"],
@@ -152,13 +138,9 @@ console.log("FOLDKIT_LAMBDA_OK");`),
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         expect(output.serverModules).toBeUndefined();
+        expect(yield* fs.exists(path.join(output.distDirectory!, "server"))).toBe(false);
         expect(
-          yield* fs.exists(path.join(output.distDirectory!, "server")),
-        ).toBe(false);
-        expect(
-          yield* fs.readFileString(
-            path.join(output.clientDirectory!, "about/index.html"),
-          ),
+          yield* fs.readFileString(path.join(output.clientDirectory!, "about/index.html")),
         ).toContain(">0<");
       }),
     { tags: ["unit", "local"], timeout: 120_000 },

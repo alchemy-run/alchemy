@@ -1,8 +1,10 @@
-import * as Railway from "@/Railway/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as api } from "@distilled.cloud/railway";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Railway from "@/Railway/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import {
   browserEnabled,
   foldkitChecks,
@@ -12,8 +14,6 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/FoldkitRendering.ts";
-import { Query } from "@distilled.cloud/core/query";
-import { Railway as api } from "@distilled.cloud/railway";
 import { suitePartition } from "../suiteProject.ts";
 const readService = Query.fn((id: string) => ({
   deletedAt: api.service({ id }).deletedAt,
@@ -27,9 +27,7 @@ describe.sequential(
   () => {
     for (const mode of foldkitModes) {
       for (const check of foldkitChecks) {
-        test.provider.skipIf(
-          !!process.env.FAST || (check === "browser" && !browserEnabled),
-        )(
+        test.provider.skipIf(!!process.env.FAST || (check === "browser" && !browserEnabled))(
           `${mode}: ${check === "browser" ? "browser hydration" : "HTTP rendering"} and cleanup`,
           (stack) =>
             Effect.gen(function* () {
@@ -49,19 +47,14 @@ describe.sequential(
               expect(site.url).toBeDefined();
               expect(site.service).toBeDefined();
               const serviceId = site.service!.serviceId;
-              expect((yield* readService(serviceId)).deletedAt == null).toBe(
-                true,
-              );
+              expect((yield* readService(serviceId)).deletedAt == null).toBe(true);
               yield* verifyFoldkitRendering(site.url!, mode);
-              if (check === "browser")
-                yield* verifyFoldkitBrowser(site.url!, mode);
+              if (check === "browser") yield* verifyFoldkitBrowser(site.url!, mode);
               yield* stack.destroy();
               const gone = yield* readService(serviceId)
                 .pipe(
                   Effect.map((service) => service.deletedAt != null),
-                  Effect.catchTag("RailwayNotFound", () =>
-                    Effect.succeed(true),
-                  ),
+                  Effect.catchTag("RailwayNotFound", () => Effect.succeed(true)),
                 )
                 .pipe(
                   Effect.repeat({

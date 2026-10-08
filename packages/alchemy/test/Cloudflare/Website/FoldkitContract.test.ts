@@ -1,23 +1,16 @@
 import { pathToFileURL } from "node:url";
-import { foldkitAssetsFromManifest } from "@/Cloudflare/Website/FoldkitBuild.ts";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "@/Artifacts.ts";
-import { makeSourceContext } from "@/Cloudflare/Workers/Source.ts";
-import { Worker } from "@/Cloudflare/Workers/Worker.ts";
-import {
-  makeViteSource,
-  viteBuild,
-} from "@/Cloudflare/Workers/Sources/Vite.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "@/Artifacts.ts";
+import { foldkitAssetsFromManifest } from "@/Cloudflare/Website/FoldkitBuild.ts";
+import { makeSourceContext } from "@/Cloudflare/Workers/Source.ts";
+import { makeViteSource, viteBuild } from "@/Cloudflare/Workers/Sources/Vite.ts";
+import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const fixture = (name: string) =>
@@ -65,9 +58,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           prerendered: ["/about"],
         });
         expect(output.clientDirectory).toBe(path.join(root, manifest!.client));
-        expect(output.foldkit?.serverDirectory).toBe(
-          path.join(root, manifest!.server),
-        );
+        expect(output.foldkit?.serverDirectory).toBe(path.join(root, manifest!.server));
         expect(output.foldkit?.root).toBe(root);
         expect(output.foldkit?.clientDirectory).toBe(output.clientDirectory);
         expect(
@@ -77,13 +68,9 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             ),
           ),
         ).toEqual(manifest);
+        expect(yield* fs.exists(path.join(output.clientDirectory!, "index.html"))).toBe(false);
         expect(
-          yield* fs.exists(path.join(output.clientDirectory!, "index.html")),
-        ).toBe(false);
-        expect(
-          yield* fs.readFileString(
-            path.join(output.clientDirectory!, "about/index.html"),
-          ),
+          yield* fs.readFileString(path.join(output.clientDirectory!, "about/index.html")),
         ).toContain(">0<");
         const bundle = yield* output.serverBundle;
         expect(bundle?.files[0]?.path).toBe("dist/server/fetch.js");
@@ -124,15 +111,11 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           expect(asset).toBeDefined();
           expect(prerendered).toContain(asset!);
           expect(
-            yield* fs.exists(
-              path.join(output.clientDirectory!, asset!.replace(/^\/+/, "")),
-            ),
+            yield* fs.exists(path.join(output.clientDirectory!, asset!.replace(/^\/+/, ""))),
           ).toBe(true);
         }
 
-        expect(
-          foldkitAssetsFromManifest(output.foldkit?.manifest),
-        ).toBeUndefined();
+        expect(foldkitAssetsFromManifest(output.foldkit?.manifest)).toBeUndefined();
       }).pipe(Effect.scoped),
     {
       tags: [
@@ -182,9 +165,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           );
           expect(result._tag).toBe("Failure");
           if (result._tag === "Failure") {
-            expect(String(result.failure)).toContain(
-              "cannot be combined with main",
-            );
+            expect(String(result.failure)).toContain("cannot be combined with main");
           }
         }).pipe(Effect.scoped),
       {
@@ -245,18 +226,12 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           serverEntry: "fetch.js",
           prerendered: [],
         });
-        expect(output.foldkit?.serverDirectory).toBe(
-          path.join(root, "build/edge"),
-        );
+        expect(output.foldkit?.serverDirectory).toBe(path.join(root, "build/edge"));
         expect(output.clientDirectory).toBe(path.join(root, "build/browser"));
         expect(
-          yield* fs.exists(
-            path.join(output.foldkit!.serverDirectory, "foldkit.build.json"),
-          ),
+          yield* fs.exists(path.join(output.foldkit!.serverDirectory, "foldkit.build.json")),
         ).toBe(false);
-        expect(
-          yield* fs.exists(path.join(output.clientDirectory!, "index.html")),
-        ).toBe(false);
+        expect(yield* fs.exists(path.join(output.clientDirectory!, "index.html"))).toBe(false);
       }).pipe(Effect.scoped),
     {
       tags: [
@@ -293,12 +268,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             rootDir,
             main: "src/worker.ts",
             memo: {
-              include: [
-                "src/**",
-                "index.html",
-                "vite.config.ts",
-                "package.json",
-              ],
+              include: ["src/**", "index.html", "vite.config.ts", "package.json"],
             },
           };
           const source = framework
@@ -333,13 +303,11 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           expect(output.assets?.config?.notFoundHandling).toBe("404-page");
           expect(output.assets?.config?.runWorkerFirst).toEqual(["/api/*"]);
           expect(output.assets?.pathPrefix).toBe("/app");
-          expect(Object.keys(output.assets!.manifest)).toContain(
-            "/app/index.html",
-          );
+          expect(Object.keys(output.assets!.manifest)).toContain("/app/index.html");
           expect(output.bundle?.files[0]?.path).toContain("worker.js");
-          expect(
-            output.bundle?.files.map((file) => String(file.content)).join("\n"),
-          ).toContain("https://contract.example.test");
+          expect(output.bundle?.files.map((file) => String(file.content)).join("\n")).toContain(
+            "https://contract.example.test",
+          );
         }).pipe(Effect.scoped),
       {
         tags: [
@@ -364,10 +332,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           );
           const probe = yield* ChildProcess.make(
             process.execPath,
-            [
-              path.join(import.meta.dirname, "fixtures/foldkit-dev-probe.ts"),
-              mode,
-            ],
+            [path.join(import.meta.dirname, "fixtures/foldkit-dev-probe.ts"), mode],
             { cwd: root, stdout: "pipe", stderr: "pipe" },
           );
           const [stdout, stderr, exitCode] = yield* Effect.all(

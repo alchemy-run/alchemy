@@ -72,19 +72,13 @@ describe("vite worker entry resolution", () => {
       ...(main === null ? {} : { main }),
       compatibilityDate: "2025-07-01",
     });
-    assert(
-      typeof plugin.config === "function",
-      "plugin.config is not a function",
-    );
+    assert(typeof plugin.config === "function", "plugin.config is not a function");
     // Populates the plugin's resolved input, exactly as a real config pass does.
     await plugin.config.call({ meta: {} } as never, APP_DECLARED_SSR_INPUT, {
       command: "build",
       mode: "production",
     } as vite.ConfigEnv);
-    assert(
-      typeof plugin.options === "function",
-      "plugin.options is not a function",
-    );
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
     const options = { input };
     const returned = await plugin.options.call(
       {
@@ -106,22 +100,18 @@ describe("vite worker entry resolution", () => {
       main: MAIN,
       compatibilityDate: "2025-07-01",
     });
-    assert(
-      typeof plugin.config === "function",
-      "plugin.config is not a function",
-    );
-    const result = (await plugin.config.call(
-      { meta: {} } as never,
-      APP_DECLARED_SSR_INPUT,
-      { command: "build", mode: "production" } as vite.ConfigEnv,
-    )) as vite.UserConfig;
+    assert(typeof plugin.config === "function", "plugin.config is not a function");
+    const result = (await plugin.config.call({ meta: {} } as never, APP_DECLARED_SSR_INPUT, {
+      command: "build",
+      mode: "production",
+    } as vite.ConfigEnv)) as vite.UserConfig;
 
     // Not the fix — the reason one is needed. Two entry chunks reach the
     // bundle, and the deployed Worker is whichever the bundle lists first.
     expect(
       Object.keys(
-        mergeConfig(APP_DECLARED_SSR_INPUT, result).environments?.ssr?.build
-          ?.rollupOptions?.input as object,
+        mergeConfig(APP_DECLARED_SSR_INPUT, result).environments?.ssr?.build?.rollupOptions
+          ?.input as object,
       ).sort(),
     ).toEqual(["entry.server", "worker"]);
   });

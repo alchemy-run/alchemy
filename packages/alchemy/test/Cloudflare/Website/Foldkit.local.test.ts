@@ -1,26 +1,20 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Same rationale as Vite.test.ts: Vite's `vite:build-html` plugin expresses
 // emitted asset paths relative to `cwd`, so the temp clone has to live under
@@ -40,11 +34,7 @@ const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
 describe.concurrent(
   "Foldkit dev",
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:website",
-      "provider:cloudflare:worker",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:website", "provider:cloudflare:worker"],
   },
   () => {
     // A server-rendered app names no Worker entry of its own, so workerd

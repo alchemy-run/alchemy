@@ -1,14 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
 import {
   foldkitAssetsFromManifest,
   foldkitBuildMetadataReader,
   type FoldkitBuildManifest,
   type FoldkitBuildMetadata,
 } from "@/Cloudflare/Website/FoldkitBuild";
-import { describe, expect, it } from "alchemy-test";
 
-const manifest = (
-  prerendered: ReadonlyArray<string>,
-): FoldkitBuildManifest => ({
+const manifest = (prerendered: ReadonlyArray<string>): FoldkitBuildManifest => ({
   schemaVersion: 1,
   client: "dist/client",
   server: "dist/server",
@@ -27,12 +25,7 @@ const metadata = (): FoldkitBuildMetadata => ({
 describe(
   "foldkitAssetsFromManifest",
   {
-    tags: [
-      "unit",
-      "local",
-      "provider:cloudflare",
-      "provider:cloudflare:website",
-    ],
+    tags: ["unit", "local", "provider:cloudflare", "provider:cloudflare:website"],
   },
   () => {
     it("gives a client-only build the single-page-application fallback", () => {
@@ -46,9 +39,7 @@ describe(
     });
 
     it("derives nothing for a prerendered build", () => {
-      expect(
-        foldkitAssetsFromManifest(manifest(["/", "/about"])),
-      ).toBeUndefined();
+      expect(foldkitAssetsFromManifest(manifest(["/", "/about"]))).toBeUndefined();
     });
   },
 );
@@ -56,12 +47,7 @@ describe(
 describe(
   "foldkitBuildMetadataReader",
   {
-    tags: [
-      "unit",
-      "local",
-      "provider:cloudflare",
-      "provider:cloudflare:website",
-    ],
+    tags: ["unit", "local", "provider:cloudflare", "provider:cloudflare:website"],
   },
   () => {
     it("allows a client-only app with a custom Worker entry", () => {
@@ -104,9 +90,9 @@ describe(
     });
 
     it("rejects a conflicting main before the build starts", () => {
-      expect(() =>
-        foldkitBuildMetadataReader([{ name: "foldkit:build" }], "src/fetch.ts"),
-      ).toThrow("cannot be combined with main");
+      expect(() => foldkitBuildMetadataReader([{ name: "foldkit:build" }], "src/fetch.ts")).toThrow(
+        "cannot be combined with main",
+      );
     });
 
     for (const [label, invalid] of Object.entries({
