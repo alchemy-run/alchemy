@@ -30,7 +30,7 @@ import {
   deleteObjects,
   readObject,
   reconcileObjects,
-  KubernetesApiError,
+  isNotFound,
 } from "./internal/client.ts";
 import {
   toKubernetesObjectRef,
@@ -481,9 +481,6 @@ const retryUntilServiceReady = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.E
     while: (error) => error instanceof ServiceNotReady,
     schedule: loadBalancerRetrySchedule,
   });
-
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
 
 class ServiceStillExists extends Data.TaggedError("Kubernetes.ServiceStillExists")<{}> {}
 

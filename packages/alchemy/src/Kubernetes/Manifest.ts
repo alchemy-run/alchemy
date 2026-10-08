@@ -8,7 +8,7 @@ import {
   connectCluster,
   deleteObject,
   readObject,
-  KubernetesApiError,
+  isNotFound,
 } from "./internal/client.ts";
 import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
@@ -164,9 +164,6 @@ const toObjectDefinition = (
   }
   return Effect.succeed(manifest as KubernetesObjectDefinition);
 };
-
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
 
 export const ManifestProvider = () =>
   Provider.effect(
