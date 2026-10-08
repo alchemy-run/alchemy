@@ -351,7 +351,10 @@ can be unavailable during deployment; this is not blue/green deployment.
 ## Config
 
 Yield `Config` in the constructor. Alchemy reads the value from the env of
-whoever deploys and writes it onto the Machine.
+whoever deploys and stores it as a secret on the Service's App, so it never
+appears in the Machine config. A Service in a shared App (`app`) writes it
+into the Machine env instead, because Fly gives every App secret to every
+Machine in the App.
 
 ```typescript
 import * as Config from "effect/Config";

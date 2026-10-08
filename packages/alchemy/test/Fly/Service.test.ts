@@ -1,5 +1,6 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -10,6 +11,7 @@ import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/api.ts";
+import BoundSecretsApi from "./fixtures/bound-secrets.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
 import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
@@ -912,4 +914,114 @@ test.provider(
       expect(yield* appGone(first.appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 500_000 },
+);
+
+test.provider(
+  "bound Config values are App secrets, not Machine env",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const ambient = yield* ConfigProvider.ConfigProvider;
+      const deploy = (config: Record<string, string>) =>
+        stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* BoundSecretsApi;
+            }),
+          )
+          .pipe(
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.orElse(ConfigProvider.fromUnknown(config), ambient),
+            ),
+          );
+      const client = yield* HttpClient.HttpClient;
+      const readSecret = (url: string | undefined, expected: string) =>
+        client.get(`${url}/secret`).pipe(
+          Effect.flatMap((response) => response.json),
+          Effect.map((body) => (body as { secret: string }).secret),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (secret) => secret === expected,
+            times: 15,
+          }),
+        );
+      const secretsOf = (appName: string) =>
+        machines
+          .listSecrets({ app_name: appName, show_secrets: false })
+          .pipe(Effect.map((listed) => (listed.secrets ?? []).map((secret) => secret.name)));
+      const updatedAtOf = (appName: string, name: string) =>
+        machines
+          .listSecrets({ app_name: appName, show_secrets: false })
+          .pipe(
+            Effect.map(
+              (listed) => (listed.secrets ?? []).find((secret) => secret.name === name)?.updated_at,
+            ),
+          );
+      const machineOf = (appName: string, machineId: string) =>
+        machines.getMachine({ app_name: appName, machine_id: machineId });
+
+      // A bound value lands in the App vault, not in the Machine config.
+      const first = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-one" });
+      const appName = first.appName;
+      expect(Object.keys(first.secrets ?? {}).sort()).toEqual([
+        "BOUND_SECRET",
+        "BOUND_SECRETS_MODE",
+      ]);
+      expect(first.secretsVersion).toEqual(expect.any(Number));
+      expect(yield* secretsOf(appName)).toEqual(
+        expect.arrayContaining(["BOUND_SECRET", "BOUND_SECRETS_MODE"]),
+      );
+      const created = yield* machineOf(appName, first.machineId);
+      expect(created.config?.env?.BOUND_SECRET).toBeUndefined();
+      expect(created.config?.env?.BOUND_SECRETS_MODE).toBeUndefined();
+      expect(created.config?.env?.PLAIN_VALUE).toEqual("plain");
+      expect(yield* readSecret(first.url, "value-one")).toEqual("value-one");
+
+      // An unchanged value writes nothing and leaves the Machine running.
+      const same = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-one" });
+      expect(same.secretsVersion).toEqual(first.secretsVersion);
+      expect(same.machineIds).toEqual(first.machineIds);
+      expect((yield* machineOf(appName, same.machineId)).instance_id).toEqual(created.instance_id);
+
+      // A changed value raises the secrets version and rolls the Machine;
+      // its unchanged neighbour is matched by digest and not rewritten.
+      const modeUpdatedAt = yield* updatedAtOf(appName, "BOUND_SECRETS_MODE");
+      const changed = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-two" });
+      expect(changed.secretsVersion).toBeGreaterThan(first.secretsVersion!);
+      expect(yield* updatedAtOf(appName, "BOUND_SECRETS_MODE")).toEqual(modeUpdatedAt);
+      expect(yield* readSecret(changed.url, "value-two")).toEqual("value-two");
+
+      // A secret the Service did not write survives; an unbound one is deleted.
+      yield* machines.updateSecrets({ app_name: appName, values: { FOREIGN_SECRET: "keep" } });
+      const removed = yield* deploy({ BOUND_SECRETS_MODE: "off" });
+      expect(Object.keys(removed.secrets ?? {})).toEqual(["BOUND_SECRETS_MODE"]);
+      const remaining = yield* secretsOf(appName);
+      expect(remaining).not.toContain("BOUND_SECRET");
+      expect(remaining).toContain("FOREIGN_SECRET");
+      expect(yield* readSecret(removed.url, "unset")).toEqual("unset");
+
+      // A bound value never overwrites an App secret it did not write.
+      yield* machines.updateSecrets({
+        app_name: appName,
+        values: { BOUND_SECRET: "someone-else" },
+      });
+      const conflict = yield* deploy({
+        BOUND_SECRETS_MODE: "on",
+        BOUND_SECRET: "value-three",
+      }).pipe(Effect.flip);
+      expect(conflict).toMatchObject({ _tag: "Fly.ServiceSecretConflict", name: "BOUND_SECRET" });
+
+      yield* stack.destroy();
+      const app = yield* machines.getApp({ app_name: appName }).pipe(
+        Effect.map(() => "found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      );
+      expect(app).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:fly", "provider:fly:service", "live"],
+    timeout: 300_000,
+  },
 );
