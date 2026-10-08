@@ -892,7 +892,6 @@ export const DistributionProvider = () =>
                         const created = yield* cloudfront.createDistribution({
                           DistributionConfig: config,
                         });
-
                         if (created.Distribution?.ARN && Object.keys(desiredTags).length > 0) {
                           yield* Effect.logInfo(
                             `CloudFront Distribution reconcile: tagging distribution ${created.Distribution.Id} after fallback`,
@@ -904,7 +903,6 @@ export const DistributionProvider = () =>
                             },
                           });
                         }
-
                         return created;
                       })
                     : Effect.gen(function* () {
@@ -914,8 +912,6 @@ export const DistributionProvider = () =>
                         return yield* error;
                       }),
                 ),
-              )
-              .pipe(
                 Effect.map((created) => ({
                   distributionId: created.Distribution?.Id,
                   etag: created.ETag,

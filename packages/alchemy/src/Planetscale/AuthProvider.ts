@@ -417,48 +417,47 @@ export const PlanetscaleAuth = AuthProviderLayer<
       config: PlanetscaleAuthConfig,
       updateConfig?: (config: PlanetscaleAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "stored" }, (stored) => Effect.succeed(stored)),
-          Match.when({ method: "oauth" }, (oauth) =>
-            Effect.gen(function* () {
-              const credentials: OAuthClient.OAuthCredentials = {
-                type: "oauth",
-                clientId: oauth.clientId,
-                access: Redacted.make(oauth.access),
-                refresh: Redacted.make(oauth.refresh),
-                expires: oauth.expires,
-                scopes: oauth.scopes,
-              };
-              if (!OAuthClient.usesCurrentClient(credentials)) {
-                return yield* configureOAuth(profileName);
-              }
-              const refreshed = yield* withProfileCredentialsLock(
-                profileName,
-                interaction.output.info("Planetscale: refreshing OAuth credentials...").pipe(
-                  Effect.andThen(OAuthClient.refresh(credentials)),
-                  Effect.flatMap((credentials) => {
-                    const config = {
-                      ...oauth,
-                      clientId: credentials.clientId,
-                      access: Redacted.value(credentials.access),
-                      refresh: Redacted.value(credentials.refresh),
-                      expires: credentials.expires,
-                      scopes: credentials.scopes,
-                    };
-                    return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
-                  }),
-                  Effect.tap(() =>
-                    interaction.output.success("Planetscale: OAuth credentials refreshed."),
-                  ),
+      Match.value(config).pipe(
+        Match.when({ method: "stored" }, (stored) => Effect.succeed(stored)),
+        Match.when({ method: "oauth" }, (oauth) =>
+          Effect.gen(function* () {
+            const credentials: OAuthClient.OAuthCredentials = {
+              type: "oauth",
+              clientId: oauth.clientId,
+              access: Redacted.make(oauth.access),
+              refresh: Redacted.make(oauth.refresh),
+              expires: oauth.expires,
+              scopes: oauth.scopes,
+            };
+            if (!OAuthClient.usesCurrentClient(credentials)) {
+              return yield* configureOAuth(profileName);
+            }
+            const refreshed = yield* withProfileCredentialsLock(
+              profileName,
+              interaction.output.info("Planetscale: refreshing OAuth credentials...").pipe(
+                Effect.andThen(OAuthClient.refresh(credentials)),
+                Effect.flatMap((credentials) => {
+                  const config = {
+                    ...oauth,
+                    clientId: credentials.clientId,
+                    access: Redacted.value(credentials.access),
+                    refresh: Redacted.value(credentials.refresh),
+                    expires: credentials.expires,
+                    scopes: credentials.scopes,
+                  };
+                  return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
+                }),
+                Effect.tap(() =>
+                  interaction.output.success("Planetscale: OAuth credentials refreshed."),
                 ),
-              ).pipe(Effect.catchTag("OAuthError", () => configureOAuth(profileName)));
-              return refreshed;
-            }),
-          ),
-          Match.exhaustive,
-        )
-        .pipe(Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })));
+              ),
+            ).pipe(Effect.catchTag("OAuthError", () => configureOAuth(profileName)));
+            return refreshed;
+          }),
+        ),
+        Match.exhaustive,
+        Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+      );
 
     const details = (
       profileName: string,

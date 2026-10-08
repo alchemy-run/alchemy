@@ -256,10 +256,10 @@ export const DeploymentProvider = () =>
               () => Effect.succeed(undefined),
             ),
           );
-          yield* greengrassv2
-            .deleteDeployment({ deploymentId })
-            .pipe(retryWhileConflict)
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* greengrassv2.deleteDeployment({ deploymentId }).pipe(
+            retryWhileConflict,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         });
 
       return Deployment.Provider.of({

@@ -440,28 +440,27 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       );
 
     const login = (profileName: string, config: GcpAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "env" }, () => resolveFromEnv().pipe(Effect.as(config))),
-          Match.when({ method: "serviceAccount" }, (cfg) =>
-            resolveFromServiceAccountFile(cfg.credentialsFile).pipe(Effect.as(cfg)),
-          ),
-          Match.when({ method: "stored" }, () =>
-            store
-              .read(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema)
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null
-                    ? loginStored(profileName).pipe(
-                        Effect.map((stored) => ({ ...config, ...stored })),
-                      )
-                    : Effect.succeed(config),
-                ),
+      Match.value(config).pipe(
+        Match.when({ method: "env" }, () => resolveFromEnv().pipe(Effect.as(config))),
+        Match.when({ method: "serviceAccount" }, (cfg) =>
+          resolveFromServiceAccountFile(cfg.credentialsFile).pipe(Effect.as(cfg)),
+        ),
+        Match.when({ method: "stored" }, () =>
+          store
+            .read(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema)
+            .pipe(
+              Effect.flatMap((creds) =>
+                creds == null
+                  ? loginStored(profileName).pipe(
+                      Effect.map((stored) => ({ ...config, ...stored })),
+                    )
+                  : Effect.succeed(config),
               ),
-          ),
-          Match.exhaustive,
-        )
-        .pipe(Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })));
+            ),
+        ),
+        Match.exhaustive,
+        Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+      );
 
     const details = (
       profileName: string,

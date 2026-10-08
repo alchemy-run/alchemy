@@ -344,23 +344,22 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         );
 
       const login = (_profileName: string, config: GitHubAuthConfig) =>
-        Match.value(config)
-          .pipe(
-            Match.when({ method: "gh-cli" }, (c) =>
-              effectiveBaseUrl(c).pipe(
-                Effect.flatMap((baseUrl) =>
-                  ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
-                ),
-                Effect.tap(() =>
-                  interaction.output.success("GitHub: gh CLI authentication available."),
-                ),
-                Effect.map((token) => ({ ...c, token })),
+        Match.value(config).pipe(
+          Match.when({ method: "gh-cli" }, (c) =>
+            effectiveBaseUrl(c).pipe(
+              Effect.flatMap((baseUrl) =>
+                ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
               ),
+              Effect.tap(() =>
+                interaction.output.success("GitHub: gh CLI authentication available."),
+              ),
+              Effect.map((token) => ({ ...c, token })),
             ),
-            Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
-            Match.exhaustive,
-          )
-          .pipe(Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })));
+          ),
+          Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
+          Match.exhaustive,
+          Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+        );
 
       const details = (
         profileName: string,

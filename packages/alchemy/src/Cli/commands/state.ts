@@ -202,10 +202,10 @@ const stateExplorer = (args: StateArgs) =>
     // Captured here so the explorer's forked fibers run with the command's
     // ambient services (tracing, terminal) rather than the default runtime.
     const services = yield* Effect.context<never>();
-    yield* cli
-      .application(cli.prompt.custom(stateExplorerScreen(explorer, services)))
-      .pipe(CliKit.Application.alternate)
-      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
+    yield* cli.application(cli.prompt.custom(stateExplorerScreen(explorer, services))).pipe(
+      CliKit.Application.alternate,
+      Effect.catchTag("TerminalCancelled", () => Effect.void),
+    );
   });
 
 const nukeCommand = Command.make(
