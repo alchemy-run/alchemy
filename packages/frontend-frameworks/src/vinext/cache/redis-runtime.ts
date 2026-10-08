@@ -10,7 +10,6 @@
 import { connect, type Connection } from "alchemy/Redis";
 import type { Arg, Reply } from "alchemy/Redis";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
