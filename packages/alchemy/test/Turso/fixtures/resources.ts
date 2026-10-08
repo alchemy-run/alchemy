@@ -9,3 +9,8 @@ export const BindingDb = Effect.gen(function* () {
 });
 
 export const TenantGroup = Turso.Group("TenantGroup", { location: "aws-us-east-1" });
+
+export const LambdaDb = Effect.gen(function* () {
+  const group = yield* Turso.Group("LambdaGroup", { location: "aws-us-east-1" });
+  return yield* Turso.Database("LambdaDb", { group: group.name });
+});

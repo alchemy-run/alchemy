@@ -2,6 +2,7 @@ import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/turso/Creden
 import * as turso from "@distilled.cloud/turso/turso";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Alchemy";
 import * as Turso from "@/Turso";
 import { organization } from "@/Turso/Credentials";
@@ -59,6 +60,32 @@ test.provider(
       yield* stack.destroy();
       expect(yield* listed(token.name)).toBeUndefined();
       expect(yield* listed(replaced.name)).toBeUndefined();
+    }),
+  { tags: ["provider:turso", "provider:turso:apitoken", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "changing the scopes of a token with a pinned name revokes the old one first",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const stage = yield* Stage;
+      const name = `alchemy-${stage}-pinned-token`;
+
+      const app = (scopes: Turso.ApiTokenScope[]) =>
+        Effect.gen(function* () {
+          const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+          return yield* Turso.ApiToken("Token", { name, group: group.name, scopes });
+        });
+
+      const first = yield* stack.deploy(app(["read"]));
+      const second = yield* stack.deploy(app(["read", "db:create"]));
+      expect(second.name).toBe(name);
+      expect(second.id).not.toBe(first.id);
+      expect((yield* listed(name))?.id).toBe(second.id);
+
+      yield* stack.destroy();
+      expect(yield* listed(name)).toBeUndefined();
     }),
   { tags: ["provider:turso", "provider:turso:apitoken", "live"], timeout: 120_000 },
 );

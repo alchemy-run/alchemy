@@ -13,8 +13,8 @@ const { test } = Test.make({ providers: Turso.providers() });
 // Set TURSO_TEST_TEAM=1 (and TURSO_TEST_MEMBER=<username>) on an entitled org.
 const team = !!process.env.TURSO_TEST_TEAM;
 const memberUsername = process.env.TURSO_TEST_MEMBER;
-// Organization settings toggle billing (overages); never run by default.
-const orgSettings = !!process.env.TURSO_TEST_ORG_SETTINGS;
+// Toggling overages changes billing; never run it by default.
+const overages = !!process.env.TURSO_TEST_ORG_SETTINGS;
 
 const INVITE_EMAIL = "alchemy-turso-invite@example.com";
 
@@ -82,7 +82,31 @@ test.provider.skipIf(!team || !memberUsername)(
   { tags: ["provider:turso", "provider:turso:organizationmember", "live"], timeout: 60_000 },
 );
 
-test.provider.skipIf(!orgSettings)(
+test.provider(
+  "restoreEnabled is applied and restored on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const org = yield* organization;
+      const observe = turso
+        .getOrganization({ organizationSlug: org })
+        .pipe(Effect.map(({ organization }) => organization?.restore_enabled ?? false));
+      const original = yield* observe;
+
+      const settings = yield* stack.deploy(
+        Turso.OrganizationSettings("Org", { restoreEnabled: !original }),
+      );
+      expect(settings.original.restoreEnabled).toBe(original);
+      expect(settings.restoreEnabled).toBe(!original);
+      expect(yield* observe).toBe(!original);
+
+      yield* stack.destroy();
+      expect(yield* observe).toBe(original);
+    }),
+  { tags: ["provider:turso", "provider:turso:organizationsettings", "live"], timeout: 60_000 },
+);
+
+test.provider.skipIf(!overages)(
   "organization settings are applied and restored on destroy",
   (stack) =>
     Effect.gen(function* () {

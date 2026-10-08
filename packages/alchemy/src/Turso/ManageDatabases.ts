@@ -6,7 +6,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { Self } from "../Self.ts";
 import { ApiToken } from "./ApiToken.ts";
 import type { ConnectClient } from "./Connect.ts";
 import type { DatabaseSeed } from "./Database.ts";
@@ -93,15 +92,16 @@ export const ManageDatabases = Binding.Service<ManageDatabases>("Turso.ManageDat
 export const ManageDatabasesHttp = Layer.effect(
   ManageDatabases,
   Effect.gen(function* () {
-    const self = yield* Self;
     const PlatformToken = yield* ApiToken;
     const SqlToken = yield* GroupToken;
     return Effect.fn(function* (group: Group) {
-      const apiToken = yield* PlatformToken(`${self.LogicalId}${group.LogicalId}ManageToken`, {
+      const host = yield* Binding.Host;
+      const prefix = `${host?.LogicalId ?? ""}${group.LogicalId}`;
+      const apiToken = yield* PlatformToken(`${prefix}ManageToken`, {
         group: group.name,
         scopes: ["read", "db:create", "db:delete", "db:configure"],
       });
-      const sqlToken = yield* SqlToken(`${self.LogicalId}${group.LogicalId}SqlToken`, {
+      const sqlToken = yield* SqlToken(`${prefix}SqlToken`, {
         group: group.name,
       });
       const apiKey = yield* apiToken.token;

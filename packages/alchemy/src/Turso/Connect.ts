@@ -3,7 +3,6 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { Self } from "../Self.ts";
 import type { Database } from "./Database.ts";
 import { DatabaseToken, type TokenAuthorization } from "./DatabaseToken.ts";
 
@@ -53,6 +52,18 @@ export interface ConnectOptions {
  * const db = yield* Drizzle.LibSQL(conn, { relations });
  * ```
  *
+ * **Example:** AWS Lambda (install the native libSQL client)
+ * ```typescript
+ * export default class Api extends Lambda.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, build: { install: ["@libsql/client"] } },
+ *   Effect.gen(function* () {
+ *     const sql = yield* SQL.LibSQL(yield* Turso.Connect(Db));
+ *     // ...
+ *   }).pipe(Effect.provide(Turso.ConnectHttp)),
+ * ) {}
+ * ```
+ *
  * **Example:** Read-only access
  * ```typescript
  * const conn = yield* Turso.Connect(Db, { authorization: "read-only" });
@@ -76,12 +87,12 @@ export const Connect = Binding.Service<Connect>("Turso.Connect");
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const self = yield* Self;
     const Token = yield* DatabaseToken;
     return Effect.fn(function* (database: Database, options?: ConnectOptions) {
+      const host = yield* Binding.Host;
       const authorization = options?.authorization ?? "full-access";
       const token = yield* Token(
-        `${self.LogicalId}${database.LogicalId}${authorization === "read-only" ? "ReadOnly" : ""}Token`,
+        `${host?.LogicalId ?? ""}${database.LogicalId}${authorization === "read-only" ? "ReadOnly" : ""}Token`,
         { database: database.name, authorization },
       );
       return {

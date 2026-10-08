@@ -1,7 +1,10 @@
 import * as turso from "@distilled.cloud/turso/turso";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Alchemy";
 import * as Turso from "@/Turso";
 import { organization } from "@/Turso/Credentials";
@@ -117,6 +120,63 @@ test.provider(
         .pipe(Effect.flip);
       expect(String(result)).toContain("replication is not supported");
       yield* stack.destroy();
+    }),
+  { tags: ["provider:turso", "provider:turso:group", "live"], timeout: 120_000 },
+);
+
+const pinned = (suffix: string) =>
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return `alchemy-${stage}-${suffix}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  });
+
+test.provider(
+  "changing the location of a group with a pinned name deletes the old one first",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* pinned("pinned-group");
+
+      const east = yield* stack.deploy(Turso.Group("Pinned", { name, location: "aws-us-east-1" }));
+      const west = yield* stack.deploy(Turso.Group("Pinned", { name, location: "aws-us-west-2" }));
+      expect(west.name).toBe(name);
+      expect(west.location).toBe("aws-us-west-2");
+      expect(west.uuid).not.toBe(east.uuid);
+
+      yield* stack.destroy();
+      yield* expectGroupGone(name);
+    }),
+  { tags: ["provider:turso", "provider:turso:group", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "a group with a pinned name created elsewhere is refused unless adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const org = yield* organization;
+      const name = yield* pinned("foreign-group");
+      yield* turso
+        .deleteGroup({ organizationSlug: org, groupName: name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      const foreign = yield* turso.createGroup({
+        organizationSlug: org,
+        name,
+        location: "aws-us-east-1",
+      });
+
+      const app = (allow: boolean) =>
+        Turso.Group("Foreign", { name, location: "aws-us-east-1" }).pipe(adopt(allow));
+
+      const refused = yield* stack.deploy(app(false)).pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* stack.deploy(app(true));
+      expect(adopted.uuid).toBe(foreign.group?.uuid);
+
+      yield* stack.destroy();
+      yield* expectGroupGone(name);
     }),
   { tags: ["provider:turso", "provider:turso:group", "live"], timeout: 120_000 },
 );

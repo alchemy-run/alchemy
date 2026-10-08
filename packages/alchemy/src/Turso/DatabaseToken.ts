@@ -111,6 +111,23 @@ export const tokenExpiry = (token: Redacted.Redacted<string>): number | undefine
   }
 };
 
+/** Re-mint a token that expires within the hour. */
+const RENEW_WITHIN_MS = 60 * 60 * 1000;
+
+/**
+ * `diff` for SQL tokens: an unchanged token that is about to expire still
+ * needs an update, so the deploy re-mints it.
+ */
+export const diffSqlToken = Effect.fn(function* ({
+  output,
+}: {
+  output: SqlTokenAttributes | undefined;
+}) {
+  if (output?.expiresAt === undefined) return undefined;
+  const now = yield* Clock.currentTimeMillis;
+  return output.expiresAt - now <= RENEW_WITHIN_MS ? ({ action: "update" } as const) : undefined;
+});
+
 /** Whether a previously minted token can be kept as-is. */
 export const isTokenCurrent = Effect.fn(function* (
   output: SqlTokenAttributes | undefined,
@@ -129,7 +146,7 @@ export const isTokenCurrent = Effect.fn(function* (
   // Re-mint a token that expires within the hour, so a deploy never hands
   // consumers a token about to lapse.
   const now = yield* Clock.currentTimeMillis;
-  return output.expiresAt - now > 60 * 60 * 1000;
+  return output.expiresAt - now > RENEW_WITHIN_MS;
 });
 
 export const DatabaseTokenProvider = () =>
@@ -138,6 +155,7 @@ export const DatabaseTokenProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["organization"],
+        diff: diffSqlToken,
         reconcile: Effect.fn(function* ({ news, olds, output }) {
           const org = output?.organization ?? (yield* organization);
 

@@ -72,6 +72,27 @@ test(
 );
 
 test(
+  "Drizzle.LibSQL with relations serves db.query",
+  Effect.gen(function* () {
+    const body = (yield* get("/relations")) as {
+      author: { name: string; posts: Array<{ title: string }> };
+    };
+    expect(body.author.name).toBe("ada");
+    expect(body.author.posts.map((p) => p.title)).toEqual(["engines"]);
+  }),
+  { timeout: 120_000 },
+);
+
+test(
+  "Connect accessors work with @libsql/client directly",
+  Effect.gen(function* () {
+    const body = (yield* get("/client")) as { seven: number };
+    expect(body.seven).toBe(7);
+  }),
+  { timeout: 120_000 },
+);
+
+test(
   "ManageDatabases creates, queries, lists, and deletes tenant databases",
   Effect.gen(function* () {
     const { group, organization: org } = yield* stack;

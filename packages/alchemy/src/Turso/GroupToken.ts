@@ -4,6 +4,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { organization } from "./Credentials.ts";
 import {
+  diffSqlToken,
   isTokenCurrent,
   tokenExpiry,
   type SqlTokenAttributes,
@@ -70,6 +71,7 @@ export const GroupTokenProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["organization"],
+        diff: diffSqlToken,
         reconcile: Effect.fn(function* ({ news, olds, output }) {
           const org = output?.organization ?? (yield* organization);
 

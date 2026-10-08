@@ -1,5 +1,6 @@
 import * as turso from "@distilled.cloud/turso/turso";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { organization } from "./Credentials.ts";
@@ -110,10 +111,23 @@ export const OrganizationSettingsProvider = () =>
           const slug = output?.organization ?? (yield* organization);
           const observed = yield* observe(slug);
           yield* apply(slug, observed, news);
+          // Organization reads can briefly lag a PATCH; wait until the
+          // settings we set are visible.
+          const settled = yield* observe(slug).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (current) =>
+                (news.overages === undefined || current.overages === news.overages) &&
+                (news.requireMfa === undefined || current.requireMfa === news.requireMfa) &&
+                (news.restoreEnabled === undefined ||
+                  current.restoreEnabled === news.restoreEnabled),
+              times: 10,
+            }),
+          );
           return {
             organization: slug,
             original: output?.original ?? observed,
-            ...(yield* observe(slug)),
+            ...settled,
           };
         }),
         delete: Effect.fn(function* ({ olds, output }) {

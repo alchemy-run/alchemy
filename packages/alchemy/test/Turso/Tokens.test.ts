@@ -78,3 +78,28 @@ test.provider(
     }),
   { tags: ["provider:turso", "provider:turso:grouptoken", "live"], timeout: 180_000 },
 );
+
+test.provider(
+  "a token close to expiry is re-minted on deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const app = Effect.gen(function* () {
+        const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+        const db = yield* Turso.Database("Db", { group: group.name });
+        // Expires within the hour, so every deploy re-mints it.
+        return yield* Turso.DatabaseToken("Short", { database: db.name, expiration: "30m" });
+      });
+
+      const first = yield* stack.deploy(app);
+      // Turso tokens are deterministic per second of issue time.
+      yield* Effect.sleep("1100 millis");
+      const second = yield* stack.deploy(app);
+      expect(Redacted.value(second.token)).not.toBe(Redacted.value(first.token));
+      expect(second.expiresAt).toBeGreaterThan(first.expiresAt!);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:turso", "provider:turso:databasetoken", "live"], timeout: 180_000 },
+);

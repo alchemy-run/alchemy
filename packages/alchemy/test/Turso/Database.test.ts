@@ -1,8 +1,12 @@
 import * as turso from "@distilled.cloud/turso/turso";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Alchemy";
 import * as Turso from "@/Turso";
 import { organization } from "@/Turso/Credentials";
@@ -26,6 +30,13 @@ const sql = (database: string, hostname: string, statement: string) =>
       expiration: "5m",
     });
     return yield* Hrana.query({ url: `https://${hostname}`, authToken: jwt! }, statement);
+  });
+
+/** A per-stage, account-unique name for resources with a pinned `name`. */
+const pinned = (suffix: string) =>
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return `alchemy-${stage}-${suffix}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   });
 
 const expectDatabaseGone = (name: string) =>
@@ -194,6 +205,161 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectDatabaseGone(db.name);
+    }),
+  { tags: ["provider:turso", "provider:turso:database", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "moving a database with a pinned name deletes the old one first",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* pinned("pinned-db");
+
+      const app = (target: "A" | "B") =>
+        Effect.gen(function* () {
+          const a = yield* Turso.Group("GroupA", { location: "aws-us-east-1" });
+          const b = yield* Turso.Group("GroupB", { location: "aws-us-east-1" });
+          return yield* Turso.Database("Db", { name, group: target === "A" ? a.name : b.name });
+        });
+
+      const first = yield* stack.deploy(app("A"));
+      expect(first.name).toBe(name);
+      const second = yield* stack.deploy(app("B"));
+      expect(second.name).toBe(name);
+      expect(second.dbId).not.toBe(first.dbId);
+      expect(second.group).not.toBe(first.group);
+
+      yield* stack.destroy();
+      yield* expectDatabaseGone(name);
+    }),
+  { tags: ["provider:turso", "provider:turso:database", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "a database with a pinned name created elsewhere is refused unless adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const org = yield* organization;
+      const name = yield* pinned("foreign-db");
+
+      const group = yield* stack.deploy(Turso.Group("Group", { location: "aws-us-east-1" }));
+      yield* turso
+        .deleteDatabase({ organizationSlug: org, databaseName: name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      const foreign = yield* turso.createDatabase({
+        organizationSlug: org,
+        name,
+        group: group.name,
+      });
+
+      const app = (allow: boolean) =>
+        Effect.gen(function* () {
+          const g = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+          return yield* Turso.Database("Db", { name, group: g.name }).pipe(adopt(allow));
+        });
+
+      const refused = yield* stack.deploy(app(false)).pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* stack.deploy(app(true));
+      expect(adopted.dbId).toBe(foreign.database?.DbId);
+
+      // Once adopted, later deploys need no adopt flag.
+      expect((yield* stack.deploy(app(false))).dbId).toBe(adopted.dbId);
+
+      yield* stack.destroy();
+      yield* expectDatabaseGone(name);
+    }),
+  { tags: ["provider:turso", "provider:turso:database", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "migrations honor a custom table and reject rewritten history",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "turso-migrations-" });
+      yield* fs.writeFileString(
+        path.join(dir, "0001_items.sql"),
+        "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+      );
+
+      const app = Effect.gen(function* () {
+        const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+        return yield* Turso.Database("Db", {
+          group: group.name,
+          migrations: { dir, table: "schema_migrations" },
+        });
+      });
+
+      const db = yield* stack.deploy(app);
+      expect(db.migrationsTable).toBe("schema_migrations");
+      expect(
+        yield* sql(db.name, db.hostname, "SELECT count(*) AS n FROM schema_migrations"),
+      ).toEqual([{ n: 1 }]);
+
+      // A second file is applied on the next deploy.
+      yield* fs.writeFileString(
+        path.join(dir, "0002_tags.sql"),
+        "CREATE TABLE tags (id INTEGER PRIMARY KEY);",
+      );
+      yield* stack.deploy(app);
+      expect(
+        yield* sql(db.name, db.hostname, "SELECT count(*) AS n FROM schema_migrations"),
+      ).toEqual([{ n: 2 }]);
+
+      // Editing an applied file fails the deploy.
+      yield* fs.writeFileString(
+        path.join(dir, "0001_items.sql"),
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);",
+      );
+      const rewritten = yield* stack.deploy(app).pipe(Effect.flip);
+      expect(String(rewritten)).toContain("0001_items.sql");
+
+      yield* stack.destroy();
+      yield* expectDatabaseGone(db.name);
+    }).pipe(Effect.scoped),
+  { tags: ["provider:turso", "provider:turso:database", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "fork a database from a point in time",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const source = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+          return yield* Turso.Database("Source", { group: group.name });
+        }),
+      );
+      yield* sql(source.name, source.hostname, "CREATE TABLE t (v INTEGER)");
+      yield* Effect.sleep("3 seconds");
+      const timestamp = new Date(Date.now() - 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+      const { fork } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+          const src = yield* Turso.Database("Source", { group: group.name });
+          const fork = yield* Turso.Database("Fork", {
+            group: group.name,
+            seed: { type: "database", name: src.name, timestamp },
+          });
+          return { fork };
+        }),
+      );
+      expect(fork.dbId).not.toBe(source.dbId);
+      expect(
+        yield* sql(fork.name, fork.hostname, "SELECT name FROM sqlite_master WHERE name = 't'"),
+      ).toEqual([{ name: "t" }]);
+
+      yield* stack.destroy();
     }),
   { tags: ["provider:turso", "provider:turso:database", "live"], timeout: 180_000 },
 );

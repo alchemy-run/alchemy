@@ -52,6 +52,26 @@ Both install `@effect/sql-libsql`:
 pnpm add @effect/sql-libsql
 ```
 
+## Connect from AWS Lambda
+
+`Turso.Connect` works the same in a Lambda. In Node, `@libsql/client` loads a native binary, so install it into the function:
+
+```typescript
+export default class Api extends Lambda.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    functionUrl: true,
+    build: { install: ["@libsql/client"] },
+  },
+  Effect.gen(function* () {
+    const conn = yield* Turso.Connect(Db);
+    const sql = yield* SQL.LibSQL(conn);
+    // ...
+  }).pipe(Effect.provide(Turso.ConnectHttp)),
+) {}
+```
+
 ## Connect read-only
 
 ```typescript
