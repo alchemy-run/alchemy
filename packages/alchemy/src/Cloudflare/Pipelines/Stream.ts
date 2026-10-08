@@ -204,7 +204,7 @@ const normalizeStreamProps = (
         props: { ...(props as object), schema: resolved },
         recordSchema: schema,
       })),
-      Effect.catch((error) => Effect.die(error)),
+      Effect.orDie,
     );
   });
 
