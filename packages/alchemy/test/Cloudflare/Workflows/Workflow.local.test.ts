@@ -35,6 +35,15 @@ class WorkflowInstanceNotVisible extends Data.TaggedError("WorkflowInstanceNotVi
   instanceId: string;
 }> {}
 
+class WorkflowStatusFailed extends Data.TaggedError("WorkflowStatusFailed")<{
+  status: number;
+  body: string;
+}> {
+  override get message() {
+    return `Workflow status ${this.status}: ${this.body}`;
+  }
+}
+
 class WorkflowLinkNotReady extends Data.TaggedError("WorkflowLinkNotReady")<{
   instanceId: string;
 }> {}
@@ -105,7 +114,7 @@ const waitForTerminal = (url: string, instanceId: string) =>
               Effect.fail(
                 res.status === 500 && body.includes("(instance.not_found)")
                   ? new WorkflowInstanceNotVisible({ instanceId })
-                  : new Error(`Workflow status ${res.status}: ${body}`),
+                  : new WorkflowStatusFailed({ status: res.status, body }),
               ),
             ),
           ),
