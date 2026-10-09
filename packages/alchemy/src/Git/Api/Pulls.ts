@@ -85,7 +85,7 @@ export const UpdatePull = HttpApiEndpoint.patch("update", "/repos/:owner/:repo/p
   payload: Schema.Struct({
     title: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
     /** `null` clears the body. */
-    body: Schema.optional(Schema.NullOr(Schema.String)),
+    body: Schema.String.pipe(Schema.NullOr, Schema.optional),
     /**
      * `closed` closes an open PR; `open` reopens a closed one. Merged
      * PRs reject both (409).

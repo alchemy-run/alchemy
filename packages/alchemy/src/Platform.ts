@@ -297,11 +297,13 @@ export const Platform = <
 
   // Apply the optional `transformProps` hook to a (possibly Effect-valued)
   // props argument. Returns the props untouched when no hook is installed so
-  // the plain-object fast paths below keep working.
+  // the plain-object fast paths below keep working, and leaves `undefined`
+  // props (a bare-tag forward reference) for `Plan.make` to report.
   const applyTransformProps = (id: string, props: any): any =>
-    hooks.transformProps === undefined
+    hooks.transformProps === undefined || props === undefined
       ? props
       : Effect.flatMap(
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props Effects are declarations resolved by the engine
           Effect.isEffect(props) ? (props as Effect.Effect<any>) : Effect.succeed(props ?? {}),
           (resolved) => hooks.transformProps!(id, resolved),
         );
@@ -440,7 +442,8 @@ export const Platform = <
               (() => {
                 const transformed = applyTransformProps(id, props);
                 return Effect.isEffect(transformed)
-                  ? (transformed as Effect.Effect<any>)
+                  ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props Effects are declarations resolved by the engine
+                    (transformed as Effect.Effect<any>)
                   : Effect.succeed(transformed ?? {});
               })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),

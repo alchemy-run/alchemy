@@ -291,7 +291,7 @@ export const RegistryLive = Registry.make(
           const owner = input.owner.toLowerCase();
           const name = input.name.toLowerCase();
           if (RESERVED_OWNERS.has(owner)) {
-            return yield* new ValidationError({
+            return yield* ValidationError.make({
               message: `owner name '${owner}' is reserved`,
             });
           }
@@ -309,7 +309,7 @@ export const RegistryLive = Registry.make(
               .toArray();
             if (existing.length > 0) {
               // Includes soft-deleted rows: the name frees only after purge.
-              rollback(new RepoAlreadyExists({ owner, repo: name }));
+              rollback(RepoAlreadyExists.make({ owner, repo: name }));
             }
             raw.exec(
               `INSERT INTO repos (owner, name, repo_id, description, is_public, fork_of, fork_count, created_at, deleted_at)

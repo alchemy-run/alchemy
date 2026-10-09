@@ -309,11 +309,9 @@ export const FlowProvider = () =>
           })[] = [];
           for (const desired of props.outputs ?? []) {
             if (desired.Name === undefined) {
-              return yield* Effect.fail(
-                new FlowOutputNameMissing({
-                  message: `every output of MediaConnect flow '${name}' must set a Name — outputs are converged by name`,
-                }),
-              );
+              return yield* new FlowOutputNameMissing({
+                message: `every output of MediaConnect flow '${name}' must set a Name — outputs are converged by name`,
+              });
             }
             desiredOutputs.push({ ...desired, Name: desired.Name });
           }
@@ -540,9 +538,7 @@ export const FlowProvider = () =>
           }
           // Wait for any in-flight transition (STOPPING/UPDATING) to settle,
           // then delete. A flow already DELETING (or gone) is success.
-          const settled = yield* waitUntilSettled(arn).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          const settled = yield* waitUntilSettled(arn).pipe(Effect.orElseSucceed(() => undefined));
           if (settled !== undefined) {
             yield* mediaconnect.deleteFlow({ FlowArn: arn }).pipe(
               // Status races (e.g. a transition that began after our read)

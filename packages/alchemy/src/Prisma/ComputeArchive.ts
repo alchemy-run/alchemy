@@ -247,15 +247,15 @@ const createComputeArchiveFile = Effect.fn(function* (
     prefix: "alchemy-prisma-compute-",
     suffix: ".tar.gz",
   });
-  const cleanup = fs.remove(archivePath, { force: true }).pipe(Effect.catch(() => Effect.void));
+  const cleanup = fs.remove(archivePath, { force: true }).pipe(Effect.ignore);
 
   yield* writeCompressedArchiveSecure(archivePath, entries, manifest, MAX_COMPRESSED_BYTES).pipe(
-    Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(error)))),
+    Effect.tapError(() => cleanup),
   );
   return yield* inspectArtifactFile(archivePath, MAX_COMPRESSED_BYTES, {
     cleanup,
     description: "Prisma compute archive",
-  }).pipe(Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(error)))));
+  }).pipe(Effect.tapError(() => cleanup));
 });
 
 const addDirectoryEntries: (

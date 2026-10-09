@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useGlyphs } from "./Environment.tsx";
 import { Stack } from "./Layout.tsx";

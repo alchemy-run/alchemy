@@ -48,10 +48,11 @@ export const inFleetWiseRegion = <A, E, R>(
 export const readFleetWiseTags = Effect.fn(function* (arn: string) {
   const response = yield* iotfleetwise.listTagsForResource({ ResourceARN: arn }).pipe(
     inFleetWiseRegion,
-    Effect.catch(() =>
-      Effect.succeed({
-        Tags: [],
-      } as iotfleetwise.ListTagsForResourceResponse),
+    Effect.orElseSucceed(
+      () =>
+        ({
+          Tags: [],
+        }) as iotfleetwise.ListTagsForResourceResponse,
     ),
   );
   return Object.fromEntries((response.Tags ?? []).map((tag) => [tag.Key, tag.Value])) as Record<

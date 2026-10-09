@@ -98,7 +98,7 @@ export const publishCommand = Command.make(
 );
 
 export const root = Command.make("pkg", {}, () =>
-  Effect.fail(new CliError.ShowHelp({ commandPath: ["pkg"], errors: [] })),
+  Effect.fail(CliError.ShowHelp.make({ commandPath: ["pkg"], errors: [] })),
 ).pipe(
   Command.withDescription("Pack and publish preview packages for pull requests."),
   Command.withSubcommands([packCommand, publishCommand]),

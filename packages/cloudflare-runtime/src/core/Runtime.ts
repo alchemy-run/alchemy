@@ -103,7 +103,7 @@ export const RuntimeLive = Layer.effect(
       // containers). Upstream workers-sdk bails out on Windows for the same
       // reason, directing users to WSL.
       if (process.platform === "win32") {
-        return yield* new SystemError({
+        return yield* SystemError.make({
           subtag: "ContainersUnsupportedOnWindows",
           message: "Local development with containers is not supported on Windows.",
           hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",

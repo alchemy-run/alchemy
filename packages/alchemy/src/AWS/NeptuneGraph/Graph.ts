@@ -249,23 +249,19 @@ export const GraphProvider = () =>
           Effect.gen(function* () {
             const graph = yield* getGraph(graphId);
             if (graph === undefined) {
-              return yield* Effect.fail(new GraphNotReady({ graphId, status: "missing" }));
+              return yield* new GraphNotReady({ graphId, status: "missing" });
             }
             if (graph.status === "FAILED") {
-              return yield* Effect.fail(
-                new GraphProvisioningFailed({
-                  graphId,
-                  reason: graph.statusReason ?? "unknown",
-                }),
-              );
+              return yield* new GraphProvisioningFailed({
+                graphId,
+                reason: graph.statusReason ?? "unknown",
+              });
             }
             if (graph.status !== "AVAILABLE") {
-              return yield* Effect.fail(
-                new GraphNotReady({
-                  graphId,
-                  status: graph.status ?? "unknown",
-                }),
-              );
+              return yield* new GraphNotReady({
+                graphId,
+                status: graph.status ?? "unknown",
+              });
             }
             return graph;
           }),

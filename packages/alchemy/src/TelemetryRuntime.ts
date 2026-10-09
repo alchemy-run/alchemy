@@ -308,7 +308,12 @@ const makeExporterLayer = (options?: {
             resource,
             exportInterval: options?.exportInterval,
             shutdownTimeout: options?.shutdownTimeout,
-          }),
+          }).pipe(
+            // Metrics go out as protobuf: OTLP/HTTP receivers must accept
+            // it, while JSON is optional and some reject it on /v1/metrics
+            // (Axiom answers 415 Unsupported Media Type).
+            Layer.provide(OtlpSerialization.layerProtobuf),
+          ),
         );
       }
       return Layer.mergeAll(...(layers as [Layer.Layer<never>])).pipe(
@@ -327,7 +332,8 @@ const makeExporterLayer = (options?: {
 /**
  * The runtime half of the {@link layerOtlp} binding, and the default
  * per-event Layer: reads the bound `OTEL_EXPORTER_OTLP_*` values back and
- * constructs the OTLP JSON exporters. Each signal resolves independently;
+ * constructs the OTLP exporters (JSON for traces and logs, protobuf for
+ * metrics). Each signal resolves independently;
  * only configured signals export; resolves to `Layer.empty` when nothing is
  * bound, so no exporters are built until a destination is configured.
  *

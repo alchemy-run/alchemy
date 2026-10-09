@@ -53,7 +53,7 @@ export const createGatewayName = Effect.fn(function* (id: string) {
 export const readAgentCoreTags = Effect.fn(function* (resourceArn: string) {
   const response = yield* control
     .listTagsForResource({ resourceArn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;

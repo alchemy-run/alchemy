@@ -241,6 +241,8 @@ export const devKeepAlive = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Ef
   );
 
 const makeExec = () => {
+  // Decoded eagerly when the program is constructed, not when it runs.
+  // oxlint-disable-next-line effecttsgo/schema-sync
   const options = Schema.decodeSync(DevOptions)(JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!));
   return Effect.gen(function* () {
     yield* installShutdownFeedback;

@@ -270,7 +270,7 @@ const collectFile = (absolute: string, relative: string): Effect.Effect<Collecte
         await import(pathToFileURL(absolute).href);
         // Flush microtasks + one macrotask so registrations deferred with
         // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
-        // tree — their AsyncLocalStorage context resolves this file's collector.
+        // tree while this file's collector is still the active one.
         await new Promise<void>((resolve) => setImmediate(resolve));
       });
       return { file: relative, suite };

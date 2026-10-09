@@ -227,29 +227,25 @@ const waitForQuota = (quotaId: string, target: "Ready" | "Gone") =>
       if (target === "Gone") {
         if (described === undefined || described.Status === "Deleted") return;
         if (FAILED_STATUSES.includes(described.Status)) {
-          return yield* Effect.fail(
-            new ComputeQuotaFailed({
-              quotaId,
-              status: described.Status,
-              message: described.FailureReason,
-            }),
-          );
+          return yield* new ComputeQuotaFailed({
+            quotaId,
+            status: described.Status,
+            message: described.FailureReason,
+          });
         }
-        return yield* Effect.fail(new ComputeQuotaNotReady({ quotaId, status: described.Status }));
+        return yield* new ComputeQuotaNotReady({ quotaId, status: described.Status });
       }
       if (described?.Status === "Created" || described?.Status === "Updated") {
         return;
       }
       if (described !== undefined && FAILED_STATUSES.includes(described.Status)) {
-        return yield* Effect.fail(
-          new ComputeQuotaFailed({
-            quotaId,
-            status: described.Status,
-            message: described.FailureReason,
-          }),
-        );
+        return yield* new ComputeQuotaFailed({
+          quotaId,
+          status: described.Status,
+          message: described.FailureReason,
+        });
       }
-      return yield* Effect.fail(new ComputeQuotaNotReady({ quotaId, status: described?.Status }));
+      return yield* new ComputeQuotaNotReady({ quotaId, status: described?.Status });
     }),
   );
 

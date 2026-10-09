@@ -1522,6 +1522,10 @@ import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServic
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
 import {
+  ServiceAccount as IamServiceAccount,
+  ServiceAccountProvider as IamServiceAccountProvider,
+} from "./IAM/ServiceAccount.ts";
+import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
 } from "./IAP/BrandsIdentityAwareProxyClient.ts";
@@ -2345,6 +2349,7 @@ import {
   ServiceProvider as ServicemanagementServiceProvider,
 } from "./ServiceManagement/Service.ts";
 import { Connection, ConnectionProvider } from "./ServiceNetworking/Connection.ts";
+import { ProjectService, ProjectServiceProvider } from "./ServiceUsage/ProjectService.ts";
 import { WebResource, WebResourceProvider } from "./SiteVerification/WebResource.ts";
 import {
   Database as SpannerDatabase,
@@ -2606,6 +2611,7 @@ const gcpLive = fromCredentials().pipe(
 );
 
 const makeProviders = () =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erased on purpose, see comment at the cast below
   Layer.effect(
     Providers,
     Effect.gen(function* () {
@@ -3581,6 +3587,8 @@ const makeProviders = () =>
           SasportalSignedCustomersDeploymentsDevice,
           SasportalSignedNodesDeploymentsDevice,
           JobTemplate,
+          IamServiceAccount,
+          ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       return {
@@ -4704,6 +4712,8 @@ const makeProviders = () =>
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
                 IamMemberProvider(),
+                IamServiceAccountProvider(),
+                ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
               ),

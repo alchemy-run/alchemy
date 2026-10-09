@@ -68,6 +68,22 @@ describe(
   "Docker.Volume",
   { tags: ["provider:docker", "provider:docker:volume", "local"], concurrent: false },
   () => {
+    // Every prop is optional: `Docker.Volume("data")` must plan, deploy,
+    // redeploy in place, and destroy without a props object.
+    test.provider("deploys a volume declared without props", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Docker.Volume("bare-volume"));
+        expect(first.driver).toBe("local");
+        const second = yield* stack.deploy(Docker.Volume("bare-volume"));
+        expect(second.createdAt).toBe(first.createdAt);
+        yield* stack.destroy();
+        const gone = yield* docker.volume.inspect(first.name).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
     test.provider("creates a volume with labels", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;

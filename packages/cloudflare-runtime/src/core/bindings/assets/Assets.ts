@@ -77,27 +77,25 @@ export const AssetsLive = Layer.effect(
               Effect.tap(() => Effect.logWarning(`Could not read assets directory "${dir}"`)),
             ),
         ),
-        Effect.mapError(
-          (cause) =>
-            new SystemError({
-              subtag: "Assets",
-              message: `Failed to read assets directory "${dir}": ${cause.message}`,
-              hint: "Ensure the assets directory exists and is readable.",
-              detail: { directory: dir },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          SystemError.make({
+            subtag: "Assets",
+            message: `Failed to read assets directory "${dir}": ${cause.message}`,
+            hint: "Ensure the assets directory exists and is readable.",
+            detail: { directory: dir },
+            cause,
+          }),
         ),
       );
       const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(dir).pipe(
         Effect.provide([Layer.succeed(FileSystem.FileSystem, fs), Layer.succeed(Path.Path, path)]),
-        Effect.mapError(
-          (cause) =>
-            new SystemError({
-              subtag: "Assets",
-              message: `Failed to read assets ignore file in "${dir}": ${cause.message}`,
-              detail: { directory: dir },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          SystemError.make({
+            subtag: "Assets",
+            message: `Failed to read assets ignore file in "${dir}": ${cause.message}`,
+            detail: { directory: dir },
+            cause,
+          }),
         ),
       );
       const manifest: Array<ManifestEntry> = [];
@@ -113,14 +111,13 @@ export const AssetsLive = Layer.effect(
             const filepath = path.join(dir, file);
             const relativeFilepath = path.relative(dir, filepath);
             const info = yield* fs.stat(filepath).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new SystemError({
-                    subtag: "Assets",
-                    message: `Failed to stat asset file "${filepath}": ${cause.message}`,
-                    detail: { filepath },
-                    cause,
-                  }),
+              Effect.mapError((cause) =>
+                SystemError.make({
+                  subtag: "Assets",
+                  message: `Failed to stat asset file "${filepath}": ${cause.message}`,
+                  detail: { filepath },
+                  cause,
+                }),
               ),
             );
 
@@ -132,7 +129,7 @@ export const AssetsLive = Layer.effect(
             // TODO: Warn about _worker.js
 
             if (info.size > BigInt(MAX_ASSET_SIZE)) {
-              return yield* new ConfigError({
+              return yield* ConfigError.make({
                 subtag: "Assets",
                 message:
                   `Asset too large. ` +
@@ -169,7 +166,7 @@ export const AssetsLive = Layer.effect(
       );
 
       if (manifest.length > MAX_ASSET_COUNT) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "Assets",
           message:
             `Maximum number of assets exceeded. ` +
@@ -390,7 +387,7 @@ export const local = (binding: string): BindingHook<Assets> =>
           },
         })
       : Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "Assets",
             message: "An assets binding cannot be used without worker.assets being specified.",
             hint: "Remove the assets binding or specify worker.assets in your worker config.",

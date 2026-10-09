@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /** Branded help screens + the CliOutput formatter that renders them. */
 import { stripVTControlCharacters } from "node:util";

@@ -249,8 +249,8 @@ export const readinessChecksPassing = (
 };
 
 const sameMetadata = (left: ReadinessEvent, right: ReadinessEvent) =>
-  left.method === "PUT" &&
-  right.method === "PUT" &&
+  left.method === "PATCH" &&
+  right.method === "PATCH" &&
   left.path.endsWith("/metadata") &&
   left.path === right.path &&
   left.metadataOnly === true &&
@@ -294,13 +294,14 @@ export const assertReadinessCommit = (
       !event.path.endsWith("/lease") &&
       (ids.includes(event.machineId!) || creates.includes(event.sequence)),
   );
+  // Phase stamps go through Fly's `PATCH /machines/{id}/metadata` (formerly PUT).
   const isCommit = (event: ReadinessEvent) =>
-    event.method === "PUT" &&
+    event.method === "PATCH" &&
     event.path.endsWith("/metadata") &&
     event.phase === "active" &&
     event.metadataOnly === true;
   const isValidating = (event: ReadinessEvent) =>
-    event.method === "PUT" &&
+    event.method === "PATCH" &&
     event.path.endsWith("/metadata") &&
     event.phase === "validating" &&
     event.metadataOnly === true;

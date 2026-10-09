@@ -250,8 +250,10 @@ export const PostgresRoleProvider = () =>
               branch: token.branch.name,
             }),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            Forbidden: () => Effect.succeed(undefined),
+            NotFound: () => Effect.succeed(undefined),
+          }),
         );
     }),
 
@@ -302,11 +304,9 @@ export const PostgresRoleProvider = () =>
           branch: branchName,
         });
         if (branchInfo.kind !== "postgresql") {
-          return yield* Effect.fail(
-            new PlanetscaleConflict({
-              message: `Cannot create a Role on MySQL database "${databaseName}". Roles are only supported on PostgreSQL. Use Password for MySQL.`,
-            }),
-          );
+          return yield* new PlanetscaleConflict({
+            message: `Cannot create a Role on MySQL database "${databaseName}". Roles are only supported on PostgreSQL. Use Password for MySQL.`,
+          });
         }
         if (!branchInfo.ready) {
           yield* waitForBranchReady(organization, databaseName, branchName);
@@ -424,12 +424,10 @@ export const PostgresRoleProvider = () =>
                             ),
                         ),
                       ),
-                      Effect.catchTag("NotFound", () =>
-                        Effect.succeed([] as PostgresRoleAttributes[]),
-                      ),
-                      Effect.catchTag("Forbidden", () =>
-                        Effect.succeed([] as PostgresRoleAttributes[]),
-                      ),
+                      Effect.catchTags({
+                        NotFound: () => Effect.succeed([] as PostgresRoleAttributes[]),
+                        Forbidden: () => Effect.succeed([] as PostgresRoleAttributes[]),
+                      }),
                     ),
                 { concurrency: 10 },
               ).pipe(Effect.map((perBranch) => perBranch.flat())),

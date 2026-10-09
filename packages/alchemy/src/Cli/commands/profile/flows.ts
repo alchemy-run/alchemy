@@ -194,7 +194,7 @@ export const editProfileFlow = Effect.fn(function* (options: {
     } else if (isPromptCancellation(result.failure)) {
       outcomes.push({ ...step, outcome: "skipped" });
     } else {
-      return yield* Effect.fail(result.failure);
+      return yield* result.failure;
     }
   }
   return outcomes;

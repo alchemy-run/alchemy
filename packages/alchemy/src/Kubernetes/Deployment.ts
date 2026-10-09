@@ -51,14 +51,11 @@ import {
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
-export const isDeployment = (value: any): value is Deployment => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "Kubernetes.Deployment"
-  );
-};
+export const isDeployment = (value: any): value is Deployment =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "Kubernetes.Deployment";
 
 /**
  * The image-source props shared by the workload platforms. Exactly one of
@@ -615,7 +612,7 @@ export const DeploymentProvider = () =>
             Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             // Transient unreachability must not read as "gone" — keep the
             // persisted state and let reconcile converge.
-            Effect.catch(() => Effect.succeed("unreachable" as const)),
+            Effect.orElseSucceed(() => "unreachable" as const),
           );
           if (transport === undefined) return undefined;
           if (transport === "unreachable") return output;
@@ -626,7 +623,7 @@ export const DeploymentProvider = () =>
           if (!anchor) return output;
           const observed = yield* readObject({ transport, object: anchor }).pipe(
             Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-            Effect.catch(() => Effect.succeed(output)),
+            Effect.orElseSucceed(() => output),
           );
           if (observed === undefined) return undefined;
           return output;
@@ -833,10 +830,10 @@ export const DeploymentProvider = () =>
           // resources that outlive it (image repository, identity role).
           const transport = yield* adapter
             .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(Effect.orElseSucceed(() => undefined));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] }).pipe(
-              Effect.catch(() => Effect.void),
+              Effect.ignore,
             );
             // A LoadBalancer Service carries the cloud controller's cleanup
             // finalizer; wait for it so the cloud load balancer is gone
@@ -844,8 +841,7 @@ export const DeploymentProvider = () =>
             // deleting the cluster first leaks the load balancer.
             yield* Effect.forEach(
               (output.kubernetesObjects ?? []).filter((object) => object.kind === "Service"),
-              (service) =>
-                waitForServiceGone(transport, service).pipe(Effect.catch(() => Effect.void)),
+              (service) => waitForServiceGone(transport, service).pipe(Effect.ignore),
               { discard: true },
             );
           }

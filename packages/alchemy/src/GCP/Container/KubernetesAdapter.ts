@@ -461,11 +461,9 @@ export const GkeKubernetesAdapter = () =>
             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
         }).pipe(withGcp);
         if (!cluster || cluster.status === "STOPPING") {
-          return yield* Effect.fail(
-            new ClusterNotFoundError({
-              message: `GKE cluster '${auth.clusterId}' no longer exists`,
-            }),
-          );
+          return yield* new ClusterNotFoundError({
+            message: `GKE cluster '${auth.clusterId}' no longer exists`,
+          });
         }
         return cluster;
       });

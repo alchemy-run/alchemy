@@ -231,13 +231,11 @@ export const LoggingCli = Layer.effect(
                 : { message: "Apply this plan?", initial: true },
             );
           }
-          return yield* Effect.fail(
-            new NonInteractiveTerminal({
-              operation: "approve deployment plan",
-              message:
-                "Cannot approve this operation without terminal input. Pass --yes to continue.",
-            }),
-          );
+          return yield* new NonInteractiveTerminal({
+            operation: "approve deployment plan",
+            message:
+              "Cannot approve this operation without terminal input. Pass --yes to continue.",
+          });
         }),
       displayPlan: (plan, options) =>
         Effect.gen(function* () {

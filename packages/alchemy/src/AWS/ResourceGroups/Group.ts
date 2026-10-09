@@ -250,7 +250,7 @@ export const GroupProvider = () =>
       const readGroupTags = (groupArn: string) =>
         resourcegroups.getTags({ Arn: groupArn }).pipe(
           Effect.map((r) => (r.Tags ?? {}) as Record<string, string>),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       return Group.Provider.of({

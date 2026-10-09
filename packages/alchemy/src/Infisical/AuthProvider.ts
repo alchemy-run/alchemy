@@ -123,13 +123,12 @@ export const mintAccessToken = (config: {
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
     Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
-    Effect.mapError(
-      (cause) =>
-        new AuthError({
-          message:
-            "Infisical rejected the machine identity credentials. Check the client ID and secret, and that the secret has not expired or hit its use limit.",
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      AuthError.make({
+        message:
+          "Infisical rejected the machine identity credentials. Check the client ID and secret, and that the secret has not expired or hit its use limit.",
+        cause,
+      }),
     ),
   );
 
@@ -150,12 +149,11 @@ export const mintAccessTokenFromOidc = (config: {
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
     Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
-    Effect.mapError(
-      (cause) =>
-        new AuthError({
-          message: `Infisical rejected the OIDC login for identity '${config.identityId}': ${cause.message}. Check that the identity's OIDC auth trusts this platform's issuer, subject, and audience.`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      AuthError.make({
+        message: `Infisical rejected the OIDC login for identity '${config.identityId}': ${cause.message}. Check that the identity's OIDC auth trusts this platform's issuer, subject, and audience.`,
+        cause,
+      }),
     ),
   );
 
@@ -230,7 +228,7 @@ const readEnvironment = Effect.gen(function* () {
   }
   const identityId = yield* getEnv(INFISICAL_IDENTITY_ID_ENV);
   if (!identityId) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: `Infisical credentials are missing. In CI set ${INFISICAL_TOKEN_ENV}, or set ${INFISICAL_IDENTITY_ID_ENV} to log in with the platform's OIDC token; locally run \`alchemy profile edit --add Infisical\`.`,
     });
   }
@@ -239,7 +237,7 @@ const readEnvironment = Effect.gen(function* () {
     audience: INFISICAL_OIDC_AUDIENCE_ENV,
   });
   if (oidc === undefined) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: `${INFISICAL_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: ${SUPPORTED_OIDC_PLATFORMS}; elsewhere pass the token in ${INFISICAL_OIDC_TOKEN_ENV}.`,
     });
   }
@@ -274,7 +272,7 @@ export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalRes
     configureWith: (_, input) => {
       if (input.method !== "universal-auth" && input.method !== "access-token") {
         return Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `Infisical: unknown method '${input.method}'. Valid methods: universal-auth, access-token.`,
           }),
         );

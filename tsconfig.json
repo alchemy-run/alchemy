@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
     {
@@ -66,9 +69,9 @@
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
-    // {
-    //   "path": "./tsconfig.scripts.json"
-    // },
+    {
+      "path": "./tsconfig.scripts.json"
+    },
     {
       "path": "./packages/alchemy-test/tsconfig.json"
     },
@@ -93,6 +96,9 @@
     },
     {
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-federated-api/tsconfig.json"
     },
     {
       "path": "./examples/gcp-cloud-function/tsconfig.json"

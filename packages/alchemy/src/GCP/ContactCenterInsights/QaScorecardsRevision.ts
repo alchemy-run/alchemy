@@ -234,14 +234,11 @@ export const QaScorecardsRevisionProvider = () =>
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
-            Effect.catchIf(
-              (error) => error._tag === "Conflict",
-              () => getByName(name),
-            ),
-            // The scorecard's current revision is still settling; adopt it.
-            Effect.catchTag("QaScorecardPreconditionFailed", () =>
-              findExisting(news.parent, qaScorecardRevisionId),
-            ),
+            Effect.catchTags({
+              Conflict: () => getByName(name),
+              // The scorecard's current revision is still settling; adopt it.
+              QaScorecardPreconditionFailed: () => findExisting(news.parent, qaScorecardRevisionId),
+            }),
           );
         current = created ?? undefined;
       }
@@ -263,8 +260,10 @@ export const QaScorecardsRevisionProvider = () =>
             body: {},
           })
           .pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(undefined),
+              BadRequest: () => Effect.succeed(undefined),
+            }),
           );
       }
       yield* cci
@@ -273,9 +272,11 @@ export const QaScorecardsRevisionProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          // The only revision goes away with its scorecard.
-          Effect.catchTag("QaScorecardOnlyRevision", () => Effect.void),
+          Effect.catchTags({
+            NotFound: () => Effect.void,
+            // The only revision goes away with its scorecard.
+            QaScorecardOnlyRevision: () => Effect.void,
+          }),
         );
     }),
   });

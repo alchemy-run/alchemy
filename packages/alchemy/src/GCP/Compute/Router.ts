@@ -122,6 +122,23 @@ export type RouterNat = {
   tcpEstablishedIdleTimeoutSec?: number;
   /** TCP transitory-connection idle timeout in seconds. */
   tcpTransitoryIdleTimeoutSec?: number;
+  /**
+   * TCP TIME_WAIT timeout in seconds.
+   * @default 120
+   */
+  tcpTimeWaitTimeoutSec?: number;
+  /**
+   * Network tier for automatically allocated NAT addresses (`PREMIUM` or
+   * `STANDARD`).
+   * @default the project's default network tier
+   */
+  autoNetworkTier?: compute.RouterNatAutoNetworkTierEnum;
+  /**
+   * Endpoint types whose traffic is translated (`ENDPOINT_TYPE_VM`,
+   * `ENDPOINT_TYPE_SWG`, `ENDPOINT_TYPE_MANAGED_PROXY_LB`).
+   * @default ["ENDPOINT_TYPE_VM"]
+   */
+  endpointTypes?: compute.RouterNatEndpointTypesItemEnum[];
   /** NAT logging. */
   logConfig?: RouterNatLogConfig;
 };
@@ -486,6 +503,9 @@ const toNats = (nats: compute.RouterNat[] | undefined): RouterNat[] =>
     icmpIdleTimeoutSec: nat.icmpIdleTimeoutSec,
     tcpEstablishedIdleTimeoutSec: nat.tcpEstablishedIdleTimeoutSec,
     tcpTransitoryIdleTimeoutSec: nat.tcpTransitoryIdleTimeoutSec,
+    tcpTimeWaitTimeoutSec: nat.tcpTimeWaitTimeoutSec,
+    autoNetworkTier: nat.autoNetworkTier as compute.RouterNatAutoNetworkTierEnum | undefined,
+    endpointTypes: nat.endpointTypes as compute.RouterNatEndpointTypesItemEnum[] | undefined,
     logConfig:
       nat.logConfig === undefined
         ? undefined
@@ -557,6 +577,11 @@ const natMatches = (desired: compute.RouterNat, observed: compute.RouterNat) => 
         }
         break;
       }
+      case "endpointTypes":
+        if (sortedKey(value as string[]) !== sortedKey(current as string[] | undefined)) {
+          return false;
+        }
+        break;
       case "logConfig": {
         const log = current as compute.RouterNatLogConfig | undefined;
         const want = value as compute.RouterNatLogConfig;

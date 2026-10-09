@@ -104,7 +104,7 @@ export const ClusterProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dsql
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return Object.fromEntries(
           Object.entries(response?.tags ?? {}).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",
