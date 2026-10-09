@@ -376,6 +376,14 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
   image: string;
 }
 
+/** SSH access to a container application's instances. */
+export interface ContainerSshConfiguration {
+  /** Whether instances accept SSH connections. */
+  enabled: boolean;
+  /** Port the SSH server listens on inside each instance. */
+  port?: number;
+}
+
 /** An image published for a Durable Object to select when starting a container. */
 export type ContainerImageProps = {
   /** Image publication and build-cache configuration. */
@@ -424,8 +432,11 @@ export interface DurableObjectContainerProps extends PlatformProps {
    * @default "30 minutes"
    */
   imagePreparationTimeout?: Duration.Input;
-  /** Application-wide SSH access. Removing a previously declared value disables SSH. */
-  wranglerSsh?: Containers.WranglerSSHConfiguration;
+  /**
+   * SSH access to every instance of the application. Removing a previously
+   * declared value disables SSH.
+   */
+  ssh?: ContainerSshConfiguration;
   /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
@@ -455,7 +466,7 @@ export interface AnyContainerApplicationProps extends Omit<
   "schedulingPolicy"
 > {
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
-  wranglerSsh?: Containers.WranglerSSHConfiguration;
+  ssh?: ContainerSshConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   images?: Record<string, ContainerImageProps>;
   imagePreparationTimeout?: Duration.Input;

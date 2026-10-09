@@ -304,7 +304,7 @@ for (const dev of [true, false]) {
               yield* Effect.gen(function* () {
                 const declared = yield* stack.deploy(
                   settingsStack({
-                    wranglerSsh: { enabled: true, port: 22 },
+                    ssh: { enabled: true, port: 22 },
                     authorizedKeys: [{ name: "alchemy-test", publicKey: TEST_SSH_PUBLIC_KEY }],
                     observability: { logs: { enabled: true } },
                   }),

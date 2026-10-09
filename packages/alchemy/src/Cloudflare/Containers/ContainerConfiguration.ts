@@ -160,9 +160,10 @@ export const durableObjectSettingsPatch = (
   observed: Pick<Containers.GetContainerApplicationResponse, "configuration" | "observability">,
 ): Pick<Containers.UpdateContainerApplicationRequest, "configuration" | "observability"> => {
   const configuration: Containers.DurableObjectContainerConfiguration = {
-    ...(news.wranglerSsh !== undefined
-      ? { wranglerSsh: news.wranglerSsh }
-      : olds?.wranglerSsh !== undefined
+    // Cloudflare names the SSH setting after the CLI that connects to it.
+    ...(news.ssh !== undefined
+      ? { wranglerSsh: news.ssh }
+      : olds?.ssh !== undefined
         ? { wranglerSsh: { enabled: false } }
         : {}),
     ...(news.authorizedKeys !== undefined

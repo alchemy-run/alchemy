@@ -8,7 +8,7 @@ export const TEST_SSH_PUBLIC_KEY =
 
 export type ApplicationSettings = Pick<
   Cloudflare.Containers.DurableObjectContainerProps,
-  "wranglerSsh" | "authorizedKeys" | "observability"
+  "ssh" | "authorizedKeys" | "observability"
 >;
 
 /** A Durable Object-managed application whose application-wide settings vary per deploy. */

@@ -974,7 +974,7 @@ export const LiveContainerProvider = () =>
         const published = yield* publishNamedImages(id, news, output, session);
 
         const configuration: Containers.DurableObjectContainerConfiguration = {
-          ...(news.wranglerSsh !== undefined ? { wranglerSsh: news.wranglerSsh } : {}),
+          ...(news.ssh !== undefined ? { wranglerSsh: news.ssh } : {}),
           ...(news.authorizedKeys !== undefined ? { authorizedKeys: news.authorizedKeys } : {}),
         };
 
