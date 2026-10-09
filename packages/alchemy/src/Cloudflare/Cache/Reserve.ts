@@ -136,8 +136,10 @@ export const ReserveProvider = () =>
             Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Plan-gated zones (no Cache Reserve subscription) and
             // partial/deleted zones reject the route; skip them.
-            Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              SettingUnavailableForPlan: () => Effect.succeed(undefined),
+              InvalidRoute: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -203,8 +205,10 @@ export const ReserveProvider = () =>
       // Observe — if the zone itself is gone (or the entitlement was
       // dropped so the setting no longer exists), nothing to restore.
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-        Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          InvalidRoute: () => Effect.succeed(undefined),
+          SettingUnavailableForPlan: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

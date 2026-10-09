@@ -564,7 +564,7 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
   }
   const indexStat = yield* fs
     .stat(path.join(sourceDir, indexPage))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   if (indexStat?.type !== "File") {
     return yield* Effect.fail(
       new Error(`Static site build did not produce ${indexPage} inside ${sourceDir}.`),
@@ -573,39 +573,35 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
 
   const temp = yield* makeTempArtifactDir();
   const budget = makeStagingBudget();
-  const build = Effect.gen(function* () {
-    return yield* withStagingDeadline(
-      Effect.gen(function* () {
-        const publicDir = path.join(temp.artifactDir, "public");
-        yield* copyDirectoryPreserveSymlinks(sourceDir, publicDir, temp.artifactDir, cwd, budget);
-        const entrypoint = "server.mjs";
-        const serverPath = path.join(temp.artifactDir, entrypoint);
-        const source = staticSiteServerSource({
-          indexPage,
-          spa: options.spa ?? false,
-        });
-        yield* accountStagingEntry(
-          budget,
-          serverPath,
-          yield* Effect.sync(() => new TextEncoder().encode(source).byteLength),
-        );
-        yield* fs.writeFileString(serverPath, source);
-        return {
-          directory: temp.artifactDir,
-          entrypoint,
-          defaultPort: 8080,
-          archiveIgnorePrefix: "public",
-          requiredFiles: [`public/${indexPage}`],
-          cleanup: temp.cleanup,
-        };
-      }),
-      budget,
-    );
-  });
-
-  return yield* build.pipe(
-    Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
+  const build = withStagingDeadline(
+    Effect.gen(function* () {
+      const publicDir = path.join(temp.artifactDir, "public");
+      yield* copyDirectoryPreserveSymlinks(sourceDir, publicDir, temp.artifactDir, cwd, budget);
+      const entrypoint = "server.mjs";
+      const serverPath = path.join(temp.artifactDir, entrypoint);
+      const source = staticSiteServerSource({
+        indexPage,
+        spa: options.spa ?? false,
+      });
+      yield* accountStagingEntry(
+        budget,
+        serverPath,
+        yield* Effect.sync(() => new TextEncoder().encode(source).byteLength),
+      );
+      yield* fs.writeFileString(serverPath, source);
+      return {
+        directory: temp.artifactDir,
+        entrypoint,
+        defaultPort: 8080,
+        archiveIgnorePrefix: "public",
+        requiredFiles: [`public/${indexPage}`],
+        cleanup: temp.cleanup,
+      };
+    }),
+    budget,
   );
+
+  return yield* build.pipe(Effect.tapError(() => temp.cleanup));
 });
 
 const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
@@ -722,56 +718,52 @@ const buildFramework = Effect.fn(function* (options: {
 
   const temp = yield* makeTempArtifactDir();
   const budget = makeStagingBudget();
-  const build = Effect.gen(function* () {
-    return yield* withStagingDeadline(
-      Effect.gen(function* () {
-        yield* copyDirectoryPreserveSymlinks(
-          path.join(options.appPath, options.sourceDir),
-          temp.artifactDir,
-          temp.artifactDir,
-          options.appPath,
-          budget,
-        );
-        yield* materializeBunNodeModuleAliases(
-          temp.artifactDir,
-          path.join(options.appPath, options.sourceDir),
-          budget,
-        );
-        const entrypoint = yield* resolveFrameworkEntrypoint(
-          temp.artifactDir,
-          options.entrypoint,
-          options.allowNestedEntrypoint ?? false,
-        );
-        const extrasBaseDir = options.extrasRelativeToEntrypoint
-          ? path.dirname(path.join(temp.artifactDir, entrypoint))
-          : temp.artifactDir;
-        for (const extra of options.extras ?? []) {
-          const extraSource = path.join(options.appPath, extra.from);
-          if (yield* directoryExists(extraSource)) {
-            const extraTarget = path.join(extrasBaseDir, extra.to);
-            yield* copyDirectoryPreserveSymlinks(
-              extraSource,
-              extraTarget,
-              temp.artifactDir,
-              options.appPath,
-              budget,
-            );
-          }
+  const build = withStagingDeadline(
+    Effect.gen(function* () {
+      yield* copyDirectoryPreserveSymlinks(
+        path.join(options.appPath, options.sourceDir),
+        temp.artifactDir,
+        temp.artifactDir,
+        options.appPath,
+        budget,
+      );
+      yield* materializeBunNodeModuleAliases(
+        temp.artifactDir,
+        path.join(options.appPath, options.sourceDir),
+        budget,
+      );
+      const entrypoint = yield* resolveFrameworkEntrypoint(
+        temp.artifactDir,
+        options.entrypoint,
+        options.allowNestedEntrypoint ?? false,
+      );
+      const extrasBaseDir = options.extrasRelativeToEntrypoint
+        ? path.dirname(path.join(temp.artifactDir, entrypoint))
+        : temp.artifactDir;
+      for (const extra of options.extras ?? []) {
+        const extraSource = path.join(options.appPath, extra.from);
+        if (yield* directoryExists(extraSource)) {
+          const extraTarget = path.join(extrasBaseDir, extra.to);
+          yield* copyDirectoryPreserveSymlinks(
+            extraSource,
+            extraTarget,
+            temp.artifactDir,
+            options.appPath,
+            budget,
+          );
         }
-        return {
-          directory: temp.artifactDir,
-          entrypoint,
-          defaultPort: options.defaultPort,
-          cleanup: temp.cleanup,
-        };
-      }),
-      budget,
-    );
-  });
-
-  return yield* build.pipe(
-    Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
+      }
+      return {
+        directory: temp.artifactDir,
+        entrypoint,
+        defaultPort: options.defaultPort,
+        cleanup: temp.cleanup,
+      };
+    }),
+    budget,
   );
+
+  return yield* build.pipe(Effect.tapError(() => temp.cleanup));
 });
 
 const buildNestjs = Effect.fn(function* (options: ComputeAutoBuildOptions) {
@@ -817,10 +809,8 @@ const buildNestjs = Effect.fn(function* (options: ComputeAutoBuildOptions) {
   });
 
   return yield* build.pipe(
-    Effect.catch((error) =>
-      fs
-        .remove(path.dirname(temp.artifactDir), { recursive: true })
-        .pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
+    Effect.tapError(() =>
+      fs.remove(path.dirname(temp.artifactDir), { recursive: true }).pipe(Effect.ignore),
     ),
   );
 });
@@ -841,7 +831,7 @@ const resolveNestjsCompiledEntrypoint = Effect.fn(function* (appPath: string) {
   for (const candidate of candidates) {
     const stat = yield* fs
       .stat(path.join(appPath, candidate))
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      .pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type === "File") return candidate;
   }
 
@@ -1019,7 +1009,7 @@ const readDirectoryEntries = Effect.fn(function* (directory: string) {
       const file = path.join(directory, name);
       const isSymlink = yield* fs.readLink(file).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (isSymlink) {
         return { name, type: "SymbolicLink" } satisfies DirectoryEntry;
@@ -1048,7 +1038,7 @@ const materializeBunNodeModuleAliases = Effect.fn(function* (
 
   for (const entry of yield* fs.readDirectory(aliasRoot)) {
     const source = path.join(aliasRoot, entry);
-    const stat = yield* fs.stat(source).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const stat = yield* fs.stat(source).pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type !== "Directory") continue;
 
     if (entry.startsWith("@")) {
@@ -1196,9 +1186,7 @@ function buildBun(options: ComputeAutoBuildOptions) {
       };
     });
 
-    return yield* build.pipe(
-      Effect.catch((error) => temp.cleanup.pipe(Effect.andThen(Effect.fail(error)))),
-    );
+    return yield* build.pipe(Effect.tapError(() => temp.cleanup));
   });
 }
 
@@ -1240,9 +1228,7 @@ const makeTempArtifactDir = Effect.fn(function* (leaf = "app") {
 
 const hasRootFile = Effect.fn(function* (appPath: string, filenames: readonly string[]) {
   const fs = yield* FileSystem.FileSystem;
-  const entries = yield* fs
-    .readDirectory(appPath)
-    .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+  const entries = yield* fs.readDirectory(appPath).pipe(Effect.orElseSucceed(() => [] as string[]));
   return entries.some((entry) => filenames.includes(entry));
 });
 
@@ -1275,13 +1261,7 @@ const readPackageJson = Effect.fn(function* (appPath: string) {
   const packagePath = path.join(appPath, "package.json");
   const text = yield* fs
     .readFileString(packagePath)
-    .pipe(
-      Effect.catch((error) =>
-        error._tag === "PlatformError" && error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(error),
-      ),
-    );
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
   if (!text) return undefined;
   return yield* Effect.try({
     try: () => JSON.parse(text) as Record<string, unknown>,
@@ -1302,9 +1282,7 @@ const readNestjsOutDir = Effect.fn(function* (appPath: string) {
   const path = yield* Path.Path;
   for (const fileName of NEST_TSCONFIG_FILENAMES) {
     const filePath = path.join(appPath, fileName);
-    const text = yield* fs
-      .readFileString(filePath)
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const text = yield* fs.readFileString(filePath).pipe(Effect.orElseSucceed(() => undefined));
     if (text === undefined) continue;
     const outDir = yield* parseTsconfigOutDir(text);
     if (outDir !== undefined) return outDir;
@@ -1319,7 +1297,7 @@ const parseTsconfigOutDir = Effect.fn(function* (content: string) {
         compilerOptions?: { outDir?: unknown };
       },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-  }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  }).pipe(Effect.orElseSucceed(() => undefined));
   const outDir = parsed?.compilerOptions?.outDir;
   return typeof outDir === "string" ? normalizeRelativePath(outDir) : undefined;
 });
@@ -1329,7 +1307,7 @@ const readJsonObjectFile = Effect.fn(function* (directory: string, fileName: str
   const path = yield* Path.Path;
   const text = yield* fs
     .readFileString(path.join(directory, fileName))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return undefined;
   return yield* Effect.try({
     try: () => {
@@ -1337,12 +1315,12 @@ const readJsonObjectFile = Effect.fn(function* (directory: string, fileName: str
       return isRecord(parsed) ? parsed : undefined;
     },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-  }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  }).pipe(Effect.orElseSucceed(() => undefined));
 });
 
 const directoryExists = Effect.fn(function* (dirPath: string) {
   const fs = yield* FileSystem.FileSystem;
-  const stat = yield* fs.stat(dirPath).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const stat = yield* fs.stat(dirPath).pipe(Effect.orElseSucceed(() => undefined));
   return stat?.type === "Directory";
 });
 
@@ -1355,10 +1333,8 @@ const stageTracedPath = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const symlinkTarget = yield* fs
-    .readLink(sourcePath)
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
-  const stat = yield* fs.stat(sourcePath).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const symlinkTarget = yield* fs.readLink(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
+  const stat = yield* fs.stat(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
   if (stat === undefined && symlinkTarget === undefined) {
     return yield* Effect.fail(
       new Error(`NestJS dependency disappeared while staging: ${sourcePath}`),
@@ -1415,13 +1391,11 @@ const withStagingDeadline = <A, E, R>(
   effect.pipe(
     Effect.timeoutOption(Duration.millis(Math.max(1, budget.deadline - Date.now()))),
     Effect.flatMap((result) =>
-      Option.isSome(result)
-        ? Effect.succeed(result.value)
-        : Effect.fail(
-            new Error(
-              `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
-            ),
-          ),
+      Effect.fromOption(
+        result,
+        () =>
+          new Error(`Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`),
+      ),
     ),
   );
 
@@ -1485,7 +1459,7 @@ const assertSafeStagingDestination = Effect.fn(function* (destination: string, t
   while (!(yield* fs.exists(existingAncestor))) {
     const isDanglingSymlink = yield* fs.readLink(existingAncestor).pipe(
       Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
+      Effect.orElseSucceed(() => false),
     );
     if (isDanglingSymlink) {
       return yield* Effect.fail(
@@ -1630,7 +1604,7 @@ const packageCliCommand = Effect.fn(function* (
     ),
   );
   for (const candidate of candidates) {
-    const stat = yield* fs.stat(candidate).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const stat = yield* fs.stat(candidate).pipe(Effect.orElseSucceed(() => undefined));
     if (stat?.type === "File" && (process.platform === "win32" || (stat.mode & 0o111) !== 0)) {
       const argText = args.map(shellQuote).join(" ");
       // Package-manager shims resolve dependencies relative to their own path.

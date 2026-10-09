@@ -327,9 +327,11 @@ export const EnterpriseProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.name.length === 0) return;
       yield* androidmanagement.deleteEnterprises({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        // Customer-managed enterprises cannot be deleted through the API.
-        Effect.catchTag("BadRequest", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          // Customer-managed enterprises cannot be deleted through the API.
+          BadRequest: () => Effect.void,
+        }),
       );
     }),
   });

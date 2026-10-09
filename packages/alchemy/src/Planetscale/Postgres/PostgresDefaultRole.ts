@@ -195,11 +195,9 @@ export const PostgresDefaultRoleProvider = () =>
       //    Taking over requires a reset (which destroys the existing
       //    password), so gate on an explicit forceReset opt-in.
       if (observed && !news.forceReset) {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message: `Default role already exists for database "${databaseName}" branch "${branchName}". Use forceReset: true to reset.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message: `Default role already exists for database "${databaseName}" branch "${branchName}". Use forceReset: true to reset.`,
+        });
       }
 
       // 4. Ensure — (re)create the default role. This branch runs

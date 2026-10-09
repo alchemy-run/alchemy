@@ -413,7 +413,7 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   // Construct an actual `Response.Usage` instance — `Schema.Class<Usage>`
   // encodes by going through the class constructor / `isInstance` check, so a
   // plain struct that "matches" the encoded shape isn't enough.
-  return new Response.Usage({
+  return Response.Usage.make({
     inputTokens: {
       uncached: cached !== undefined ? Math.max(0, promptTokens - cached) : promptTokens,
       total: promptTokens,
@@ -1153,8 +1153,10 @@ const parseStreamText = (
   }).pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode<AiError.AiError, unknown>()),
-    Stream.catchTag("Retry", (retry) => Stream.die(retry)),
-    Stream.catchTag("SseError", (error) => Stream.fail(toAiError(error, "streamText"))),
+    Stream.catchTags({
+      Retry: (retry) => Stream.die(retry),
+      SseError: (error) => Stream.fail(toAiError(error, "streamText")),
+    }),
     Stream.mapAccumEffect(
       () => initialStreamState(startsInThink),
       (state, event) => handleStreamChunk(state, event.data, idGen, hasTools),
@@ -1171,7 +1173,7 @@ const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiErr
   AiError.AiError.make({
     module: "Cloudflare.AI.LanguageModel",
     method,
-    reason: new AiError.UnknownError({
+    reason: AiError.UnknownError.make({
       description: cause instanceof Error ? cause.message : "AI Gateway request failed",
     }),
   });

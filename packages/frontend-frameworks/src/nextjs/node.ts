@@ -127,9 +127,7 @@ const runNextBuild = (options: { readonly root: string; readonly cli: string }) 
         { concurrency: "unbounded" },
       ).pipe(Effect.mapError(failFramework("Failed reading next build output")));
       if (exitCode !== 0) {
-        return yield* Effect.fail(
-          failFramework(`The next build exited with code ${exitCode}`)(undefined),
-        );
+        return yield* failFramework(`The next build exited with code ${exitCode}`)(undefined);
       }
     }),
   );
@@ -146,7 +144,7 @@ const collectNextOutput = (root: string) =>
     const nextDir = path.join(root, ".next");
     const hasNext = yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasNext) {
-      return yield* Effect.fail(failFramework(`The next build produced no ${nextDir}`)(undefined));
+      return yield* failFramework(`The next build produced no ${nextDir}`)(undefined);
     }
     const serverFilesPath = path.join(nextDir, "required-server-files.json");
     const { config } = yield* fs
@@ -156,13 +154,11 @@ const collectNextOutput = (root: string) =>
         Effect.mapError(failFramework(`Failed to read the built Next config ${serverFilesPath}`)),
       );
     if (config.output === "export") {
-      return yield* Effect.fail(
-        failFramework(
-          '`output: "export"` builds a static site with no Next server, so it ' +
-            'cannot run on the Node target. Remove `output: "export"` from ' +
-            "next.config, or deploy the exported `out/` directory as a static site.",
-        )(undefined),
-      );
+      return yield* failFramework(
+        '`output: "export"` builds a static site with no Next server, so it ' +
+          'cannot run on the Node target. Remove `output: "export"` from ' +
+          "next.config, or deploy the exported `out/` directory as a static site.",
+      )(undefined);
     }
     const publicDir = path.join(root, "public");
     const hasPublic = yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false));
@@ -331,11 +327,9 @@ const awaitNextDevReady = (options: {
     const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          failFramework(
-            `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* failFramework(
+          `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.callback<boolean>((resume) => {
         const net = createRequire(import.meta.url)("net") as typeof NodeNet;
@@ -365,8 +359,8 @@ const awaitNextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      failFramework(`Timed out waiting for the next dev server at ${options.url}`)(undefined),
+    return yield* failFramework(`Timed out waiting for the next dev server at ${options.url}`)(
+      undefined,
     );
   });
 

@@ -23,11 +23,9 @@ export const resolveStackEntrypoint = Effect.fn(function* (main: string) {
   const path = yield* Path.Path;
   const absolutePath = path.resolve(main);
   if (!(yield* fs.exists(absolutePath))) {
-    return yield* Effect.fail(
-      new StackEntrypointError({
-        message: `Stack entrypoint '${main}' does not exist in '${path.dirname(absolutePath)}'. Run this command from an Alchemy project or pass --config <path>.`,
-      }),
-    );
+    return yield* new StackEntrypointError({
+      message: `Stack entrypoint '${main}' does not exist in '${path.dirname(absolutePath)}'. Run this command from an Alchemy project or pass --config <path>.`,
+    });
   }
   return absolutePath;
 });

@@ -184,7 +184,11 @@ export const PostgresDatabaseProvider = () =>
         return { action: "update", stables } as const;
       }
 
-      return undefined;
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -201,14 +205,12 @@ export const PostgresDatabaseProvider = () =>
       if (!data) return undefined;
 
       if (data.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       const defaultBranch = data.default_branch ?? "main";
@@ -298,14 +300,12 @@ export const PostgresDatabaseProvider = () =>
       yield* waitForDatabaseReady(organization, observed.name, session);
 
       if (observed.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       // Sync — ensure a non-`main` default branch exists before

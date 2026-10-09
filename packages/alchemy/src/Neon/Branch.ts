@@ -430,7 +430,7 @@ export const BranchProvider = () =>
             findBranchByName(projectId, newName).pipe(
               Effect.flatMap(
                 Effect.fn(function* (matches) {
-                  if (matches.length !== 1) return yield* Effect.fail(error);
+                  if (matches.length !== 1) return yield* error;
                   const branch = yield* authorize(matches[0]!);
                   return { branch, operations: [] };
                 }),

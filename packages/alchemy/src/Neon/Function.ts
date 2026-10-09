@@ -165,6 +165,7 @@ export const Function: Platform<
     Effect.gen(function* () {
       if (globalThis.__ALCHEMY_RUNTIME__) return props;
       const yieldRef = (value: unknown) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props refs are declaration Effects resolved by the engine
         Effect.isEffect(value) ? (value as Effect.Effect<unknown>) : Effect.succeed(value);
       return {
         ...props,

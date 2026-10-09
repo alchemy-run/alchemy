@@ -332,9 +332,11 @@ export const ObjectAccessControlProvider = () =>
         })
         .pipe(
           Effect.as(true),
-          Effect.catchTag("NotFound", () => Effect.succeed(true)),
-          // GCS refuses to drop the last OWNER ACL on an object.
-          Effect.catchTag("ObjectOwnerAclRequired", () => Effect.succeed(false)),
+          Effect.catchTags({
+            NotFound: () => Effect.succeed(true),
+            // GCS refuses to drop the last OWNER ACL on an object.
+            ObjectOwnerAclRequired: () => Effect.succeed(false),
+          }),
         );
       if (removed) {
         yield* waitUntilGone(bucketName, object, entity, output.generation);

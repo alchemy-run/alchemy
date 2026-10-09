@@ -7,6 +7,8 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import { adopt } from "@/AdoptPolicy";
+import * as Drift from "@/Drift.ts";
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
 import { hashMigrations } from "@/SQL/SqlFile.ts";
@@ -15,6 +17,8 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Planetscale.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const fixturesDir = `${import.meta.dirname}/Postgres/fixtures`;
 
 const branchOutput = (
   overrides: Partial<Planetscale.PostgresBranchAttributes> = {},
@@ -63,7 +67,11 @@ test.provider(
           hasReadOnlyReplicas: false,
         }),
       });
-      expect(alreadyConvergedToNonHa).toBeUndefined();
+      // Converged: a noop that still carries the `name` stable for `--force`.
+      expect(alreadyConvergedToNonHa).toEqual({
+        action: "noop",
+        stables: ["organization", "database", "name"],
+      });
 
       const exactHaCountChanged = yield* provider.diff!({
         id: "Branch",
@@ -174,6 +182,68 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
 
           expect(live.cluster_architecture).toEqual("aarch64");
           expect(live.cluster_name).toEqual("PS_DEV_AWS_ARM");
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    // Regression for #1955: a PostgresBranch adopting the database's default
+    // `main` branch (with a role on it, as in the issue) must report no drift
+    // right after a successful deploy.
+    test.provider(
+      "Postgres default branch reports no drift after deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("DriftDatabase", {
+                clusterSize: "PS_10",
+              });
+              const branch = yield* Planetscale.PostgresBranch("Branch", {
+                database,
+                name: "main",
+                migrations: `${fixturesDir}/migrations`,
+              }).pipe(adopt(true));
+              yield* Planetscale.PostgresRole("Role", {
+                database,
+                branch,
+                inheritedRoles: [],
+              });
+
+              return { database, branch };
+            }),
+          );
+
+          expect(branch.name).toEqual("main");
+          expect(branch.migrationsHashes["0001_create_widgets.sql"]).toEqual(expect.any(String));
+
+          // PlanetScale bumps the branch's `updated_at` a few seconds after the
+          // deploy (no config change). Wait for that bump so drift detection
+          // observes the volatile timestamp.
+          yield* ps
+            .getBranch({
+              organization: branch.organization,
+              database: branch.database,
+              branch: branch.name,
+            })
+            .pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("3 seconds"),
+                until: (live) => live.updated_at !== branch.updatedAt,
+                times: 20,
+              }),
+            );
+
+          const { plan } = yield* Drift.plan({ name: stack.name, stage: stack.stage }).pipe(
+            Effect.provide(stack.state),
+          );
+          const { action, drift } = plan.resources.Branch!;
+          expect({ action, drift }).toEqual({ action: "noop", drift: undefined });
+          expect(plan.resources.DriftDatabase).toMatchObject({ action: "noop" });
 
           yield* stack.destroy();
           yield* waitForDatabaseToBeDeleted(database.name, database.organization);

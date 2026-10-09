@@ -307,7 +307,7 @@ export const make: (
       // build for a different preset would never be deployed.
       const conflict = findPresetConflict(options?.nitro, target.nitroPreset);
       if (conflict !== undefined) {
-        return yield* Effect.fail(fail(presetConflictMessage(conflict, target.nitroPreset)));
+        return yield* fail(presetConflictMessage(conflict, target.nitroPreset));
       }
 
       const vite = yield* loadVite(root);
@@ -429,7 +429,7 @@ export const make: (
 
       const resolved = server.resolvedUrls?.local[0];
       if (resolved === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       // Vite reports its local URL with a trailing slash. SolidStart runs with
       // `appType: "custom"`, so its router sees the raw pathname and a caller
@@ -509,14 +509,12 @@ export const readNitroOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The SolidStart build produced no server modules in ${dirs.serverDir}`),
-      );
+      return yield* fail(`The SolidStart build produced no server modules in ${dirs.serverDir}`);
     }
     const serverModules = FrameworkCore.sortServerModules(modules, SERVER_ENTRY_NAME);
     if (serverModules[0]?.name !== SERVER_ENTRY_NAME) {
-      return yield* Effect.fail(
-        fail(`The SolidStart build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`),
+      return yield* fail(
+        `The SolidStart build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`,
       );
     }
     return {

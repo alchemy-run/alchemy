@@ -124,6 +124,7 @@ export function handleWebSocket(
         upstreamSocket.write(head);
       }
 
+      // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
       socket.pipe(upstreamSocket).pipe(socket);
     });
 

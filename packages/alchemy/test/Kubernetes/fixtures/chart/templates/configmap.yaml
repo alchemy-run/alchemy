@@ -1,3 +1,6 @@
+{{- if .Values.fail }}
+{{- fail .Values.message }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

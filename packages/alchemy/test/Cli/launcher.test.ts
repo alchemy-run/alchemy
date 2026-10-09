@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -19,8 +20,6 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
     const bin = path.join(installed, "bin");
     yield* fs.makeDirectory(bin, { recursive: true });
     yield* fs.copyFile(path.join(packageDir, "bin", "cli.js"), path.join(bin, "cli.js"));
-    const config = path.join(packageDir, "bin", "tsconfig.json");
-    yield* fs.copyFile(config, path.join(bin, "tsconfig.json"));
     yield* fs.writeFileString(
       path.join(installed, "package.json"),
       JSON.stringify({ type: "module", bin: { alchemy: "./bin/cli.js" } }),
@@ -89,7 +88,10 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
 // Run the published launcher under Node with a launcher's environment and
 // report which runtime it picked. The entry and loader are stubs, and a fake
 // `bun` first on PATH reports the handoff instead of running the CLI.
-const launcherRuntime = (env: { npm_execpath: string; npm_config_user_agent: string }) =>
+const launcherRuntime = (
+  env: { npm_execpath: string; npm_config_user_agent: string },
+  nodeArgs: ReadonlyArray<string> = [],
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -113,7 +115,7 @@ const launcherRuntime = (env: { npm_execpath: string; npm_config_user_agent: str
     const fakeBun = path.join(fakeBin, "bun");
     yield* fs.writeFileString(fakeBun, `#!/bin/sh\necho bun\n`);
     yield* fs.chmod(fakeBun, 0o755);
-    const handle = yield* ChildProcess.make(nodePath!, [path.join(bin, "cli.js")], {
+    const handle = yield* ChildProcess.make(nodePath!, [...nodeArgs, path.join(bin, "cli.js")], {
       cwd: project,
       env: {
         ...env,
@@ -160,6 +162,13 @@ const launchers = [
     runtime: "node",
   },
   {
+    // A directory named like bun (`/home/ubuntu/`) must not select bun.
+    name: "pnpm under /home/ubuntu",
+    npm_execpath: "/home/ubuntu/.local/share/pnpm/pnpm.cjs",
+    npm_config_user_agent: "pnpm/11.25.0 npm/? node/v24.0.0 linux x64",
+    runtime: "node",
+  },
+  {
     name: "bun run / bunx",
     npm_execpath: "<fake-bun>",
     npm_config_user_agent: "bun/1.4.2 npm/? node/v26.3.0 darwin arm64",
@@ -175,7 +184,82 @@ describe.sequential("launcher runtime selection", { tags: ["unit", "local"] }, (
       }),
     );
   }
+
+  it.live.skipIf(!nodeSupportsDevMode)(
+    "bun run hands off through a child when this Node has no execve",
+    () =>
+      Effect.gen(function* () {
+        const { runtime: _runtime, name: _name, ...env } = launchers[4];
+        const withoutExecve = "data:text/javascript,delete process.execve;";
+        expect(yield* launcherRuntime(env, ["--import", withoutExecve])).toBe("bun");
+      }),
+  );
+
+  it.live.skipIf(!nodeSupportsDevMode)(
+    "bun run keeps a parent's IPC channel across the handoff",
+    () => launcherRelaysIpc(),
+  );
 });
+
+// The launcher, forked with an IPC channel the way a supervisor would, must
+// still deliver the CLI's messages both ways: `execve` would sever the channel,
+// so this path keeps a child and relays. Node's IPC has no Effect surface, so
+// the process is driven with `node:child_process` directly.
+const launcherRelaysIpc = () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const packageDir = yield* path.fromFileUrl(new URL("../../", import.meta.url));
+    const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-launcher-ipc-" });
+    const bin = path.join(project, "node_modules", "alchemy", "bin");
+    yield* fs.makeDirectory(bin, { recursive: true });
+    yield* fs.copyFile(path.join(packageDir, "bin", "cli.js"), path.join(bin, "cli.js"));
+    yield* fs.symlink(
+      path.join(packageDir, "node_modules"),
+      path.join(project, "node_modules", "alchemy", "node_modules"),
+    );
+    yield* fs.writeFileString(
+      path.join(project, "node_modules", "alchemy", "package.json"),
+      JSON.stringify({ type: "module" }),
+    );
+    // The CLI entry, as bun would run it: announce readiness over IPC, then
+    // echo the one message the parent sends and exit.
+    yield* fs.writeFileString(
+      path.join(bin, "alchemy.js"),
+      [
+        "process.send({ ready: true, args: process.argv.slice(2) });",
+        'process.once("message", (message) => {',
+        "  process.send({ echo: message });",
+        "  process.exit(7);",
+        "});",
+      ].join("\n"),
+    );
+    const fakeBun = path.join(project, "bun");
+    yield* fs.writeFileString(fakeBun, `#!/bin/sh\nexec ${JSON.stringify(nodePath!)} "$@"\n`);
+    yield* fs.chmod(fakeBun, 0o755);
+
+    const result = yield* Effect.promise(
+      () =>
+        new Promise<{ messages: Array<unknown>; exitCode: number | null }>((resolve, reject) => {
+          const child = spawn(nodePath!, [path.join(bin, "cli.js"), "deploy", "--yes"], {
+            cwd: project,
+            env: { ...process.env, npm_execpath: fakeBun, npm_config_user_agent: "bun/1.4.2" },
+            stdio: ["ignore", "ignore", "inherit", "ipc"],
+          });
+          const messages: Array<unknown> = [];
+          child.on("message", (message) => {
+            messages.push(message);
+            if (messages.length === 1) child.send({ hello: "cli" });
+          });
+          child.on("error", reject);
+          child.on("close", (exitCode) => resolve({ messages, exitCode }));
+        }),
+    );
+    expect(result).toEqual({
+      messages: [{ ready: true, args: ["deploy", "--yes"] }, { echo: { hello: "cli" } }],
+      exitCode: 7,
+    });
+  }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
 describe.sequential("published Bun launcher", { tags: ["unit", "local"] }, () => {
   it.live.skipIf(!nodeSupportsDevMode)(

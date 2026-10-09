@@ -727,7 +727,7 @@ systemctl enable --now ${unitName}.service
 
     if (output.managedIam && output.instanceProfileName && output.roleName) {
       const attachedPolicyArns = yield* listAttachedPolicyArns(output.roleName).pipe(
-        Effect.catch(() => Effect.succeed([])),
+        Effect.orElseSucceed(() => []),
       );
       yield* iam
         .removeRoleFromInstanceProfile({
