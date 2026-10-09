@@ -1093,6 +1093,10 @@ it.effect(
           await expect(kv.delete(key)).rejects.toThrow("at most 300 bytes");
         }
       });
-    }).pipe(Effect.provide(localRuntimeLayer), Effect.scoped),
+    }).pipe(
+      // Stop the worker before the runtime layer removes its storage directory.
+      Effect.scoped,
+      Effect.provide(localRuntimeLayer),
+    ),
   { timeout: 60_000 },
 );
