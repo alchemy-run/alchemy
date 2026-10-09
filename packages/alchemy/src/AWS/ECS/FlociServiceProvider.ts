@@ -35,10 +35,10 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual } from "../../Diff.ts";
-import type { ImageSourceLike } from "../ECR/ImageSource.ts";
+import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
 import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger, restartFamilyTasks } from "./EcsDevWatch.ts";
-import { Service, ServiceProvider, type ServiceProps } from "./Service.ts";
+import { Service, ServiceProvider, serviceImageInput, type ServiceProps } from "./Service.ts";
 
 /** Cluster ARN from either form of the `cluster` prop (see ServiceProvider). */
 const clusterArnOfProps = (cluster: ServiceProps["cluster"] | undefined): string | undefined =>
@@ -136,6 +136,7 @@ export const FlociServiceProvider = () =>
           // the referenced `AWS.ECS.Task` resource.
           return;
         }
+        const imageSource = yield* makeImageSource;
         const trigger = yield* imageSourceTrigger({
           id: ctx.id,
           source: ctx.news as ImageSourceLike,
@@ -144,13 +145,29 @@ export const FlociServiceProvider = () =>
         yield* trigger.pipe(
           // The reconcile registers the new revision and `updateService`s
           // onto it; the `onReconciled` hook (shared with engine-driven
-          // updates) rolls the running tasks.
+          // updates) rolls the running tasks. The staleness check runs under
+          // the per-id lock, against the freshest attrs: `Bundle.watch` emits
+          // its initial build too, and re-reconciling unchanged content would
+          // register a new revision and roll the running tasks for nothing.
           Stream.runForEach(() =>
-            ctx.rerunReconcile.pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
+            ctx
+              .rerunReconcileIfStale((current) =>
+                imageSource
+                  .hash(serviceImageInput(ctx.news))
+                  .pipe(
+                    Effect.map(
+                      (hash) =>
+                        hash === undefined ||
+                        current.code === undefined ||
+                        hash !== current.code.hash,
+                    ),
+                  ),
+              )
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
+                ),
               ),
-            ),
           ),
         );
       }),
