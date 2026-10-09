@@ -4,6 +4,7 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
@@ -14,6 +15,13 @@ import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 const { test } = Test.make({ providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const uriHostLabel = (uri: unknown) =>
+  Redacted.isRedacted(uri)
+    ? /^postgres(?:ql)?:\/\/[^@/]+@([a-z]+)\./.exec(String(Redacted.value(uri)))?.[1]
+    : typeof uri;
+
+const isEmptyRedacted = (uri: unknown) => Redacted.isRedacted(uri) && Redacted.value(uri) === "";
 
 const waitUntilClusterGone = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
@@ -113,6 +121,8 @@ test.provider(
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.region).toEqual("iad");
       expect(created.db.plan).toEqual("basic");
+      expect(uriHostLabel(created.db.connectionUri)).toEqual("direct");
+      expect(uriHostLabel(created.db.pooledConnectionUri)).toEqual("pgbouncer");
 
       const status = yield* waitUntilReady(created.db.clusterId);
       expect(status).toEqual("ready");
@@ -125,19 +135,23 @@ test.provider(
       expect(fetched.data?.region).toEqual("iad");
       expect(fetched.data?.status).toEqual("ready");
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("MpgSite");
-          const db = yield* Fly.Postgres("Db", {
-            region: "iad",
-            plan: "basic",
-            volumeSizeGb: 10,
-          });
-          return { app, db };
-        }),
-      );
+      const redeploy = Effect.gen(function* () {
+        const app = yield* Fly.App("MpgSite");
+        const db = yield* Fly.Postgres("Db", {
+          region: "iad",
+          plan: "basic",
+          volumeSizeGb: 10,
+        });
+        return { app, db };
+      });
+      const plan = yield* stack.plan(redeploy);
+      expect(plan.resources["Db"].action).toEqual("noop");
+
+      const updated = yield* stack.deploy(redeploy);
       expect(updated.db.clusterId).toEqual(created.db.clusterId);
       expect(updated.db.name).toEqual(created.db.name);
+      expect(uriHostLabel(updated.db.connectionUri)).toEqual("direct");
+      expect(uriHostLabel(updated.db.pooledConnectionUri)).toEqual("pgbouncer");
 
       const provider = yield* Provider.findProvider(Fly.Postgres);
       const all = yield* provider.list();
@@ -145,6 +159,8 @@ test.provider(
       expect(listed).toBeDefined();
       expect(listed?.name).toEqual(created.db.name);
       expect(listed?.region).toEqual("iad");
+      expect(isEmptyRedacted(listed?.connectionUri)).toBe(true);
+      expect(isEmptyRedacted(listed?.pooledConnectionUri)).toBe(true);
 
       yield* stack.destroy();
 
