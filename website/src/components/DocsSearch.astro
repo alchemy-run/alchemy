@@ -331,6 +331,10 @@ import { SEARCH_PROVIDERS } from "../docs-search";
     flex-direction: column;
     max-height: inherit;
   }
+  /* Only the result list scrolls; the chrome around it keeps its height. */
+  .alc-search__frame > :not(.alc-search__results) {
+    flex-shrink: 0;
+  }
   .alc-search__form {
     display: flex;
     align-items: center;
