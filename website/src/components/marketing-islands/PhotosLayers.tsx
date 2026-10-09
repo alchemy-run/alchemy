@@ -8,8 +8,8 @@ import { sleep } from "./_terminal";
  * slots of one template, so the line count never changes and only the
  * slotted values roll.
  *
- * ⟨0⟩ the Layer, ⟨1⟩ the resource, ⟨2⟩ what the binding grants, ⟨3⟩ the
- * binding, ⟨4⟩ the call that stores the photo.
+ * ⟨0⟩ the Layer, ⟨1⟩ the resource, ⟨2⟩ the binding, ⟨3⟩ the call that
+ * stores the photo.
  */
 const TEMPLATE = `export class Photos extends Context.Service<Photos, {
   upload(name: string, body: string): Effect.Effect<void>;
@@ -18,13 +18,10 @@ const TEMPLATE = `export class Photos extends Context.Service<Photos, {
 export const ⟨0⟩ = Layer.effect(
   Photos,
   Effect.gen(function* () {
-    // resource
     const bucket = yield* ⟨1⟩("Photos");
-    ⟨2⟩
-    const photos = yield* ⟨3⟩(bucket);
-    // API
+    const photos = yield* ⟨2⟩(bucket);
     return {
-      upload: (name, body) => ⟨4⟩,
+      upload: (name, body) => ⟨3⟩,
     };
   }),
 );`;
@@ -34,48 +31,12 @@ const PUT_OBJECT = "photos({ Key: name, Body: body })";
 
 // The Layer names match the hero's (heroHosts.ts).
 const VARIANTS: string[][] = [
-  [
-    "PhotosR2",
-    "Cloudflare.R2.Bucket",
-    "// binding: read/write access for this Worker only",
-    "Cloudflare.R2.ReadWriteBucket",
-    PUT,
-  ],
-  [
-    "PhotosS3",
-    "AWS.S3.Bucket",
-    "// binding: s3:PutObject on this bucket only",
-    "AWS.S3.PutObject",
-    PUT_OBJECT,
-  ],
-  [
-    "PhotosGCS",
-    "GCP.Storage.Bucket",
-    "// binding: roles/storage.objectUser on this bucket",
-    "GCP.Storage.ReadWriteBucket",
-    PUT,
-  ],
-  [
-    "PhotosTigris",
-    "Fly.Bucket",
-    "// binding: write access to this bucket only",
-    "Fly.PutObject",
-    PUT_OBJECT,
-  ],
-  [
-    "PhotosRailway",
-    "Railway.Bucket",
-    "// binding: write access to this bucket only",
-    "Railway.PutObject",
-    PUT_OBJECT,
-  ],
-  [
-    "PhotosNeon",
-    "Neon.Bucket",
-    "// binding: read/write access to this bucket only",
-    "Neon.ReadWriteBucket",
-    PUT,
-  ],
+  ["PhotosR2", "Cloudflare.R2.Bucket", "Cloudflare.R2.ReadWriteBucket", PUT],
+  ["PhotosS3", "AWS.S3.Bucket", "AWS.S3.PutObject", PUT_OBJECT],
+  ["PhotosGCS", "GCP.Storage.Bucket", "GCP.Storage.ReadWriteBucket", PUT],
+  ["PhotosTigris", "Fly.Bucket", "Fly.PutObject", PUT_OBJECT],
+  ["PhotosRailway", "Railway.Bucket", "Railway.PutObject", PUT_OBJECT],
+  ["PhotosNeon", "Neon.Bucket", "Neon.ReadWriteBucket", PUT],
 ];
 
 const SEGMENTS = TEMPLATE.split(/⟨(\d)⟩/);
