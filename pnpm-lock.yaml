@@ -307,7 +307,7 @@ catalogs:
       specifier: ^0.20.0
       version: 0.20.0
     '@prisma/orm-family-sql':
-      specifier: 8.0.0-rc.11
+      specifier: ^8.0.0-rc.11
       version: 8.0.0-rc.11
     '@prisma/orm-postgres':
       specifier: ^8.0.0-rc.11
