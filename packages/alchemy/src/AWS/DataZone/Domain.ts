@@ -184,8 +184,10 @@ export const DomainProvider = () =>
       // domain-scoped authorization before existence. Both mean "absent".
       const getDomainOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* datazone.getDomain({ identifier }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.succeed(undefined),
+          }),
         );
       });
 
@@ -437,14 +439,16 @@ export const DomainProvider = () =>
               skipDeletionCheck: true,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // an already-deleted domain surfaces as AccessDenied ("User is
-              // not permitted to perform operation: DeleteDomain") — DataZone
-              // checks domain-scoped auth before existence.
-              Effect.catchTag("AccessDeniedException", () => Effect.void),
-              // a concurrent DELETING domain rejects a second delete — the
-              // wait below observes it through to gone either way.
-              Effect.catchTag("ConflictException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // an already-deleted domain surfaces as AccessDenied ("User is
+                // not permitted to perform operation: DeleteDomain") — DataZone
+                // checks domain-scoped auth before existence.
+                AccessDeniedException: () => Effect.void,
+                // a concurrent DELETING domain rejects a second delete — the
+                // wait below observes it through to gone either way.
+                ConflictException: () => Effect.void,
+              }),
             );
           yield* waitForGone(output.domainId);
 

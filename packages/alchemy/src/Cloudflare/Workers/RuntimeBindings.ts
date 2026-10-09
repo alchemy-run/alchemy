@@ -60,7 +60,7 @@ export const toRuntimeBinding = Effect.fn(function* (
   devRemote?: Record<string, boolean>,
 ) {
   const unsupported = () =>
-    new WorkerValidationError({
+    WorkerValidationError.make({
       message: `${b.type} bindings are not supported in local mode`,
       value: b,
     });
@@ -118,7 +118,7 @@ export const toRuntimeBinding = Effect.fn(function* (
       return Json.local(b.name, b.json);
     case "k2":
       // Miniflare has no K2 simulation and no remote proxy for it yet.
-      return yield* new WorkerValidationError({
+      return yield* WorkerValidationError.make({
         message: `K2 binding "${b.name}" is not supported in local mode: K2 has no local simulation.`,
         hint: "Run K2 producers against a deployed Worker (alchemy deploy).",
         value: b,
@@ -149,7 +149,7 @@ export const toRuntimeBinding = Effect.fn(function* (
         if (url === undefined || token === undefined) {
           // Defensive: binding data produced by current eval always carries
           // the shim for this mode combination.
-          return yield* new WorkerValidationError({
+          return yield* WorkerValidationError.make({
             message:
               `Queue binding "${b.name}" targets a live queue ` +
               "(Alchemy.remote()) but no producer shim was registered for it — " +

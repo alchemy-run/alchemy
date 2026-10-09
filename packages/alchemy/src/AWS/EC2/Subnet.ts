@@ -425,7 +425,7 @@ export const SubnetProvider = () =>
                     // carries our ownership tags; a foreign subnet re-fails
                     // with the typed conflict.
                     if (news.cidrBlock === undefined) {
-                      return yield* Effect.fail(error);
+                      return yield* error;
                     }
                     const existing = yield* ec2.describeSubnets
                       .items({
@@ -445,7 +445,7 @@ export const SubnetProvider = () =>
                         Effect.map(Option.getOrUndefined),
                       );
                     if (existing?.SubnetId === undefined) {
-                      return yield* Effect.fail(error);
+                      return yield* error;
                     }
                     const existingId = existing.SubnetId as SubnetId;
                     yield* session.note(

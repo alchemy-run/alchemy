@@ -160,7 +160,7 @@ const make = Effect.gen(function* () {
   // two GitHub calls a mint makes, so nothing is kept between mints.
   const appJwt = Effect.gen(function* () {
     const pem = yield* config.github.privateKey;
-    const key = yield* importPrivateKey(Redacted.value(pem));
+    const key = yield* pem.pipe(Redacted.value, importPrivateKey);
     const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
     return yield* signJwt({ iat: now - 60, exp: now + 540, iss: yield* config.github.appId }, key);
   });

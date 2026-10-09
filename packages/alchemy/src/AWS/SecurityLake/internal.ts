@@ -18,7 +18,7 @@ export const fromTagList = (
 export const readSecurityLakeTags = (resourceArn: string) =>
   securitylake.listTagsForResource({ resourceArn }).pipe(
     Effect.map((response) => fromTagList(response.tags)),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 /**

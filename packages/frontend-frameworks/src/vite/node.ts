@@ -41,8 +41,8 @@ const makeNodeChildTarget = (config: ViteTargetConfig = {}): ViteTarget =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         if (output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The Vite build produced no client directory for the Node serve entry"),
+          return yield* fail(
+            "The Vite build produced no client directory for the Node serve entry",
           );
         }
         const servePath = path.join(output.clientDirectory, NODE_SERVE_ENTRY_FILE_NAME);

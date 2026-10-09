@@ -583,14 +583,15 @@ export const DistributionProvider = () =>
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
           // Bound each poll — a wedged read must count as "not deployed
           // yet" and retry, never hang the deploy (see the delete-wait).
-          Effect.timeout(30_000),
-          Effect.catchTag("TimeoutError", () =>
-            Effect.fail(
-              new DistributionPendingDeployment({
-                message: `Timed out reading distribution ${distributionId} while polling deployment`,
-              }),
-            ),
-          ),
+          Effect.timeoutOrElse({
+            duration: 30_000,
+            orElse: () =>
+              Effect.fail(
+                new DistributionPendingDeployment({
+                  message: `Timed out reading distribution ${distributionId} while polling deployment`,
+                }),
+              ),
+          }),
           Effect.map((response) => response.Distribution),
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
@@ -602,11 +603,9 @@ export const DistributionProvider = () =>
                   yield* Effect.logInfo(
                     `CloudFront Distribution wait: ${distributionId} status=${distribution?.Status ?? "unknown"}`,
                   );
-                  return yield* Effect.fail(
-                    new DistributionPendingDeployment({
-                      message: `Distribution ${distributionId} is not yet deployed`,
-                    }),
-                  );
+                  return yield* new DistributionPendingDeployment({
+                    message: `Distribution ${distributionId} is not yet deployed`,
+                  });
                 }),
           ),
           Effect.retry({
@@ -714,14 +713,15 @@ export const DistributionProvider = () =>
           // rides the same bounded retry.
           Effect.andThen(() =>
             getCurrent(distributionId).pipe(
-              Effect.timeout(30_000),
-              Effect.catchTag("TimeoutError", () =>
-                Effect.fail(
-                  new DistributionPendingDeletionReadiness({
-                    message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
-                  }),
-                ),
-              ),
+              Effect.timeoutOrElse({
+                duration: 30_000,
+                orElse: () =>
+                  Effect.fail(
+                    new DistributionPendingDeletionReadiness({
+                      message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
+                    }),
+                  ),
+              }),
             ),
           ),
           Effect.flatMap(
@@ -737,11 +737,9 @@ export const DistributionProvider = () =>
                 yield* Effect.logInfo(
                   `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
                 );
-                return yield* Effect.fail(
-                  new DistributionPendingDeletionReadiness({
-                    message: `Distribution ${distributionId} is not yet ready for deletion`,
-                  }),
-                );
+                return yield* new DistributionPendingDeletionReadiness({
+                  message: `Distribution ${distributionId} is not yet ready for deletion`,
+                });
               }
 
               yield* Effect.logInfo(
@@ -896,7 +894,6 @@ export const DistributionProvider = () =>
                         const created = yield* cloudfront.createDistribution({
                           DistributionConfig: config,
                         });
-
                         if (created.Distribution?.ARN && Object.keys(desiredTags).length > 0) {
                           yield* Effect.logInfo(
                             `CloudFront Distribution reconcile: tagging distribution ${created.Distribution.Id} after fallback`,
@@ -908,46 +905,41 @@ export const DistributionProvider = () =>
                             },
                           });
                         }
-
                         return created;
                       })
                     : Effect.gen(function* () {
                         yield* Effect.logInfo(
                           `CloudFront Distribution reconcile: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
                         );
-                        return yield* Effect.fail(error);
+                        return yield* error;
                       }),
                 ),
-              )
-              .pipe(
                 Effect.map((created) => ({
                   distributionId: created.Distribution?.Id,
                   etag: created.ETag,
                   tags: desiredTags,
                 })),
-                Effect.catchTag("DistributionAlreadyExists", () =>
-                  Effect.gen(function* () {
-                    yield* Effect.logInfo(
-                      `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
-                    );
-                    const recovered = yield* getByCallerReference(callerReference);
-                    if (!recovered?.distribution.Id) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                        ),
+                Effect.catchTags({
+                  DistributionAlreadyExists: () =>
+                    Effect.gen(function* () {
+                      yield* Effect.logInfo(
+                        `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
                       );
-                    }
-                    return {
-                      distributionId: recovered.distribution.Id,
-                      etag: recovered.etag,
-                      tags: recovered.tags,
-                    };
-                  }),
-                ),
-                Effect.catchTag(
-                  "InvalidArgument",
-                  (
+                      const recovered = yield* getByCallerReference(callerReference);
+                      if (!recovered?.distribution.Id) {
+                        return yield* Effect.fail(
+                          new Error(
+                            `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                          ),
+                        );
+                      }
+                      return {
+                        distributionId: recovered.distribution.Id,
+                        etag: recovered.etag,
+                        tags: recovered.tags,
+                      };
+                    }),
+                  InvalidArgument: (
                     error,
                   ): Effect.Effect<
                     never,
@@ -966,7 +958,7 @@ export const DistributionProvider = () =>
                           ),
                         )
                       : Effect.fail(error),
-                ),
+                }),
                 Effect.retry({
                   while: (error) => error instanceof DistributionFunctionAssociationPending,
                   schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),

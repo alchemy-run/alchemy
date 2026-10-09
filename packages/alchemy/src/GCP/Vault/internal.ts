@@ -184,15 +184,19 @@ export const closeThenDeleteMatter = (matterId: string) =>
     if (current === undefined || current.state === "DELETED") return;
     if (current.state === "OPEN") {
       yield* vault.closeMatters({ matterId, body: {} }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
       );
     }
     yield* vault.deleteMatters({ matterId }).pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.catchTag("BadRequest", () => Effect.void),
-      Effect.catchTag("Conflict", () => Effect.void),
+      Effect.catchTags({
+        NotFound: () => Effect.void,
+        BadRequest: () => Effect.void,
+        Conflict: () => Effect.void,
+      }),
     );
   });
 

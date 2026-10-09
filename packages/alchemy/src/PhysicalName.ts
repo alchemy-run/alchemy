@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import { base32 } from ".//Util/base32.ts";
-import { InstanceId } from "./InstanceId.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 
@@ -71,12 +71,12 @@ export const createPhysicalName = Effect.fn(function* ({
   ) {
     prefix = `x${delimiter}${prefix}`;
   }
-  const randomId = base32(Buffer.from(instanceId ?? (yield* InstanceId), "hex"));
+  const randomId = base32(Buffer.from(instanceId ?? (yield* ResourceContext).instanceId, "hex"));
   const suffix = randomId.slice(0, suffixLength);
   const name = `${prefix}${suffix}`;
   if (maxLength && name.length > maxLength) {
     // The instance suffix alone cannot disambiguate: every name derived from
-    // the same resource shares one InstanceId, so two prefixes that differ
+    // the same resource shares one instance ID, so two prefixes that differ
     // only in their truncated tail (e.g. `…-task-role-` vs `…-execution-role-`)
     // would collapse to the same string. Keep a stable hash of the full name
     // next to the suffix so truncated names remain unique.

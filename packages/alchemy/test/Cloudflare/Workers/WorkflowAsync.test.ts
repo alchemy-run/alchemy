@@ -4,6 +4,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
@@ -67,17 +68,40 @@ const EnvResponse = Schema.Struct({
   asset: Schema.String,
 });
 
-const getJson = <A>(url: string, schema: Schema.Decoder<A>) =>
+const getJson = <A>(url: string, schema: Schema.Decoder<A>, retries = 10) =>
   Effect.gen(function* () {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     return yield* client.get(url).pipe(
       Effect.flatMap((res) => res.json),
       Effect.flatMap(Schema.decodeUnknownEffect(schema)),
-      retry,
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: retries }),
     );
   });
 
+/**
+ * Right after a deploy, the Workflows engine can run a new instance against a
+ * script version it has not loaded yet. The instance errors with one of these
+ * messages, and a later instance succeeds.
+ */
+class WorkflowEngineNotReady extends Data.TaggedError("WorkflowEngineNotReady")<{
+  readonly message: string;
+}> {}
+
+const isEngineNotReady = (message: string | undefined) =>
+  message === "Worker not found." ||
+  (message?.startsWith("The entrypoint name ") === true &&
+    message.includes(" was not found in this worker."));
+
 const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
+  runWorkflowOnce(url, expectedWorkflowName).pipe(
+    Effect.retry({
+      while: (error) => error instanceof WorkflowEngineNotReady,
+      schedule: Schedule.spaced("5 seconds"),
+      times: 6,
+    }),
+  );
+
+const runWorkflowOnce = (url: string, expectedWorkflowName?: string) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const client = HttpClient.filterStatusOk(http);
@@ -100,12 +124,22 @@ const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
         Effect.timeout("30 seconds"),
       );
       expect(identity.workflowName).toBe(expectedWorkflowName);
-      const rejected = yield* http.post(`${url}/workflow/start/world`, {
-        headers: {
-          "x-expected-workflow-name": `${expectedWorkflowName}-stale`,
-        },
-      });
-      yield* rejected.text;
+      // A ready `/workflow/identity` proves only one host has the new Worker:
+      // this request can still land on one serving the workers.dev
+      // placeholder 404, or get a 502 from the edge (with no Worker
+      // invocation) while the new version rolls out.
+      const rejected = yield* requestWorker(
+        HttpClientRequest.post(`${url}/workflow/start/world`).pipe(
+          HttpClientRequest.setHeader("x-expected-workflow-name", `${expectedWorkflowName}-stale`),
+        ),
+      ).pipe(
+        Effect.tap((response) => response.text),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (response) => response.status < 500,
+          times: 10,
+        }),
+      );
       expect(rejected.status).toBe(409);
     }
     const { instanceId } = yield* client
@@ -121,14 +155,19 @@ const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
         retry,
       );
 
-    const status = yield* getJson(`${url}/workflow/status/${instanceId}`, WorkflowStatus).pipe(
+    // A new instance can answer `instance.not_found` (a 500 here) for over
+    // 30 seconds after `create` returns its id.
+    const status = yield* getJson(`${url}/workflow/status/${instanceId}`, WorkflowStatus, 20).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
         until: (s) => s.status === "complete" || s.status === "errored",
-        times: 10,
+        times: 20,
       }),
-      Effect.timeout("60 seconds"),
+      Effect.timeout("90 seconds"),
     );
+    if (status.status === "errored" && isEngineNotReady(status.error?.message)) {
+      return yield* new WorkflowEngineNotReady({ message: status.error!.message! });
+    }
     if (status.status !== "complete") {
       return yield* Effect.fail(
         new Error(`workflow ${status.status}: ${JSON.stringify(status.error)}`),
@@ -279,22 +318,11 @@ test.provider(
         output: "output",
         asset: "workflow asset\n",
       });
-      const { instanceId } = yield* runWorkflowToCompletion(worker.url!);
-      const events = yield* getJson(`${worker.url}/events`, WorkflowEvents).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("3 seconds"),
-          until: (events) => events.some((event) => event.payload.instanceId === instanceId),
-          times: 10,
-        }),
-        Effect.timeout("60 seconds"),
+      const { terminal, events } = yield* runUntilWorkflowEvent(
+        `${worker.url}/events`,
+        runWorkflowToCompletion(worker.url!),
       );
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: "cf.workflows.workflow.instance.completed",
-          source: expect.objectContaining(source),
-          payload: expect.objectContaining({ instanceId }),
-        }),
-      );
+      expectWorkflowEvent(events, terminal.instanceId, source);
       yield* Effect.logInfo(`Workflow queue lifecycle delivery: ${JSON.stringify(events)}`);
 
       yield* stack.destroy();
@@ -324,29 +352,65 @@ test.provider(
       "provider:cloudflare:workflow",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 300_000,
   },
 );
 
-const expectWorkflowEvent = (url: string, instanceId: string, workflowName: string) =>
-  getJson(`${url}/events`, WorkflowEvents).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("3 seconds"),
-      until: (events) => events.some((event) => event.payload.instanceId === instanceId),
-      times: 10,
-    }),
-    Effect.timeout("60 seconds"),
-    Effect.tap((events) =>
-      Effect.sync(() =>
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "cf.workflows.workflow.instance.completed",
-            source: { type: "workflows.workflow", workflowName },
-            payload: expect.objectContaining({ instanceId }),
-          }),
-        ),
+const hasEvent = (events: typeof WorkflowEvents.Type, instanceId: string) =>
+  events.some((event) => event.payload.instanceId === instanceId);
+
+// The events Durable Object can answer "internal error" for over 30 seconds
+// after a deploy, so a failed read counts as no events yet.
+const pollWorkflowEvents = (eventsUrl: string, instanceId: string) =>
+  getJson(eventsUrl, WorkflowEvents, 0).pipe(
+    Effect.tap((events) => Effect.logInfo("Workflow event poll", { instanceId, events })),
+    Effect.catch((error) =>
+      Effect.logWarning("Workflow event poll failed", { instanceId, error: String(error) }).pipe(
+        Effect.as([] as typeof WorkflowEvents.Type),
       ),
     ),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (events) => hasEvent(events, instanceId),
+      times: 18,
+    }),
+    Effect.timeoutOrElse({ duration: "90 seconds", orElse: () => Effect.succeed([]) }),
+  );
+
+/**
+ * Run a Workflow and wait for its `instance.completed` event to reach the
+ * subscribed Queue's consumer. Delivery has taken over a minute, and an
+ * instance that completes right after its subscription is created can produce
+ * no event at all, so a missing event gets one more run.
+ */
+const runUntilWorkflowEvent = <T extends { readonly instanceId: string }, E, R>(
+  eventsUrl: string,
+  run: Effect.Effect<T, E, R>,
+) =>
+  Effect.gen(function* () {
+    let terminal = yield* run;
+    let events = yield* pollWorkflowEvents(eventsUrl, terminal.instanceId);
+    if (!hasEvent(events, terminal.instanceId)) {
+      yield* Effect.logWarning("Workflow event not delivered; running the Workflow again", {
+        instanceId: terminal.instanceId,
+      });
+      terminal = yield* run;
+      events = yield* pollWorkflowEvents(eventsUrl, terminal.instanceId);
+    }
+    return { terminal, events };
+  });
+
+const expectWorkflowEvent = (
+  events: typeof WorkflowEvents.Type,
+  instanceId: string,
+  source: { type: string; workflowName: string },
+) =>
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      type: "cf.workflows.workflow.instance.completed",
+      source: expect.objectContaining(source),
+      payload: expect.objectContaining({ instanceId }),
+    }),
   );
 
 const expectWorkflowSubscriptionGone = (
@@ -440,16 +504,14 @@ test.provider(
       });
       expect(observed.source).toEqual(expect.objectContaining(source));
       expect(observed.destination.queueId).toBe(deployed.queue.queueId);
-      const { instanceId } = yield* runWorkflowToCompletion(deployed.worker.url!).pipe(
-        Effect.retry({
-          schedule: Schedule.spaced("3 seconds"),
-          times: 2,
-          while: (error) =>
-            error instanceof Error &&
-            error.message === 'workflow errored: {"message":"Worker not found."}',
-        }),
+      const { terminal, events } = yield* runUntilWorkflowEvent(
+        `${deployed.worker.url}/events`,
+        runWorkflowToCompletion(deployed.worker.url!),
       );
-      yield* expectWorkflowEvent(deployed.worker.url!, instanceId, first.workflowName);
+      expectWorkflowEvent(events, terminal.instanceId, {
+        type: "workflows.workflow",
+        workflowName: first.workflowName,
+      });
 
       yield* stack.deploy(AsyncWorkflowWorker);
       yield* expectWorkflowSubscriptionGone(
@@ -476,7 +538,7 @@ test.provider(
       "provider:cloudflare:workflow",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 300_000,
   },
 );
 
@@ -548,8 +610,14 @@ test.provider(
       });
       expect(observed.source).toEqual(expect.objectContaining(source));
       expect(observed.destination.queueId).toBe(deployed.queue.queueId);
-      const { instanceId } = yield* runWorkflowToCompletion(hosted.worker.url!);
-      yield* expectWorkflowEvent(deployed.worker.url!, instanceId, hosted.workflowName);
+      const { terminal, events } = yield* runUntilWorkflowEvent(
+        `${deployed.worker.url}/events`,
+        runWorkflowToCompletion(hosted.worker.url!),
+      );
+      expectWorkflowEvent(events, terminal.instanceId, {
+        type: "workflows.workflow",
+        workflowName: hosted.workflowName,
+      });
 
       yield* stack.destroy();
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
@@ -581,7 +649,7 @@ test.provider(
       "provider:cloudflare:workflow",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 300_000,
   },
 );
 
@@ -905,7 +973,16 @@ test.provider(
             expect(binding.scriptIsOutput).toBe(true);
             expect(binding.workflowName).toBe(expected);
             expect(binding.scriptName).toBe(worker.workerName);
-            expect(yield* readWorkflowName(worker.workerName)).toBe(expected);
+            // Script settings can briefly report the previous version's
+            // bindings after an update.
+            const boundName = yield* readWorkflowName(worker.workerName).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (workflowName) => workflowName === expected,
+                times: 10,
+              }),
+            );
+            expect(boundName).toBe(expected);
             const observed = yield* workflows.getWorkflow({
               accountId,
               workflowName: binding.workflowName,
@@ -932,44 +1009,15 @@ test.provider(
               workflow: observed,
               subscription: liveSubscription,
             });
-            const terminal = yield* runWorkflowToCompletion(worker.url!, expected);
-            expect(terminal.output?.workflowName).toBe(expected);
-            const terminalObservedAt = yield* Clock.currentTimeMillis;
-            yield* Effect.logInfo("Workflow terminal", {
-              ...terminal,
-              observedAt: terminalObservedAt,
-            });
-            const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-            const events = yield* client.get(`${worker.url}/events`).pipe(
-              Effect.flatMap((response) =>
-                Effect.gen(function* () {
-                  const body = yield* response.json.pipe(
-                    Effect.flatMap(Schema.decodeUnknownEffect(WorkflowEvents)),
-                  );
-                  yield* Effect.logInfo("Workflow event poll", {
-                    readAt: response.headers["x-events-read-at"],
-                    cache: response.headers["cf-cache-status"],
-                    age: response.headers.age,
-                    events: body,
-                  });
-                  return body;
-                }),
-              ),
-              retry,
-              // Live Queue dispatch has taken 55 seconds after Workflow completion.
-              Effect.repeat({
-                schedule: Schedule.spaced("5800 millis"),
-                until: (events) =>
-                  events.some((event) => event.payload.instanceId === terminal.instanceId),
-                times: 10,
-              }),
-              Effect.timeoutOrElse({
-                duration: "60 seconds",
-                orElse: () => Effect.succeed([]),
-              }),
+            const { terminal, events } = yield* runUntilWorkflowEvent(
+              `${worker.url}/events`,
+              runWorkflowToCompletion(worker.url!, expected),
             );
-            if (!events.some((event) => event.payload.instanceId === terminal.instanceId)) {
+            expect(terminal.output?.workflowName).toBe(expected);
+            if (!hasEvent(events, terminal.instanceId)) {
               const diagnostics = yield* Effect.gen(function* () {
+                const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+                const startedAt = yield* Clock.currentTimeMillis;
                 yield* Effect.logInfo(
                   "Workflow event diagnostics",
                   JSON.stringify({
@@ -1044,7 +1092,7 @@ test.provider(
                           "Queue delivery sample",
                           JSON.stringify({
                             observedAt,
-                            elapsedMs: observedAt - terminalObservedAt,
+                            elapsedMs: observedAt - startedAt,
                             originalPresent: hasOriginal(snapshot),
                             probePresent: hasProbe(snapshot),
                             storage: snapshot,
@@ -1080,15 +1128,7 @@ test.provider(
                 );
               }
             }
-            expect(events).toContainEqual(
-              expect.objectContaining({
-                type: "cf.workflows.workflow.instance.completed",
-                source: expect.objectContaining(source),
-                payload: expect.objectContaining({
-                  instanceId: terminal.instanceId,
-                }),
-              }),
-            );
+            expectWorkflowEvent(events, terminal.instanceId, source);
             return deployed;
           }),
       );
@@ -1124,7 +1164,7 @@ test.provider(
       "provider:cloudflare:workflow",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 600_000,
   },
 );
 

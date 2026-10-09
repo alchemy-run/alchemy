@@ -5,11 +5,13 @@ on:
     inputs:
       version:
         description: >-
-          Release spec. `beta` (the default) publishes the next
-          `2.0.0-beta.N`; `beta.N` publishes that exact candidate. `rc[.N]`
-          and `alpha[.N]` select those prerelease channels.
-          `patch|minor|major` or `x.y.z` publishes a stable release. Anything
-          else publishes `0.0.0-<name>`.
+          Release spec, bumped from the version every package.json shares.
+          `beta` (the default) publishes the next beta, e.g. `2.0.0-beta.81`
+          to `2.0.0-beta.82`; `beta.N` publishes that candidate. `rc[.N]` and
+          `alpha[.N]` select those prerelease channels. `patch|minor|major`
+          bump per semver, and `x.y.z[-beta.N]` publishes exactly that
+          version. Anything else publishes `0.0.0-<name>` without committing
+          it.
         required: false
         type: string
         default: "beta"
