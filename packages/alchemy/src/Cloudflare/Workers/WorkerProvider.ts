@@ -4741,9 +4741,7 @@ export const LiveWorkerProvider = () =>
             yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
-            const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...", { status: 503, headers: { "Cache-Control": "no-store" } }) } };\n${doClasses
-              .map((className) => `export class ${className} extends DurableObject {}`)
-              .join("\n")}`;
+            const placeholderScript = makePlaceholderScript(doClasses);
             placeholder = yield* putWorkerScript({
               accountId,
               scriptName: name,
@@ -5418,6 +5416,45 @@ function bumpMigrationTagVersion(oldTag: string | undefined): string | undefined
   if (!version) return "alchemy:v1";
   return `alchemy:v${parseInt(version, 10) + 1}`;
 }
+
+/**
+ * The script `precreate` uploads to break a dependency cycle: it only has to
+ * declare the Durable Object classes so their namespaces exist before the
+ * real script is uploaded later in the same deploy.
+ *
+ * Each placeholder Durable Object class resets itself on any call. An
+ * instance that starts on the placeholder (e.g. an edge that has not yet
+ * seen the real version) would otherwise keep running the empty class for
+ * as long as callers keep it busy, failing every RPC call with "The RPC
+ * receiver does not implement the method". `ctx.abort()` fails the in-flight
+ * call and resets the object, so the next call constructs it from the
+ * currently deployed version. The constructor returns a `Proxy` (the
+ * technique `DurableObjectBridge` uses) so that every RPC method name
+ * resolves to the reset.
+ */
+const makePlaceholderScript = (doClasses: readonly string[]) => {
+  const worker = `export default { fetch() { return new Response("Alchemy worker is being deployed...", { status: 503, headers: { "Cache-Control": "no-store" } }) } };\n`;
+  if (doClasses.length === 0) return worker;
+  return `import { DurableObject } from "cloudflare:workers";
+
+const alchemyResetReason = "Alchemy worker is being deployed";
+class AlchemyPlaceholderDurableObject extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    return new Proxy(this, {
+      get: (target, prop) =>
+        typeof prop !== "string" || prop in target
+          ? Reflect.get(target, prop)
+          : () => target.ctx.abort(alchemyResetReason),
+    });
+  }
+  fetch() { this.ctx.abort(alchemyResetReason); }
+  alarm() { this.ctx.abort(alchemyResetReason); }
+}
+
+${worker}${doClasses.map((className) => `export class ${className} extends AlchemyPlaceholderDurableObject {}`).join("\n")}
+`;
+};
 
 /**
  * Merges a worker's export-derived and binding-derived Durable Object class
