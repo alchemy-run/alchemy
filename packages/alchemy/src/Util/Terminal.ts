@@ -76,3 +76,7 @@ export const truncate = (value: string, width: number): string => {
   }
   return `${kept}…`;
 };
+
+/** Running over SSH, where links the terminal detects in wrapped output get cut. */
+export const isSshSession = () =>
+  process.env.SSH_CONNECTION !== undefined || process.env.SSH_TTY !== undefined;

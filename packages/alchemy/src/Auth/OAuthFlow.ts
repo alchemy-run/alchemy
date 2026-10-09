@@ -129,6 +129,18 @@ export interface OAuthClient {
   readonly revoke: (credentials: OAuthCredentials) => Effect.Effect<void, OAuthError>;
 }
 
+const redirectToError = (
+  res: http.ServerResponse,
+  error: { readonly error?: string; readonly errorDescription?: string; readonly message?: string },
+) => {
+  const location = new URL(AUTH_ERROR_URL);
+  if (error.error) location.searchParams.set("error", error.error);
+  const description = error.errorDescription ?? error.message;
+  if (description) location.searchParams.set("error_description", description);
+  res.writeHead(302, { Location: location.toString() });
+  res.end();
+};
+
 const randomText = Effect.fn(function* (length: number) {
   const crypto = yield* Crypto.Crypto;
   const bytes = yield* crypto.randomBytes(length).pipe(
@@ -396,37 +408,34 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
           return;
         }
 
+        const fail = (error: OAuthError) => {
+          redirectToError(res, error);
+          resolveOnce(Effect.fail(error));
+        };
+
         const error = url.searchParams.get("error");
-        const errorDescription = url.searchParams.get("error_description");
         if (error) {
-          res.writeHead(302, { Location: AUTH_ERROR_URL });
-          res.end();
-          new OAuthError({
-            error,
-            errorDescription: errorDescription ?? "An unknown error occurred.",
-          }).pipe(Effect.fail, resolveOnce);
+          fail(
+            new OAuthError({
+              error,
+              errorDescription:
+                url.searchParams.get("error_description") ?? "An unknown error occurred.",
+            }),
+          );
           return;
         }
 
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
         if (!code || !state) {
-          res.writeHead(302, { Location: AUTH_ERROR_URL });
-          res.end();
-          new OAuthError({
-            error: "invalid_request",
-            errorDescription: "Missing code or state",
-          }).pipe(Effect.fail, resolveOnce);
+          fail(
+            new OAuthError({ error: "invalid_request", errorDescription: "Missing code or state" }),
+          );
           return;
         }
 
         if (state !== authorization.state) {
-          res.writeHead(302, { Location: AUTH_ERROR_URL });
-          res.end();
-          new OAuthError({ error: "invalid_request", errorDescription: "Invalid state" }).pipe(
-            Effect.fail,
-            resolveOnce,
-          );
+          fail(new OAuthError({ error: "invalid_request", errorDescription: "Invalid state" }));
           return;
         }
         resolveOnce(
@@ -437,12 +446,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
                 res.end();
               }),
             ),
-            Effect.tapError(() =>
-              Effect.sync(() => {
-                res.writeHead(302, { Location: AUTH_ERROR_URL });
-                res.end();
-              }),
-            ),
+            Effect.tapError((error) => Effect.sync(() => redirectToError(res, error))),
           ),
         );
       });

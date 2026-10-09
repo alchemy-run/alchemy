@@ -7,4 +7,45 @@ import Auth from "../../layouts/Auth.astro";
   message="We couldn't complete the authentication process.<br>Please try again."
   variant="error"
   primaryAction={{ text: "Learn More", href: "/getting-started/" }}
-/>
+>
+  <section class="auth-error" id="auth-error" hidden>
+    <code id="auth-error-code"></code>
+    <p id="auth-error-description"></p>
+  </section>
+</Auth>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const error = params.get("error");
+  const description = params.get("error_description");
+  if (error || description) {
+    document.querySelector<HTMLElement>("#auth-error-code")!.textContent = error ?? "";
+    document.querySelector<HTMLElement>("#auth-error-description")!.textContent =
+      description ?? "";
+    document.querySelector<HTMLElement>("#auth-error")!.hidden = false;
+  }
+</script>
+
+<style>
+  .auth-error {
+    width: 100%;
+    padding: 1rem;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 0.5rem;
+    background: var(--alc-bg-elev-1);
+    color: var(--alc-fg-2);
+    text-align: left;
+  }
+  .auth-error code {
+    color: var(--alc-fg-1);
+  }
+  .auth-error p {
+    margin: 0.5rem 0 0;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .auth-error code:empty,
+  .auth-error p:empty {
+    display: none;
+  }
+</style>

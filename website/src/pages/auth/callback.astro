@@ -23,6 +23,7 @@ import Auth from "../../layouts/Auth.astro";
   const code = params.get("code");
   const state = params.get("state");
   const error = params.get("error");
+  const errorDescription = params.get("error_description");
   const localCallback = new URL("http://localhost:9976/auth/callback");
   localCallback.search = params.toString();
 
@@ -36,14 +37,14 @@ import Auth from "../../layouts/Auth.astro";
 
   const showManual = () => {
     connecting.textContent = error
-      ? "Cloudflare did not authorize the request."
+      ? `Cloudflare did not authorize the request: ${errorDescription ?? error}`
       : "Couldn't connect to your local Alchemy process.";
     if (!code || !state) return;
     codeBox.textContent = `${code}#${state}`;
     manual.hidden = false;
   };
 
-  if (error || !code || !state) {
+  if (!error && (!code || !state)) {
     showManual();
   } else {
     const controller = new AbortController();

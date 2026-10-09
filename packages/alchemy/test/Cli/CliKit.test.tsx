@@ -1805,6 +1805,39 @@ it.effect(
 );
 
 it.effect(
+  "prints the full authorization URL unwrapped over SSH",
+  () =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          process.env.SSH_CONNECTION = "10.0.0.1 22 10.0.0.2 22";
+        }),
+        () =>
+          Effect.sync(() => {
+            delete process.env.SSH_CONNECTION;
+          }),
+      );
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+      const url = `https://example.com/authorize?scope=${"scope.read+".repeat(400)}&state=abcdefgh`;
+
+      const fiber = yield* service.prompt
+        .awaitExternal({ message: "Authorize", waitingLabel: "Waiting", url })
+        .pipe(Effect.flip, Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("abcdefgh"));
+      const output = stripVTControlCharacters(stdout.output);
+      expect(output.split("\n")).toContain(url);
+      expect(output).toContain("Open this URL in your browser:");
+      expect(output).toContain("Open the URL printed above in your browser.");
+
+      yield* Effect.sync(() => stdin.write("\x1b"));
+      yield* Fiber.join(fiber);
+    }).pipe(Effect.scoped),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.effect(
   "keeps browser-only authorization cancellable",
   () =>
     Effect.gen(function* () {
