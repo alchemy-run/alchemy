@@ -195,7 +195,7 @@ export const makeFrameReader = (body: ReadableStream<Uint8Array>) => {
           pendingBytes += value.length;
         }
       },
-      catch: (error) => new HashError({ reason: `hash part body: ${String(error)}` }),
+      catch: (error) => HashError.make({ reason: `hash part body: ${String(error)}` }),
     });
 };
 

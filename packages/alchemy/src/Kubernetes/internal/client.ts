@@ -213,14 +213,12 @@ export const resolveKindSpec = Effect.fn(function* ({
   );
 
   if (!resource?.name) {
-    return yield* Effect.fail(
-      new KubernetesApiError({
-        method: "GET",
-        path: discoveryPath,
-        statusCode: 404,
-        body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
-      }),
-    );
+    return yield* new KubernetesApiError({
+      method: "GET",
+      path: discoveryPath,
+      statusCode: 404,
+      body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
+    });
   }
 
   const spec: KubernetesObjectKindSpec = {

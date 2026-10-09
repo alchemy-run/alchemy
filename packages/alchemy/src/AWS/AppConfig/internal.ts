@@ -84,7 +84,7 @@ export const toTagRecord = (
 export const readAppConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* appconfig
     .listTagsForResource({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

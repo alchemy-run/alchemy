@@ -17,12 +17,8 @@ import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { DistributiveOmit } from "../../Util/types.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import { DURABLE_SDK_MODULE, encodeDurableEnvelope, makeDurableListener } from "./DurableBridge.ts";
-import {
-  Function,
-  type FunctionProps,
-  type FunctionServices,
-  type HandlerContext,
-} from "./Function.ts";
+import { Function, type FunctionProps, type FunctionServices } from "./Function.ts";
+import type { HandlerContext } from "./InvocationDeadline.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
@@ -325,7 +321,8 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
 
 const mapDurablePropsInput = (props: unknown) =>
   Effect.isEffect(props)
-    ? Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
+    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
+      Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
     : mapDurableProps(props as DurableFunctionProps);
 
 const resolveDurableHandle = (id: string) => (instance: unknown) => {
@@ -478,6 +475,7 @@ const composeDurableImpl = (
       makeDurableListener({
         name,
         run: (input) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining run services are provided per invocation by the durable bridge
           fn(input).pipe(Effect.provideService(RuntimeContext, runtime)) as Effect.Effect<unknown>,
       }),
     );

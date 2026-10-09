@@ -31,11 +31,9 @@ export const loadGeneratorConfig = Effect.fn(function* (configFile: string) {
   const config = module.default as GeneratorConfig | undefined;
   const options = config?.orm?.[effectGeneratorKey];
   if (!options || !config?.orm?.contract?.output) {
-    return yield* Effect.fail(
-      new CliError({
-        message: `Wrap the orm configuration in ${absolute} with withEffect(ormConfig(...), options) and specify output.`,
-      }),
-    );
+    return yield* new CliError({
+      message: `Wrap the orm configuration in ${absolute} with withEffect(ormConfig(...), options) and specify output.`,
+    });
   }
   const directory = path.dirname(absolute);
   return {
@@ -130,11 +128,9 @@ export const generate = Effect.fn(function* (configFile: string) {
     if (yield* fs.exists(target)) {
       const previous = yield* fs.readFileString(target);
       if (!previous.startsWith(header)) {
-        return yield* Effect.fail(
-          new CliError({
-            message: `Refusing to overwrite non-generated file ${target}`,
-          }),
-        );
+        return yield* new CliError({
+          message: `Refusing to overwrite non-generated file ${target}`,
+        });
       }
     }
   }

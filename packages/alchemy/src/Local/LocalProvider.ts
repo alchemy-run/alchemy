@@ -209,7 +209,7 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
     if (typeof input === "bigint") return `bigint:${input.toString()}`;
     if (input === null || typeof input !== "object") return input;
     if (Redacted.isRedacted(input)) {
-      return { __redacted: normalize(Redacted.value(input)) };
+      return { __redacted: input.pipe(Redacted.value, normalize) };
     }
     if (seen.has(input)) return "[circular]";
     seen.add(input);
@@ -266,6 +266,7 @@ export const make = <
   RpcProvider.effect(
     cls,
     providersUrl,
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- StartR is re-provided by the RpcProvider wrapper, see comment at the cast below
     Effect.gen(function* () {
       const {
         resolveConfig = defaultResolveConfig<R, Config>,

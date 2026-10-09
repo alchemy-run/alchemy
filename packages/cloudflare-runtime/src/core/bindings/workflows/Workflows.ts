@@ -41,7 +41,7 @@ export const WorkflowsLive = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "Workflows",
           message: "Cannot configure workflows persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
@@ -49,15 +49,14 @@ export const WorkflowsLive = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "workflows");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "Workflows",
-              message: `Failed to create workflows persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Workflows",
+            message: `Failed to create workflows persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -222,7 +221,7 @@ export const local = ({
       );
       if (!workflow) {
         return Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "WorkflowNotFound",
             message: `Workflow ${workflowName} not found`,
             hint: `Make sure the workflow ${workflowName} is defined in the worker config`,
@@ -235,7 +234,7 @@ export const local = ({
       }
       if (workflow.className !== className) {
         return Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "WorkflowClassNameMismatch",
             message: `Workflow ${workflowName} has class name "${workflow.className}" but "${className}" was provided`,
           }),

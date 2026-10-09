@@ -23,7 +23,7 @@ Cloud programs composed from [Effect](https://effect.website) Layers: type-check
 Alchemy is an Infrastructure-as-Effects framework for TypeScript. Cloud resources, the access your code has to them, and the code itself are one Effect program. Each feature is a Layer that creates its own resources, binds the access it needs, and implements a service, so the type checker can verify the whole stack before anything deploys.
 
 ```sh
-pnpm add alchemy@latest effect
+pnpm add alchemy@latest effect @effect/platform-bun @effect/platform-node
 ```
 
 ## A feature is a Layer
@@ -171,7 +171,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # install your dependencies and put the `alchemy` CLI on PATH here
-      - uses: alchemy-run/alchemy@v1
+      - uses: alchemy-run/alchemy@main
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

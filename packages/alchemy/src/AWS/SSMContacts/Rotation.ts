@@ -147,7 +147,7 @@ export const RotationProvider = () =>
               ),
             ),
           ),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       const buildAttrs = (rotation: contacts.GetRotationResult): Rotation["Attributes"] => ({

@@ -277,22 +277,16 @@ const waitForDataSourceStatus = (
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new DataSourceNotReady({ dataSourceId, status: described.status }),
-        );
+        return yield* new DataSourceNotReady({ dataSourceId, status: described.status });
       }
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(
-          new DataSourceProvisioningFailed({
-            dataSourceId,
-            message: described.error?.errorMessage,
-          }),
-        );
+        return yield* new DataSourceProvisioningFailed({
+          dataSourceId,
+          message: described.error?.errorMessage,
+        });
       }
-      return yield* Effect.fail(
-        new DataSourceNotReady({ dataSourceId, status: described?.status }),
-      );
+      return yield* new DataSourceNotReady({ dataSourceId, status: described?.status });
     }),
   );
 

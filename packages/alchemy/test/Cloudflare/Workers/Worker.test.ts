@@ -802,6 +802,72 @@ describe.concurrent(
       { tags: ["live"] },
     );
 
+    // #1299: a binding to a resource created in the same deploy leaves the
+    // Worker's props unresolved at plan time. The ownership check must still
+    // run (at apply time, once props resolve) and refuse the foreign worker.
+    test.provider(
+      "refuses a foreign worker when its bindings are unresolved at plan time",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const original = yield* stack.deploy(
+            Cloudflare.Worker("UnresolvedOriginal", {
+              main,
+              workersDev: false,
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+          const physicalName = original.workerName;
+
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "UnresolvedOriginal",
+            });
+          }).pipe(Effect.provide(stack.state));
+
+          const refused = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const kv = yield* Cloudflare.KV.Namespace("UnresolvedKv");
+                return yield* Cloudflare.Worker("UnresolvedDifferent", {
+                  main,
+                  name: physicalName,
+                  workersDev: false,
+                  compatibility: { date: "2024-01-01" },
+                  env: { KV: kv },
+                });
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(refused._tag).toEqual("OwnedBySomeoneElse");
+
+          // The refused deploy left the foreign worker's ownership untouched.
+          const tags = yield* getWorkerTags(physicalName, accountId);
+          expect(tags).toContain("alchemy:id:UnresolvedOriginal");
+          expect(tags).not.toContain("alchemy:id:UnresolvedDifferent");
+
+          // Its tags still name `UnresolvedOriginal`, so redeploying that id
+          // adopts it back into state and the destroy below deletes it.
+          yield* stack.deploy(
+            Cloudflare.Worker("UnresolvedOriginal", {
+              main,
+              name: physicalName,
+              workersDev: false,
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(physicalName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"] },
+    );
+
     // First-deploy behaviour: the default (omitting `workersDev`) must enable
     // the workers.dev subdomain, and `workersDev: false` must disable it. Both
     // are asserted against live Cloudflare state via `getScriptSubdomain`,

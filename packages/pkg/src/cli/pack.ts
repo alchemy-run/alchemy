@@ -299,6 +299,91 @@ export const discover = Effect.fn("discoverPackages")(function* (
   return [...found.values()];
 });
 
+/** Display group of workspace dependencies packed without being listed by `--group`. */
+export const TRANSITIVE_GROUP: Group = {
+  name: "Transitive Dependencies",
+  pattern: "",
+  collapsed: true,
+};
+
+/** Sections a consumer installs, so a workspace dependency in one has to be published too. */
+const INSTALLED_SECTIONS = ["dependencies", "peerDependencies", "optionalDependencies"] as const;
+
+/**
+ * Add every `workspace:` dependency the discovered packages install,
+ * transitively, so a listed package never links to a version that was
+ * not published alongside it. Each dependency is resolved the way Node
+ * would, through the `node_modules` link the package manager created,
+ * walking up no further than `root`. Added packages join
+ * {@link TRANSITIVE_GROUP}.
+ */
+export const discoverWorkspaceDependencies = Effect.fn("discoverWorkspaceDependencies")(function* (
+  cwd: string,
+  root: string,
+  packages: ReadonlyArray<WorkspacePackage>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const decode = Schema.decodeUnknownEffect(
+    Schema.fromJsonString(Schema.Struct({ ...PackageJson.fields, ...DependencySections.fields })),
+  );
+  // Links resolve to real paths, so compare everything by real path.
+  const realCwd = yield* fs.realPath(cwd);
+  const realRoot = yield* fs.realPath(root);
+  const found = new Map(packages.map((pkg) => [pkg.name, pkg]));
+  const realDirs = new Map<string, string>();
+  for (const pkg of packages) realDirs.set(pkg.name, yield* fs.realPath(pkg.absDir));
+  const added: WorkspacePackage[] = [];
+
+  const resolve = Effect.fn(function* (from: string, name: string) {
+    let dir = from;
+    while (true) {
+      const link = path.join(dir, "node_modules", name);
+      if (yield* fs.exists(link)) return yield* fs.realPath(link);
+      const relative = path.relative(realRoot, dir);
+      if (relative === "" || relative.startsWith("..")) break;
+      dir = path.dirname(dir);
+    }
+    return yield* new WorkspaceError({
+      message: `Cannot resolve workspace dependency ${name} from ${from}: install dependencies before packing`,
+    });
+  });
+
+  const pending = [...packages];
+  for (const dependent of pending) {
+    const manifest = yield* decode(
+      yield* fs.readFileString(path.join(dependent.absDir, "package.json")),
+    );
+    const names = INSTALLED_SECTIONS.flatMap((section) =>
+      Object.entries(manifest[section] ?? {})
+        .filter(([, spec]) => spec.startsWith("workspace:"))
+        .map(([name]) => name),
+    );
+    for (const name of [...new Set(names)].sort()) {
+      if (found.has(name)) continue;
+      const absDir = yield* resolve(realDirs.get(dependent.name)!, name);
+      const dependency = yield* decode(yield* fs.readFileString(path.join(absDir, "package.json")));
+      if (dependency.private) {
+        return yield* new WorkspaceError({
+          message: `${dependent.name} depends on private workspace package ${name}, which cannot be published`,
+        });
+      }
+      const pkg: WorkspacePackage = {
+        name,
+        version: dependency.version ?? "0.0.0",
+        dir: path.relative(realCwd, absDir).split(path.sep).join("/"),
+        absDir,
+        group: TRANSITIVE_GROUP.name,
+      };
+      found.set(name, pkg);
+      realDirs.set(name, absDir);
+      added.push(pkg);
+      pending.push(pkg);
+    }
+  }
+  return added;
+});
+
 export class GitError extends Data.TaggedError("GitError")<{
   readonly args: ReadonlyArray<string>;
   readonly cwd: string;
@@ -521,6 +606,13 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
     });
   }
   let packages = yield* discover(options.cwd, options.groups);
+  const implied = yield* discoverWorkspaceDependencies(options.cwd, root, packages);
+  if (implied.length > 0) {
+    yield* Console.log(
+      `Including ${implied.length} workspace dependenc${implied.length === 1 ? "y" : "ies"} not listed by --group: ${implied.map((pkg) => pkg.name).join(", ")}`,
+    );
+    packages = [...packages, ...implied];
+  }
 
   // Dependencies between packed packages are rewritten to the dependency's
   // immutable tarball URL, so a package is packed only after everything it
@@ -624,10 +716,16 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // Packing ran in dependency order; the manifest keeps the listed order.
   const entries = packages.map((pkg) => packedByName.get(pkg.name)!);
 
-  // One entry per distinct group name, in the order the groups were given.
+  // One entry per distinct group name, in the order the groups were given,
+  // then the transitive group when it has members.
   const groups = [
     ...new Map(
-      options.groups.map((group) => [group.name, { name: group.name, collapsed: group.collapsed }]),
+      [
+        ...options.groups,
+        ...(entries.some((entry) => entry.group === TRANSITIVE_GROUP.name)
+          ? [TRANSITIVE_GROUP]
+          : []),
+      ].map((group) => [group.name, { name: group.name, collapsed: group.collapsed }]),
     ).values(),
   ];
   const manifest: Manifest = {

@@ -1,6 +1,7 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { unwrapRedacted } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -43,11 +45,12 @@ export interface ObservabilityDestinationProps {
   url: string;
   /**
    * Extra HTTP headers sent with each push (e.g. authentication tokens).
+   * Pass credentials as `Redacted` values to keep them out of plan output.
    * Cloudflare always adds a `content-type: application/json` header of
    * its own. Mutable — updated in place.
    * @default {}
    */
-  headers?: Record<string, string>;
+  headers?: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Which Workers Logs dataset to export. Cannot be changed after
    * creation — updating this property triggers a replacement.
@@ -96,9 +99,10 @@ export interface ObservabilityDestinationAttributes {
   logpushDataset: ObservabilityDataset;
   /**
    * The underlying Logpush destination string (the URL with the
-   * configured headers encoded as query parameters).
+   * configured headers encoded as query parameters). Redacted because it
+   * embeds the header values, including any credentials.
    */
-  destinationConf: string;
+  destinationConf: Redacted.Redacted<string>;
   /**
    * Names of the Worker scripts currently opted in to this destination.
    */
@@ -201,6 +205,12 @@ export const ObservabilityDestinationProvider = () =>
       if (oldDataset !== undefined && oldDataset !== news.logpushDataset) {
         return { action: "replace" } as const;
       }
+      // State written by earlier versions holds `destinationConf` as a plain
+      // string. Reconcile to re-read it as `Redacted`; without header or URL
+      // drift this issues no PATCH.
+      if (output !== undefined && !Redacted.isRedacted(output.destinationConf)) {
+        return { action: "update" } as const;
+      }
       return undefined;
     }),
 
@@ -228,9 +238,9 @@ export const ObservabilityDestinationProvider = () =>
       // Prefer the deployed name: regenerating would target a different
       // resource if the generator's output for this id ever drifts.
       const name = news.name ?? output?.name ?? (yield* createDestinationName(id));
-      // Inputs have been resolved to concrete strings by Plan.
+      // Inputs have been resolved to concrete values by Plan.
       const url = news.url as string;
-      const headers = (news.headers ?? {}) as Record<string, string>;
+      const headers = unwrapRedacted(news.headers ?? {});
       const enabled = news.enabled ?? true;
 
       // 1. Observe — the slug cached on `output` is a hint, not a
@@ -265,7 +275,7 @@ export const ObservabilityDestinationProvider = () =>
               Effect.gen(function* () {
                 const match = yield* findByName(accountId, name);
                 if (!match) {
-                  return yield* Effect.fail(originalError);
+                  return yield* originalError;
                 }
                 return match;
               }),
@@ -381,7 +391,7 @@ const freshObserved = (accountId: string, slug: string) =>
           // succeeded and this read except via an out-of-band delete racing
           // us — surface that as the typed not-found the API would raise.
           Effect.fail(
-            new workers.ObservabilityDestinationNotFound({
+            workers.ObservabilityDestinationNotFound.make({
               code: 0,
               message: `observability destination "${slug}" disappeared during reconcile`,
             }),
@@ -419,6 +429,6 @@ const toAttributes = (
   url: observed.configuration.url,
   // Distilled widens generated string enums to open unions (`string & {}`).
   logpushDataset: observed.configuration.logpushDataset as ObservabilityDataset,
-  destinationConf: observed.configuration.destinationConf,
+  destinationConf: Redacted.make(observed.configuration.destinationConf),
   scripts: [...observed.scripts],
 });

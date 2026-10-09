@@ -53,6 +53,12 @@ import {
   makeFunctionImage,
 } from "./FunctionImage.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  HandlerContext,
+  TIMEOUT_MARGIN_ENV,
+  toTimeoutMarginMillis,
+  withInvocationDeadline,
+} from "./InvocationDeadline.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 
@@ -80,18 +86,11 @@ class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   }
 }
 
-export class HandlerContext extends Context.Service<HandlerContext, lambda.Context>()(
-  "AWS.Lambda.HandlerContext",
-) {}
-
-export const isFunction = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.Lambda.Function"
-  );
-};
+export const isFunction = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.Lambda.Function";
 
 /**
  * True for any Alchemy host that accepts the `{ env, policyStatements }`
@@ -108,18 +107,15 @@ export const isFunction = (value: any): value is Function => {
  * `host.LogicalId` are ever touched inside the guarded block, so downstream
  * typing is unchanged while the runtime check widens to all three.
  */
-export const isBindingHost = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    (value.Type === "AWS.Lambda.Function" ||
-      value.Type === "AWS.ECS.Task" ||
-      value.Type === "AWS.ECS.Service" ||
-      value.Type === "Kubernetes.Deployment" ||
-      value.Type === "Kubernetes.Job")
-  );
-};
+export const isBindingHost = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value.Type === "AWS.Lambda.Function" ||
+    value.Type === "AWS.ECS.Task" ||
+    value.Type === "AWS.ECS.Service" ||
+    value.Type === "Kubernetes.Deployment" ||
+    value.Type === "Kubernetes.Job");
 
 export interface FunctionBuildOptions
   extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {
@@ -270,6 +266,25 @@ export interface FunctionCommonProps extends PlatformProps {
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
+  /**
+   * How long before {@link timeout} telemetry is flushed for an invocation
+   * that is still running. A Lambda that hits its timeout is killed
+   * mid-flight and its buffered spans and logs are lost; at
+   * `timeout - timeoutMargin` the runtime ends the invocation's root span
+   * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
+   * the exporters, so the trace of the slow invocation is exported instead.
+   *
+   * The handler is never interrupted and the invocation's outcome is never
+   * changed. If it does finish inside the margin, its response goes out
+   * as normal; the root span is still exported once, as the timeout error
+   * marked `aws.lambda.timeout.imminent`.
+   *
+   * Size it for one export round-trip to your telemetry backend. Set to
+   * `Duration.zero` to disable.
+   *
+   * @default 500 millis
+   */
+  timeoutMargin?: Duration.Duration;
   /**
    * Maximum number of concurrent executions reserved for this function.
    * Omit to remove the function-level reserved concurrency limit.
@@ -1056,8 +1071,15 @@ export const Function: Platform<
                 // latency anyway — keep request finalizers fast. A failing
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
+                //
+                // The scope is ALSO what a timeout would take with it: Lambda
+                // kills the invocation mid-flight and the buffered telemetry
+                // never flushes. `withInvocationDeadline` flushes it
+                // `timeoutMargin` before that happens — without touching the
+                // handler or the invocation's outcome.
                 const scope = Scope.makeUnsafe();
                 const exit = await eff.pipe(
+                  withInvocationDeadline,
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
@@ -1346,6 +1368,14 @@ export const FunctionProvider = () =>
         };
       };
 
+      // The runtime reads the invocation deadline margin per invocation
+      // (see `withInvocationDeadline`); only written when set so the
+      // runtime default applies otherwise.
+      const timeoutMarginEnv = (margin: Duration.Duration | undefined): Record<string, string> => {
+        const ms = toTimeoutMarginMillis(margin);
+        return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
+      };
+
       const retryFunctionMutation = Effect.retry({
         while: (e: any) =>
           e._tag === "ResourceConflictException" || e._tag === "TooManyRequestsException",
@@ -1614,7 +1644,7 @@ export const FunctionProvider = () =>
 
         const tags = yield* createInternalTags(id);
 
-        const codeLocation = yield* Effect.gen(function* () {
+        const resolveCodeLocation = Effect.gen(function* () {
           if (code.packageType === "Image") {
             return { ImageUri: code.imageUri } as const;
           }
@@ -1631,6 +1661,7 @@ export const FunctionProvider = () =>
             S3Key: key,
           } as const;
         });
+        const codeLocation = yield* resolveCodeLocation;
         const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
@@ -1661,14 +1692,13 @@ export const FunctionProvider = () =>
           Layers: isFunctionImageProps(news)
             ? undefined
             : (news.layers ?? []).map(layerVersionArnOf),
-          Environment: runtimeEnv
-            ? {
-                Variables: {
-                  ...runtimeEnv,
-                  ...alchemyEnv,
-                },
-              }
-            : undefined,
+          Environment: {
+            Variables: {
+              ...runtimeEnv,
+              ...alchemyEnv,
+              ...timeoutMarginEnv(news.timeoutMargin),
+            },
+          },
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
           // Always explicit so removing the `tracing` prop converges back to
@@ -1686,6 +1716,7 @@ export const FunctionProvider = () =>
           FileSystemConfigs: fileSystemConfigs,
         };
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -1761,12 +1792,9 @@ export const FunctionProvider = () =>
           ),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
-          Effect.tapError((e) =>
-            Effect.gen(function* () {
-              yield* Effect.logDebug(e);
-            }),
-          ),
+          Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
             while: (e) => isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(Schedule.tap(() => noteCreateDependencyWait())),
@@ -2041,6 +2069,11 @@ export const FunctionProvider = () =>
             }
           }
           if (toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)) {
+            return { action: "update" };
+          }
+          if (
+            toTimeoutMarginMillis(olds.timeoutMargin) !== toTimeoutMarginMillis(news.timeoutMargin)
+          ) {
             return { action: "update" };
           }
           if (olds.architecture !== news.architecture) {
@@ -2643,7 +2676,7 @@ export const FunctionProvider = () =>
           // recreation stuck (gone); present means the group survives its own
           // deletion (denied/undeletable) and must fail loudly.
           if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(`Lambda log group ${logGroupName} remained observable after delete`),
             );
           }
