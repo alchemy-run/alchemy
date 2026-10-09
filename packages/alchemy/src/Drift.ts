@@ -2,6 +2,7 @@
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { stripUnowned } from "./AdoptPolicy.ts";
@@ -428,9 +429,11 @@ const instrumentLifecycle =
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
-          Effect.provideService(ResourceFqn, fqn),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
+            Layer.succeed(InstanceId, instanceId),
+            Layer.succeed(ResourceFqn, fqn),
+          ]),
           Effect.catchCauseIf(
             (cause: Cause.Cause<E>) => !Cause.hasInterruptsOnly(cause),
             (cause) =>

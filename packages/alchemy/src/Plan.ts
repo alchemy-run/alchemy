@@ -2309,13 +2309,11 @@ const providePlanScope =
       Effect.flatMap((store) =>
         effect.pipe(
           failCredentialsRequired(fqn),
-          Effect.provide(
-            Layer.mergeAll(
-              Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
-              Layer.succeed(InstanceId, instanceId),
-              Layer.succeed(ResourceFqn, fqn),
-            ),
-          ),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
+            Layer.succeed(InstanceId, instanceId),
+            Layer.succeed(ResourceFqn, fqn),
+          ]),
         ),
       ),
     );

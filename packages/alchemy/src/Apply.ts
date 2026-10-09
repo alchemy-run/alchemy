@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
@@ -98,9 +99,11 @@ const provideLifecycleScope =
       Effect.flatMap((store) =>
         effect.pipe(
           failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
-          Effect.provideService(ResourceFqn, fqn),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
+            Layer.succeed(InstanceId, instanceId),
+            Layer.succeed(ResourceFqn, fqn),
+          ]),
         ),
       ),
     );
