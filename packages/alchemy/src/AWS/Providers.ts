@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { CertRequest, CertRequestProvider } from "../CertRequest.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
@@ -269,6 +270,7 @@ export const providers = () =>
     // cloud regardless.
     Effect.flatMap(
       Provider.collection([
+        CertRequest,
         KeyPair,
         Random,
         AccessAnalyzer.Analyzer,
@@ -1819,6 +1821,7 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),
+        CertRequestProvider(),
         KeyPairProvider(),
         RandomProvider(),
         Assets.AssetsLive,
