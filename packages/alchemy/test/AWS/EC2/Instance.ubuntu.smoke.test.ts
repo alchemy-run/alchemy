@@ -23,18 +23,18 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { instanceId, publicIpAddress } = yield* stack.deploy(
+      const { instanceId, url } = yield* stack.deploy(
         Effect.gen(function* () {
           const instance = yield* TestUbuntuInstance;
           return {
             instanceId: instance.instanceId,
-            publicIpAddress: instance.publicIpAddress,
+            url: instance.url,
           };
         }),
       );
 
-      expect(publicIpAddress).toBeTruthy();
-      const base = `http://${publicIpAddress}:3000`;
+      expect(url).toBeTruthy();
+      const base = url!;
 
       // Poll until the instance boots, apt-get installs unzip, the AWS CLI
       // installs, bun installs, the bundle syncs from S3, and the systemd

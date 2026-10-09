@@ -15,7 +15,7 @@ class InterceptContainer extends Cloudflare.Container<InterceptContainer>()("Int
 
 /**
  * Durable Object that owns an {@link InterceptContainer} through
- * `Containers.layer` and routes the container's outbound HTTP back to itself:
+ * `yield* InterceptContainer` and routes the container's outbound HTTP back to itself:
  * the Fetcher it registers is a stub for its own id, so intercepted requests
  * arrive at its `fetch`.
  */
@@ -28,6 +28,8 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
 
     return Effect.gen(function* () {
       const self = Cloudflare.fromCloudflareFetcher(env.InterceptContainerObject.get(state.id));
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: false });
       const { fetch } = yield* container.getTcpPort(8080);
 
       const probe = (url: string) =>
@@ -45,20 +47,16 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
           return HttpServerResponse.text(`intercepted ${request.headers.host}${request.url}`);
         }),
         probeHost: () =>
-          container
-            .interceptOutboundHttp(INTERCEPT_HOST, self)
-            .pipe(Effect.andThen(probe(`http://${INTERCEPT_HOST}/hello`))),
+          start.pipe(
+            Effect.andThen(container.interceptOutboundHttp(INTERCEPT_HOST, self)),
+            Effect.andThen(probe(`http://${INTERCEPT_HOST}/hello`)),
+          ),
         probeAll: () =>
-          container
-            .interceptAllOutboundHttp(self)
-            .pipe(Effect.andThen(probe("http://any.example/hello"))),
+          start.pipe(
+            Effect.andThen(container.interceptAllOutboundHttp(self)),
+            Effect.andThen(probe("http://any.example/hello")),
+          ),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(InterceptContainer, {
-        enableInternet: false,
-      }),
-    ),
-  ),
+  }),
 ) {}

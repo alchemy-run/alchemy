@@ -238,17 +238,14 @@ export class ContainerHost extends Cloudflare.DurableObject<ContainerHost>()(
     const container = yield* MyContainer;
 
     return Effect.gen(function* () {
+      const start = container.start({ enableInternet: true });
       return {
-        ping: () => container.ping(),
+        ping: () => start.pipe(Effect.andThen(container.ping())),
         // Read the object from inside the container over RPC.
-        readObjectRpc: (key: string) => container.readObject(key),
+        readObjectRpc: (key: string) => start.pipe(Effect.andThen(container.readObject(key))),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(MyContainer, { enableInternet: true }),
-    ),
-  ),
+  }),
 ) {}
 ```
 

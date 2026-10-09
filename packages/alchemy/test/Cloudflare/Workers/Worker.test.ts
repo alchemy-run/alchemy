@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { adopt } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
@@ -134,6 +135,15 @@ describe.concurrent(
           expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
             "alchemy:id:TestWorker",
           );
+
+          // The bundle that shipped is kept for inspection in the Worker's own
+          // directory under `.alchemy/bundles`, named after stack, stage, and FQN.
+          const fs = yield* FileSystem.FileSystem;
+          const { dotAlchemy } = yield* AlchemyContext;
+          const bundled = yield* fs.readDirectory(
+            pathe.join(dotAlchemy, "bundles", `${s.name}-${s.stage}-TestWorker`),
+          );
+          expect(bundled.some((file) => file.endsWith(".js"))).toBe(true);
 
           // Verify the workers.dev subdomain is enabled on Cloudflare
           // (rather than just trusting the resource's output attributes).

@@ -19,6 +19,7 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
+import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -26,6 +27,7 @@ import { getHyperdriveDevOriginForHost } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isStream as isK2Stream } from "../K2/Stream.ts";
+import { isInstantNamespace } from "../KV/InstantNamespace.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
@@ -371,13 +373,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [
-      {
-        className,
-        dev: application.dev,
-        hash: application.hash.pipe(Output.map((h) => h?.image)),
-      },
-    ],
+    containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
@@ -548,7 +544,7 @@ const toBinding = (
         Output.map((jurisdiction) => (jurisdiction === "default" ? undefined : jurisdiction)),
       ),
     };
-  } else if (isKVNamespace(binding)) {
+  } else if (isKVNamespace(binding) || isInstantNamespace(binding)) {
     return {
       type: "kv_namespace",
       name: bindingName,
@@ -606,6 +602,15 @@ const toBinding = (
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
     // Tested BEFORE `isWorker` — the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
+    if (binding.worker === undefined) {
+      // One of this Worker's own named entrypoints: lowered like `Self`.
+      return {
+        type: "self_service",
+        name: bindingName,
+        entrypoint: binding.entrypoint,
+        props: binding.props,
+      };
+    }
     return {
       type: "service",
       name: bindingName,
