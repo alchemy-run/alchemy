@@ -9,13 +9,15 @@ export class MountObject extends Cloudflare.DurableObject<MountObject>()(
   Effect.gen(function* () {
     const box = yield* MountBox;
     return Effect.gen(function* () {
+      const start = box.start({ enableInternet: true });
       const { fetch } = yield* box.getTcpPort(3000);
       return {
         check: () =>
-          fetch(HttpClientRequest.get("http://container/check")).pipe(
+          start.pipe(
+            Effect.andThen(fetch(HttpClientRequest.get("http://container/check"))),
             Effect.flatMap((response) => response.text),
           ),
       };
     });
-  }).pipe(Effect.provide(Cloudflare.Containers.layer(MountBox, { enableInternet: true }))),
+  }),
 ) {}

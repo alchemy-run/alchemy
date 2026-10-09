@@ -14,8 +14,15 @@ import * as https from "node:https";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { findClusterAdapter, type ClusterTransport } from "../ClusterAdapter.ts";
+import { isPlainObject, unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets, redactJson } from "../../Util/Redaction.ts";
+import {
+  ClusterNotFoundError,
+  findClusterAdapter,
+  type ClusterTransport,
+} from "../ClusterAdapter.ts";
 import type { Connection } from "../Connection.ts";
+import { driftMask, hashDriftSelection } from "./declared.ts";
 import {
   buildKubernetesObjectPathWithSpec,
   chunkByApplyRank,
@@ -44,6 +51,9 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
 
 const fieldManager = "alchemy";
 
+/** Deadline for auth-header minting and for each HTTP attempt. */
+const requestTimeout = "10 seconds";
+
 /**
  * Resolve the {@link ClusterTransport} for a connection through its
  * registered adapter.
@@ -53,113 +63,174 @@ export const connectCluster = (connection: Connection) =>
     Effect.flatMap((adapter) => adapter.connect(connection)),
   );
 
+/** 404 from the apiserver, including a removed CRD's discovery 404. */
+export class KubernetesNotFound extends Data.TaggedError("KubernetesNotFound")<{
+  method: string;
+  path: string;
+  body: string;
+}> {
+  override get message(): string {
+    return `${this.method} ${this.path} responded 404: ${
+      this.body.length > 0 ? this.body.slice(0, 1000) : "(empty body)"
+    }`;
+  }
+}
+
+/**
+ * The effect's result when the cluster exists. `ClusterNotFoundError`
+ * becomes `undefined`; auth and HTTP failures stay failures.
+ */
+export const ifClusterExists = <A, E, R>(effect: Effect.Effect<A, ClusterNotFoundError | E, R>) =>
+  effect.pipe(Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)));
+
 const requestJson = Effect.fn(function* ({
   transport,
   method,
   path,
   body,
+  redactions = [],
 }: {
   transport: ClusterTransport;
   method: string;
   path: string;
   body?: Record<string, unknown>;
+  /** Secrets already plaintext in `body` (Helm renders them). */
+  redactions?: readonly string[];
 }) {
-  const headers = yield* transport.headers;
+  // Outside the attempt retry: a hung token mint must not be retried as
+  // if it were a refused connection.
+  const headers = yield* transport.headers.pipe(Effect.timeout(requestTimeout));
   const url = new URL(path, transport.endpoint);
-  const payload = body ? JSON.stringify(body) : undefined;
+  // JSON.stringify(Redacted) emits the display placeholder. Unwrap only at
+  // the wire so plans and state keep the wrapper.
+  const prepared = yield* Effect.sync(() => {
+    const payload = body === undefined ? undefined : JSON.stringify(unwrapRedacted(body));
+    return {
+      payload,
+      contentLength: payload === undefined ? undefined : Buffer.byteLength(payload),
+      ca:
+        transport.certificateAuthorityData === undefined
+          ? undefined
+          : Buffer.from(transport.certificateAuthorityData, "base64").toString("utf8"),
+      secrets: [...(body === undefined ? [] : collectRedactedSecrets(body)), ...redactions],
+    };
+  });
 
-  return yield* Effect.tryPromise({
-    try: () =>
-      new Promise<unknown>((resolve, reject) => {
-        const request = https.request(
-          {
-            protocol: url.protocol,
-            hostname: url.hostname,
-            port: url.port || 443,
-            path: `${url.pathname}${url.search}`,
-            method,
-            headers: {
-              ...headers,
-              Accept: "application/json",
-              ...(payload
-                ? {
-                    "Content-Type": "application/apply-patch+yaml",
-                    "Content-Length": Buffer.byteLength(payload),
-                  }
-                : {}),
-            },
-            ...(transport.certificateAuthorityData
-              ? {
-                  ca: Buffer.from(transport.certificateAuthorityData, "base64").toString("utf8"),
-                }
-              : {}),
-            ...(transport.clientCert
-              ? {
-                  cert: transport.clientCert.certificate,
-                  key: transport.clientCert.key,
-                }
-              : {}),
-            ...(transport.insecureSkipTlsVerify ? { rejectUnauthorized: false } : {}),
-          },
-          (response) => {
-            const chunks: Buffer[] = [];
-            response.on("data", (chunk) => {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            });
-            response.on("end", () => {
-              const responseBody = Buffer.concat(chunks).toString("utf8");
-              const statusCode = response.statusCode ?? 500;
-
-              if (statusCode < 200 || statusCode >= 300) {
-                reject(
-                  new KubernetesApiError({
-                    method,
-                    path,
-                    statusCode,
-                    body: responseBody,
-                  }),
-                );
-                return;
-              }
-
-              if (!responseBody.trim()) {
-                resolve(undefined);
-                return;
-              }
-
-              try {
-                resolve(JSON.parse(responseBody));
-              } catch {
-                resolve(responseBody);
-              }
-            });
-          },
-        );
-
-        request.on("error", reject);
-        if (payload) {
-          request.write(payload);
-        }
-        request.end();
-      }),
-    catch: (error) =>
-      error instanceof KubernetesApiError
-        ? error
-        : new Error(
-            `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
-          ),
+  const response = yield* Effect.callback<
+    { readonly statusCode: number; readonly body: string },
+    Error
+  >((resume, signal) => {
+    const request = https.request(
+      {
+        signal,
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers: {
+          ...headers,
+          Accept: "application/json",
+          ...(prepared.payload === undefined
+            ? {}
+            : {
+                "Content-Type": "application/apply-patch+yaml",
+                "Content-Length": prepared.contentLength,
+              }),
+        },
+        ...(prepared.ca === undefined ? {} : { ca: prepared.ca }),
+        ...(transport.clientCert
+          ? {
+              cert: transport.clientCert.certificate,
+              key: transport.clientCert.key,
+            }
+          : {}),
+        ...(transport.insecureSkipTlsVerify ? { rejectUnauthorized: false } : {}),
+      },
+      (incoming) => {
+        const chunks: Uint8Array[] = [];
+        incoming.on("data", (chunk: Uint8Array) => {
+          chunks.push(chunk);
+        });
+        incoming.on("error", (error) => {
+          resume(Effect.fail(error));
+        });
+        incoming.on("aborted", () => {
+          resume(Effect.fail(new Error(`Kubernetes ${method} ${path} response aborted`)));
+        });
+        incoming.on("end", () => {
+          if (incoming.complete === false) {
+            resume(
+              Effect.fail(
+                new Error(`Kubernetes ${method} ${path} response ended before completion`),
+              ),
+            );
+            return;
+          }
+          const statusCode = incoming.statusCode ?? 500;
+          resume(
+            Effect.sync(() => ({
+              statusCode,
+              body: Buffer.concat(chunks).toString("utf8"),
+            })),
+          );
+        });
+      },
+    );
+    request.on("error", (error) => {
+      resume(Effect.fail(error instanceof Error ? error : new Error(String(error))));
+    });
+    if (prepared.payload !== undefined) request.write(prepared.payload);
+    request.end();
+    // Bun's TLS client ignores AbortSignal. Destroying the socket releases it.
+    // Effect.callback already drops a second resume, and this finalizer runs
+    // on the same interrupt that aborts `signal`.
+    return Effect.sync(() => {
+      request.destroy();
+      request.socket?.destroy();
+    });
   }).pipe(
-    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS)
-    // are transient — a fresh managed endpoint's load balancer can refuse
-    // connections for a short window after the cluster reports ready.
-    // Every request here is idempotent (GET / SSA PATCH / DELETE), so
-    // retry them; HTTP errors (KubernetesApiError) are handled by the
-    // callers.
+    Effect.timeout(requestTimeout),
+    Effect.mapError(
+      (error) =>
+        new Error(
+          `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    ),
+    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS,
+    // the per-attempt deadline) are transient — a fresh managed endpoint's
+    // load balancer can refuse connections for a short window after the
+    // cluster reports ready. Every request here is idempotent (GET / SSA
+    // PATCH / DELETE), so retry them. HTTP status errors are classified
+    // below and are not retried here.
     Effect.retry({
-      while: (e): boolean => !(e instanceof KubernetesApiError),
       schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
     }),
   );
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    // Error bodies can echo the request. Scrub only failures —
+    // a successful dry-run is the object we compare for drift.
+    const responseBody = yield* Effect.sync(() => redactJson(response.body, prepared.secrets));
+    if (response.statusCode === 404) {
+      return yield* new KubernetesNotFound({ method, path, body: responseBody });
+    }
+    return yield* new KubernetesApiError({
+      method,
+      path,
+      statusCode: response.statusCode,
+      body: responseBody,
+    });
+  }
+
+  if (!response.body.trim()) return undefined;
+  return yield* Effect.sync(() => {
+    try {
+      return JSON.parse(response.body) as unknown;
+    } catch {
+      return response.body;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────── kind discovery ──
@@ -213,10 +284,9 @@ export const resolveKindSpec = Effect.fn(function* ({
   );
 
   if (!resource?.name) {
-    return yield* new KubernetesApiError({
+    return yield* new KubernetesNotFound({
       method: "GET",
       path: discoveryPath,
-      statusCode: 404,
       body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
     });
   }
@@ -257,15 +327,25 @@ export const readObject = Effect.fn(function* ({
     transport,
     method: "GET",
     path: yield* buildPath({ transport, object }),
-  });
+  }).pipe(
+    // Drift reads a whole Helm release at once. A 429 is the apiserver
+    // asking for a pause, not a failed object.
+    Effect.retry({
+      while: (error) => error instanceof KubernetesApiError && error.statusCode === 429,
+      schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(4)]),
+    }),
+  );
 });
 
 export const applyObject = Effect.fn(function* ({
   transport,
   object,
+  redactions,
 }: {
   transport: ClusterTransport;
   object: KubernetesObjectDefinition;
+  /** Plaintext secrets already rendered into `object` (Helm values). */
+  redactions?: readonly string[];
 }) {
   const basePath = yield* buildPath({
     transport,
@@ -273,16 +353,16 @@ export const applyObject = Effect.fn(function* ({
   });
   const path = `${basePath}?fieldManager=${fieldManager}&force=true`;
 
+  // A freshly provisioned cluster's API server briefly 5xxes while warming
+  // up, and the creator's bootstrap access can propagate asynchronously
+  // (401/403 in the first minute).
   return yield* requestJson({
     transport,
     method: "PATCH",
     path,
     body: object,
+    redactions,
   }).pipe(
-    // A freshly provisioned cluster's API server briefly 5xxes while
-    // warming up, and the creator's bootstrap access can propagate
-    // asynchronously (401/403 in the first minute) — retry transient
-    // failures for ~1 min.
     Effect.retry({
       while: (e): boolean =>
         e instanceof KubernetesApiError &&
@@ -312,10 +392,7 @@ export const deleteObject = Effect.fn(function* ({
         path: `${path}?propagationPolicy=Background`,
       }),
     ),
-    Effect.catchIf(
-      (error): error is KubernetesApiError => error instanceof KubernetesApiError,
-      (error) => (error.statusCode === 404 ? Effect.void : Effect.fail(error)),
-    ),
+    Effect.catchTag("KubernetesNotFound", () => Effect.void),
   );
 });
 
@@ -323,10 +400,12 @@ export const reconcileObjects = Effect.fn(function* ({
   transport,
   previousObjects,
   desiredObjects,
+  redactions,
 }: {
   transport: ClusterTransport;
   previousObjects: ReadonlyArray<KubernetesObjectRef>;
   desiredObjects: ReadonlyArray<KubernetesObjectDefinition>;
+  redactions?: readonly string[];
 }) {
   const desiredRefs = desiredObjects.map(toKubernetesObjectRef);
   const desiredKeys = new Set(desiredRefs.map(kubernetesObjectKey));
@@ -342,21 +421,32 @@ export const reconcileObjects = Effect.fn(function* ({
     });
   }
 
+  const baselines = new Map<string, { baselineHash: string; driftMask: unknown }>();
   for (const chunk of chunkByApplyRank(desiredObjects)) {
     yield* Effect.forEach(
       chunk,
       (object) =>
-        applyObject({
-          transport,
-          object,
+        Effect.gen(function* () {
+          const applied = yield* applyObject({
+            transport,
+            object,
+            redactions,
+          });
+          const ref = toKubernetesObjectRef(object);
+          const witnessed = isPlainObject(applied) ? applied : undefined;
+          baselines.set(kubernetesObjectKey(ref), {
+            driftMask: driftMask(object, witnessed),
+            baselineHash: yield* hashDriftSelection(object, witnessed ?? object),
+          });
         }),
-      {
-        concurrency: "unbounded",
-      },
+      { concurrency: "unbounded" },
     );
   }
 
-  return desiredRefs;
+  return desiredRefs.map((ref) => ({
+    ...ref,
+    ...baselines.get(kubernetesObjectKey(ref)),
+  }));
 });
 
 export const deleteObjects = Effect.fn(function* ({

@@ -10,7 +10,7 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -49,6 +49,7 @@ import {
 import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -353,7 +354,7 @@ export const LocalWorkerProvider = () =>
         // send_email descriptors. Part of the hashed config: flipping the
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
-        const containers: Record<string, ContainerImage> = {};
+        const containers: Record<string, NonNullable<RuntimeDurableObject["container"]>> = {};
         // Content hashes of the container images, keyed like `containers`.
         // `ContainerImage` itself only carries stable paths (context /
         // dockerfile / imageUri), so without the hash an image CONTENT
@@ -415,14 +416,23 @@ export const LocalWorkerProvider = () =>
             }
           }
           if (data.containers) {
+            const toRuntimeImage = (image: DevContainerImage) => ({
+              ...image,
+              env: unwrapRedacted(image.env),
+            });
             for (const container of data.containers) {
-              if (!container.dev) {
+              if (container.devImages !== undefined) {
+                // Durable Object-managed: named images, selected at start().
+                const images: Record<string, RuntimeContainerImage> = {};
+                for (const [name, image] of Object.entries(container.devImages)) {
+                  images[name] = toRuntimeImage(image);
+                }
+                containers[container.className] = { images };
+              } else if (container.dev) {
+                containers[container.className] = toRuntimeImage(container.dev);
+              } else {
                 return yield* Effect.die(`Container ${container.className} has no dev image`);
               }
-              containers[container.className] = {
-                ...container.dev,
-                env: unwrapRedacted(container.dev.env),
-              };
               if (container.hash !== undefined) {
                 containerHashes[container.className] = container.hash;
               }
@@ -618,6 +628,9 @@ export const LocalWorkerProvider = () =>
       // bound via `scriptName` from another Worker) therefore never observe
       // a window where the script has no running instance and no registry
       // entry, even when `runtime.start` is slow (container image builds).
+      // Workers with containers are the exception: their previous instance
+      // is retired after the images are ready but before the new workerd
+      // boots (see `beforeServe` in `serveWith`).
       // Both instances use the same registry key; the registry's entry
       // removal is owner-aware, so closing the old scope after the
       // replacement has re-registered cannot delete the replacement's
@@ -676,16 +689,20 @@ export const LocalWorkerProvider = () =>
           const fs = yield* PlatformFileSystem.FileSystem;
           const watched = new Map<string, { dockerfile: string | undefined }>();
           for (const namespace of worker.durableObjectNamespaces) {
-            const image = namespace.container;
-            if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(runtimeBase, image.context ?? ".");
-            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
-            watched.set(context, {
-              dockerfile:
-                image.dockerfile !== undefined
-                  ? path.resolve(context, image.dockerfile)
-                  : undefined,
-            });
+            const container = namespace.container;
+            if (container === undefined) continue;
+            const images = "images" in container ? Object.values(container.images) : [container];
+            for (const image of images) {
+              if (!("dockerfile" in image)) continue;
+              const context = path.resolve(runtimeBase, image.context ?? ".");
+              if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
+              watched.set(context, {
+                dockerfile:
+                  image.dockerfile !== undefined
+                    ? path.resolve(context, image.dockerfile)
+                    : undefined,
+              });
+            }
           }
           const key = JSON.stringify([...watched.entries()].sort());
           const existing = containerWatchers.get(worker.fqn);
@@ -817,10 +834,43 @@ export const LocalWorkerProvider = () =>
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
               const previous = workerdScopes.get(worker.fqn);
-              // Instances whose queue-consumer wiring went stale while they
-              // were starting; never exposed via the proxy, closed together
-              // with `previous` after the cutover below.
-              const superseded: Scope.Closeable[] = [];
+              // Instances to tear down once the replacement is up: `previous`
+              // plus any instance whose queue-consumer wiring went stale
+              // while it was starting (never exposed via the proxy).
+              const retiring: Scope.Closeable[] = previous ? [previous] : [];
+              const closeRetiring = Effect.suspend(() =>
+                Effect.forEach(
+                  retiring.splice(0),
+                  (replaced) =>
+                    Scope.close(replaced, Exit.void).pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.logWarning(
+                          `[${worker.fqn}] Failed to stop previous local worker instance`,
+                          Cause.squash(cause),
+                        ),
+                      ),
+                    ),
+                  { discard: true },
+                ),
+              ).pipe(Effect.uninterruptible);
+              // Container names are deterministic per Durable Object, so a
+              // new workerd would "recover" the previous instance's
+              // still-running container — which the previous instance's
+              // teardown then removes (with its networking sidecar) out from
+              // under it. For workers with containers, break before make:
+              // retire the previous instance after the slow part of the start
+              // (image builds/pulls) but before the new workerd boots, parking
+              // requests on the proxy until the cutover.
+              const hasContainers = worker.durableObjectNamespaces.some(
+                (namespace) => namespace.container !== undefined,
+              );
+              const beforeServe = hasContainers
+                ? Effect.suspend(() =>
+                    retiring.length > 0
+                      ? Effect.andThen(proxy.unset(), closeRetiring)
+                      : Effect.void,
+                  )
+                : undefined;
               let scope!: Scope.Closeable;
               let url!: URL;
               // Queue-consumer wiring can change while `runtime.start` is in
@@ -892,6 +942,7 @@ export const LocalWorkerProvider = () =>
                       cf: worker.dev.cf,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
+                      beforeServe,
                     })
                     .pipe(Scope.provide(scope)),
                 ).pipe(
@@ -937,27 +988,18 @@ export const LocalWorkerProvider = () =>
                 if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
                   // Wiring changed while workerd was starting — serve again
                   // with the fresh consumers before exposing the instance.
-                  superseded.push(scope);
+                  retiring.push(scope);
                   continue;
                 }
                 break;
               }
               yield* exposeWorker(worker, proxy, url);
-              // Only now tear the replaced instances down: `previous` kept
-              // serving — and stayed registered in the dev registry — until
-              // the cutover above. The registry's entry removal is
-              // owner-aware, so these closes cannot delete the replacement's
-              // registration.
-              for (const replaced of previous ? [...superseded, previous] : superseded) {
-                yield* Scope.close(replaced, Exit.void).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Failed to stop previous local worker instance`,
-                      Cause.squash(cause),
-                    ),
-                  ),
-                );
-              }
+              // Only now tear the replaced instances down (unless
+              // `beforeServe` already did): `previous` kept serving — and
+              // stayed registered in the dev registry — until the cutover
+              // above. The registry's entry removal is owner-aware, so these
+              // closes cannot delete the replacement's registration.
+              yield* closeRetiring;
               return url;
             }),
           ),

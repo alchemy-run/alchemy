@@ -52,6 +52,38 @@ test(
   },
 );
 
+test(
+  "a worker reaches its own NAMED entrypoint through WorkerEntrypoint(name)",
+  Effect.gen(function* () {
+    const { targetUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    // A bare `Self` binding would hit the default export, which has no
+    // `greet`: the greeting proves the self binding carried `entrypoint`.
+    const res = yield* client.get(`${targetUrl}/self-greet?name=bob`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("hello bob from Api");
+  }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "a worker reaches its own default export through WorkerEntrypoint()",
+  Effect.gen(function* () {
+    const { targetUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${targetUrl}/self-default`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("via self default: hello from EntrypointTargetWorker");
+  }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
 // The Cloudflare API's service-binding schema does not carry `props` yet:
 // the distilled `workers` service drops the field at encode, so deployed
 // bindings deliver no ctx.props. Local dev already delivers them (see

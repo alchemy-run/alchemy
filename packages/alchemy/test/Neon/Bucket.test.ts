@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Result from "effect/Result";
 import { adopt, Unowned } from "@/AdoptPolicy";
-import { InstanceId } from "@/InstanceId";
 import { Branch } from "@/Neon/Branch";
 import { Bucket, bucketStorageClient, type BucketProps } from "@/Neon/Bucket";
 import { Credential } from "@/Neon/Credential";
@@ -14,7 +13,9 @@ import { providers } from "@/Neon/Providers";
 import { makeStorageClient } from "@/Neon/Storage";
 import { createPhysicalName } from "@/PhysicalName";
 import * as Provider from "@/Provider";
+import { ResourceContext } from "@/ResourceContext.ts";
 import * as Test from "@/Test/Alchemy";
+import { resourceContext } from "../Utils/ResourceContext.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -77,7 +78,7 @@ test.provider(
         instanceId,
         olds,
         output: undefined,
-      }).pipe(Effect.provideService(InstanceId, instanceId));
+      }).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       yield* Effect.gen(function* () {
         expect(Unowned.is(yield* read)).toBe(false);
         expect((yield* read)?.bucketName).toBe(bucket.bucketName);

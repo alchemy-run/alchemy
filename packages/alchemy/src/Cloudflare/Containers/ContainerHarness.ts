@@ -1,16 +1,17 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Harness } from "../../AI/Session.ts";
+import { Harness, SessionError } from "../../AI/Session.ts";
 import { connectHarness } from "../../AI/SessionRpcs.ts";
 import { toHttpClient } from "../Fetcher.ts";
 import type { Container, ContainerStartupOptions } from "./Container.ts";
-import { layer as containerLayer } from "./StartContainer.ts";
 
 /**
  * Provides `AI.Harness` from a container: each Durable Object instance (one
  * per session) owns one instance of `container`, whose program serves the
- * harness (`AI.serveHarnessHttp`) on `port`. Calls connect to it on demand —
- * never while the Durable Object is being constructed.
+ * harness (`AI.serveHarnessHttp`) on `port`. Each connection starts the
+ * container first (`start()` is idempotent, so a running container is left
+ * alone and a stopped one starts again) — never while the Durable Object is
+ * being constructed.
  *
  * ### Running sessions in containers
  * **Example:** A Durable Object per session, a container per Durable Object
@@ -37,11 +38,19 @@ export const ContainerHarness = <C extends Container.Decl.Any>(
   Layer.effect(
     Harness,
     Effect.gen(function* () {
+      // Binds the container; nothing starts until a session connects.
       const instance = (yield* container as unknown as Effect.Effect<Container>) as Container;
-      return instance
-        .getTcpPort(options.port ?? 3000)
-        .pipe(Effect.flatMap((port) => connectHarness(toHttpClient(port))));
+      const { port = 3000, ...startup } = options;
+      const start = instance
+        .start(startup)
+        .pipe(
+          Effect.mapError(
+            (cause) => new SessionError({ message: `starting the container: ${String(cause)}` }),
+          ),
+        );
+      return start.pipe(
+        Effect.andThen(instance.getTcpPort(port)),
+        Effect.flatMap((tcp) => connectHarness(toHttpClient(tcp as never))),
+      );
     }),
-  ).pipe(
-    Layer.provide(containerLayer(container, options) as Layer.Layer<never>),
   ) as Layer.Layer<Harness>;

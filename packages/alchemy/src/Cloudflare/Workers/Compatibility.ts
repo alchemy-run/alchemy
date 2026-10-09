@@ -21,6 +21,13 @@ import type { WorkerProps } from "./Worker.ts";
 const CROSS_REQUEST_PROMISE_RESOLUTION = "handle_cross_request_promise_resolution";
 
 /**
+ * An Effect Worker that binds itself with `bindWorker` calls its own default
+ * entrypoint through workerd's `ctx.exports` loopback (default-on since
+ * compatibility date 2025-11-17), so disabling it is a deploy-time error.
+ */
+const DISABLE_CTX_EXPORTS = "disable_ctx_exports";
+
+/**
  * Compatibility settings passed to build tools and framework adapters.
  * Cloudflare rejects a redundant `nodejs_compat` flag after its default-on
  * date, but downstream tools may still detect Node support from the explicit
@@ -60,6 +67,13 @@ export const getCompatibility = (props: WorkerProps) => {
         "the alchemy Worker runtime shares its layer build across concurrent " +
         "requests, which requires workerd's corrected cross-request promise " +
         "semantics. Remove the flag from `compatibility.flags`.",
+    );
+  }
+  if (!props.isExternal && userFlags.includes(DISABLE_CTX_EXPORTS)) {
+    throw new Error(
+      `The "${DISABLE_CTX_EXPORTS}" compatibility flag is not supported: ` +
+        "the alchemy Worker runtime calls a Worker's own entrypoints through " +
+        "`ctx.exports`. Remove the flag from `compatibility.flags`.",
     );
   }
   const date = props.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE;

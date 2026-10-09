@@ -460,7 +460,11 @@ export const GkeKubernetesAdapter = () =>
             .getProjectsLocationsClusters({ name })
             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
         }).pipe(withGcp);
-        if (!cluster || cluster.status === "STOPPING") {
+        // STOPPING still serves the API until the endpoint is gone. A missing
+        // CA with that endpoint is not "gone": connect fails and destroy retries
+        // instead of skipping Service deletion.
+        const apiGone = cluster?.status === "STOPPING" && !apiServerEndpoint(cluster.endpoint);
+        if (!cluster || apiGone) {
           return yield* new ClusterNotFoundError({
             message: `GKE cluster '${auth.clusterId}' no longer exists`,
           });
@@ -471,20 +475,19 @@ export const GkeKubernetesAdapter = () =>
       const connect: ClusterAdapterService["connect"] = (connection) =>
         Effect.gen(function* () {
           const auth = yield* narrowGkeAuth(connection);
-          let endpoint = apiServerEndpoint(connection.endpoint);
-          let certificateAuthorityData = connection.certificateAuthorityData;
+          // Always read the cluster. A persisted endpoint does not prove it
+          // still exists, and delete uses ClusterNotFoundError to skip
+          // in-cluster objects and still remove workload-identity bindings.
+          const cluster = yield* getLiveCluster(auth);
+          const endpoint = apiServerEndpoint(cluster.endpoint);
+          const certificateAuthorityData = cluster.masterAuth?.clusterCaCertificate;
           if (!endpoint || !certificateAuthorityData) {
-            const cluster = yield* getLiveCluster(auth);
-            endpoint = apiServerEndpoint(cluster.endpoint);
-            certificateAuthorityData = cluster.masterAuth?.clusterCaCertificate;
-            if (!endpoint || !certificateAuthorityData) {
-              return yield* Effect.fail(
-                new Error(
-                  `GKE cluster '${auth.clusterId}' has no endpoint or ` +
-                    "certificate authority data yet (still creating?)",
-                ),
-              );
-            }
+            return yield* Effect.fail(
+              new Error(
+                `GKE cluster '${auth.clusterId}' has no endpoint or ` +
+                  "certificate authority data yet (still creating?)",
+              ),
+            );
           }
           return yield* makeGkeTransport({
             endpoint,
