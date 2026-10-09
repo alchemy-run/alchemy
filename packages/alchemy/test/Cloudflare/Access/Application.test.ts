@@ -576,6 +576,86 @@ test.provider(
 );
 
 test.provider(
+  "adopted application keeps live policy links and hostnames it does not declare",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const name = "alchemy-test-adopt-keeps-links";
+      const domain = `${name}.${zoneName}`;
+      const extraDomain = `${name}-2.${zoneName}`;
+      const policy = yield* zeroTrust.createAccessPolicy({
+        accountId,
+        name,
+        decision: "allow",
+        include: [{ emailDomain: { domain: "example.com" } }],
+      });
+      // The policy is outside the stack: delete it even when the test fails,
+      // after the application releases it.
+      const cleanup = stack
+        .destroy()
+        .pipe(
+          Effect.andThen(
+            zeroTrust
+              .deleteAccessPolicy({ accountId, policyId: policy.id! })
+              .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 5 })),
+          ),
+          Effect.orDie,
+        );
+
+      yield* Effect.gen(function* () {
+        const existing = yield* zeroTrust.createAccessApplicationForAccount({
+          accountId,
+          type: "self_hosted",
+          name,
+          domain,
+          destinations: [
+            { type: "public", uri: domain },
+            { type: "public", uri: extraDomain },
+          ],
+          sessionDuration: "24h",
+          policies: [policy.id!],
+        });
+
+        // The changed `sessionDuration` forces a PUT, which must keep the
+        // undeclared policy link and hostnames.
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
+              AdoptPolicy.adopt(true),
+            );
+            return yield* Cloudflare.Access.Application("AdoptKeepsLinks", {
+              applicationId: existing.id!,
+              type: "self_hosted",
+              name,
+              domain,
+              sessionDuration: "12h",
+            });
+          }),
+        );
+        expect(adopted.updatedAt).toBeDefined();
+
+        const live = (yield* zeroTrust.getAccessApplicationForAccount({
+          accountId,
+          appId: existing.id!,
+        })) as unknown as {
+          sessionDuration?: string;
+          policies?: ReadonlyArray<{ id?: string }>;
+          destinations?: ReadonlyArray<{ uri?: string }>;
+        };
+        expect(live.sessionDuration).toEqual("12h");
+        expect(live.policies?.map((p) => p.id)).toEqual([policy.id]);
+        expect(live.destinations?.map((d) => d.uri)).toEqual([domain, extraDomain]);
+      }).pipe(Effect.ensuring(cleanup));
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
+  },
+);
+
+test.provider(
   "manages CORS, cookie and preflight settings",
   (stack) =>
     Effect.gen(function* () {
@@ -985,6 +1065,39 @@ describe(
           domain: DOMAIN,
           destinations,
         });
+      }),
+    );
+
+    it.effect("keeps every live hostname when the declared domain is unchanged", () =>
+      Effect.gen(function* () {
+        const destinations = [
+          { type: "public", uri: DOMAIN },
+          { type: "public", uri: "grafana.example.net" },
+        ];
+        const { calls } = yield* reconcileApp(
+          { ...selfHostedNews, sessionDuration: "12h" },
+          existingOutput(),
+          echo((o) => liveSelfHosted({ destinations, ...o })),
+        );
+
+        expect(putOf(calls)?.body).toMatchObject({ domain: DOMAIN, destinations });
+      }),
+    );
+
+    it.effect("no update when policies are omitted and live ones are linked", () =>
+      Effect.gen(function* () {
+        const { calls } = yield* reconcileApp(
+          selfHostedNews,
+          existingOutput(),
+          echo((o) =>
+            liveSelfHosted({
+              policies: [{ id: "policy-1", precedence: 1, reusable: true, decision: "allow" }],
+              ...o,
+            }),
+          ),
+        );
+
+        expect(calls.map((c) => c.method)).toEqual(["GET"]);
       }),
     );
 
