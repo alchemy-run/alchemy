@@ -592,6 +592,27 @@ export const resolveWorkerDomain = (
     };
   });
 
+/**
+ * Preserve the resolved domain metadata only while the declared canonical
+ * hostname is attached. Alias, redirect, and unknown-hostname classification
+ * is supplied by `read`; zone and previews retain reconcile's persisted shape.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveObservedWorkerDomain = (
+  serving: readonly string[],
+  redirects: string[],
+  declared: ResolvedWorkerDomain | undefined,
+): ResolvedWorkerDomain | undefined =>
+  serving.length > 0
+    ? {
+        ...(declared?.name === serving[0] ? declared : {}),
+        name: serving[0],
+        aliases: serving.slice(1),
+        redirects,
+      }
+    : undefined;
+
 const isWorkersDevHostname = (hostname: string) => hostname.endsWith(".workers.dev");
 
 // Hostnames that only appear in local-dev state (the dev server's
@@ -5024,10 +5045,7 @@ export const LiveWorkerProvider = () =>
             ]);
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
-            const observedDomain =
-              serving.length > 0
-                ? { name: serving[0], aliases: serving.slice(1), redirects: keptRedirects }
-                : undefined;
+            const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
