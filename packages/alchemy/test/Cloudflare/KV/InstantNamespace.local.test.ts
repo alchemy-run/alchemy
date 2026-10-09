@@ -18,6 +18,13 @@ const { test } = Test.make({
   dev: true,
 });
 
+// Live Instant KV incurs $0.10 per put/delete/list; storage billing granularity is unverified.
+// Require an explicit cost opt-in (unset, "0", and "false" all skip).
+// TODO: Once beta access is available, replace only `test.provider.todo` below
+// with `test.provider`, retaining the environment-variable gate.
+const liveTest =
+  process.env.CLOUDFLARE_TEST_KV_INSTANT === "1" ? test.provider.todo : test.provider.skip;
+
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
@@ -165,7 +172,7 @@ test.provider(
 );
 
 // TODO: Requires private beta access even when the containing stack is local.
-test.provider.todo(
+liveTest(
   "Alchemy.remote opts InstantNamespace out of local emulation",
   (stack) =>
     Effect.gen(function* () {

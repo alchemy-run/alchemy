@@ -1,5 +1,3 @@
-// TODO: Enable these lifecycle tests by changing test.provider.todo to test.provider
-// once the testing account has Workers KV Instant private beta access.
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -16,9 +14,16 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
+// Live Instant KV incurs $0.10 per put/delete/list; storage billing granularity is unverified.
+// Require an explicit cost opt-in (unset, "0", and "false" all skip).
+// TODO: Once beta access is available, replace only `test.provider.todo` below
+// with `test.provider`, retaining the environment-variable gate.
+const liveTest =
+  process.env.CLOUDFLARE_TEST_KV_INSTANT === "1" ? test.provider.todo : test.provider.skip;
+
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-test.provider.todo(
+liveTest(
   "create and delete namespace with default props",
   (stack) =>
     Effect.gen(function* () {
@@ -49,7 +54,7 @@ test.provider.todo(
   { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
-test.provider.todo(
+liveTest(
   "create, update, delete namespace",
   (stack) =>
     Effect.gen(function* () {
@@ -99,7 +104,7 @@ test.provider.todo(
 // namespace, resolve the provider from context via `findProviderByType`,
 // call `list()`, and assert the deployed namespace appears in the
 // exhaustively-paginated result.
-test.provider.todo(
+liveTest(
   "list separates classic and instant namespaces",
   (stack) =>
     Effect.gen(function* () {
@@ -130,7 +135,7 @@ test.provider.todo(
 // adoption. The test wipes local state mid-run while leaving the namespace
 // on Cloudflare — this simulates a fresh state store seeing an existing
 // resource with the same physical name.
-test.provider.todo(
+liveTest(
   "existing namespace (matching title) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
@@ -201,7 +206,7 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, ac
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
-test.provider.todo(
+liveTest(
   "Instant client: put, get, list all keys, and delete from an Action",
   (stack) =>
     Effect.gen(function* () {
@@ -282,7 +287,7 @@ test.provider.todo(
   },
 );
 
-test.provider.todo(
+liveTest(
   "switching namespace modes replaces storage while reusing an explicit title",
   (stack) =>
     Effect.gen(function* () {
