@@ -86,14 +86,11 @@ class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   }
 }
 
-export const isFunction = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.Lambda.Function"
-  );
-};
+export const isFunction = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.Lambda.Function";
 
 /**
  * True for any Alchemy host that accepts the `{ env, policyStatements }`
@@ -110,18 +107,15 @@ export const isFunction = (value: any): value is Function => {
  * `host.LogicalId` are ever touched inside the guarded block, so downstream
  * typing is unchanged while the runtime check widens to all three.
  */
-export const isBindingHost = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    (value.Type === "AWS.Lambda.Function" ||
-      value.Type === "AWS.ECS.Task" ||
-      value.Type === "AWS.ECS.Service" ||
-      value.Type === "Kubernetes.Deployment" ||
-      value.Type === "Kubernetes.Job")
-  );
-};
+export const isBindingHost = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value.Type === "AWS.Lambda.Function" ||
+    value.Type === "AWS.ECS.Task" ||
+    value.Type === "AWS.ECS.Service" ||
+    value.Type === "Kubernetes.Deployment" ||
+    value.Type === "Kubernetes.Job");
 
 export interface FunctionBuildOptions
   extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {
@@ -1650,7 +1644,7 @@ export const FunctionProvider = () =>
 
         const tags = yield* createInternalTags(id);
 
-        const codeLocation = yield* Effect.gen(function* () {
+        const resolveCodeLocation = Effect.gen(function* () {
           if (code.packageType === "Image") {
             return { ImageUri: code.imageUri } as const;
           }
@@ -1667,6 +1661,7 @@ export const FunctionProvider = () =>
             S3Key: key,
           } as const;
         });
+        const codeLocation = yield* resolveCodeLocation;
         const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
@@ -1721,6 +1716,7 @@ export const FunctionProvider = () =>
           FileSystemConfigs: fileSystemConfigs,
         };
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -1796,12 +1792,9 @@ export const FunctionProvider = () =>
           ),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
-          Effect.tapError((e) =>
-            Effect.gen(function* () {
-              yield* Effect.logDebug(e);
-            }),
-          ),
+          Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
             while: (e) => isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(Schedule.tap(() => noteCreateDependencyWait())),
@@ -2683,7 +2676,7 @@ export const FunctionProvider = () =>
           // recreation stuck (gone); present means the group survives its own
           // deletion (denied/undeletable) and must fail loudly.
           if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(`Lambda log group ${logGroupName} remained observable after delete`),
             );
           }

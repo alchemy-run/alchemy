@@ -2548,10 +2548,6 @@ import {
   Subscription as WorkspaceeventsSubscription,
   SubscriptionProvider as WorkspaceeventsSubscriptionProvider,
 } from "./WorkspaceEvents/Subscription.ts";
-import {
-  TasksPushNotificationConfig,
-  TasksPushNotificationConfigProvider,
-} from "./WorkspaceEvents/TasksPushNotificationConfig.ts";
 import { GenerateAccessTokenHttp } from "./Workstations/GenerateAccessTokenHttp.ts";
 import { GetWorkstationClusterHttp } from "./Workstations/GetWorkstationClusterHttp.ts";
 import { GetWorkstationConfigHttp } from "./Workstations/GetWorkstationConfigHttp.ts";
@@ -2611,6 +2607,7 @@ const gcpLive = fromCredentials().pipe(
 );
 
 const makeProviders = () =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erased on purpose, see comment at the cast below
   Layer.effect(
     Providers,
     Effect.gen(function* () {
@@ -3192,7 +3189,6 @@ const makeProviders = () =>
           MattersHold,
           MattersSavedQuery,
           WorkspaceeventsSubscription,
-          TasksPushNotificationConfig,
           JobsTenant,
           TenantsCompany,
           TenantsJob,
@@ -4235,11 +4231,7 @@ const makeProviders = () =>
             CustomersConfigurationProvider(),
             CustomersConnectorConfigProvider(),
           ),
-          Layer.mergeAll(
-            WorkspaceeventsSubscriptionProvider(),
-            TasksPushNotificationConfigProvider(),
-            SupportEventSubscriptionProvider(),
-          ),
+          Layer.mergeAll(WorkspaceeventsSubscriptionProvider(), SupportEventSubscriptionProvider()),
           Layer.mergeAll(
             JobsTenantProvider(),
             TenantsCompanyProvider(),

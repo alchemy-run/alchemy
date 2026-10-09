@@ -64,7 +64,9 @@ export type InstanceProps = {
   region?: string;
   /**
    * Database engine and major version (`MYSQL_8_0`, `POSTGRES_15`, …).
-   * Immutable — changing it replaces the instance.
+   * Changing the version within the same engine (`POSTGRES_16` →
+   * `POSTGRES_17`) runs an in-place major version upgrade. Changing the
+   * engine (`MYSQL_8_0` → `POSTGRES_17`) replaces the instance.
    * @default "MYSQL_8_0"
    */
   databaseVersion?: sqladmin.DatabaseInstanceDatabaseVersionEnum | (string & {});
@@ -120,8 +122,9 @@ export type InstanceProps = {
    */
   backupEnabled?: boolean;
   /**
-   * Protect against accidental instance deletion. Disabled automatically
-   * on destroy.
+   * Protect against accidental instance deletion. While enabled, destroy
+   * and replacement fail with `InstanceDeletionProtected`; set it to
+   * `false` and deploy before removing the instance.
    * @default false
    */
   deletionProtectionEnabled?: boolean;
@@ -195,8 +198,9 @@ export type Instance = Resource<
 /**
  * A Cloud SQL database instance.
  *
- * Changing `instanceName`, `region`, or `databaseVersion` replaces the
- * instance. Provisioning typically takes several minutes (often 5–15).
+ * Changing `instanceName`, `region`, or the `databaseVersion` engine
+ * replaces the instance; a major version upgrade within the same engine
+ * runs in place. Provisioning typically takes several minutes (often 5–15).
  *
  * ### Creating an Instance
  * **Example:** Generated name, MySQL 8.0 shared-core
@@ -251,6 +255,12 @@ export class InstanceStillExists extends Data.TaggedError("GCP.SQL.InstanceStill
   instanceName: string;
 }> {}
 
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.SQL.InstanceDeletionProtected",
+)<{
+  instanceName: string;
+}> {}
+
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   const trimmed = value.replace(/\/+$/, "");
@@ -263,6 +273,8 @@ const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
 
 const normalizeVersion = (version: string | undefined) =>
   (version ?? DEFAULT_DATABASE_VERSION).toUpperCase();
+
+const engineOf = (version: string) => version.split("_")[0];
 
 const normalizeTier = (tier: string | undefined) => tier ?? DEFAULT_TIER;
 
@@ -519,6 +531,20 @@ export const InstanceProvider = () =>
       if (!nameChanged && !regionChanged && !versionChanged) {
         return undefined;
       }
+      if (!nameChanged && !regionChanged && engineOf(previousVersion) === engineOf(nextVersion)) {
+        // Same-engine major version upgrades run in place via instances.patch.
+        return {
+          action: "update" as const,
+          stables: [
+            "instanceName",
+            "project",
+            "region",
+            "connectionName",
+            "selfLink",
+            "createTime",
+          ],
+        };
+      }
       return {
         action: "replace" as const,
         deleteFirst: !nameChanged,
@@ -591,6 +617,16 @@ export const InstanceProvider = () =>
 
       const state = current.state ?? "";
       if (state !== "RUNNABLE" && state !== "SUSPENDED") {
+        current = yield* waitUntilRunnable(env.project, instanceName);
+      }
+
+      if (normalizeVersion(current.databaseVersion) !== version) {
+        const upgraded = yield* applyPatch(env.project, instanceName, {
+          databaseVersion: version,
+        });
+        // A major version upgrade outlasts the default budget even on
+        // db-f1-micro (33–54 minutes observed for POSTGRES_16 → POSTGRES_17).
+        yield* waitForSqlOperation(env.project, upgraded, { budget: "2 hours" });
         current = yield* waitUntilRunnable(env.project, instanceName);
       }
 
@@ -701,13 +737,16 @@ export const InstanceProvider = () =>
       return toAttrs(current, env.project, env.region);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const env = yield* GcpEnvironment.current;
       const instanceName = output.instanceName;
       const existing = yield* getByName(env.project, instanceName);
       if (existing === undefined) return;
 
       if (existing.settings?.deletionProtectionEnabled === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({ instanceName });
+        }
         const patched = yield* applyPatch(env.project, instanceName, {
           settings: {
             settingsVersion: existing.settings.settingsVersion,

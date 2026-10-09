@@ -107,7 +107,7 @@ export const EnvironmentVariable = Schema.Struct({
    * precedence order after {@link name} (e.g. `AWS_DEFAULT_REGION` for
    * `AWS_REGION`).
    */
-  alternatives: Schema.optional(Schema.Array(Schema.String)),
+  alternatives: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 export type EnvironmentVariable = typeof EnvironmentVariable.Type;
@@ -352,7 +352,9 @@ export const AuthProvider =
       const environment =
         service.environment === undefined
           ? []
-          : Schema.decodeUnknownSync(EnvironmentVariables)(service.environment);
+          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+              Effect.orDie,
+            );
       if (service.readEnvironment !== undefined && environment.length === 0) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements readEnvironment but does not ` +
@@ -429,20 +431,17 @@ export const AuthProvider =
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
-          Effect.gen(function* () {
-            return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AuthError({
-                    message:
-                      `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                      `for this version of alchemy. ` +
-                      `${reconfigureHint(name, profileName)}`,
-                    cause,
-                  }),
-              ),
-            );
-          }),
+          Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
+            Effect.mapError((cause) =>
+              AuthError.make({
+                message:
+                  `Stored ${name} configuration in profile '${profileName}' is not valid ` +
+                  `for this version of alchemy. ` +
+                  `${reconfigureHint(name, profileName)}`,
+                cause,
+              }),
+            ),
+          ),
       };
 
       providers[name] = provider;
@@ -478,7 +477,7 @@ export const getAuthProvider = <
   AuthProviders.use((registry) =>
     registry[name] == null
       ? Effect.fail(
-          new AuthError({
+          AuthError.make({
             message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
           }),
         )

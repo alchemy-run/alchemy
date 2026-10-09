@@ -19,6 +19,7 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
+import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -371,13 +372,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [
-      {
-        className,
-        dev: application.dev,
-        hash: application.hash.pipe(Output.map((h) => h?.image)),
-      },
-    ],
+    containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
@@ -606,6 +601,15 @@ const toBinding = (
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
     // Tested BEFORE `isWorker` — the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
+    if (binding.worker === undefined) {
+      // One of this Worker's own named entrypoints: lowered like `Self`.
+      return {
+        type: "self_service",
+        name: bindingName,
+        entrypoint: binding.entrypoint,
+        props: binding.props,
+      };
+    }
     return {
       type: "service",
       name: bindingName,

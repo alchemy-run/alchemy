@@ -135,7 +135,7 @@ const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
 const readProtectionTags = (protectionArn: string) =>
   shield.listTagsForResource({ ResourceARN: protectionArn }).pipe(
     Effect.map((r) => toTagRecord(r.Tags)),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 /**

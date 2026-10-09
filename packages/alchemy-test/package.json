@@ -27,7 +27,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",

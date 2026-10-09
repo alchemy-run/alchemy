@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * Shared rows for the Plan tree. Review and apply modes both render

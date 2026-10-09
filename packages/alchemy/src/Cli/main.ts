@@ -118,7 +118,7 @@ const NoInput = GlobalFlag.Setting("no-input")({
 });
 
 const root = Command.make("alchemy", {}, () =>
-  Effect.fail(new CliError.ShowHelp({ commandPath: ["alchemy"], errors: [] })),
+  Effect.fail(CliError.ShowHelp.make({ commandPath: ["alchemy"], errors: [] })),
 ).pipe(
   Command.withDescription(
     "Define, deploy, and operate cloud infrastructure with type-safe Effect programs.",

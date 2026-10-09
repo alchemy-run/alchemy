@@ -241,10 +241,12 @@ export const UserSchemaProvider = () =>
             ),
             // Zones without the API Shield entitlement reject the listing
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag("Forbidden", () => Effect.succeed([] as UserSchemaAttributes[])),
-            // A zone purged (deleted) out-of-band mid-enumeration — it was in
-            // the zone list but no longer exists; drop it.
-            Effect.catchTag("ZonePurged", () => Effect.succeed([] as UserSchemaAttributes[])),
+            Effect.catchTags({
+              Forbidden: () => Effect.succeed([] as UserSchemaAttributes[]),
+              // A zone purged (deleted) out-of-band mid-enumeration — it was in
+              // the zone list but no longer exists; drop it.
+              ZonePurged: () => Effect.succeed([] as UserSchemaAttributes[]),
+            }),
           ),
         { concurrency: 10 },
       );

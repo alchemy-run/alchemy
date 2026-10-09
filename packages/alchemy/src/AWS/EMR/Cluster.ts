@@ -588,7 +588,7 @@ export const ClusterProvider = () =>
           // Auto-termination policy: observe, then put/remove the delta.
           const observedPolicy = yield* emr.getAutoTerminationPolicy({ ClusterId: clusterId }).pipe(
             Effect.map((r) => r.AutoTerminationPolicy),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           if (props.autoTerminationPolicy !== undefined) {
             const desiredIdleTimeout = toWireSeconds(props.autoTerminationPolicy.idleTimeout);

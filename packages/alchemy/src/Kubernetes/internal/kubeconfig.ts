@@ -78,11 +78,9 @@ const expandHome = Effect.fn(function* (input: string) {
   if (!input.startsWith("~")) return input;
   const home = yield* Effect.sync(() => process.env.HOME ?? process.env.USERPROFILE);
   if (!home) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Cannot expand '${input}': no HOME environment variable`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Cannot expand '${input}': no HOME environment variable`,
+    });
   }
   const path = yield* Path.Path;
   return path.join(home, input.slice(1));
@@ -128,29 +126,23 @@ export const resolveKubeContext = Effect.fn(function* (options: {
 
   const contextName = options.context ?? parsed["current-context"];
   if (!contextName) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Kubeconfig '${configPath}' has no current-context — pass an explicit context`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Kubeconfig '${configPath}' has no current-context — pass an explicit context`,
+    });
   }
 
   const context = parsed.contexts?.find((entry) => entry.name === contextName)?.context;
   if (!context?.cluster) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Context '${contextName}' not found in kubeconfig '${configPath}'`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Context '${contextName}' not found in kubeconfig '${configPath}'`,
+    });
   }
 
   const cluster = parsed.clusters?.find((entry) => entry.name === context.cluster)?.cluster;
   if (!cluster?.server) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Cluster '${context.cluster}' (context '${contextName}') has no server in kubeconfig '${configPath}'`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Cluster '${context.cluster}' (context '${contextName}') has no server in kubeconfig '${configPath}'`,
+    });
   }
 
   const user = parsed.users?.find((entry) => entry.name === context.user)?.user ?? {};
@@ -245,13 +237,11 @@ export const runExecCredential = Effect.fn(function* (options: {
   );
 
   if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new ExecCredentialError({
-        message:
-          `Exec credential plugin '${options.command} ${(options.args ?? []).join(" ")}' ` +
-          `exited with code ${String(result.exitCode)}: ${result.stderr.trim()}`,
-      }),
-    );
+    return yield* new ExecCredentialError({
+      message:
+        `Exec credential plugin '${options.command} ${(options.args ?? []).join(" ")}' ` +
+        `exited with code ${String(result.exitCode)}: ${result.stderr.trim()}`,
+    });
   }
 
   const status = yield* Effect.try({
@@ -264,11 +254,9 @@ export const runExecCredential = Effect.fn(function* (options: {
   });
 
   if (!status || (!status.token && !(status.clientCertificateData && status.clientKeyData))) {
-    return yield* Effect.fail(
-      new ExecCredentialError({
-        message: `Exec credential plugin '${options.command}' returned no token or client certificate`,
-      }),
-    );
+    return yield* new ExecCredentialError({
+      message: `Exec credential plugin '${options.command}' returned no token or client certificate`,
+    });
   }
 
   const credentials: MintedCredentials = {
@@ -368,11 +356,9 @@ export const mintUserCredentials = Effect.fn(function* (user: KubeConfigUser) {
     } satisfies MintedCredentials;
   }
 
-  return yield* Effect.fail(
-    new KubeConfigError({
-      message:
-        "Kubeconfig user has no supported auth stanza (token, tokenFile, " +
-        "client certificate, or exec credential plugin)",
-    }),
-  );
+  return yield* new KubeConfigError({
+    message:
+      "Kubeconfig user has no supported auth stanza (token, tokenFile, " +
+      "client certificate, or exec credential plugin)",
+  });
 });

@@ -155,20 +155,16 @@ const waitForControlOperation = (operationIdentifier: string) =>
         return;
       }
       if (controlOperation.status === "FAILED") {
-        return yield* Effect.fail(
-          new ControlOperationFailed({
-            operationIdentifier,
-            status: controlOperation.status,
-            statusMessage: controlOperation.statusMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new ControlOperationPending({
+        return yield* new ControlOperationFailed({
           operationIdentifier,
           status: controlOperation.status,
-        }),
-      );
+          statusMessage: controlOperation.statusMessage,
+        });
+      }
+      return yield* new ControlOperationPending({
+        operationIdentifier,
+        status: controlOperation.status,
+      });
     }),
   );
 
@@ -257,12 +253,10 @@ export const EnabledControlProvider = () =>
               enabled.arn ??
               (yield* findEnabledControlArn(news.controlIdentifier, news.targetIdentifier));
             if (arn === undefined) {
-              return yield* Effect.fail(
-                new EnabledControlArnUnavailable({
-                  controlIdentifier: news.controlIdentifier,
-                  targetIdentifier: news.targetIdentifier,
-                }),
-              );
+              return yield* new EnabledControlArnUnavailable({
+                controlIdentifier: news.controlIdentifier,
+                targetIdentifier: news.targetIdentifier,
+              });
             }
             details = yield* readEnabledControl(arn);
           } else if (news.parameters !== undefined) {

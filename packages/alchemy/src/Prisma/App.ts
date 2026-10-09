@@ -155,12 +155,10 @@ const listApps = (filter: { projectId?: string; logicalId?: string; branchId?: s
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -316,39 +314,32 @@ const ProviderLive = () =>
         read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let provenOwned = false;
+          const findAppInProject = Effect.gen(function* () {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            if (!projectId) return undefined;
+            const byLogicalId = yield* findAppByLogicalId(projectId, olds.logicalId ?? fqn, olds);
+            if (byLogicalId) {
+              // A logical ID alone does not prove ownership: another
+              // declaration, stage, or stack on the branch can hold it.
+              // The generated display name embeds this instance's ID,
+              // so a match on it is this resource's interrupted create.
+              provenOwned =
+                olds.displayName === undefined &&
+                byLogicalId.name === (yield* createDisplayName(id, undefined));
+              return byLogicalId;
+            }
+            // An explicit logical ID is the only identity. A derived one
+            // falls back to the display name for Apps created before
+            // logical IDs existed.
+            if (olds.logicalId !== undefined) return undefined;
+            return yield* findApp(projectId, yield* createDisplayName(id, olds.displayName), olds);
+          });
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                if (!projectId) return undefined;
-                const byLogicalId = yield* findAppByLogicalId(
-                  projectId,
-                  olds.logicalId ?? fqn,
-                  olds,
-                );
-                if (byLogicalId) {
-                  // A logical ID alone does not prove ownership: another
-                  // declaration, stage, or stack on the branch can hold it.
-                  // The generated display name embeds this instance's ID,
-                  // so a match on it is this resource's interrupted create.
-                  provenOwned =
-                    olds.displayName === undefined &&
-                    byLogicalId.name === (yield* createDisplayName(id, undefined));
-                  return byLogicalId;
-                }
-                // An explicit logical ID is the only identity. A derived one
-                // falls back to the display name for Apps created before
-                // logical IDs existed.
-                if (olds.logicalId !== undefined) return undefined;
-                return yield* findApp(
-                  projectId,
-                  yield* createDisplayName(id, olds.displayName),
-                  olds,
-                );
-              });
+            : yield* findAppInProject;
           if (!app) return undefined;
           const attrs = attrsFrom(app);
           return appId || provenOwned ? attrs : Unowned(attrs);

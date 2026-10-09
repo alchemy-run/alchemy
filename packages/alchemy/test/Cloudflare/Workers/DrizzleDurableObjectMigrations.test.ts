@@ -5,7 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import DrizzleDurableObjectWorker from "./fixtures/drizzle-do/worker.ts";
 
 for (const dev of [true, false]) {
@@ -35,7 +35,31 @@ for (const dev of [true, false]) {
       }),
     );
 
-    const stack = beforeAll(deploy(Stack));
+    const stack = beforeAll(
+      Effect.gen(function* () {
+        const deployed = yield* deploy(Stack);
+        // A fresh deploy rolls each Durable Object namespace out host by
+        // host: for several seconds, the first call to a new object can fail
+        // with an opaque "internal error" before the object starts. Each
+        // probe addresses new objects of both classes, so wait until new
+        // objects start reliably.
+        yield* waitUntilStable(
+          `Drizzle Durable Object namespaces at ${deployed.url}`,
+          Effect.gen(function* () {
+            const name = yield* Effect.sync(() => crypto.randomUUID());
+            const response = yield* requestWorker(
+              HttpClientRequest.get(
+                `${deployed.url}/sqlite-clock?direct=true&do=readiness-${name}`,
+              ),
+            );
+            return response.status === 200;
+          }).pipe(Effect.catchTag("WorkerNotPropagated", () => Effect.succeed(false))),
+          { consecutive: 5, timeout: "90 seconds" },
+        );
+        return deployed;
+      }),
+      { timeout: 120_000 },
+    );
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
     const readinessSchedule = Schedule.min([

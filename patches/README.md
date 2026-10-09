@@ -20,3 +20,13 @@ OG routes hash the rendered React markup (including inline styles and the yantra
 SVG), font metadata and bytes, and render options. Their keys do not depend on a
 fixed slug or a document body digest. Astro additionally tracks the route's
 bundled dependencies and invalidates its cache when the lockfile changes.
+
+## `typescript` dev build (`typescript-api`)
+
+`typescript-api` aliases a TypeScript dev build for its compiler API (Effect
+patching, docs and lint tooling). The patch removes its `tsc` bin, which would
+otherwise shadow the `typescript` catalog compiler in projects that depend on
+both. Mixing compiler versions makes every `tsc -b` treat the other version's
+output as out of date and rebuild it. It also drops the `getExePath` check that
+requires that bin, since the compiler API uses it to find the native executable.
+Rebase the patch when bumping `typescript-api`.

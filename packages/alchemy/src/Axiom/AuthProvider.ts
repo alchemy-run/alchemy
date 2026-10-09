@@ -41,7 +41,7 @@ const readEnvironment = Effect.gen(function* () {
   const apiToken =
     (yield* getEnvRedacted("AXIOM_TOKEN")) ?? (yield* getEnvRedacted("AXIOM_API_KEY"));
   if (!apiToken) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: "Axiom CI credentials not found. Set AXIOM_TOKEN or AXIOM_API_KEY.",
     });
   }

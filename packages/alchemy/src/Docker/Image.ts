@@ -10,7 +10,7 @@ import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
-  parseRepoDigest,
+  publishedRepoDigest,
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
@@ -269,9 +269,9 @@ export const ImageProvider = () =>
           if (news.registry && !news.skipPush) {
             yield* session.note(`Pushing image to registry "${news.registry.server}"`);
             targetImageRef = withRegistryHost(ref, news.registry);
-            repoDigest = yield* docker.image
-              .push(ref, news.registry, undefined, context)
-              .pipe(Effect.map((result) => parseRepoDigest(ref, result.stdout)));
+            const pushed = yield* docker.image.push(ref, news.registry, undefined, context);
+            const published = yield* docker.image.inspect(ref, context);
+            repoDigest = publishedRepoDigest(ref, pushed, published.RepoDigests, targetImageRef);
           }
 
           return {

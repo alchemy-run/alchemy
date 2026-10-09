@@ -113,51 +113,50 @@ export function plan<Module = unknown>(
 export function plan<Module = unknown, Input extends FilteredPlanInput = PlanInput>(
   input: Input,
 ): PlanResult<SelectionOutput<StackModuleOutput<Module>, Input>>;
-export function plan<Module = unknown>(input: FilteredPlanInput) {
-  return planStack<Module>(input);
+export function plan(input: FilteredPlanInput) {
+  return planStack(input);
 }
 
-const planStack = <Module = unknown>(input: FilteredPlanInput) =>
-  Effect.gen(function* () {
-    type Output = StackModuleOutput<Module> | undefined;
-    if (
-      input.operation === "destroy" &&
-      (input.include !== undefined || input.exclude !== undefined)
-    ) {
-      return yield* Effect.die(
-        new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
-      );
-    }
-    const report = withSpanEvents(yield* Progress);
+const planStack = Effect.fn("Alchemist.stack.plan")(function* (input: FilteredPlanInput) {
+  type Output = StackModuleOutput<unknown> | undefined;
+  if (
+    input.operation === "destroy" &&
+    (input.include !== undefined || input.exclude !== undefined)
+  ) {
+    return yield* Effect.die(
+      new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
+    );
+  }
+  const report = withSpanEvents(yield* Progress);
 
-    // Everything below emits into the same flat ProgressEvent channel:
-    // `open` reports importing-module / resolving-services at the real work
-    // boundaries, the engine reports loading-state / computing-plan and the
-    // per-node diff events. Re-providing the wrapped reporter is all the
-    // route does — no translation layer.
-    const session = yield* open(input.target, input).pipe(Effect.provideService(Progress, report));
-    const native = (yield* (
-      input.operation === "destroy"
-        ? Plan.destroy(session.stack)
-        : Plan.make(session.stack, {
-            force: input.force,
-            include: input.include,
-            exclude: input.exclude,
-          })
-    ).pipe(
-      Effect.provideService(Progress, report),
-      Effect.provide(session.context),
-    )) as Plan.Plan<Output>;
-    yield* report({ _tag: "plan.phase", phase: "plan-ready" });
-    return {
-      stack: { name: session.stack.name, stage: session.stack.stage },
-      summary: summarize(native),
-      ...Plan.describePlan(native),
-      native,
-      createdAt: new Date(yield* Clock.currentTimeMillis),
-      session,
-    } satisfies PlanSnapshot<Output>;
-  }).pipe(Effect.withSpan("Alchemist.stack.plan"));
+  // Everything below emits into the same flat ProgressEvent channel:
+  // `open` reports importing-module / resolving-services at the real work
+  // boundaries, the engine reports loading-state / computing-plan and the
+  // per-node diff events. Re-providing the wrapped reporter is all the
+  // route does — no translation layer.
+  const session = yield* open(input.target, input).pipe(Effect.provideService(Progress, report));
+  const native = (yield* (
+    input.operation === "destroy"
+      ? Plan.destroy(session.stack)
+      : Plan.make(session.stack, {
+          force: input.force,
+          include: input.include,
+          exclude: input.exclude,
+        })
+  ).pipe(
+    Effect.provideService(Progress, report),
+    Effect.provide(session.context),
+  )) as Plan.Plan<Output>;
+  yield* report({ _tag: "plan.phase", phase: "plan-ready" });
+  return {
+    stack: { name: session.stack.name, stage: session.stack.stage },
+    summary: summarize(native),
+    ...Plan.describePlan(native),
+    native,
+    createdAt: new Date(yield* Clock.currentTimeMillis),
+    session,
+  } satisfies PlanSnapshot<Output>;
+});
 
 /**
  * Apply a computed plan. Engine apply events are reported through

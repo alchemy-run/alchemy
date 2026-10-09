@@ -620,7 +620,7 @@ export const SecurityGroupRuleProvider = () =>
             }),
           );
           if (!matches(final)) {
-            return yield* Effect.fail(new SecurityGroupRuleNotConverged({ ruleId }));
+            return yield* new SecurityGroupRuleNotConverged({ ruleId });
           }
           return toAttrs(final);
         }),

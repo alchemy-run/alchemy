@@ -12,6 +12,7 @@ import {
   updateDatabase,
   createDatabase,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
@@ -316,12 +317,10 @@ const listProjectDatabases = (projectId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -340,12 +339,10 @@ const listAllDatabases = (
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -394,7 +391,9 @@ const logicalIdTaken = (
     { cause },
   );
 
-class GeneratedDatabaseNotVisible extends Error {}
+class GeneratedDatabaseNotVisible extends Data.TaggedError("GeneratedDatabaseNotVisible")<{
+  readonly message: string;
+}> {}
 
 const generatedDatabaseRecoverySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -407,9 +406,9 @@ const recoverGeneratedDatabaseAfterConflict = (projectId: string, name: string) 
       database
         ? Effect.succeed(database)
         : Effect.fail(
-            new GeneratedDatabaseNotVisible(
-              `Generated Prisma database '${name}' already exists but is not visible yet.`,
-            ),
+            new GeneratedDatabaseNotVisible({
+              message: `Generated Prisma database '${name}' already exists but is not visible yet.`,
+            }),
           ),
     ),
     Effect.retry({

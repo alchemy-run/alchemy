@@ -3,7 +3,8 @@ title: Hyperdrive
 description: Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pgDeps = `pg`;
 export const pgDevDeps = `@types/pg`;
@@ -405,60 +406,21 @@ the binding. Pick the one that matches your engine:
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (Postgres)">
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (MySQL)">
 
 [`mysql2`](https://github.com/sidorares/node-mysql2):
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={mysqlDeps} />
 
   </TabItem>
 </Tabs>

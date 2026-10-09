@@ -169,7 +169,7 @@ export const ClusterProvider = () =>
       const readClusterTags = Effect.fn(function* (clusterId: string) {
         const response = yield* cloudhsm
           .listTags({ ResourceId: clusterId })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.TagList);
       });
 

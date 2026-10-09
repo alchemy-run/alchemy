@@ -67,6 +67,8 @@ export interface DurableObjectLike<Shape = any> {
 
 export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape> {
   Type: TypeId;
+  /** The namespace's logical id. */
+  LogicalId: string;
   name: string;
   namespaceId: Output.Output<string>;
   getByName: (
@@ -218,9 +220,10 @@ export interface DurableObjectProps {
   scriptName?: Input<string> | undefined;
   /**
    * The Worker(s) that previously hosted this Durable Object class. When one
-   * of them still holds the namespace, the deploy performs Cloudflare's
-   * data-preserving `transferred_classes` migration, moving the namespace —
-   * including all stored objects — from that script to this Worker.
+   * of them still holds the namespace, the deploy transfers it — including
+   * all stored objects — from that script to this Worker: this Worker
+   * declares the class `expecting-transfer` in its `exports`, and the former
+   * host commits the move with a `transferred` tombstone.
    *
    * Each entry names a former host — see
    * {@link DurableObjectTransferSource} for the accepted forms: a string
@@ -1055,10 +1058,10 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * "transfer the data" and "delete it, start fresh", so Alchemy never
  * guesses (removing a DO deletes it; that is the default). Declare
  * `transferredFrom` on the Durable Object at its **new host**, naming the
- * former host, and the new host's deploy ships Cloudflare's
- * data-preserving `transferred_classes` migration. The former host's
- * deploy converges on its own — no delete migration is emitted for a
- * class that moved away.
+ * former host, and the new host's deploy moves the namespace with its
+ * data (Cloudflare's `expecting-transfer` / `transferred` exports
+ * entries). The former host's deploy converges on its own — nothing is
+ * deleted for a class that moved away.
  *
  * Each `transferredFrom` entry is either the former host's Worker
  * **logical id** (same stack + stage, resolved via alchemy's ownership
@@ -1248,8 +1251,16 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }),
         );
 
+        // `undefined` at plan time; every method is only called at runtime.
         // A function because `jurisdiction` wraps the sub-namespace it returns.
-        const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): any => ({
+        // The return annotation checks the value against the interface, so a
+        // method missing here is a compile error.
+        const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
+          // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
+          // a Worker's `env` bind as the `durable_object_namespace` it is.
+          kind: TypeId,
+          scriptName,
+          transferredFrom,
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
@@ -1258,13 +1269,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
             makeRpcStub(ns!.getByName(name, options), { errors }),
-          // newUniqueId: () => use((ns) => ns.newUniqueId()),
-          // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-          // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-          // get: (
-          //   id: cf.DurableObjectId,
-          //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-          // ) => use((ns) => makeRpcStub(ns.get(id, options))),
+          newUniqueId: () => ns!.newUniqueId(),
+          idFromName: (name: string) => ns!.idFromName(name),
+          idFromString: (id: string) => ns!.idFromString(id),
+          get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
+            makeRpcStub(ns!.get(id, options), { errors }),
           jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
             makeNamespace(ns?.jurisdiction(jurisdiction)),
         });
@@ -1290,7 +1299,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // resolves the tag to a concrete namespace value.
       const self = yield* binding(undefined, classProps?.transferredFrom, classProps?.errors);
       const phase = yield* ALCHEMY_PHASE;
-      const constructor = impl.pipe(Effect.provide(Layer.succeed(DurableObjectScope, self as any)));
+      const constructor = impl.pipe(Effect.provideService(DurableObjectScope, self as any));
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState
         // to trigger discovery of bindings
@@ -1302,6 +1311,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               fromDurableObjectState({ storage: {} } as any),
             ),
           ),
+          Effect.asVoid,
         );
       }
       yield* (yield* Worker).export(namespace, {

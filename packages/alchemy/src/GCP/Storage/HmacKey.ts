@@ -175,8 +175,10 @@ const deactivateThenDelete = (projectId: string, accessId: string) =>
           },
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFound: () => Effect.succeed(undefined),
+            Conflict: () => Effect.succeed(undefined),
+          }),
         );
     }
     yield* storage

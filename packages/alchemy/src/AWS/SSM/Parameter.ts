@@ -269,9 +269,7 @@ export const ParameterProvider = () =>
                   const type = (m.Type ?? "String") as ParameterType;
                   const keyArn =
                     type === "SecureString"
-                      ? yield* resolveKeyArn(m.KeyId).pipe(
-                          Effect.catch(() => Effect.succeed(undefined)),
-                        )
+                      ? yield* resolveKeyArn(m.KeyId).pipe(Effect.orElseSucceed(() => undefined))
                       : undefined;
                   return {
                     parameterName: m.Name,
@@ -294,14 +292,10 @@ export const ParameterProvider = () =>
           );
           if (!found) return undefined;
           const type = (found.Type ?? "String") as ParameterType;
-          const meta = yield* describeByName(name).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          const meta = yield* describeByName(name).pipe(Effect.orElseSucceed(() => undefined));
           const keyArn =
             type === "SecureString"
-              ? yield* resolveKeyArn(meta?.KeyId).pipe(
-                  Effect.catch(() => Effect.succeed(undefined)),
-                )
+              ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
               : undefined;
           const attrs = {
             parameterName: name,
@@ -311,7 +305,7 @@ export const ParameterProvider = () =>
             keyArn,
           };
           const tags = yield* fetchObservedTags(name).pipe(
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
           );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
@@ -395,9 +389,7 @@ export const ParameterProvider = () =>
             //    (tier, description, allowedPattern, KMS key id); it is
             //    eventually consistent so an absent record just means "can't
             //    prove a no-op" and we overwrite.
-            const meta = yield* describeByName(name).pipe(
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
+            const meta = yield* describeByName(name).pipe(Effect.orElseSucceed(() => undefined));
             const drift =
               toPlainValue(observed.Value) !== desiredValue ||
               (observed.Type ?? "String") !== desiredType ||

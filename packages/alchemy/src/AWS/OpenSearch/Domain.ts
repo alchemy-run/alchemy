@@ -630,7 +630,7 @@ export const DomainProvider = () =>
           // (bounded, tolerant) for it to settle first. Already deleting
           // (or gone) is success.
           yield* repeatUntilDomainState(readDomain(name), isDomainDeletable).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           yield* opensearch
             .deleteDomain({ DomainName: name })

@@ -946,36 +946,34 @@ const toServiceAttributes = (
   service: ServiceInspect,
   context?: string,
   code?: { hash: string },
-): Service["Attributes"] => {
-  return {
-    id: service.ID,
-    name: service.Spec.Name,
-    context,
-    image: service.Spec.TaskTemplate?.ContainerSpec?.Image ?? "",
-    replicas: service.Spec.Mode?.Replicated?.Replicas ?? 1,
-    networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
-      n.Target ? [n.Target] : [],
-    ),
-    ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
-      if (port.PublishedPort === undefined || port.TargetPort === undefined) {
-        return [];
-      }
-      return [
-        {
-          external: port.PublishedPort,
-          internal: port.TargetPort,
-          protocol: port.Protocol ?? "tcp",
-          mode: port.PublishMode ?? "ingress",
-        },
-      ];
-    }),
-    labels: service.Spec.Labels ?? {},
-    endpointMode: service.Spec.EndpointSpec?.Mode ?? "vip",
-    createdAt: Date.parse(service.CreatedAt ?? "") || Date.now(),
-    updatedAt: Date.parse(service.UpdatedAt ?? "") || Date.now(),
-    code,
-  };
-};
+): Service["Attributes"] => ({
+  id: service.ID,
+  name: service.Spec.Name,
+  context,
+  image: service.Spec.TaskTemplate?.ContainerSpec?.Image ?? "",
+  replicas: service.Spec.Mode?.Replicated?.Replicas ?? 1,
+  networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
+    n.Target ? [n.Target] : [],
+  ),
+  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+    if (port.PublishedPort === undefined || port.TargetPort === undefined) {
+      return [];
+    }
+    return [
+      {
+        external: port.PublishedPort,
+        internal: port.TargetPort,
+        protocol: port.Protocol ?? "tcp",
+        mode: port.PublishMode ?? "ingress",
+      },
+    ];
+  }),
+  labels: service.Spec.Labels ?? {},
+  endpointMode: service.Spec.EndpointSpec?.Mode ?? "vip",
+  createdAt: Date.parse(service.CreatedAt ?? "") || Date.now(),
+  updatedAt: Date.parse(service.UpdatedAt ?? "") || Date.now(),
+  code,
+});
 
 const ensureReplicatedMode = (service: ServiceInspect): void => {
   if (service.Spec.Mode?.Global !== undefined) {

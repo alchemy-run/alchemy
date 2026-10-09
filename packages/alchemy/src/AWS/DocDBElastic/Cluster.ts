@@ -228,7 +228,7 @@ export const ClusterProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* docdbelastic
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.tags);
       });
 

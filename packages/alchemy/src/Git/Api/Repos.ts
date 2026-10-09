@@ -53,7 +53,7 @@ export const GetRepo = HttpApiEndpoint.get("get", "/repos/:owner/:repo", {
 export const UpdateRepo = HttpApiEndpoint.patch("update", "/repos/:owner/:repo", {
   params: RepoPath,
   payload: Schema.Struct({
-    description: Schema.optional(Schema.NullOr(Schema.String)),
+    description: Schema.String.pipe(Schema.NullOr, Schema.optional),
     /** Must resolve to an existing branch. */
     defaultBranch: Schema.optional(Schema.String),
     readOnly: Schema.optional(Schema.Boolean),

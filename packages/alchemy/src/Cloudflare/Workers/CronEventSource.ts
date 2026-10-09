@@ -242,7 +242,7 @@ export const CronEventSourceLive = Layer.effect(
         const controller = event.input as cf.ScheduledController;
         if (controller.cron !== expression) return;
 
-        return process(controller).pipe(Effect.catchCause(() => Effect.void));
+        return process(controller).pipe(Effect.ignoreCause);
       });
     }) as CronEventSourceService;
   }),

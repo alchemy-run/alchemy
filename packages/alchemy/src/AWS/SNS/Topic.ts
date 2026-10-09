@@ -285,8 +285,10 @@ export const TopicProvider = () =>
       if (!isFifo) {
         observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
           Effect.map((r) => r.DataProtectionPolicy),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFoundException: () => Effect.succeed(undefined),
+            InvalidParameterException: () => Effect.succeed(undefined),
+          }),
         );
       }
       if (
@@ -317,8 +319,10 @@ export const TopicProvider = () =>
           TopicArn: output.topicArn,
         })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.void),
-          Effect.catchTag("InvalidParameterException", () => Effect.void),
+          Effect.catchTags({
+            NotFoundException: () => Effect.void,
+            InvalidParameterException: () => Effect.void,
+          }),
         );
     }),
   });
@@ -402,8 +406,10 @@ const readTopic = Effect.fn(function* ({
     ],
     { concurrency: "unbounded" },
   ).pipe(
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      NotFoundException: () => Effect.succeed(undefined),
+      InvalidParameterException: () => Effect.succeed(undefined),
+    }),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a

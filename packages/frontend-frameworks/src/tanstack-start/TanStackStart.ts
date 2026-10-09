@@ -289,7 +289,7 @@ export const make: (
 
       const resolved = server.resolvedUrls?.local[0];
       if (resolved === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       // Vite reports its local URL with a trailing slash; hand back an origin
       // that concatenates correctly (`${url}/about`, not `//about`).
@@ -365,8 +365,8 @@ export const readTanStackStartOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The TanStack Start build produced no server modules in ${dirs.serverDir}`),
+      return yield* fail(
+        `The TanStack Start build produced no server modules in ${dirs.serverDir}`,
       );
     }
     const entryName = selectServerEntryName(
@@ -374,11 +374,9 @@ export const readTanStackStartOutput = (
       expected,
     );
     if (entryName === undefined) {
-      return yield* Effect.fail(
-        fail(
-          `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} — ` +
-            "is the SSR environment's rollup input the project's server entry?",
-        ),
+      return yield* fail(
+        `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} — ` +
+          "is the SSR environment's rollup input the project's server entry?",
       );
     }
     return {

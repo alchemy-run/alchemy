@@ -356,12 +356,12 @@ export const FargateProfileProvider = () =>
               fargateProfileName: output.fargateProfileName,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // A concurrent profile create/delete on the cluster raises
-              // ResourceInUseException — back off and retry the delete.
-              Effect.catchTag("ResourceInUseException", () =>
-                Effect.fail(new FargateProfileBusy()),
-              ),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // A concurrent profile create/delete on the cluster raises
+                // ResourceInUseException — back off and retry the delete.
+                ResourceInUseException: () => Effect.fail(new FargateProfileBusy()),
+              }),
               Effect.retry({
                 while: (error) => error instanceof FargateProfileBusy,
                 schedule: busySchedule,

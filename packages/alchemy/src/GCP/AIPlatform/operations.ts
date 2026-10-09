@@ -37,14 +37,14 @@ export const waitForOperation = (
       budget: "30 minutes",
     }).pipe(
       Effect.as(true),
-      Effect.catchTag("GCP.OperationFailed", (error) =>
-        error.code === 6 || (options?.notFoundOk === true && error.code === 5)
-          ? Effect.succeed(false)
-          : Effect.fail(error),
-      ),
-      Effect.catchTag("NotFound", (error) =>
-        options?.notFoundOk === true ? Effect.succeed(false) : Effect.fail(error),
-      ),
+      Effect.catchTags({
+        "GCP.OperationFailed": (error) =>
+          error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+            ? Effect.succeed(false)
+            : Effect.fail(error),
+        NotFound: (error) =>
+          options?.notFoundOk === true ? Effect.succeed(false) : Effect.fail(error),
+      }),
     );
     if (!finished || operation.done === true || !operation.name) {
       return operation;

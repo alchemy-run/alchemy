@@ -198,8 +198,10 @@ export const AccountApiTokenProvider = () =>
             })
             .pipe(
               Effect.map((token) => token),
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-              Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTags({
+                InvalidRoute: () => Effect.succeed(undefined),
+                TokenNotFound: () => Effect.succeed(undefined),
+              }),
             )
         : undefined;
 
@@ -248,8 +250,10 @@ export const AccountApiTokenProvider = () =>
           // Already gone — Cloudflare may report this as either an
           // `InvalidRoute` (token-id no longer routable) or a generic
           // `TokenNotFound`. Either is fine; we just want the resource gone.
-          Effect.catchTag("InvalidRoute", () => Effect.void),
-          Effect.catchTag("TokenNotFound", () => Effect.void),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.void,
+            TokenNotFound: () => Effect.void,
+          }),
           // Cloudflare-managed tokens (e.g. "Cloudflare Resource Tagging
           // System") can never be deleted (code 1001). We don't own them, so
           // treat the refusal as a no-op rather than a failure.
@@ -282,8 +286,10 @@ export const AccountApiTokenProvider = () =>
         })
         .pipe(
           Effect.map((token) => buildAttributes(token, output.value, output.accountId)),
-          Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-          Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.succeed(undefined),
+            TokenNotFound: () => Effect.succeed(undefined),
+          }),
         );
     }),
   });

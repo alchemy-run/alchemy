@@ -278,9 +278,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catch((error) =>
-              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
-            ),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
           );
 
       const describeByName = (launchTemplateName: string) =>
@@ -290,9 +288,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catch((error) =>
-              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
-            ),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
           );
 
       const syncTemplateTags = Effect.fn(function* ({
@@ -544,11 +540,7 @@ export const LaunchTemplateProvider = () =>
             .deleteLaunchTemplate({
               LaunchTemplateId: output.launchTemplateId,
             } as any)
-            .pipe(
-              Effect.catch((error) =>
-                isLaunchTemplateNotFound(error) ? Effect.void : Effect.fail(error),
-              ),
-            );
+            .pipe(Effect.catchIf(isLaunchTemplateNotFound, () => Effect.void));
 
           yield* hosted.cleanupHostedRuntime({ output, session });
         }),

@@ -237,19 +237,17 @@ export const runViteBuildChild = (
       yield* Fiber.join(stderrFiber).pipe(Effect.ignore);
       if (exitCode !== 0) {
         const truncated = stderrLines > stderrTail.length;
-        return yield* Effect.fail(
-          new BundleError({
-            message: [
-              `Vite build child exited with code ${exitCode}.`,
-              ...(stderrTail.length === 0
-                ? []
-                : [
-                    truncated ? `stderr (last ${stderrTail.length} lines):` : "stderr:",
-                    ...stderrTail,
-                  ]),
-            ].join("\n"),
-          }),
-        );
+        return yield* BundleError.make({
+          message: [
+            `Vite build child exited with code ${exitCode}.`,
+            ...(stderrTail.length === 0
+              ? []
+              : [
+                  truncated ? `stderr (last ${stderrTail.length} lines):` : "stderr:",
+                  ...stderrTail,
+                ]),
+          ].join("\n"),
+        });
       }
       const bytes = yield* fs.readFile(outputPath).pipe(Effect.orDie);
       return NodeV8.deserialize(Buffer.from(bytes)) as ViteBuildChildResult;

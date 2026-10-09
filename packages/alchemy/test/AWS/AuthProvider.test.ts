@@ -24,6 +24,19 @@ describe("parseAwsSsoLoginOutput", { tags: ["unit", "provider:aws", "local"] }, 
     ).toEqual({ url: "https://oidc.example.com/authorize?state=abc", code: undefined });
   });
 
+  it("reads the aws login browser prompt", () => {
+    expect(
+      parseAwsSsoLoginOutput(`Attempting to open your default browser. If the browser does not open, open the following URL.
+
+https://us-east-1.signin.aws.amazon.com/v1/authorize?client_id=abc
+
+`),
+    ).toEqual({
+      url: "https://us-east-1.signin.aws.amazon.com/v1/authorize?client_id=abc",
+      code: undefined,
+    });
+  });
+
   it("reads the text AWS emits despite --output json", () => {
     expect(
       parseAwsSsoLoginOutput(`Browser will not be automatically opened.

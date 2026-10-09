@@ -95,7 +95,7 @@ const readCache = Effect.fn(
     const parsed = yield* Effect.try(() => JSON.parse(raw) as VersionCheckCache | null | undefined);
     return typeof parsed?.checkedAt === "number" ? parsed : undefined;
   },
-  Effect.catch(() => Effect.succeed(undefined)),
+  Effect.orElseSucceed(() => undefined),
 );
 
 const writeCache = Effect.fn(
@@ -105,7 +105,7 @@ const writeCache = Effect.fn(
     const cache: VersionCheckCache = { checkedAt, distTags };
     yield* fs.writeFileString(cachePath, JSON.stringify(cache));
   },
-  Effect.catch(() => Effect.void),
+  (effect) => Effect.ignore(effect),
 );
 
 const fetchDistTags = Effect.gen(function* () {
@@ -137,7 +137,7 @@ const refreshDistTags = Effect.fn(function* (cachePath: string) {
   );
   return yield* Fiber.join(fetch).pipe(
     Effect.timeout(SYNC_WAIT),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 });
 
@@ -184,7 +184,7 @@ export const checkLatestVersion = Effect.gen(function* () {
   yield* Console.warn(
     useColor ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}` : message,
   );
-}).pipe(Effect.catch(() => Effect.void));
+}).pipe(Effect.ignore);
 
 // Exported for tests.
 export const _internal = { pickDistTag, compareVersions };

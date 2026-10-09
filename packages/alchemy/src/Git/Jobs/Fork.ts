@@ -90,7 +90,7 @@ const decodeZData = (row: SnapshotObjectRow): Effect.Effect<Uint8Array, StoreErr
   const decoded = Base64.decode(row.zdata ?? "");
   return Result.isSuccess(decoded)
     ? Effect.succeed(decoded.success)
-    : Effect.fail(new StoreError({ reason: `fork: corrupt zdata for ${row.oid}` }));
+    : Effect.fail(StoreError.make({ reason: `fork: corrupt zdata for ${row.oid}` }));
 };
 
 /** Config keys that transfer from parent to fork. */
@@ -317,8 +317,8 @@ export interface ForkJobOptions {
  */
 export const runForkJob = (options: ForkJobOptions): Effect.Effect<number, StoreError> =>
   options.snapshot.pipe(
-    Stream.mapError(
-      (error) => new StoreError({ reason: `fork snapshot stream failed: ${String(error)}` }),
+    Stream.mapError((error) =>
+      StoreError.make({ reason: `fork snapshot stream failed: ${String(error)}` }),
     ),
     Stream.runFoldEffect(
       () => 0,

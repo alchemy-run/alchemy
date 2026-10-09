@@ -261,13 +261,15 @@ export const NotificationConfigurationProvider = () =>
           // Idempotent — deleting also cascades any remaining event rules.
           // Retry the transitional lock (a rule still DELETING blocks the
           // configuration delete with a ConflictException).
-          yield* retryWhileConflict(
-            pinNotificationsRegion(
-              notifications.deleteNotificationConfiguration({
-                arn: output.notificationConfigurationArn,
-              }),
-            ),
-          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* notifications
+            .deleteNotificationConfiguration({
+              arn: output.notificationConfigurationArn,
+            })
+            .pipe(
+              pinNotificationsRegion,
+              retryWhileConflict,
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
         }),
       });
     }),

@@ -505,7 +505,7 @@ const ensureFlociUnsynchronized = (
       Effect.catch((error) =>
         docker(["inspect", "--format", "{{.Id}}", containerName]).pipe(
           Effect.flatMap(({ stdout }) => (stdout.trim() ? Effect.void : Effect.fail(error))),
-          Effect.catch(() => Effect.fail(error)),
+          Effect.mapError(() => error),
         ),
       ),
     );

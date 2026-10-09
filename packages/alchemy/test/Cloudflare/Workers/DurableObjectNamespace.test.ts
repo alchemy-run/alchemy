@@ -12,6 +12,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
+import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -93,6 +94,47 @@ test(
     expect(body.eu).toMatch(/^[0-9a-f]{64}$/);
     expect(body.eu).not.toBe(body.global);
     expect(body.euAgain).toBe(body.eu);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+test(
+  "get, idFromName, idFromString and newUniqueId address the expected instance",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/addressing?name=addressing-probe`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as {
+      idFromName: string;
+      byName: string;
+      byId: string;
+      byIdString: string;
+      uniqueId: string;
+      unique: string;
+      otherUnique: string;
+    };
+
+    // `get(idFromName(name))` and the string round-trip reach the same
+    // instance as `getByName(name)`.
+    expect(body.byName).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.idFromName).toBe(body.byName);
+    expect(body.byId).toBe(body.byName);
+    expect(body.byIdString).toBe(body.byName);
+    // `newUniqueId()` addresses a fresh instance each time.
+    expect(body.unique).toBe(body.uniqueId);
+    expect(body.unique).not.toBe(body.byName);
+    expect(body.otherUnique).not.toBe(body.unique);
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
@@ -351,6 +393,47 @@ const consumerWorkerScript = `export default {
 };
 `;
 
+// Calls `get()` (RPC) or `fetch()` on a cross-script `Counter` and reports
+// the outcome as JSON, so a failing Durable Object call is observable.
+const placeholderProbeScript = `export default {
+  async fetch(request, env) {
+    const stub = env.Counter.getByName("placeholder-probe");
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === "/rpc") {
+        return Response.json({ ok: true, value: await stub.get() });
+      }
+      if (url.pathname === "/fetch") {
+        const res = await stub.fetch("https://counter/");
+        return Response.json({ ok: true, value: await res.text() });
+      }
+    } catch (error) {
+      return Response.json({ ok: false, error: String(error?.message ?? error) });
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+};
+`;
+
+interface ProbeResult {
+  ok: boolean;
+  value?: unknown;
+  error?: string;
+}
+
+// Until the freshly pre-created host script reaches the consumer's edge, a
+// cross-script call fails with "Worker not found." (fetch) or an opaque
+// "internal error; reference = ..." (RPC) — retry past that propagation.
+const probePlaceholder = (url: string) =>
+  fetchJsonReady<ProbeResult>(url).pipe(
+    Effect.flatMap((result) =>
+      result.error?.startsWith("internal error") || result.error === "Worker not found."
+        ? Effect.fail(new Error(`host not propagated yet: ${result.error}`))
+        : Effect.succeed(result),
+    ),
+    Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+  );
+
 // Every `test.provider` test below owns an isolated scratch stack (private
 // in-memory state, physical names derived from the unique test name), so
 // none of them can observe another's cloud resources. Run them concurrently:
@@ -579,6 +662,96 @@ export default { async fetch() { return new Response("v4"); } };
       { timeout: 120_000 },
     );
 
+    // A Durable Object instance created on the precreate placeholder must reset
+    // itself on any call instead of serving the empty placeholder class. Before
+    // the fix, an instance that landed on the placeholder (an edge that hadn't
+    // seen the real version yet) failed every RPC call with "The RPC receiver
+    // does not implement the method" for as long as callers kept it busy.
+    //
+    // The placeholder is held live deterministically: the host's real script
+    // throws at startup, so its reconcile upload is rejected after precreate
+    // has already uploaded the placeholder, while the consumer (a cycle peer
+    // that rendezvoused on the host's precreate stub) deploys fully and
+    // reaches the placeholder's `Counter` through a cross-script binding.
+    test.provider(
+      "durable objects on the precreate placeholder reset onto the real version",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+
+          const program = (hostScript: string) =>
+            Effect.gen(function* () {
+              const host = yield* Cloudflare.Worker("host-worker", {
+                script: hostScript,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+              const consumer = yield* Cloudflare.Worker("consumer-worker", {
+                script: placeholderProbeScript,
+                env: {
+                  Counter: Cloudflare.DurableObject("Counter", { scriptName: host.workerName }),
+                },
+              });
+              // host -> consumer closes the cycle, so the host is pre-created.
+              yield* host.bind("consumer-name", {
+                bindings: [
+                  { type: "plain_text", name: "CONSUMER_NAME", text: consumer.workerName },
+                ],
+              });
+              return { host, consumer };
+            });
+
+          const failed = yield* scratch
+            .deploy(
+              program(
+                `${hostWorkerScript}\nthrow new Error("placeholder probe: host fails at startup");\n`,
+              ),
+            )
+            .pipe(Effect.exit);
+          expect(failed._tag).toBe("Failure");
+
+          // The deploy failed, so read the consumer's URL from the scratch state.
+          const consumerUrl = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            const fqns = yield* state.list({ stack: scratch.name, stage: scratch.stage });
+            const fqn = fqns.find((fqn) => fqn.endsWith("consumer-worker"));
+            expect(fqn).toBeDefined();
+            const row = yield* state.get({ stack: scratch.name, stage: scratch.stage, fqn: fqn! });
+            const attr = row && "attr" in row ? row.attr : undefined;
+            return (attr as { url?: string } | undefined)?.url;
+          }).pipe(Effect.provide(scratch.state));
+          expect(consumerUrl).toBeDefined();
+
+          // Every call into the placeholder resets the object rather than
+          // reporting a missing method — RPC and fetch alike.
+          const rpc = yield* probePlaceholder(`${consumerUrl}/rpc`);
+          expect(rpc).toMatchObject({ ok: false });
+          expect(rpc.error).toContain("Alchemy worker is being deployed");
+          expect(rpc.error).not.toContain("does not implement the method");
+
+          const fetched = yield* probePlaceholder(`${consumerUrl}/fetch`);
+          expect(fetched).toMatchObject({ ok: false });
+          expect(fetched.error).toContain("Alchemy worker is being deployed");
+
+          // Deploy the real host. The same named object now answers the real
+          // method — the placeholder instance reset instead of pinning it.
+          const deployed = yield* scratch.deploy(program(hostWorkerScript));
+          expect(deployed.consumer.url).toBe(consumerUrl);
+
+          const value = yield* fetchJsonReady<ProbeResult>(`${consumerUrl}/rpc`).pipe(
+            Effect.flatMap((result) =>
+              result.ok
+                ? Effect.succeed(result.value)
+                : Effect.fail(new Error(`still on the placeholder: ${result.error}`)),
+            ),
+            Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+          );
+          expect(value).toBe(0);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // Adopt a Durable Object class that already exists on a worker created
     // *outside* Alchemy (raw Cloudflare API here, standing in for Wrangler or the
     // dashboard). The worker carries no `alchemy:*` ownership tags and no
@@ -655,6 +828,88 @@ export default { async fetch() { return new Response("v4"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 120_000 },
+    );
+
+    // #2072: Wrangler ≥ 4.107 deploys Durable Objects with Cloudflare's
+    // declarative `exports` map, after which Cloudflare rejects every
+    // `migrations` upload ("reverting to `migrations` is not supported").
+    // Alchemy must adopt such a Worker without touching its namespaces —
+    // including a class it never binds (reached through `ctx.exports`), which
+    // must stay declared or Cloudflare refuses the upload.
+    test.provider(
+      "adopts a worker deployed with declarative exports",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const physicalName = `alchemy-test-do-exports-${scratch.stage
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, "-")}`;
+          const script = `${hostWorkerScript}\nexport class Unbound extends DurableObject {}\n`;
+
+          yield* workers
+            .deleteScript({ accountId, scriptName: physicalName, force: true })
+            .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+
+          // Phase 1: the Wrangler-shaped deploy — declarative `exports`, no
+          // migrations, no Alchemy tags.
+          yield* workers.putScript({
+            accountId,
+            scriptName: physicalName,
+            metadata: {
+              mainModule: "main.js",
+              bindings: [
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
+              ],
+              exports: {
+                Counter: { type: "durable-object", storage: "sqlite" },
+                Unbound: { type: "durable-object", storage: "sqlite" },
+              },
+              compatibilityDate: "2026-03-17",
+            },
+            files: [new File([script], "main.js", { type: "application/javascript+module" })],
+          });
+          const namespacesOf = Effect.gen(function* () {
+            const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === physicalName),
+              Stream.runCollect,
+            );
+            return Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id]));
+          });
+          const before = yield* namespacesOf;
+          expect(Object.keys(before).sort()).toEqual(["Counter", "Unbound"]);
+
+          // Phase 2: adopt it. Only `Counter` is bound.
+          const deployAdopted = scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Worker("AdoptExports", {
+                  name: physicalName,
+                  script,
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
+                });
+              }),
+            )
+            .pipe(adopt(true));
+          const adopted = yield* deployAdopted;
+
+          // Both namespaces survived the takeover unchanged.
+          expect(adopted.durableObjectNamespaces.Counter).toBe(before.Counter);
+          expect(yield* namespacesOf).toEqual(before);
+
+          yield* fetchJsonReady<{ ok: boolean }>(`${adopted.url}/reset`);
+          const written = yield* fetchJsonReady<{ value: number }>(`${adopted.url}/increment`);
+          expect(written.value).toBe(1);
+
+          // A routine redeploy keeps the data.
+          const redeployed = yield* deployAdopted;
+          const read = yield* fetchJsonReady<{ value: number }>(`${redeployed.url}/get`);
+          expect(read.value).toBe(1);
+          expect(yield* namespacesOf).toEqual(before);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     // #799: moving a Durable Object class from one Worker to another is
@@ -1267,12 +1522,19 @@ export default { async fetch() { return new Response("v1"); } };
           const scriptName = v1.worker.workerName;
 
           // Rewrite the tags the way alchemy <= beta.62 wrote them: one
-          // `alchemy:do:` tag per binding, no packed tag.
+          // `alchemy:do:` tag per binding, no packed tag. The Worker deploys
+          // with declarative `exports`, and Cloudflare reconciles every
+          // settings patch against the `exports` it carries, so the live
+          // classes are re-declared alongside the tags.
           const deployedTags = yield* getWorkerTags(scriptName, accountId);
           yield* workers.patchScriptScriptAndVersionSetting({
             accountId,
             scriptName,
             settings: {
+              exports: {
+                CounterClass: { type: "durable-object", storage: "sqlite" },
+                MeterClass: { type: "durable-object", storage: "sqlite" },
+              },
               tags: [
                 ...deployedTags.filter((t) => !t.startsWith("alchemy:dos:")),
                 "alchemy:do:Counter:CounterClass",

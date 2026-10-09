@@ -163,10 +163,10 @@ export const ParallelDataProvider = () =>
         );
         const props = final?.ParallelDataProperties;
         if (props?.Status === "FAILED") {
-          return yield* Effect.fail(new ParallelDataFailed({ name, message: props.Message }));
+          return yield* new ParallelDataFailed({ name, message: props.Message });
         }
         if (props?.Status !== "ACTIVE") {
-          return yield* Effect.fail(new ParallelDataNotConverged({ name, status: props?.Status }));
+          return yield* new ParallelDataNotConverged({ name, status: props?.Status });
         }
         return props;
       });

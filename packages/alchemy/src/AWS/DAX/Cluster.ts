@@ -464,9 +464,7 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // InvalidClusterStateFault — wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
-          const settled = yield* waitUntilSettled(name).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          const settled = yield* waitUntilSettled(name).pipe(Effect.orElseSucceed(() => undefined));
           if (settled === undefined || settled.Status === "deleting") {
             return;
           }

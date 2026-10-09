@@ -84,9 +84,6 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
 export const PostgresLayer = <E = never, R = never>(config: PostgresConfig<E, R>) =>
   // Derive SqlClient from the single PgClient build so both tags share one
   // per-execution pool.
-  Layer.effect(
-    Sql.SqlClient,
-    Effect.gen(function* () {
-      return yield* PgClient.PgClient;
-    }),
-  ).pipe(Layer.provideMerge(Layer.effect(PgClient.PgClient, Postgres(config))));
+  Layer.effect(Sql.SqlClient, PgClient.PgClient).pipe(
+    Layer.provideMerge(Layer.effect(PgClient.PgClient, Postgres(config))),
+  );
