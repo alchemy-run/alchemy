@@ -12,3 +12,22 @@ import * as Data from "effect/Data";
 export class TigrisCredentialsMissing extends Data.TaggedError("Fly.TigrisCredentialsMissing")<{
   name: string;
 }> {}
+
+/**
+ * Tigris refused to delete some keys of the batch `DeleteObjects` requests
+ * `Fly.Website.AssetDeployment` sent while it pruned stale assets or emptied
+ * its prefix.
+ */
+export class TigrisObjectsNotDeleted extends Data.TaggedError("Fly.TigrisObjectsNotDeleted")<{
+  bucketName: string;
+  refused: { key?: string; code?: string; message?: string }[];
+}> {
+  get message() {
+    return `Tigris refused to delete ${this.refused.length} object(s) in bucket ${this.bucketName}: ${this.refused
+      .map(
+        ({ key, code, message }) =>
+          `${JSON.stringify(key ?? "")} ${code ?? "UnknownError"}${message ? `: ${message}` : ""}`,
+      )
+      .join(", ")}`;
+  }
+}
