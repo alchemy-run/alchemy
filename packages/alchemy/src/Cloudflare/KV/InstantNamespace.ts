@@ -1,7 +1,10 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -11,14 +14,6 @@ import {
   createInstantNamespaceLocalId,
   isInstantNamespaceLocalId,
 } from "./InstantNamespaceLocal.ts";
-import {
-  createTitle,
-  deleteNamespace,
-  findNamespaceByTitle,
-  getNamespace,
-  listNamespaces,
-  syncNamespaceTitle,
-} from "./NamespaceProvider.ts";
 import { NamespaceModeMismatch } from "./NamespaceTypes.ts";
 
 export const isInstantNamespace = (value: unknown): value is InstantNamespace =>
@@ -131,9 +126,22 @@ const ProviderLive = () =>
       // Observe — re-fetch the cached namespace; fall back to a title
       // scan so we recover from out-of-band deletes or partial state
       // persistence failures.
-      let observed = output?.namespaceId
-        ? yield* getNamespace(acct, output.namespaceId)
-        : undefined;
+      let observed:
+        | {
+            id: string;
+            title: string;
+            supportsUrlEncoding?: boolean | null | undefined;
+            mode?: "instant" | null;
+          }
+        | undefined;
+      if (output?.namespaceId) {
+        observed = yield* kv
+          .getNamespace({
+            accountId: acct,
+            namespaceId: output.namespaceId,
+          })
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
+      }
 
       // Ensure — create if missing. Cloudflare returns
       // `NamespaceTitleAlreadyExists` on a concurrent create; tolerate
@@ -148,7 +156,7 @@ const ProviderLive = () =>
           .pipe(
             Effect.catchTag("NamespaceTitleAlreadyExists", (error) =>
               Effect.gen(function* () {
-                const match = yield* findNamespaceByTitle(accountId, title, "instant");
+                const match = yield* findNamespaceByTitle(title);
                 if (match) {
                   return match;
                 }
@@ -162,22 +170,57 @@ const ProviderLive = () =>
         return yield* new NamespaceModeMismatch({ namespaceId: observed.id, expected: "instant" });
       }
 
+      // Sync — KV's only mutable property is the title. Rename only
+      // when the observed title drifts from desired so we avoid
+      // unnecessary API calls on every reconcile.
+      let namespaceId = observed.id;
+      let resolvedTitle = observed.title;
+      let supportsUrlEncoding = observed.supportsUrlEncoding ?? undefined;
+      if (observed.title !== title) {
+        const renamed = yield* kv.updateNamespace({
+          accountId: acct,
+          namespaceId: observed.id,
+          title,
+        });
+        namespaceId = renamed.id;
+        resolvedTitle = renamed.title;
+        supportsUrlEncoding = renamed.supportsUrlEncoding ?? undefined;
+      }
+
       return {
         mode: "instant" as const,
-        ...(yield* syncNamespaceTitle(acct, observed, title)),
+        title: resolvedTitle,
+        namespaceId,
+        supportsUrlEncoding,
+        accountId: acct,
       };
     }),
-    delete: ({ output }) => deleteNamespace(output.accountId, output.namespaceId),
+    delete: Effect.fn(function* ({ output }) {
+      yield* kv
+        .deleteNamespace({
+          accountId: output.accountId,
+          namespaceId: output.namespaceId,
+        })
+        .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.void));
+    }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const namespaces = yield* listNamespaces(accountId, "instant");
-      return namespaces.map((ns) => ({
-        mode: "instant" as const,
-        title: ns.title,
-        namespaceId: ns.id,
-        supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
-        accountId,
-      }));
+      return yield* kv.listNamespaces.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((ns) => ns.mode === "instant")
+              .map((ns) => ({
+                mode: "instant" as const,
+                title: ns.title,
+                namespaceId: ns.id,
+                supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
+                accountId,
+              })),
+          ),
+        ),
+      );
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -205,7 +248,7 @@ const ProviderLive = () =>
           );
       }
       const title = yield* createTitle(id, olds?.title);
-      const match = yield* findNamespaceByTitle(accountId, title, "instant");
+      const match = yield* findNamespaceByTitle(title);
       if (match) {
         return {
           mode: "instant" as const,
@@ -253,3 +296,21 @@ export const InstantNamespaceProvider = () =>
     local: () => ProviderLocal(),
     live: () => ProviderLive(),
   });
+
+const createTitle = (id: string, title: string | undefined) =>
+  Effect.gen(function* () {
+    return title ?? (yield* createPhysicalName({ id }));
+  });
+
+// Cloudflare's `listNamespaces` accepts no title/prefix filter, so
+// adoption-by-name has to scan every page. Use the paginated
+// `.items` stream off the un-yielded operation method (yielding
+// `kv.listNamespaces` collapses it to a single-page call).
+const findNamespaceByTitle = Effect.fn(function* (title: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* kv.listNamespaces.items({ accountId }).pipe(
+    Stream.filter((ns) => ns.title === title && ns.mode === "instant"),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
+});
