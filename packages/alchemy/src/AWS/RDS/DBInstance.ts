@@ -11,6 +11,14 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  diffMigrations,
+  MigrationError,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "../../SQL/Migrations/index.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { sha256 } from "../../Util/sha256.ts";
@@ -20,6 +28,7 @@ import {
   type PolicyDocument,
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import { runDataApiMigrations } from "./DataApiMigrations.ts";
 
 export interface DBInstanceProps {
   /**
@@ -291,6 +300,27 @@ export interface DBInstanceProps {
    * repeated destroy/create cycles never collide on snapshot names.
    */
   finalDBSnapshotIdentifier?: string;
+  /**
+   * SQL migrations to apply to the cluster's database on deploy, over the
+   * RDS Data API once this instance is available. Accepts a directory path,
+   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Aurora cluster
+   * members only: the cluster needs `enableHttpEndpoint: true`, and only one
+   * instance per cluster (the writer) should declare migrations.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy. The Data API runs one statement per
+   * call: put each statement in its own file or separate statements with
+   * `--> statement-breakpoint` (drizzle-kit's default). Deleting the
+   * instance never touches the database.
+   */
+  migrations?: MigrationsInput;
+  /**
+   * ARN of the Secrets Manager secret (JSON with `username` and `password`)
+   * the Data API authenticates with when applying `migrations`.
+   * @default the cluster's RDS-managed master user secret
+   */
+  migrationsSecretArn?: string;
 }
 
 export interface DBInstance extends Resource<
@@ -513,6 +543,12 @@ export interface DBInstance extends Resource<
      * Tags on the instance.
      */
     tags: Record<string, string>;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
   Providers
@@ -851,6 +887,28 @@ export interface DBInstance extends Resource<
  * readiness, while storage, port, and association updates wait for both their
  * requested values and an operational instance before returning.
  *
+ * ### Migrations
+ * **Example:** Apply migrations from an Aurora cluster's writer
+ * ```typescript
+ * const cluster = yield* DBCluster("Cluster", {
+ *   engine: "aurora-postgresql",
+ *   databaseName: "app",
+ *   enableHttpEndpoint: true,
+ *   manageMasterUserPassword: true,
+ *   masterUsername: "app",
+ * });
+ * const writer = yield* DBInstance("Writer", {
+ *   dbClusterIdentifier: cluster.dbClusterIdentifier,
+ *   dbInstanceClass: "db.serverless",
+ *   engine: "aurora-postgresql",
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * Migrations run over the cluster's Data API once the instance is
+ * available, so the deploying machine needs no VPC access. Declare them on
+ * one instance per cluster.
+ *
  * ### Monitoring & Logs
  * **Example:** Enhanced monitoring + log export
  * ```typescript
@@ -899,6 +957,7 @@ const toAttrs = ({
   finalDBSnapshotIdentifier,
   masterUserPasswordFingerprint,
   masterUserSecretResourcePolicy,
+  migrations,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
@@ -906,7 +965,14 @@ const toAttrs = ({
   finalDBSnapshotIdentifier?: string | undefined;
   masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
   masterUserSecretResourcePolicy?: string | undefined;
+  migrations?: Pick<
+    DBInstance["Attributes"],
+    "migrationsDir" | "migrationsTable" | "migrationsHashes"
+  >;
 }): DBInstance["Attributes"] => ({
+  migrationsDir: migrations?.migrationsDir,
+  migrationsTable: migrations?.migrationsTable,
+  migrationsHashes: migrations?.migrationsHashes ?? {},
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
   masterUserPasswordFingerprint,
@@ -1807,6 +1873,9 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
+          }
           const storage = yield* toStorageConfiguration(news);
           if (output !== undefined) {
             const instance = yield* readInstance(output.dbInstanceIdentifier);
@@ -1861,6 +1930,7 @@ export const DBInstanceProvider = () =>
             finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
             masterUserPasswordFingerprint: output?.masterUserPasswordFingerprint,
             masterUserSecretResourcePolicy: yield* readObservedSecretPolicy(instance),
+            migrations: output,
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -2236,6 +2306,24 @@ export const DBInstanceProvider = () =>
             observed,
             news.masterUserSecretResourcePolicy,
           );
+          // Sync migrations — the shared pipeline skips already-applied ones.
+          const migrationsInput = migrationsInputOf(news);
+          const migrations = migrationsInput
+            ? yield* Effect.gen(function* () {
+                if (!observed.DBClusterIdentifier) {
+                  return yield* new MigrationError({
+                    message: `DB instance '${identifier}' declares migrations but is not an Aurora cluster member; migrations run over the cluster's Data API`,
+                  });
+                }
+                return yield* runDataApiMigrations({
+                  dbClusterIdentifier: observed.DBClusterIdentifier,
+                  secretArn: news.migrationsSecretArn,
+                  input: migrationsInput,
+                  stamped: stampedOf(output),
+                });
+              })
+            : undefined;
+
           yield* session.note(dbInstanceArn || identifier);
           return toAttrs({
             instance: managedSecret.instance,
@@ -2244,6 +2332,7 @@ export const DBInstanceProvider = () =>
             finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
             masterUserPasswordFingerprint: passwordFingerprint,
             masterUserSecretResourcePolicy: managedSecret.policy,
+            migrations: migrationsAttrs({ input: migrationsInput, run: migrations, output }),
           });
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import * as Output from "../../Output.ts";
 import type { MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
@@ -20,10 +19,6 @@ import {
   type DBClusterProps,
   type DBCluster as DBClusterResource,
 } from "./DBCluster.ts";
-import {
-  DBClusterMigrations,
-  type DBClusterMigrations as DBClusterMigrationsResource,
-} from "./DBClusterMigrations.ts";
 import {
   DBClusterParameterGroup,
   type DBClusterParameterGroupProps,
@@ -184,6 +179,8 @@ export interface AuroraProps {
     | "dbParameterGroupName"
     | "vpcSecurityGroupIds"
     | "tags"
+    | "migrations"
+    | "migrationsSecretArn"
   > & {
     tags?: Record<string, Input<string>>;
   };
@@ -298,7 +295,6 @@ export interface AuroraDatabase {
   writer: DBInstanceResource;
   readers: DBInstanceResource[];
   instances: [DBInstanceResource, ...DBInstanceResource[]];
-  migrations?: DBClusterMigrationsResource;
   proxy?: {
     role: IAM.Role;
     proxy: DBProxyResource;
@@ -539,6 +535,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
           props.instance?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
+        migrations: props.migrations,
+        migrationsSecretArn: props.migrations ? secret.secretArn : undefined,
       });
 
       const readers = yield* Effect.all(
@@ -566,19 +564,6 @@ export const Aurora = (id: string, props: AuroraProps) =>
         ),
         { concurrency: "unbounded" },
       );
-
-      // The Data API needs an available writer, so the migrations are
-      // ordered after it.
-      const migrations = props.migrations
-        ? yield* DBClusterMigrations("Migrations", {
-            dbClusterIdentifier: Output.all(cluster.dbClusterIdentifier, writer.dbInstanceArn).pipe(
-              Output.map(([dbClusterIdentifier]) => dbClusterIdentifier),
-            ),
-            secretArn: secret.secretArn,
-            database: databaseName,
-            migrations: props.migrations,
-          })
-        : undefined;
 
       const createProxy = Effect.gen(function* () {
         if (proxyConfig === undefined) {
@@ -675,7 +660,6 @@ export const Aurora = (id: string, props: AuroraProps) =>
         writer,
         readers,
         instances: [writer, ...readers] as [DBInstanceResource, ...DBInstanceResource[]],
-        migrations,
         proxy,
       } satisfies AuroraDatabase as AuroraDatabase;
     }),
