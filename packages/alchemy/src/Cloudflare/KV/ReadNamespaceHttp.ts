@@ -126,22 +126,6 @@ export const makeReadKVHttpClient = (
               limit: options?.limit ?? undefined,
               cursor: options?.cursor ?? undefined,
             }),
-          ).pipe(
-            // TODO: Remove after verifying Instant REST listing completeness in beta.
-            Effect.tap((res) =>
-              Effect.sync(() =>
-                console.log("[KV Instant beta] REST key list response", {
-                  namespaceId,
-                  keyCount: res.result.length,
-                  resultInfo: res.resultInfo,
-                  hasNextCursor: Boolean(res.resultInfo?.cursor),
-                  listComplete: !res.resultInfo?.cursor,
-                  requestedLimit: options?.limit,
-                  hasRequestedCursor: Boolean(options?.cursor),
-                  hasPrefix: options?.prefix !== undefined,
-                }),
-              ),
-            ),
           ),
         ),
         Effect.mapError(toKVNamespaceError),

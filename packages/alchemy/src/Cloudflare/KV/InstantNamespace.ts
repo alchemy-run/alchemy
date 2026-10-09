@@ -140,10 +140,7 @@ const ProviderLive = () =>
             accountId: acct,
             namespaceId: output.namespaceId,
           })
-          .pipe(
-            Effect.tap((namespace) => logNamespaceResponse("get (reconcile)", namespace)),
-            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -157,7 +154,6 @@ const ProviderLive = () =>
             mode: "instant",
           })
           .pipe(
-            Effect.tap((namespace) => logNamespaceResponse("create", namespace)),
             Effect.catchTag("NamespaceTitleAlreadyExists", (error) =>
               Effect.gen(function* () {
                 const match = yield* findNamespaceByTitle(title);
@@ -181,13 +177,11 @@ const ProviderLive = () =>
       let resolvedTitle = observed.title;
       let supportsUrlEncoding = observed.supportsUrlEncoding ?? undefined;
       if (observed.title !== title) {
-        const renamed = yield* kv
-          .updateNamespace({
-            accountId: acct,
-            namespaceId: observed.id,
-            title,
-          })
-          .pipe(Effect.tap((namespace) => logNamespaceResponse("update", namespace)));
+        const renamed = yield* kv.updateNamespace({
+          accountId: acct,
+          namespaceId: observed.id,
+          title,
+        });
         namespaceId = renamed.id;
         resolvedTitle = renamed.title;
         supportsUrlEncoding = renamed.supportsUrlEncoding ?? undefined;
@@ -212,16 +206,6 @@ const ProviderLive = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* kv.listNamespaces.pages({ accountId }).pipe(
-        Stream.tap((page) =>
-          Effect.sync(() =>
-            console.log("[KV Instant beta] namespace list page", {
-              count: (page.result ?? []).length,
-              instantCount: (page.result ?? []).filter((ns) => ns.mode === "instant").length,
-              absentModeCount: (page.result ?? []).filter((ns) => ns.mode === undefined).length,
-              nullModeCount: (page.result ?? []).filter((ns) => ns.mode === null).length,
-            }),
-          ),
-        ),
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
@@ -247,7 +231,6 @@ const ProviderLive = () =>
             namespaceId: output.namespaceId,
           })
           .pipe(
-            Effect.tap((namespace) => logNamespaceResponse("get (read)", namespace)),
             Effect.flatMap((namespace) =>
               namespace.mode !== "instant"
                 ? Effect.fail(
@@ -326,23 +309,8 @@ const createTitle = (id: string, title: string | undefined) =>
 const findNamespaceByTitle = Effect.fn(function* (title: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* kv.listNamespaces.items({ accountId }).pipe(
-    Stream.filter((ns) => ns.title === title),
-    Stream.tap((namespace) => logNamespaceResponse("title lookup candidate", namespace)),
-    Stream.filter((ns) => ns.mode === "instant"),
+    Stream.filter((ns) => ns.title === title && ns.mode === "instant"),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );
 });
-
-// TODO: Remove the beta diagnostic logs after live mode responses are verified.
-// Log only identifiers and mode evidence, before validation can reject a response.
-// Missing and null modes stay distinguishable; never log namespace contents.
-const logNamespaceResponse = (operation: string, namespace: { id: string; mode?: string | null }) =>
-  Effect.sync(() =>
-    console.log("[KV Instant beta] namespace response", {
-      operation,
-      namespaceId: namespace.id,
-      mode: namespace.mode,
-      modePresent: Object.hasOwn(namespace, "mode"),
-    }),
-  );
