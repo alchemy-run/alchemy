@@ -628,6 +628,9 @@ export const LocalWorkerProvider = () =>
       // bound via `scriptName` from another Worker) therefore never observe
       // a window where the script has no running instance and no registry
       // entry, even when `runtime.start` is slow (container image builds).
+      // Workers with containers are the exception: their previous instance
+      // is retired after the images are ready but before the new workerd
+      // boots (see `beforeServe` in `serveWith`).
       // Both instances use the same registry key; the registry's entry
       // removal is owner-aware, so closing the old scope after the
       // replacement has re-registered cannot delete the replacement's
@@ -831,10 +834,43 @@ export const LocalWorkerProvider = () =>
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
               const previous = workerdScopes.get(worker.fqn);
-              // Instances whose queue-consumer wiring went stale while they
-              // were starting; never exposed via the proxy, closed together
-              // with `previous` after the cutover below.
-              const superseded: Scope.Closeable[] = [];
+              // Instances to tear down once the replacement is up: `previous`
+              // plus any instance whose queue-consumer wiring went stale
+              // while it was starting (never exposed via the proxy).
+              const retiring: Scope.Closeable[] = previous ? [previous] : [];
+              const closeRetiring = Effect.suspend(() =>
+                Effect.forEach(
+                  retiring.splice(0),
+                  (replaced) =>
+                    Scope.close(replaced, Exit.void).pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.logWarning(
+                          `[${worker.fqn}] Failed to stop previous local worker instance`,
+                          Cause.squash(cause),
+                        ),
+                      ),
+                    ),
+                  { discard: true },
+                ),
+              ).pipe(Effect.uninterruptible);
+              // Container names are deterministic per Durable Object, so a
+              // new workerd would "recover" the previous instance's
+              // still-running container — which the previous instance's
+              // teardown then removes (with its networking sidecar) out from
+              // under it. For workers with containers, break before make:
+              // retire the previous instance after the slow part of the start
+              // (image builds/pulls) but before the new workerd boots, parking
+              // requests on the proxy until the cutover.
+              const hasContainers = worker.durableObjectNamespaces.some(
+                (namespace) => namespace.container !== undefined,
+              );
+              const beforeServe = hasContainers
+                ? Effect.suspend(() =>
+                    retiring.length > 0
+                      ? Effect.andThen(proxy.unset(), closeRetiring)
+                      : Effect.void,
+                  )
+                : undefined;
               let scope!: Scope.Closeable;
               let url!: URL;
               // Queue-consumer wiring can change while `runtime.start` is in
@@ -906,6 +942,7 @@ export const LocalWorkerProvider = () =>
                       cf: worker.dev.cf,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
+                      beforeServe,
                     })
                     .pipe(Scope.provide(scope)),
                 ).pipe(
@@ -937,27 +974,18 @@ export const LocalWorkerProvider = () =>
                 if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
                   // Wiring changed while workerd was starting — serve again
                   // with the fresh consumers before exposing the instance.
-                  superseded.push(scope);
+                  retiring.push(scope);
                   continue;
                 }
                 break;
               }
               yield* exposeWorker(worker, proxy, url);
-              // Only now tear the replaced instances down: `previous` kept
-              // serving — and stayed registered in the dev registry — until
-              // the cutover above. The registry's entry removal is
-              // owner-aware, so these closes cannot delete the replacement's
-              // registration.
-              for (const replaced of previous ? [...superseded, previous] : superseded) {
-                yield* Scope.close(replaced, Exit.void).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Failed to stop previous local worker instance`,
-                      Cause.squash(cause),
-                    ),
-                  ),
-                );
-              }
+              // Only now tear the replaced instances down (unless
+              // `beforeServe` already did): `previous` kept serving — and
+              // stayed registered in the dev registry — until the cutover
+              // above. The registry's entry removal is owner-aware, so these
+              // closes cannot delete the replacement's registration.
+              yield* closeRetiring;
               return url;
             }),
           ),
