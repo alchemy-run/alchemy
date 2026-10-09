@@ -102,6 +102,11 @@ running, and concurrent calls start it once, so call it at the top of
 each operation. RPC methods and `getTcpPort` wait until the container's
 port accepts connections, but never start it.
 
+:::note
+Stopping, sleeping, crash handling and snapshots are covered in
+[Container lifecycle](/cloudflare/compute/container-lifecycle).
+:::
+
 Importing `Sandbox` (the class) does not pull in the runtime file —
 it gets tree-shaken out of the DO's bundle. A Worker then binds
 `Agent` and calls `agents.getByName(name).ping()` like any other DO
@@ -145,6 +150,7 @@ const { fetch } = yield* sandbox.getTcpPort(3000);
 return {
   hello: () =>
     Effect.gen(function* () {
+      yield* sandbox.start({ enableInternet: true });
       const response = yield* fetch(
         HttpClientRequest.get("http://container/"),
       );
@@ -153,8 +159,9 @@ return {
 };
 ```
 
-The returned `fetch` retries with backoff while the container is
-still booting, so you don't coordinate readiness yourself.
+The returned `fetch` waits until the port accepts connections, so you
+don't coordinate readiness yourself. It never starts the container:
+call `start` first.
 
 ## Process scope vs request scope
 
@@ -607,6 +614,8 @@ The full walkthrough:
 
 Related:
 
+- [Container lifecycle](/cloudflare/compute/container-lifecycle) — start,
+  stop, sleep, and snapshot a container.
 - [Durable Objects](/cloudflare/compute/durable-objects) — every container
   is fronted by one.
 - [Workers](/cloudflare/compute/workers) — the entrypoint that reaches the
