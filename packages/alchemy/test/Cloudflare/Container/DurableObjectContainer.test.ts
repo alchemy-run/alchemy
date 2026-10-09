@@ -108,7 +108,7 @@ for (const dev of [true, false]) {
       const { test } = Test.make({
         providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
         dev,
-        stage: dev ? "test-native-local" : "test-native-live",
+        stage: `${Test.defaultStage()}-native-${dev ? "local" : "live"}`,
       });
 
       // TODO: Investigate image-map propagation after same-name image updates.
