@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { highlightTS } from "../marketing/highlightTS";
+import { useEffect, useRef, useState } from "react";
+import { RollTemplate } from "./_roll";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 import {
   compactValues,
@@ -136,34 +136,15 @@ export default function HeroHosts() {
   const spinner = useSpinner(rows.some((r) => r.status === "creating"));
   const h = HOSTS[host]!;
 
-  // A template, with each value in a slot that rolls when it changes.
-  const render = (segments: string[], was: readonly string[], now: readonly string[]) =>
-    segments.map((seg, n) => {
-      if (n % 2 === 0)
-        return <span key={n} dangerouslySetInnerHTML={{ __html: highlightTS(seg) }} />;
-      const k = +seg;
-      const rolling = was[k] !== now[k];
-      return (
-        <span
-          key={`${n}-${roll.n}`}
-          className={`hh-slot ${rolling ? "is-active is-rolling" : ""}`}
-          style={
-            {
-              "--from": `${was[k]!.length}ch`,
-              "--to": `${now[k]!.length}ch`,
-              width: `${now[k]!.length}ch`,
-            } as CSSProperties
-          }
-        >
-          <span className="hh-slot__strip">
-            <span dangerouslySetInnerHTML={{ __html: highlightTS(was[k]!) || "" }} />
-            <span dangerouslySetInnerHTML={{ __html: highlightTS(now[k]!) || "" }} />
-          </span>
-        </span>
-      );
-    });
-  const code = render(SEGMENTS, roll.was, roll.now);
-  const compact = render(SEGMENTS_COMPACT, compactValues(roll.was), compactValues(roll.now));
+  const code = <RollTemplate segments={SEGMENTS} was={roll.was} now={roll.now} n={roll.n} />;
+  const compact = (
+    <RollTemplate
+      segments={SEGMENTS_COMPACT}
+      was={compactValues(roll.was)}
+      now={compactValues(roll.now)}
+      n={roll.n}
+    />
+  );
 
   return (
     <>
