@@ -41,6 +41,7 @@ interface SearchEnv {
   DOCS_VECTORS?: VectorIndex;
   /** Section text in an FTS5 table (search/migrations). */
   DOCS_TEXT?: Database;
+  CF_VERSION_METADATA?: { id: string };
   /** Axiom ingest endpoint for the query log dataset. */
   SEARCH_LOG_URL?: string;
   /** Ingest-only Axiom token for {@link SEARCH_LOG_URL}. */
@@ -52,7 +53,7 @@ const ORIGIN_HOST_HEADER = "x-docs-search-host";
 
 const MAX_QUERY = 200;
 const MAX_HITS = 12;
-const CACHE_SECONDS = 300;
+const CACHE_SECONDS = 60;
 
 /**
  * `GET /api/search?q=<query>&provider=<tab label>` → {@link SearchResponse}.
@@ -60,8 +61,10 @@ const CACHE_SECONDS = 300;
  * Production searches its own index: docs sections embedded into Vectorize
  * and stored in a D1 FTS5 table at deploy time (search/index.ts). Every
  * other stage (main, PR previews, personal stages) proxies to production
- * rather than indexing its own copy. Responses are edge-cached for five
- * minutes per (query, provider).
+ * rather than indexing its own copy. Responses are edge-cached for a minute
+ * per (deployed version, query, provider): a deploy that re-indexes starts
+ * from an empty cache, and the minute bounds how long a response computed
+ * just before the re-index finished can outlive it.
  *
  * Every query that reaches production — cached or not, from any stage — is
  * logged to Axiom as one event (see {@link logQuery}).
@@ -97,9 +100,11 @@ export const handleSearch = async (
   }
 
   const cacheKey = new Request(
-    `${canonicalOrigin}/api/search?${new URLSearchParams({
+    // The Cache API only stores keys on the serving zone's own host.
+    `${url.origin}/api/search?${new URLSearchParams({
       q: query.toLowerCase(),
       provider: provider ?? "",
+      v: env.CF_VERSION_METADATA?.id ?? "",
     })}`,
   );
   const started = Date.now();
@@ -118,7 +123,9 @@ export const handleSearch = async (
   if (cached) {
     const { hits } = (await cached.clone().json()) as SearchResponse;
     log({ status: "ok", cached: true, hits });
-    return cached;
+    const hit = new Response(cached.body, cached);
+    hit.headers.set("x-search-cache", "hit");
+    return hit;
   }
 
   const timings: Timings = {};
@@ -137,6 +144,7 @@ export const handleSearch = async (
   const res = json({ query, provider, hits } satisfies SearchResponse, CACHE_SECONDS);
   res.headers.set("server-timing", serverTiming(timings));
   ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
+  res.headers.set("x-search-cache", "miss");
   return res;
 };
 

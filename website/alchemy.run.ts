@@ -42,6 +42,8 @@ const Website = Cloudflare.Website.StaticSite(
       });
       env = {
         AI: Cloudflare.Workers.AI(),
+        // Keys the search response cache to the deployed version.
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         DOCS_VECTORS: yield* DocsVectors,
         DOCS_TEXT: yield* DocsText,
         SEARCH_LOG_URL: Output.interpolate`${queries.edgeDeploymentUrl}/v1/ingest/${queries.name}`,
