@@ -185,7 +185,7 @@ type ContainerShape<Shape> = {
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
  *   {
- *     exec: (cmd: string) => Effect.Effect<{
+ *     shell: (cmd: string) => Effect.Effect<{
  *       exitCode: number;
  *       stdout: string;
  *       stderr: string;
@@ -203,7 +203,7 @@ type ContainerShape<Shape> = {
  *     const cp = yield* ChildProcessSpawner;
  *
  *     return Sandbox.of({
- *       exec: (command) =>
+ *       shell: (command) =>
  *         cp.spawn(ChildProcess.make(command, { shell: true })).pipe(
  *           Effect.flatMap(({ exitCode, stdout, stderr }) =>
  *             Effect.all({
@@ -289,10 +289,9 @@ type ContainerShape<Shape> = {
  * is uploaded. Omit `images` to use `cloudflare/debian-trixie` or restore a
  * snapshot without publishing an image.
  *
- * `Containers.bind` returns a native Effect client without starting the
- * container. Its `exec` takes an argument vector and returns a scoped process
- * with streams, an exit code, and an `output()` collector. Your application's
- * own RPC methods remain separate from the native client.
+ * `yield* Sandbox` returns the container's handle without starting it. Its
+ * `exec` takes an argument vector and returns a scoped process with streams,
+ * an exit code, and an `output()` collector.
  *
  * **Example:** Execute a command in a named image
  * ```typescript
@@ -304,22 +303,22 @@ type ContainerShape<Shape> = {
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const sandbox = yield* Cloudflare.Containers.bind(Sandbox);
+ *     const sandbox = yield* Sandbox;
  *     return Effect.succeed({
- *       exec: (args: string[]) => Effect.gen(function* () {
- *         if (!(yield* sandbox.running)) {
+ *       exec: (args: string[]) =>
+ *         Effect.gen(function* () {
  *           const images = yield* sandbox.images;
+ *           // A no-op when the container is already running.
  *           yield* sandbox.start({
  *             image: images.node,
  *             instance: "lite",
  *             entrypoint: ["sleep", "infinity"],
  *             enableInternet: false,
  *           });
- *         }
- *         const process = yield* sandbox.exec(args);
- *         const result = yield* process.output();
- *         return { text: new TextDecoder().decode(result.stdout), exitCode: result.exitCode };
- *       }),
+ *           const process = yield* sandbox.exec(args);
+ *           const result = yield* process.output();
+ *           return { text: new TextDecoder().decode(result.stdout), exitCode: result.exitCode };
+ *         }).pipe(Effect.scoped),
  *     });
  *   }),
  * ) {}
@@ -368,8 +367,8 @@ type ContainerShape<Shape> = {
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
  * ship an arbitrary image as-is: they have no runtime to provide, so
- * you declare the class with its props inline and register it purely
- * via `Cloudflare.Containers.layer` from the hosting Durable Object.
+ * you declare the class with its props inline and bind it with
+ * `yield* MyContainer` from the hosting Durable Object.
  *
  * **Example:** Effect-native image (`main`)
  * ```typescript
@@ -475,16 +474,17 @@ type ContainerShape<Shape> = {
  *   Effect.gen(function* () {
  *     const web = yield* Web;
  *     return Effect.gen(function* () {
+ *       const { fetch } = yield* web.getTcpPort(8080);
  *       return {
  *         hello: () =>
  *           Effect.gen(function* () {
- *             const { fetch } = yield* web.getTcpPort(8080);
+ *             yield* web.start();
  *             const res = yield* fetch(HttpClientRequest.get("http://container/"));
  *             return yield* res.text;
  *           }),
  *       };
  *     });
- *   }).pipe(Effect.provide(Cloudflare.Containers.layer(Web))),
+ *   }),
  * ) {}
  * ```
  *
@@ -530,7 +530,7 @@ type ContainerShape<Shape> = {
  *     observability: { logs: { enabled: true } },
  *   })),
  *   Effect.gen(function* () {
- *     return Sandbox.of({ exec: (cmd) => ... });
+ *     return Sandbox.of({ shell: (cmd) => ... });
  *   }),
  * );
  * ```
@@ -623,8 +623,7 @@ type ContainerShape<Shape> = {
  * ) {}
  * ```
  *
- * Either way, start it with
- * `Cloudflare.Containers.layer(Api, { enableInternet: true })` — without
+ * Either way, start it with `api.start({ enableInternet: true })` — without
  * outbound networking the container never reaches the database.
  * `Cloudflare.Hyperdrive.Connect` is the one that cannot work here: it
  * *is* a workerd binding, so no container process can resolve it.
@@ -651,15 +650,21 @@ type ContainerShape<Shape> = {
  * ```
  *
  * ### Calling from a Durable Object
- * `yield* Sandbox` resolves a **running** container instance — every
- * method declared on the container's shape **plus** a `getTcpPort`
- * helper. Provide `Cloudflare.Containers.layer(Sandbox, …)` on the
- * DO's init to configure how the container runs; that layer binds,
- * starts, and monitors it and satisfies the `Sandbox` tag. Because
- * only the class is imported, the runtime implementation in
+ * `yield* Sandbox` binds the container to the Durable Object and returns
+ * its handle: every method declared on the container's shape, plus
+ * `start`, `running`, `destroy`, `getTcpPort`, `exec` and the rest of the
+ * native container API. Binding never starts the container. Because only
+ * the class is imported, the runtime implementation in
  * `Sandbox.runtime.ts` is tree-shaken out of the DO's bundle.
  *
- * **Example:** Running a container from a DO
+ * `start()` is idempotent: it starts the container unless it is already
+ * running, and concurrent calls start it once. Call it at the top of each
+ * operation. Its options apply only when that call actually starts the
+ * container. RPC methods and ports wait until the container's port accepts
+ * connections, but never start it: a stopped container fails with
+ * `ContainerNotRunningError`.
+ *
+ * **Example:** Starting a container from a DO
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
@@ -667,22 +672,44 @@ type ContainerShape<Shape> = {
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       // An Effect is a lazy value: define "start" once, run it per call.
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *
+ * A container's shape cannot declare a method the handle already has
+ * (`start`, `exec`, `images`, `getTcpPort`, …); declaring one is a type
+ * error, because the handle's method would shadow the RPC call.
+ *
+ * ### Using a Container from a Layer
+ * A Layer can `yield*` a container like any other service. It runs in the
+ * Durable Object that hosts it, and starts the container when an operation
+ * needs it. Layers never stop a shared container; let it sleep through
+ * `setInactivityTimeout`, or stop it from the Durable Object that owns it.
+ *
+ * **Example:** A service backed by a container
+ * ```typescript
+ * export const WriteFileLive = Layer.effect(
+ *   WriteFile,
+ *   Effect.gen(function* () {
+ *     const devBox = yield* DevBox;
+ *     const start = devBox.start({ enableInternet: true });
+ *
+ *     return ({ path, contents }) =>
+ *       start.pipe(Effect.andThen(devBox.writeFile(path, contents)));
+ *   }),
+ * );
+ * ```
+ *
  * ### HTTP Requests to Container Ports
- * Use `getTcpPort` on the running container instance to get a `fetch`
- * handle for a specific port. This lets you make HTTP requests to
- * servers running inside the container process.
+ * Use `getTcpPort` to get a `fetch` handle for a port inside the
+ * container. Each request waits until the port accepts connections, then
+ * is sent once.
  *
  * **Example:** Fetching from a container port
  * ```typescript
@@ -697,6 +724,7 @@ type ContainerShape<Shape> = {
  *       return {
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* sandbox.start({ enableInternet: true });
  *             const response = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
  *             );
@@ -704,11 +732,7 @@ type ContainerShape<Shape> = {
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *

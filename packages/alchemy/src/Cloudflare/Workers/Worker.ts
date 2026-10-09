@@ -2378,10 +2378,9 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
- * bind, start, and monitor the container; then `yield* Sandbox`
- * resolves the **running** instance. Call its typed methods or use
- * `getTcpPort` to make HTTP requests to its exposed ports.
+ * `yield* Sandbox` binds the container to the DO and returns its handle
+ * without starting it. Call `start()` (a no-op once running) before using
+ * its typed methods or `getTcpPort`.
  *
  * **Example:** Running a Container from a Durable Object
  * ```typescript
@@ -2391,10 +2390,12 @@ export const isSelf = (value: unknown): value is Self =>
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* start;
  *             const { fetch } = yield* sandbox.getTcpPort(3000);
  *             const res = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
@@ -2403,11 +2404,7 @@ export const isSelf = (value: unknown): value is Self =>
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *

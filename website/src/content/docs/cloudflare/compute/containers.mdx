@@ -73,9 +73,8 @@ through the typed handle.
 
 ## Run it from a Durable Object
 
-Yield the class inside a DO's Construction phase and provide
-`Cloudflare.Containers.layer` — that layer binds, starts, and
-monitors the container, then hands you a running instance:
+Yield the class inside a DO's Construction phase. That binds the
+container to the DO and hands you its handle, without starting it:
 
 ```typescript
 // src/Agent.ts
@@ -89,17 +88,19 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     const sandbox = yield* Sandbox;
 
     return Effect.gen(function* () {
+      const start = sandbox.start({ enableInternet: true });
       return {
-        ping: () => sandbox.ping(),
+        ping: () => start.pipe(Effect.andThen(sandbox.ping())),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
-    ),
-  ),
+  }),
 ) {}
 ```
+
+`start` is idempotent: it starts the container unless it is already
+running, and concurrent calls start it once, so call it at the top of
+each operation. RPC methods and `getTcpPort` wait until the container's
+port accepts connections, but never start it.
 
 Importing `Sandbox` (the class) does not pull in the runtime file —
 it gets tree-shaken out of the DO's bundle. A Worker then binds
@@ -390,7 +391,7 @@ Start it with outbound networking, or the container never reaches the
 database at all:
 
 ```typescript
-Effect.provide(Cloudflare.Containers.layer(Api, { enableInternet: true }))
+yield* api.start({ enableInternet: true });
 ```
 
 ## Connect an arbitrary image to a database
