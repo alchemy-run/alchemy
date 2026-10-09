@@ -20,10 +20,8 @@ const { test } = Test.make({
 
 // Live Instant KV incurs $0.10 per put/delete/list; storage billing granularity is unverified.
 // Require an explicit cost opt-in (unset, "0", and "false" all skip).
-// TODO: Once beta access is available, replace only `test.provider.todo` below
-// with `test.provider`, retaining the environment-variable gate.
-const liveTest =
-  process.env.CLOUDFLARE_TEST_KV_INSTANT === "1" ? test.provider.todo : test.provider.skip;
+// Beta access does not imply permission to incur charges: opt in for each live run.
+const liveTest = test.provider.skipIf(process.env.CLOUDFLARE_TEST_KV_INSTANT !== "1");
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -171,7 +169,7 @@ test.provider(
   },
 );
 
-// TODO: Requires private beta access even when the containing stack is local.
+// Requires private beta access and the cost opt-in even when the stack is local.
 liveTest(
   "Alchemy.remote opts InstantNamespace out of local emulation",
   (stack) =>
@@ -183,7 +181,7 @@ liveTest(
       expect(ns.namespaceId.startsWith("dev:")).toBe(false);
       yield* stack.destroy();
     }),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
 test.provider(

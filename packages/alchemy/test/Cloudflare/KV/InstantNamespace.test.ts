@@ -16,10 +16,8 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Live Instant KV incurs $0.10 per put/delete/list; storage billing granularity is unverified.
 // Require an explicit cost opt-in (unset, "0", and "false" all skip).
-// TODO: Once beta access is available, replace only `test.provider.todo` below
-// with `test.provider`, retaining the environment-variable gate.
-const liveTest =
-  process.env.CLOUDFLARE_TEST_KV_INSTANT === "1" ? test.provider.todo : test.provider.skip;
+// Beta access does not imply permission to incur charges: opt in for each live run.
+const liveTest = test.provider.skipIf(process.env.CLOUDFLARE_TEST_KV_INSTANT !== "1");
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -51,7 +49,7 @@ liveTest(
 
       yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
     }).pipe(logLevel),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
 liveTest(
@@ -97,7 +95,7 @@ liveTest(
 
       yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
     }).pipe(logLevel),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
 // Canonical `list()` test (account-scoped collection): deploy a real
@@ -127,7 +125,7 @@ liveTest(
       expect(classicNamespaces.some((ns) => ns.namespaceId === instant.namespaceId)).toBe(false);
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
 // Engine-level adoption: KV namespaces have no ownership signal (Cloudflare
@@ -190,7 +188,7 @@ liveTest(
       yield* stack.destroy();
       yield* waitForNamespaceToBeDeleted(initialId, accountId);
     }).pipe(logLevel),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
@@ -199,6 +197,7 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, ac
     Effect.retry({
       while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
       schedule: Schedule.exponential(100),
+      times: 8,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
   );
@@ -206,6 +205,8 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, ac
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
+// One successful execution performs 1 put + 1 list + 1 delete ($0.30), plus reads/storage.
+// Never reuse the 1,001-key local fixture here. Do not retry this whole test.
 liveTest(
   "Instant client: put, get, list all keys, and delete from an Action",
   (stack) =>
@@ -226,8 +227,7 @@ liveTest(
               return Effect.fn(function* () {
                 yield* kv.put("greeting", "hello world");
 
-                // KV is eventually consistent — retry the read-back until the
-                // value propagates (bounded so the test fails fast).
+                // Retry only propagation mismatches; surface API errors immediately.
                 const value = yield* kv.get("greeting").pipe(
                   Effect.flatMap((v) =>
                     v === "hello world"
@@ -236,9 +236,9 @@ liveTest(
                   ),
                   Effect.retry({
                     schedule: Schedule.spaced("1 second"),
+                    while: (error) => error === "not yet propagated",
                     times: 10,
                   }),
-                  Effect.orElseSucceed(() => null),
                 );
 
                 const listed = yield* kv.list();
@@ -255,9 +255,9 @@ liveTest(
                   ),
                   Effect.retry({
                     schedule: Schedule.spaced("1 second"),
+                    while: (error) => error === "not yet deleted",
                     times: 10,
                   }),
-                  Effect.orElseSucceed(() => "still present" as string | null),
                 );
 
                 return {
@@ -283,6 +283,7 @@ liveTest(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"],
+    retry: 0,
     timeout: 120_000,
   },
 );
@@ -311,5 +312,5 @@ liveTest(
       yield* stack.destroy();
       yield* waitForNamespaceToBeDeleted(restored.namespaceId, accountId);
     }).pipe(logLevel),
-  { timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
+  { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
