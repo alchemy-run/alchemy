@@ -1,9 +1,19 @@
 ---
-title: Create the template database
-description: Create a Turso group, a Drizzle schema, and a template database.
+title: "Part 1: Your First Database"
+description: Create a Turso group and a template database, migrated from a Drizzle schema.
+sidebar:
+  order: 1
 ---
 
-Open `src/Db.ts`. Every tenant's database will be a copy of the template you make here.
+Build a notes API where every customer (tenant) gets their own Turso database. A Worker creates each database by copying a template, then reads and writes notes with Drizzle.
+
+The finished code is in [`examples/cloudflare-turso-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-turso-drizzle).
+
+## Prerequisites
+
+Finish [Turso setup](/turso/setup) and [Cloudflare setup](/cloudflare/setup). Turso's free plan is enough.
+
+Start in `src/Db.ts`. Every tenant's database will be a copy of the template you make here.
 
 ## Create a group
 
@@ -81,6 +91,12 @@ export default Alchemy.Stack(
 );
 ```
 
-Deploy. The template now has an empty `notes` table.
+## Deploy
 
-Continue with [Create tenant databases from a Worker](/turso/tutorial/tenants/).
+```diff lang="sh"
++pnpm alchemy deploy
+```
+
+Alchemy prints the template database's name. It has an empty `notes` table.
+
+In [Part 2](/turso/tutorial/part-2), you'll add a Worker that creates a database for each tenant.

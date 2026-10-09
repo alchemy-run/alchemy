@@ -1,6 +1,8 @@
 ---
-title: Create tenant databases from a Worker
+title: "Part 2: Create Tenant Databases"
 description: Let a Worker create a database for each tenant.
+sidebar:
+  order: 2
 ---
 
 Open `src/Api.ts`. The Worker creates, lists, and deletes tenant databases while it runs.
@@ -81,4 +83,4 @@ Effect.gen(function* () {
 }),
 ```
 
-Continue with [Query a tenant's notes](/turso/tutorial/notes/).
+In [Part 3](/turso/tutorial/part-3), you'll read and write each tenant's notes.

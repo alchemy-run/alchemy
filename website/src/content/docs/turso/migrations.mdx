@@ -38,7 +38,9 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-`Drizzle.Schema` writes a migration when `src/schema.ts` changes. See [Drizzle ORM with Turso](/turso/guides/drizzle).
+`Drizzle.Schema` writes a migration when `src/schema.ts` changes. Add `Drizzle.providers()` to your Stack and commit the `./migrations` folder.
+
+Rather run `drizzle-kit generate` yourself? Pass the folder instead: `migrations: "./migrations"`.
 
 Already used drizzle-kit on this database? Alchemy picks up its history on the first deploy.
 
@@ -67,4 +69,4 @@ Changing or deleting a file that already ran makes the deploy fail. Add a new fi
 ## Where next
 
 - [SQL migrations](/sql/effect-sql/migrations) — how migrations work for every database
-- [Database per tenant](/turso/guides/database-per-tenant#update-existing-tenants) — updating many databases
+- [Database per tenant](/turso/database-per-tenant#update-existing-tenants) — updating many databases

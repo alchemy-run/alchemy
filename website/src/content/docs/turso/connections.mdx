@@ -44,7 +44,7 @@ const db = yield* Drizzle.LibSQL(conn);
 const users = yield* db.select().from(Users);
 ```
 
-See [Drizzle: libSQL](/sql/drizzle/libsql).
+Pass `{ relations }` to use `db.query`. See [Drizzle: libSQL](/sql/drizzle/libsql).
 
 Both need `@effect/sql-libsql`:
 
@@ -101,5 +101,5 @@ Create a [DatabaseToken](/turso/tokens) and give `db.url` and the token to your 
 ## Where next
 
 - [Tokens](/turso/tokens)
-- [Database per tenant](/turso/guides/database-per-tenant) — connect to databases your app creates
+- [Database per tenant](/turso/database-per-tenant) — connect to databases your app creates
 - [Connect reference](/providers/turso/reference/database#connect)

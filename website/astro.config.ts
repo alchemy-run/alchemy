@@ -1220,12 +1220,7 @@ export default defineConfig({
             { label: "Setup", link: "/turso/setup" },
             {
               label: "Tutorial",
-              items: [
-                { label: "Multi-tenant notes API", link: "/turso/tutorial" },
-                { label: "Template database", link: "/turso/tutorial/database" },
-                { label: "Tenant databases", link: "/turso/tutorial/tenants" },
-                { label: "Query notes", link: "/turso/tutorial/notes" },
-              ],
+              items: [{ autogenerate: { directory: "turso/tutorial" } }],
             },
             {
               label: "Databases",
@@ -1234,6 +1229,8 @@ export default defineConfig({
                 { label: "Create & configure", link: "/turso/databases" },
                 { label: "Migrations", link: "/turso/migrations" },
                 { label: "Connections", link: "/turso/connections" },
+                { label: "Database per tenant", link: "/turso/database-per-tenant" },
+                { label: "Preview databases", link: "/turso/preview-databases" },
               ],
             },
             {
@@ -1241,20 +1238,6 @@ export default defineConfig({
               items: [
                 { label: "Tokens", link: "/turso/tokens" },
                 { label: "Team & organization", link: "/turso/organization" },
-              ],
-            },
-            {
-              label: "Guides",
-              items: [
-                {
-                  label: "Database per tenant",
-                  link: "/turso/guides/database-per-tenant",
-                },
-                {
-                  label: "Preview databases",
-                  link: "/turso/guides/preview-databases",
-                },
-                { label: "Drizzle ORM", link: "/turso/guides/drizzle" },
               ],
             },
             providerResourcesEntry("Turso"),
