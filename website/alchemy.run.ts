@@ -1,4 +1,5 @@
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
@@ -38,11 +39,28 @@ const Website = Cloudflare.Website.StaticSite(
             ? "alchemy-website-prod"
             : undefined;
 
-    const docsSearch = stack.stage === "prod" ? yield* DocsSearchNamespace : undefined;
+    let env;
+    if (stack.stage === "prod") {
+      // Every docs search query is logged to Axiom (see src/search-api.ts).
+      const datasetName = `alchemy-docs-search-${stack.stage}`;
+      const queries = yield* Axiom.Dataset("DocsSearchQueries", {
+        name: datasetName,
+        description: "Queries typed into the docs search on alchemy.run",
+      });
+      const ingest = yield* Axiom.ApiToken("DocsSearchIngest", {
+        name: `alchemy-docs-search-ingest-${stack.stage}`,
+        datasetCapabilities: { [datasetName]: { ingest: ["create"] } },
+      });
+      env = {
+        DOCS_SEARCH: yield* DocsSearchNamespace,
+        SEARCH_LOG_URL: Output.interpolate`${queries.edgeDeploymentUrl}/v1/ingest/${queries.name}`,
+        SEARCH_LOG_TOKEN: ingest.token,
+      };
+    }
 
     return {
       name,
-      env: docsSearch ? { DOCS_SEARCH: docsSearch } : undefined,
+      env,
       command: "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",
@@ -91,7 +109,7 @@ const Website = Cloudflare.Website.StaticSite(
 export default Alchemy.Stack(
   "AlchemyEffectWebsite",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers(), Axiom.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
