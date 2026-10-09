@@ -17,6 +17,7 @@ import {
   removeRbac,
   restrictedConnection,
   updateRole,
+  kindAvailable,
   type KindCluster,
 } from "./fixtures/kind.ts";
 
@@ -43,7 +44,7 @@ const kindStack = Core.scratchStack(testOptions, "KubernetesJobKind");
 
 // Creates a real kind cluster (~30s); needs Docker, kind, and kubectl. The
 // Job runs a pre-built image; these cases assert on the applied objects.
-describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
+describe.skipIf(!kindAvailable)(
   "Kubernetes Job on kind",
   {
     tags: [

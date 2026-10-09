@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -5,6 +6,23 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as Kubernetes from "@/Kubernetes";
 import type { Connection } from "@/Kubernetes/Connection.ts";
+
+const commandSucceeds = (command: string, args: string[]) => {
+  try {
+    return spawnSync(command, args, { stdio: "ignore", timeout: 15_000 }).status === 0;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The kind suites run wherever Docker is up and the kind and kubectl CLIs
+ * are installed, and skip elsewhere (CI does not run them).
+ */
+export const kindAvailable =
+  commandSucceeds("docker", ["info"]) &&
+  commandSucceeds("kind", ["version"]) &&
+  commandSucceeds("kubectl", ["version", "--client"]);
 
 /**
  * A kind cluster for one Kubernetes test suite. Each suite gets its own

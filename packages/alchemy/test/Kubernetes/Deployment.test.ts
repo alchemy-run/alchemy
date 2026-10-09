@@ -24,6 +24,7 @@ import {
   removeRbac,
   restrictedConnection,
   updateRole,
+  kindAvailable,
   type KindCluster,
 } from "./fixtures/kind.ts";
 
@@ -54,7 +55,7 @@ const kindStack = Core.scratchStack(testOptions, "KubernetesDeploymentKind");
 // Creates a real kind cluster (~30s); needs Docker, kind, and kubectl. The
 // pods run a pre-built image; these cases assert on the applied objects, not
 // on pod readiness.
-describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
+describe.skipIf(!kindAvailable)(
   "Kubernetes Deployment on kind",
   {
     tags: [
