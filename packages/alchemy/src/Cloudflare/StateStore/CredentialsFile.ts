@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { STATE_STORE_SCRIPT_NAME } from "./Names.ts";
 
 /**
  * Filename (under `~/.alchemy/credentials/{profile}/`) used to cache the
@@ -11,6 +12,15 @@ import * as Schema from "effect/Schema";
  * (`StateStore/State.ts` -> `Providers.ts` -> `Auth/AuthProvider.ts`).
  */
 export const CREDENTIALS_FILE = "cloudflare-state-store";
+
+/**
+ * Per-store credentials cache file. The default store keeps the
+ * historical {@link CREDENTIALS_FILE} name; named stores (see
+ * `Cloudflare.state({ workerName })`) each get their own file so two
+ * stores never share a cached `{ url, authToken }` pair.
+ */
+export const stateStoreCredentialsFile = (workerName: string) =>
+  workerName === STATE_STORE_SCRIPT_NAME ? CREDENTIALS_FILE : `${CREDENTIALS_FILE}-${workerName}`;
 
 /**
  * On-disk shape of the cached Cloudflare state-store credentials.
