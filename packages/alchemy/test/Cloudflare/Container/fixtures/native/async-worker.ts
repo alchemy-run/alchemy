@@ -13,6 +13,30 @@ const READ_RELEASE_AND_SEED = [
 const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
 
 /**
+ * Bound one step of a request so a stall names itself instead of hanging
+ * the caller. `trace` records the steps that finished, with their timings.
+ */
+const step = async <T>(trace: string[], name: string, work: () => Promise<T>): Promise<T> => {
+  const started = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`step "${name}" stalled for 8s after [${trace.join(", ")}]`)),
+          8_000,
+        );
+      }),
+    ]);
+    trace.push(`${name} ${Date.now() - started}ms`);
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
  * The plain-JS twin of `NativeObject` (object.ts): the same routes, written
  * against `this.ctx.container` directly instead of the Effect client.
  */
@@ -108,27 +132,37 @@ export class NativeAsyncObject extends DurableObject<{
    */
   private async exec(path: string) {
     const container = this.container;
+    const trace: string[] = [`running=${container.running}`];
     if (!container.running) {
-      container.start({
-        image: this.imageFor(path),
-        entrypoint: SLEEP_FOREVER,
-        enableInternet: false,
-        instance: "lite",
-      });
+      await step(trace, "start", async () =>
+        container.start({
+          image: this.imageFor(path),
+          entrypoint: SLEEP_FOREVER,
+          enableInternet: false,
+          instance: "lite",
+        }),
+      );
     }
 
     let output;
     if (path === "/stdin") {
-      const child = await container.exec(["cat"], { stdin: "pipe" });
+      const child = await step(trace, "exec cat", () => container.exec(["cat"], { stdin: "pipe" }));
       const writeStdin = async () => {
         const writer = child.stdin!.getWriter();
-        await writer.write(new TextEncoder().encode("native stdin"));
-        await writer.close();
+        await step(trace, "write stdin", () =>
+          writer.write(new TextEncoder().encode("native stdin")),
+        );
+        await step(trace, "close stdin", () => writer.close());
       };
-      [, output] = await Promise.all([writeStdin(), child.output()]);
+      [, output] = await Promise.all([
+        writeStdin(),
+        step(trace, "collect cat output", () => child.output()),
+      ]);
     } else {
-      const child = await container.exec(["sh", "-c", "printf native; exit 7"]);
-      output = await child.output();
+      const child = await step(trace, "exec printf", () =>
+        container.exec(["sh", "-c", "printf native; exit 7"]),
+      );
+      output = await step(trace, "collect printf output", () => child.output());
     }
 
     return {
@@ -160,7 +194,22 @@ export default {
     const objectName =
       url.searchParams.get("object") ?? (PROBE_ROUTES.has(url.pathname) ? "/probe" : url.pathname);
     try {
-      return await env.SANDBOX.getByName(objectName).fetch(request);
+      // A Durable Object that never answers is a different stall from a
+      // container step inside it, which reports itself within 8s.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          env.SANDBOX.getByName(objectName).fetch(request),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Durable Object ${objectName} did not answer within 9s`)),
+              9_000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (error) {
       return Response.json({ error: String(error) }, { status: 500 });
     }

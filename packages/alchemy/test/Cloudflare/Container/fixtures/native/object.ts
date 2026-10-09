@@ -49,6 +49,15 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     const run = (cmd: string[]) =>
       Effect.scoped(Effect.flatMap(container.exec(cmd), (child) => child.output()));
 
+    /** Bound a step so a stalled container call names itself in the error. */
+    const step = <A, E, R>(name: string, effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(
+        Effect.timeoutOrElse({
+          duration: "8 seconds",
+          orElse: () => Effect.die(new Error(`container step "${name}" stalled for 8s`)),
+        }),
+      );
+
     const startImage = Effect.fn(function* (name: string) {
       const images = yield* container.images;
       yield* container.start({
@@ -82,13 +91,17 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     /** Pipe "native stdin" through `cat` while collecting its output. */
     const stdinRoundTrip = Effect.scoped(
       Effect.gen(function* () {
-        const child = yield* container.exec(["cat"], { stdin: "pipe" });
-        const writeStdin = Stream.make(new TextEncoder().encode("native stdin")).pipe(
-          Stream.run(child.stdin!),
+        const child = yield* step("exec cat", container.exec(["cat"], { stdin: "pipe" }));
+        const writeStdin = step(
+          "write and close stdin",
+          Stream.make(new TextEncoder().encode("native stdin")).pipe(Stream.run(child.stdin!)),
         );
-        const [, output] = yield* Effect.all([writeStdin, child.output()], {
-          concurrency: "unbounded",
-        });
+        const [, output] = yield* Effect.all(
+          [writeStdin, step("collect cat output", child.output())],
+          {
+            concurrency: "unbounded",
+          },
+        );
         return output;
       }),
     );
@@ -115,18 +128,24 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         };
       }
       if (mode === "interrupt") {
-        yield* ensureShell;
+        yield* step("start shell", ensureShell);
         // Closing the exec scope (here via timeout) must SIGKILL the process.
-        yield* Effect.scoped(
-          Effect.flatMap(container.exec(["sleep", "301"]), (child) => child.exitCode),
-        ).pipe(Effect.timeout("1 second"), Effect.ignore);
+        yield* step(
+          "exec sleep, then kill on scope close",
+          Effect.scoped(
+            Effect.flatMap(container.exec(["sleep", "301"]), (child) => child.exitCode),
+          ).pipe(Effect.timeout("1 second"), Effect.ignore),
+        );
         // `30[1]` keeps pgrep from matching this shell's own command line.
         // Poll briefly: the kill is delivered asynchronously.
-        const check = yield* run([
-          "sh",
-          "-c",
-          "for i in 1 2 3 4 5 6; do pgrep -f 'sleep 30[1]' >/dev/null || exit 0; sleep 0.5; done; pgrep -f 'sleep 30[1]'",
-        ]);
+        const check = yield* step(
+          "exec pgrep after the kill",
+          run([
+            "sh",
+            "-c",
+            "for i in 1 2 3 4 5 6; do pgrep -f 'sleep 30[1]' >/dev/null || exit 0; sleep 0.5; done; pgrep -f 'sleep 30[1]'",
+          ]),
+        );
         return { remaining: decode(check.stdout).trim() };
       }
       if (mode === "stream") {
