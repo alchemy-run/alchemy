@@ -165,6 +165,9 @@ export interface ApplicationProps {
    * Primary hostname and path secured by Access. Required for `self_hosted`
    * apps; ignored on the request for `warp` (Cloudflare auto-fills it with
    * `${authDomain}/warp`) and `saas` (Cloudflare uses the OIDC issuer).
+   *
+   * Changing it without declaring `destinations` resets the application's
+   * hostnames to this domain.
    */
   domain?: string;
   /**
@@ -272,6 +275,9 @@ export interface ApplicationProps {
    *
    * Cloudflare treats inline and reusable policies as mutually exclusive on
    * one application — mixing the two forms fails validation.
+   *
+   * If omitted, the application's live policies are left as they are. Pass
+   * `[]` to detach them.
    *
    * @example
    * ```ts
@@ -721,9 +727,13 @@ export const ApplicationProvider = () =>
         );
       }
       if (!bodyEqualsObserved(body, observed)) {
-        // Without a desired domain or destinations, keep every live hostname.
+        // Without desired destinations, keep every live hostname unless the
+        // primary domain changes (Cloudflare then resets to the new domain).
         const destinations =
-          body.destinations ?? (body.domain === undefined ? observed.destinations : undefined);
+          body.destinations ??
+          (body.domain === undefined || body.domain === observed.domain
+            ? observed.destinations
+            : undefined);
         const updated = yield* zeroTrust
           .updateAccessApplicationForAccount({
             ...preservedSettings(observed),
@@ -1417,12 +1427,10 @@ const policiesEq = (
   desired: ReadonlyArray<ResolvedPolicy> | undefined,
   observed: ReadonlyArray<ObservedPolicy> | undefined,
 ): boolean => {
-  if (desired === undefined && observed === undefined) return true;
-  if (desired === undefined || observed === undefined) {
-    // An explicit empty `[]` should be honoured; nothing observed and
-    // nothing desired collapses to "in sync".
-    return (desired ?? []).length === 0 && (observed ?? []).length === 0;
-  }
+  // Omitted `policies` leaves the live links unmanaged; an explicit `[]`
+  // detaches them.
+  if (desired === undefined) return true;
+  if (observed === undefined) return desired.length === 0;
   if (desired.length !== observed.length) return false;
   for (let i = 0; i < desired.length; i++) {
     const d = desired[i];
