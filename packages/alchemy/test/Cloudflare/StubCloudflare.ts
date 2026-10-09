@@ -7,9 +7,10 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { InstanceId } from "@/InstanceId.ts";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
+import { resourceContext } from "../Utils/ResourceContext.ts";
 
 export const ACCOUNT_ID = "test-account";
 
@@ -72,7 +73,7 @@ export const stubCloudflare = (respond: (call: StubCall) => unknown) => {
       actions: {},
     }),
     Layer.succeed(Stage, "test"),
-    Layer.succeed(InstanceId, "0123456789abcdef0123456789abcdef"),
+    Layer.succeed(ResourceContext, resourceContext("0123456789abcdef0123456789abcdef")),
   );
   return { calls, layer };
 };
