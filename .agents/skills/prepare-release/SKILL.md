@@ -218,14 +218,29 @@ conventional-commit scoped (`fix(aws/ec2): …`) — and **push immediately**.
 
 ## 8. Loop
 
-Go back to §1 (nuke + clear:state + baseline) and run the plan again. In
-intermediate rounds you may narrow the live phase to the worklist tags
-(`live && (provider:aws:ec2 || provider:cloudflare:r2)`), but the final two
-rounds are the **full plan**.
+**Never re-run the full suite.** Live tests are slow (a full pass takes
+hours), so the full plan runs exactly once. After that, every run is targeted:
 
-Stop when two consecutive full rounds are green and the census diff is only
-documented-undeletable residue. If a round gets worse, find out which fix
-regressed before dispatching anything else.
+1. **Track passes cumulatively.** Every run (yours and the agents') writes
+   `PASS <file> > <title>` lines to `packages/alchemy/.alchemy/log/test/*.log`.
+   Rebuild the passed set from all logs, not just the last round:
+   ```sh
+   cat packages/alchemy/.alchemy/log/test/*.log | grep -E "^PASS " \
+     | sed -E 's/^PASS //; s/ \([0-9.]+m?s\).*$//' | sort -u > /tmp/release/passed.txt
+   ```
+2. **Compute the residual:** tests with a `FAIL` line and no `PASS` line, plus
+   tests that never finished (a killed or stalled round) — find those by
+   diffing the runner's "still running" lists against the result lines.
+3. **Fix agents get each failing area passing individually** (their own
+   suites, `-t` for single tests in long sequential files).
+4. **One residual run** of only what's still unpassed — file paths, narrowed
+   with `-t` where a file is long and sequential (e.g. `Fly/BlueGreen.test.ts`
+   has ~180 tests at ~100s each; never run it unfiltered).
+5. **Finish with nuke + clear:state + census.** The goal is every test has
+   passed at least once and the census shows `Nothing to delete`.
+
+If a census leftover reappears after nuke, its `list` or `delete` is the bug
+(e.g. `list` returning archived or Cloudflare-managed objects), not the test.
 
 Report each round to the user, briefly:
 
@@ -302,3 +317,17 @@ Census: clean except <documented residue>.
 
 Say plainly what was **not** run (out-of-scope providers, opt-in tags). Don't
 report CI status in place of the test results.
+
+## Pitfalls seen in practice
+
+- **Commit with the pinned env sourced.** The pre-commit hook runs pnpm; with
+  the wrong bun/node or a stray temp workspace dir under `examples/` (left by
+  a killed test) it re-installs and rewrites `pnpm-lock.yaml`. Never commit
+  the lockfile or Prisma `generated/contract.*` churn.
+- **Distilled regeneration can `pnpm install` inside `submodules/distilled`**,
+  creating a nested `node_modules` with a second `effect` copy ("Unable to get
+  redacted value" everywhere). Move `submodules/distilled/node_modules` aside
+  and check `packages/*/node_modules/effect` links point at the root store.
+- **Account blockers are not code.** Billing (GCP), token permission groups
+  (e.g. Cloudflare K2) and retired services (AWS FinSpace) get reported to the
+  user with the exact error; never enable billing or edit shared tokens.
