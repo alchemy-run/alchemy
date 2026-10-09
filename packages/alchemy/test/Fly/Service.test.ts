@@ -1,8 +1,9 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import { expect } from "alchemy-test";
+import { assert, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -63,8 +64,9 @@ test.provider(
       const minted = yield* machines.createAppDeployToken({
         app_name: app.appName,
       });
-      expect(minted.token).toEqual(expect.any(String));
-      expect(minted.token!.length).toBeGreaterThan(0);
+      const token = minted.token;
+      assert(Redacted.isRedacted(token), "deploy token is not Redacted");
+      expect(Redacted.value(token).length).toBeGreaterThan(0);
 
       yield* stack.destroy();
     }).pipe(logLevel),

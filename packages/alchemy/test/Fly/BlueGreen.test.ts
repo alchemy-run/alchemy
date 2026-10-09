@@ -2788,7 +2788,8 @@ describe.sequential(
           yield* publisher.destroy();
           yield* Effect.gen(function* () {
             const minted = yield* machines.createAppDeployToken({ app_name: initial.appName });
-            expect(minted.token).toBeDefined();
+            const token = minted.token;
+            assert(Redacted.isRedacted(token), "deploy token is not Redacted");
             const publish = (tag: string) =>
               publisher.deploy(
                 Docker.RemoteImage("Mutable", {
@@ -2800,7 +2801,7 @@ describe.sequential(
                   registry: {
                     server: "registry.fly.io",
                     username: "x",
-                    password: Redacted.make(minted.token!),
+                    password: token,
                   },
                 }),
               );
