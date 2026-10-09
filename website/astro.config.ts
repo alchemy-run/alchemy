@@ -1228,16 +1228,21 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
+              label: "Databases",
               items: [
-                { label: "Groups", link: "/turso/data/groups" },
-                { label: "Databases", link: "/turso/data/databases" },
-                { label: "Migrations", link: "/turso/data/migrations" },
-                { label: "Connections", link: "/turso/data/connections" },
-                { label: "Tokens", link: "/turso/data/tokens" },
+                { label: "Groups", link: "/turso/groups" },
+                { label: "Create & configure", link: "/turso/databases" },
+                { label: "Migrations", link: "/turso/migrations" },
+                { label: "Connections", link: "/turso/connections" },
               ],
             },
-            { label: "Organization", link: "/turso/organization" },
+            {
+              label: "Access",
+              items: [
+                { label: "Tokens", link: "/turso/tokens" },
+                { label: "Team & organization", link: "/turso/organization" },
+              ],
+            },
             {
               label: "Guides",
               items: [

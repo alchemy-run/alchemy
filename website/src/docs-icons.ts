@@ -92,6 +92,8 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Frontend: l("layout-template"),
   APIs: l("braces"),
   Data: l("database"),
+  Databases: l("database"),
+  Access: l("key-round"),
   Messaging: l("send"),
   "Messaging & Events": l("send"),
   "Messaging & events": l("send"),

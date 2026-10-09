@@ -1,9 +1,9 @@
 ---
-title: Databases
+title: Create & configure databases
 description: Create, copy, and protect Turso databases.
 ---
 
-A Turso database is a SQLite database that lives in a [group](/turso/data/groups).
+A Turso database is a SQLite database that lives in a [group](/turso/groups).
 
 ## Create a database
 
@@ -33,7 +33,7 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-See [Migrations](/turso/data/migrations).
+See [Migrations](/turso/migrations).
 
 ## Copy another database
 
@@ -101,6 +101,6 @@ The key is 32 random bytes, base64-encoded. Changing `encryption` creates a new 
 
 ## Where next
 
-- [Connections](/turso/data/connections)
+- [Connections](/turso/connections)
 - [Preview databases](/turso/guides/preview-databases)
 - [Database reference](/providers/turso/reference/database)

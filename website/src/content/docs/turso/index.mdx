@@ -25,7 +25,7 @@ export const Db = Effect.gen(function* () {
 });
 ```
 
-Each deploy runs any new migrations. See [Migrations](/turso/data/migrations).
+Each deploy runs any new migrations. See [Migrations](/turso/migrations).
 
 ## Query it from a Worker
 
@@ -36,7 +36,7 @@ const conn = yield* Turso.Connect(Db);
 const db = yield* Drizzle.LibSQL(conn);
 ```
 
-See [Connections](/turso/data/connections).
+See [Connections](/turso/connections).
 
 ## One database per tenant
 
@@ -52,7 +52,7 @@ The [tutorial](/turso/tutorial) builds this step by step. The [Database per tena
 
 ## Where next
 
-- [Groups](/turso/data/groups) and [Databases](/turso/data/databases)
-- [Tokens](/turso/data/tokens) for apps outside your Stack
+- [Groups](/turso/groups) and [Databases](/turso/databases)
+- [Tokens](/turso/tokens) for apps outside your Stack
 - [Preview databases](/turso/guides/preview-databases), one copy per pull request
-- [Organization](/turso/organization) invites, members, and settings
+- [Team & organization](/turso/organization): invites, members, and settings
