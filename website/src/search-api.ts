@@ -1,10 +1,6 @@
-import type { WorkerEnv } from "../alchemy.run.ts";
 import {
-  chunkSection,
-  DOCS_SEARCH_INSTANCE,
+  EMBEDDING_MODEL,
   SEARCH_PROVIDERS,
-  searchFacets,
-  stripSiteTitle,
   toSnippet,
   type SearchHit,
   type SearchResponse,
@@ -22,35 +18,33 @@ declare const caches: {
     put(request: Request, response: Response): Promise<void>;
   };
 };
-interface DocsSearchNamespaceBinding {
-  get(instance: string): DocsSearchBinding;
+interface WorkersAI {
+  run(model: string, input: { queries: string[] }): Promise<{ data: number[][] }>;
 }
-interface DocsSearchBinding {
-  search(request: {
-    query: string;
-    ai_search_options?: {
-      retrieval?: {
-        max_num_results?: number;
-        filters?: Record<string, unknown>;
-      };
-    };
-  }): Promise<{
-    chunks: Array<{
-      text: string;
-      score: number;
-      item: { key: string; metadata?: Record<string, unknown> };
-    }>;
-  }>;
+interface VectorIndex {
+  query(
+    vector: number[],
+    options: { topK: number; filter?: Record<string, string> },
+  ): Promise<{ matches: Array<{ id: string; score: number }> }>;
+}
+interface Database {
+  prepare(sql: string): {
+    bind(...values: unknown[]): { all<T>(): Promise<{ results: T[] }> };
+  };
 }
 
-/** Only production owns the AI Search instance and query log (see alchemy.run.ts). */
-type SearchEnv = WorkerEnv & {
-  DOCS_SEARCH?: DocsSearchNamespaceBinding;
+/** Only production binds the search index and query log (see alchemy.run.ts). */
+interface SearchEnv {
+  AI?: WorkersAI;
+  /** Section embeddings (search/index.ts). */
+  DOCS_VECTORS?: VectorIndex;
+  /** Section text in an FTS5 table (search/migrations). */
+  DOCS_TEXT?: Database;
   /** Axiom ingest endpoint for the query log dataset. */
   SEARCH_LOG_URL?: string;
   /** Ingest-only Axiom token for {@link SEARCH_LOG_URL}. */
   SEARCH_LOG_TOKEN?: string;
-};
+}
 
 /** Set by a non-production stage when it proxies a search to production. */
 const ORIGIN_HOST_HEADER = "x-docs-search-host";
@@ -62,11 +56,11 @@ const CACHE_SECONDS = 300;
 /**
  * `GET /api/search?q=<query>&provider=<tab label>` → {@link SearchResponse}.
  *
- * Production queries its AI Search binding. Every other stage (main, PR
- * previews, personal stages) has no instance of its own and proxies to
- * production, so previews search the live docs instead of each paying to
- * crawl and index a copy. Responses are edge-cached for five minutes per
- * (query, provider) to keep repeat queries off the metered search API.
+ * Production searches its own index: docs sections embedded into Vectorize
+ * and stored in a D1 FTS5 table at deploy time (search/index.ts). Every
+ * other stage (main, PR previews, personal stages) proxies to production
+ * rather than indexing its own copy. Responses are edge-cached for five
+ * minutes per (query, provider).
  *
  * Every query that reaches production — cached or not, from any stage — is
  * logged to Axiom as one event (see {@link logQuery}).
@@ -87,8 +81,8 @@ export const handleSearch = async (
     return json({ query, provider, hits: [] } satisfies SearchResponse, 0);
   }
 
-  const namespace = env.DOCS_SEARCH;
-  if (namespace === undefined) {
+  const { AI, DOCS_VECTORS, DOCS_TEXT } = env;
+  if (!AI || !DOCS_VECTORS || !DOCS_TEXT) {
     if (url.origin === canonicalOrigin) {
       return new Response("Search unavailable", { status: 503 });
     }
@@ -126,24 +120,16 @@ export const handleSearch = async (
     return cached;
   }
 
-  let result: Awaited<ReturnType<DocsSearchBinding["search"]>>;
+  let sections: ScoredSection[];
   try {
-    result = await namespace.get(DOCS_SEARCH_INSTANCE).search({
-      query,
-      ai_search_options: {
-        retrieval: {
-          max_num_results: 50,
-          filters: provider ? { provider } : undefined,
-        },
-      },
-    });
+    sections = await retrieve({ AI, DOCS_VECTORS, DOCS_TEXT }, query, provider);
   } catch (error) {
     console.error("docs search failed", error);
     log({ status: "error", cached: false, hits: [] });
     return new Response("Search failed", { status: 502 });
   }
 
-  const hits = toHits(result.chunks, query);
+  const hits = toHits(sections, query);
   log({ status: "ok", cached: false, hits });
   const res = json({ query, provider, hits } satisfies SearchResponse, CACHE_SECONDS);
   ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
@@ -155,7 +141,7 @@ interface QueryEvent {
   /** Provider filter chip, `All` when unfiltered. */
   provider: string;
   status: "ok" | "error";
-  /** Served from the edge cache rather than AI Search. */
+  /** Served from the edge cache rather than the index. */
   cached: boolean;
   hits: SearchHit[];
   latencyMs: number;
@@ -205,48 +191,119 @@ const pagePath = (referer: string | null) => {
   }
 };
 
-type Chunk = Awaited<ReturnType<DocsSearchBinding["search"]>>["chunks"][number];
+interface SectionRow {
+  id: string;
+  path: string;
+  anchor: string;
+  title: string;
+  heading: string;
+  provider: string;
+  section: SearchSection;
+  snippet: string;
+}
+interface ScoredSection extends SectionRow {
+  /** Fused rank score, normalized so the best section scores 1. */
+  score: number;
+}
 
-/** Weight of a query-term match in the page title or a matched heading. */
-const TITLE_BONUS = 0.6;
+/** Candidates taken from each retriever (Vectorize's topK max). */
+const CANDIDATES = 100;
+/** Reciprocal-rank-fusion damping. */
+const RRF_K = 60;
+const COLUMNS = "id, path, anchor, title, heading, provider, section";
 
 /**
- * Chunks → one hit per page. A page scores the sum of its top three chunk
- * scores plus {@link TITLE_BONUS} × the share of query terms found in its
- * title or a matched section heading. Ranking by a page's single best chunk
- * let long pages that merely mention a term outrank the page about it; on
- * the docs eval set this lifts MRR from 0.71 to 0.77.
+ * Hybrid retrieval over docs sections: semantic (embed the query, nearest
+ * neighbours in Vectorize) and keyword (FTS5 BM25, title and heading
+ * weighted above body), fused by reciprocal rank.
  */
-const toHits = (chunks: Chunk[], query: string): SearchHit[] => {
-  const pages = new Map<string, Chunk[]>();
-  for (const chunk of chunks) {
-    const pathname = toPathname(chunk.item.key);
-    if (pathname === undefined) continue;
-    pages.set(pathname, [...(pages.get(pathname) ?? []), chunk]);
+const retrieve = async (
+  env: Required<Pick<SearchEnv, "AI" | "DOCS_VECTORS" | "DOCS_TEXT">>,
+  query: string,
+  provider: string | undefined,
+): Promise<ScoredSection[]> => {
+  const match = words(query)
+    .filter((word) => !STOPWORDS.has(word))
+    .map((word) => `"${word}"`)
+    .join(" OR ");
+  const [semantic, keyword] = await Promise.all([
+    env.AI.run(EMBEDDING_MODEL, { queries: [query] })
+      .then(({ data }) =>
+        env.DOCS_VECTORS.query(data[0]!, {
+          topK: CANDIDATES,
+          filter: provider ? { provider } : undefined,
+        }),
+      )
+      .then(({ matches }) => matches.map((match) => match.id)),
+    match
+      ? env.DOCS_TEXT.prepare(
+          `SELECT ${COLUMNS}, snippet(sections, 8, '', '', '…', 40) AS snippet FROM sections
+             WHERE sections MATCH ?1 AND (?2 IS NULL OR provider = ?2)
+             ORDER BY bm25(sections, 0, 0, 0, 0, 0, 0, 10.0, 5.0, 1.0) LIMIT ?3`,
+        )
+          .bind(match, provider ?? null, CANDIDATES)
+          .all<SectionRow>()
+          .then(({ results }) => results)
+      : Promise.resolve([]),
+  ]);
+
+  const rows = new Map(keyword.map((row) => [row.id, row]));
+  const missing = semantic.filter((id) => !rows.has(id));
+  if (missing.length > 0) {
+    const { results } = await env.DOCS_TEXT.prepare(
+      `SELECT ${COLUMNS}, substr(body, 1, 600) AS snippet FROM sections
+         WHERE id IN (${missing.map(() => "?").join(", ")})`,
+    )
+      .bind(...missing)
+      .all<SectionRow>();
+    for (const row of results) rows.set(row.id, row);
+  }
+
+  const fused = new Map<string, number>();
+  for (const ids of [semantic, keyword.map((row) => row.id)]) {
+    ids.forEach((id, rank) => fused.set(id, (fused.get(id) ?? 0) + 1 / (RRF_K + rank + 1)));
+  }
+  const best = Math.max(0, ...fused.values());
+  return [...fused].flatMap(([id, score]) => {
+    const row = rows.get(id);
+    return row ? [{ ...row, score: score / best }] : [];
+  });
+};
+
+/** Weight of a query-term match in the page title or a matched heading. */
+const TITLE_BONUS = 1.0;
+
+/**
+ * Sections → one hit per page. A page scores the sum of its top three
+ * section scores plus {@link TITLE_BONUS} × the share of query terms found
+ * in its title or a matched section heading, so a page about the query
+ * outranks a long page that merely mentions it. The hit deep-links to the
+ * page's best section.
+ */
+const toHits = (sections: ScoredSection[], query: string): SearchHit[] => {
+  const pages = new Map<string, ScoredSection[]>();
+  for (const section of sections) {
+    pages.set(section.path, [...(pages.get(section.path) ?? []), section]);
   }
   const terms = queryTerms(query);
-  return [...pages]
-    .map(([pathname, pageChunks]) => {
-      const sorted = pageChunks.toSorted((a, b) => b.score - a.score);
+  return [...pages.values()]
+    .map((pageSections) => {
+      const sorted = pageSections.toSorted((a, b) => b.score - a.score);
       const best = sorted[0]!;
-      const metadata = best.item.metadata ?? {};
-      const facets = searchFacets(pathname);
-      const title = stripSiteTitle(str(metadata.title) ?? titleFromPath(pathname));
-      const headings = sorted.flatMap((chunk) => chunkSection(chunk.text)?.heading ?? []);
-      // Deep-link to the best chunk's section when it starts at a heading.
-      const section = chunkSection(best.text);
+      const headings = sorted.map((section) => section.heading).filter(Boolean);
       const score =
-        sorted.slice(0, 3).reduce((sum, chunk) => sum + chunk.score, 0) +
-        TITLE_BONUS * Math.max(...[title, ...headings].map((text) => termOverlap(terms, text)));
+        sorted.slice(0, 3).reduce((sum, section) => sum + section.score, 0) +
+        TITLE_BONUS *
+          Math.max(...[best.title, ...headings].map((text) => termOverlap(terms, text)));
       return {
         score,
         hit: {
-          url: section ? `${pathname}#${section.anchor}` : pathname,
-          title,
-          heading: section?.heading,
-          provider: str(metadata.provider) ?? facets.provider,
-          section: (str(metadata.section) as SearchSection | undefined) ?? facets.section,
-          snippet: toSnippet(best.text),
+          url: best.anchor ? `${best.path}#${best.anchor}` : best.path,
+          title: best.title,
+          heading: best.heading || undefined,
+          provider: best.provider,
+          section: best.section,
+          snippet: toSnippet(best.snippet),
         } satisfies SearchHit,
       };
     })
@@ -272,24 +329,6 @@ const termOverlap = (terms: string[], text: string) => {
   const present = new Set(words(text).map(stem));
   return terms.filter((term) => present.has(term)).length / terms.length;
 };
-
-/** Crawled item keys are page URLs; keep just the path (with trailing slash). */
-const toPathname = (key: string): string | undefined => {
-  try {
-    const { pathname } = new URL(/^https?:\/\//.test(key) ? key : `https://${key}`);
-    return pathname.endsWith("/") ? pathname : `${pathname}/`;
-  } catch {
-    return undefined;
-  }
-};
-
-const titleFromPath = (pathname: string) =>
-  (pathname.split("/").filter(Boolean).at(-1) ?? "Alchemy")
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-
-const str = (value: unknown) => (typeof value === "string" && value !== "" ? value : undefined);
 
 const json = (body: SearchResponse, maxAge: number) =>
   new Response(JSON.stringify(body), {

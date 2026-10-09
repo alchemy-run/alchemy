@@ -6,22 +6,9 @@ import * as Output from "alchemy/Output";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { DOCS_SEARCH_INSTANCE } from "./src/docs-search.ts";
+import { DocsText, DocsVectors, IndexDocs } from "./search/index.ts";
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Website>;
-
-/**
- * Docs search. Production owns one AI Search instance that crawls the live
- * site; every other stage proxies `/api/search` to production (see
- * src/search-api.ts) instead of crawling and indexing its own copy.
- *
- * The Worker binds the namespace, not the instance: AI Search validates the
- * crawl sitemap when the instance is created, so the instance must deploy
- * after the Website that serves `search-sitemap.xml`. A namespace binding
- * resolves the instance by name at request time, which keeps the Website
- * free of a dependency on it.
- */
-const DocsSearchNamespace = Cloudflare.AI.SearchNamespace("DocsSearch", {});
 
 const Website = Cloudflare.Website.StaticSite(
   "Website",
@@ -39,6 +26,8 @@ const Website = Cloudflare.Website.StaticSite(
             ? "alchemy-website-prod"
             : undefined;
 
+    // Docs search: production owns the index (see search/index.ts) and the
+    // query log; every other stage proxies `/api/search` to production.
     let env;
     if (stack.stage === "prod") {
       // Every docs search query is logged to Axiom (see src/search-api.ts).
@@ -52,7 +41,9 @@ const Website = Cloudflare.Website.StaticSite(
         datasetCapabilities: { [datasetName]: { ingest: ["create"] } },
       });
       env = {
-        DOCS_SEARCH: yield* DocsSearchNamespace,
+        AI: Cloudflare.Workers.AI(),
+        DOCS_VECTORS: yield* DocsVectors,
+        DOCS_TEXT: yield* DocsText,
         SEARCH_LOG_URL: Output.interpolate`${queries.edgeDeploymentUrl}/v1/ingest/${queries.name}`,
         SEARCH_LOG_TOKEN: ingest.token,
       };
@@ -117,27 +108,8 @@ export default Alchemy.Stack(
     const website = yield* Website;
 
     if (stage === "prod") {
-      yield* Cloudflare.AI.Search("DocsSearch", {
-        namespace: yield* DocsSearchNamespace,
-        instanceId: DOCS_SEARCH_INSTANCE,
-        // Derived from `website.url` only to order the crawl after the deploy.
-        source: Output.map(website.url, () => "https://alchemy.run"),
-        parse: {
-          type: "sitemap",
-          // Unlike sitemap-index.xml, lists the noindex API reference pages.
-          specificSitemaps: ["https://alchemy.run/search-sitemap.xml"],
-          contentSelector: [{ path: "**", selector: "main" }],
-        },
-        // Read from each page's <meta> tags (src/components/starlight/Head.astro).
-        customMetadata: [
-          { fieldName: "title", dataType: "text" },
-          { fieldName: "description", dataType: "text" },
-          { fieldName: "provider", dataType: "text" },
-          { fieldName: "section", dataType: "text" },
-        ],
-        syncInterval: 21600,
-        indexOnCreate: true,
-      });
+      // Re-index whenever the built site changes.
+      yield* IndexDocs({ assets: Output.map(website.hash, (hash) => hash?.assets) });
     }
 
     if (stage.startsWith("pr-")) {

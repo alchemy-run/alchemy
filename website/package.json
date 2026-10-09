@@ -31,6 +31,7 @@
     "@astrojs/sitemap": "catalog:",
     "@astrojs/starlight": "catalog:",
     "@astrojs/starlight-tailwind": "catalog:",
+    "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@fontsource-variable/caveat": "catalog:",
     "@fontsource-variable/inter": "catalog:",

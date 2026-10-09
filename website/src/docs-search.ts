@@ -2,18 +2,19 @@
  * Docs search, shared by the page `<head>` (facet meta tags), the Worker's
  * `/api/search` route, and the search dialog.
  *
- * Each page carries `<meta name="provider">` / `<meta name="section">`. The
- * AI Search crawler stores them as custom metadata, so a query can be
- * filtered by provider; Pagefind (the fallback index) reads the same
- * provider facet as a filter.
+ * Each page's sections are indexed at deploy time with its provider facet
+ * (see search/index.ts), so a query can be filtered by provider; Pagefind
+ * (the fallback index) reads the same facet from `<meta name="provider">`.
  */
 import { activeTab, DOCS_TABS } from "./docs-tabs";
 
 /**
- * AI Search instance name within the docs search namespace. The Worker binds
- * the namespace and resolves the instance by this name (see alchemy.run.ts).
+ * Workers AI model that embeds docs sections at deploy time (as `documents`)
+ * and search input at request time (as `queries`, which adds a retrieval
+ * instruction). Changing it re-embeds every section on the next deploy.
  */
-export const DOCS_SEARCH_INSTANCE = "docs";
+export const EMBEDDING_MODEL = "@cf/qwen/qwen3-embedding-0.6b";
+export const EMBEDDING_DIMENSIONS = 1024;
 
 export type SearchSection = "guide" | "reference" | "blog";
 
@@ -63,39 +64,8 @@ export interface SearchResponse {
   hits: SearchHit[];
 }
 
-/** Starlight titles render as `Page | Alchemy`. */
-export const stripSiteTitle = (title: string) => title.replace(/\s*\|\s*Alchemy\s*$/, "");
-
-/**
- * Starlight renders every heading with a screen-reader anchor link, which the
- * crawler keeps as `[Section titled “Heading”](#heading)`.
- */
-const SECTION_ANCHOR = /\[Section titled “([^”]*)”\]\(#([^)\s]+)\)/g;
-
-/**
- * The section a chunk belongs to, when the chunk starts at a heading (a
- * heading further down would only own the chunk's tail).
- */
-export const chunkSection = (text: string): { heading: string; anchor: string } | undefined => {
-  if (!/^\s*#{1,6}\s/.test(text)) return undefined;
-  const match = new RegExp(SECTION_ANCHOR.source).exec(text);
-  return match ? { heading: match[1]!, anchor: match[2]! } : undefined;
-};
-
-/** Markdown-ish chunk text → one line of readable prose. */
+/** Section text → one line of readable prose. */
 export const toSnippet = (text: string, max = 220): string => {
-  const plain = text
-    .replace(/^---[\s\S]*?---/, "")
-    // A leading heading is shown as the hit's title (see chunkSection).
-    .replace(/^\s*#{1,6}\s[^\n]*\n/, "")
-    .replace(SECTION_ANCHOR, " ")
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[#*_>`|]+/g, " ")
-    // Table rules and horizontal rules.
-    .replace(/[-:=]{3,}/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const plain = text.replace(/\s+/g, " ").trim();
   return plain.length > max ? `${plain.slice(0, max).replace(/\s+\S*$/, "")}…` : plain;
 };

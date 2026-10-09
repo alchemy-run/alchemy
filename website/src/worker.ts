@@ -338,13 +338,12 @@ const resolveV1Fallback = async (url: URL): Promise<string | undefined> => {
 };
 
 /**
- * `llms.txt` / `llms-full.txt` (and the AI Search crawler's
- * `search-sitemap.xml`) are generated at build time with absolute canonical
- * URLs, so a PR preview would hand agents an index that points back
+ * `llms.txt` / `llms-full.txt` are generated at build time with absolute
+ * canonical URLs, so a PR preview would hand agents an index that points back
  * at production. Rewrite the baked origin to the request's own origin — the
  * same treatment `rewriteSocialCardHost` gives the OG tags.
  */
-const AGENT_TEXT_PATHS = new Set(["/llms.txt", "/llms-full.txt", "/search-sitemap.xml"]);
+const AGENT_TEXT_PATHS = new Set(["/llms.txt", "/llms-full.txt"]);
 
 const rewriteAgentTextOrigin = async (request: Request, res: Response): Promise<Response> => {
   const reqUrl = new URL(request.url);

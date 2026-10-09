@@ -19,7 +19,6 @@ import starlightBlog from "starlight-blog";
 import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
-import { searchSitemap } from "./plugins/search-sitemap.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -253,7 +252,6 @@ export default defineConfig({
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
-    searchSitemap(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
