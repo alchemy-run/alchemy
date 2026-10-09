@@ -14,8 +14,7 @@ const AUTH = "Basic b3BlbmNvZGU6YmVuY2g=";
  * session can be created — the same two-request readiness probe the MicroVM
  * hosts use, so the platforms share one definition of "usable coding agent".
  * NOTE: the authoritative cold-start clock runs in the Worker AROUND the whole
- * DO call — the container layer eagerly starts the container during DO
- * construction, so a clock started here would miss part of the start.
+ * DO call, so it also covers Durable Object construction.
  */
 export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
   "BenchOpencodeObject",

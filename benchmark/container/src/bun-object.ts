@@ -7,9 +7,8 @@ import { BunContainer } from "./bun-container.ts";
 /**
  * Durable Object backing one bun-baseline container instance. `boot()` blocks
  * until the `Bun.serve` HTTP server answers on its TCP port. NOTE: the
- * authoritative cold-start clock runs in the Worker AROUND the whole DO call —
- * the container layer eagerly starts the container during DO construction, so
- * a clock started here would miss part of the start.
+ * authoritative cold-start clock runs in the Worker AROUND the whole DO call,
+ * so it also covers Durable Object construction.
  */
 export class BunObject extends Cloudflare.DurableObject<BunObject>()(
   "BenchBunObject",
