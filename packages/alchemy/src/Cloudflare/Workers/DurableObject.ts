@@ -292,10 +292,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
     };
   };
   <Self>(): {
-    <
-      Shape extends MainRpc<DurableObjectState>,
-      Req extends DurableObjectServices | Container.Application<any> = never,
-    >(
+    <Shape extends MainRpc<DurableObjectState>, Req = never>(
       name: string,
       impl: Effect.Effect<
         Effect.Effect<Shape, never, RuntimeContext | DurableObjectState | Scope>,
@@ -305,7 +302,10 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
     ): Effect.Effect<
       DurableObject<Self>,
       never,
-      Worker | Extract<Req, Container.Application<any>>
+      // Like `make`: anything beyond the ambient DO services (e.g. another
+      // module's service) is required where the Durable Object is yielded, and
+      // captured there for the instance.
+      Worker | Exclude<Req, DurableObjectServices>
     > & {
       new (_: never): Shape;
     };
