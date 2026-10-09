@@ -1,6 +1,7 @@
 import * as turso from "@distilled.cloud/turso/turso";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Test from "@/Test/Alchemy";
 import * as Turso from "@/Turso";
 import { organization } from "@/Turso/Credentials";
@@ -98,12 +99,26 @@ test.provider(
       );
       expect(settings.original.restoreEnabled).toBe(original);
       expect(settings.restoreEnabled).toBe(!original);
-      expect(yield* observe).toBe(!original);
+      // Organization reads can briefly lag a write; poll until it shows.
+      const settle = (expected: boolean) =>
+        observe.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (value) => value === expected,
+            times: 15,
+          }),
+        );
+      expect(yield* settle(!original)).toBe(!original);
 
       yield* stack.destroy();
-      expect(yield* observe).toBe(original);
+      expect(yield* settle(original)).toBe(original);
     }),
-  { tags: ["provider:turso", "provider:turso:organizationsettings", "live"], timeout: 60_000 },
+  // An account-wide setting: run with no other Turso test in flight.
+  {
+    tags: ["provider:turso", "provider:turso:organizationsettings", "live"],
+    timeout: 90_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!overages)(
