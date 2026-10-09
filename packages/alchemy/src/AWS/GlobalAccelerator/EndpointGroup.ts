@@ -373,12 +373,14 @@ export const EndpointGroupProvider = () =>
       return toAttributes(live, endpointGroupArn);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* retryGaDeletion(
-        withGaRegion(
-          ga.deleteEndpointGroup({
-            EndpointGroupArn: output.endpointGroupArn,
-          }),
-        ),
-      ).pipe(Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void));
+      yield* ga
+        .deleteEndpointGroup({
+          EndpointGroupArn: output.endpointGroupArn,
+        })
+        .pipe(
+          withGaRegion,
+          retryGaDeletion,
+          Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void),
+        );
     }),
   });

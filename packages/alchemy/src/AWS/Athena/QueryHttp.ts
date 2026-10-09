@@ -113,7 +113,7 @@ export const QueryHttp = Layer.effect(
         const state = exec?.Status?.State ?? "FAILED";
         const reason = exec?.Status?.StateChangeReason;
         if (state !== "SUCCEEDED") {
-          return yield* Effect.fail(new AthenaQueryFailed({ queryExecutionId, state, reason }));
+          return yield* new AthenaQueryFailed({ queryExecutionId, state, reason });
         }
 
         const results = yield* getQueryResults({

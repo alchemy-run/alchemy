@@ -243,18 +243,14 @@ export const RecordingConfigurationProvider = () =>
           }),
         );
         if (config === undefined) {
-          return yield* Effect.fail(
-            new IvsRecordingConfigurationFailed({
-              message: `IVS recording configuration '${arn}' vanished while awaiting ACTIVE`,
-            }),
-          );
+          return yield* new IvsRecordingConfigurationFailed({
+            message: `IVS recording configuration '${arn}' vanished while awaiting ACTIVE`,
+          });
         }
         if (config.state === "CREATE_FAILED") {
-          return yield* Effect.fail(
-            new IvsRecordingConfigurationFailed({
-              message: `IVS recording configuration '${arn}' entered CREATE_FAILED — is the S3 bucket in the same region and account?`,
-            }),
-          );
+          return yield* new IvsRecordingConfigurationFailed({
+            message: `IVS recording configuration '${arn}' entered CREATE_FAILED — is the S3 bucket in the same region and account?`,
+          });
         }
         return config;
       });
@@ -329,11 +325,9 @@ export const RecordingConfigurationProvider = () =>
             observed = created.recordingConfiguration;
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new IvsRecordingConfigurationFailed({
-                message: "IVS CreateRecordingConfiguration returned no configuration",
-              }),
-            );
+            return yield* new IvsRecordingConfigurationFailed({
+              message: "IVS CreateRecordingConfiguration returned no configuration",
+            });
           }
           const arn = observed.arn;
           yield* session.note(arn);

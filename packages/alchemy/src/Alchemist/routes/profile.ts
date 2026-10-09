@@ -111,7 +111,7 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
     profiles.current,
   ]);
   if (profile === undefined) {
-    return yield* Effect.fail(new AlchemistNotFound({ kind: "profile", id: input.name }));
+    return yield* new AlchemistNotFound({ kind: "profile", id: input.name });
   }
   // Skipping the status probe is what makes `profile list` fast: it
   // reaches no provider APIs, so every connection reads as connected.
@@ -132,12 +132,11 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
         includeProviderStatus
           ? inspectProvider(input.name, provider, config, registered, (updated) =>
               profiles.setProviderConfig(input.name, provider, updated).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new AuthError({
-                      message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
-                      cause,
-                    }),
+                Effect.mapError((cause) =>
+                  AuthError.make({
+                    message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
+                    cause,
+                  }),
                 ),
               ),
             )
@@ -177,7 +176,7 @@ export const deleteProfile = Effect.fn("Alchemist.profile.delete")(function* (in
     Effect.gen(function* () {
       const deleted = yield* profiles.deleteProfile(input.name);
       if (!deleted) {
-        return yield* Effect.fail(new AlchemistNotFound({ kind: "profile", id: input.name }));
+        return yield* new AlchemistNotFound({ kind: "profile", id: input.name });
       }
       yield* credentials.deleteProfile(input.name);
       return { name: input.name, credentialsDeleted: true } as const;
@@ -226,7 +225,7 @@ export const configureForm = Effect.fn("Alchemist.profile.configureForm")(functi
   const registered = yield* providers({ profile: input.profile });
   const provider = registered.find(({ name }) => name === input.provider);
   if (provider === undefined) {
-    return yield* Effect.fail(new AlchemistNotFound({ kind: "provider", id: input.provider }));
+    return yield* new AlchemistNotFound({ kind: "provider", id: input.provider });
   }
   return input.method === undefined
     ? provider.configureMethods
@@ -250,21 +249,17 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
   const stored = yield* profiles.ensureProfile(input.profile);
   const provider = (yield* registry(input))[input.provider];
   if (provider === undefined) {
-    return yield* Effect.fail(
-      new AlchemistInvalidInput({
-        field: "provider",
-        message: `Auth provider '${input.provider}' is not registered.`,
-      }),
-    );
+    return yield* new AlchemistInvalidInput({
+      field: "provider",
+      message: `Auth provider '${input.provider}' is not registered.`,
+    });
   }
   const connected = input.provider in stored.providers;
   if ((input.action === "add" && connected) || (input.action === "reconfigure" && !connected)) {
-    return yield* Effect.fail(
-      new AlchemistInvalidInput({
-        field: "provider",
-        message: `Provider '${input.provider}' is ${connected ? "already" : "not"} connected.`,
-      }),
-    );
+    return yield* new AlchemistInvalidInput({
+      field: "provider",
+      message: `Provider '${input.provider}' is ${connected ? "already" : "not"} connected.`,
+    });
   }
   const config =
     input.method !== undefined && input.values !== undefined && provider.configureWith !== undefined
@@ -305,7 +300,7 @@ export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(func
   const stored = yield* profiles.ensureProfile(input.profile);
   const config = stored.providers[input.provider];
   if (config === undefined) {
-    return yield* Effect.fail(new AlchemistNotFound({ kind: "provider", id: input.provider }));
+    return yield* new AlchemistNotFound({ kind: "provider", id: input.provider });
   }
   const provider = (yield* registry(input))[input.provider];
   let logout: "completed" | "skipped-invalid-config" | "unavailable" = "unavailable";
@@ -341,12 +336,10 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
     const config = stored.providers[name];
     const provider = registered[name];
     if (config === undefined || provider === undefined) {
-      return yield* Effect.fail(
-        new AlchemistInvalidInput({
-          field: "providers",
-          message: `Provider '${name}' is not connected or registered.`,
-        }),
-      );
+      return yield* new AlchemistInvalidInput({
+        field: "providers",
+        message: `Provider '${name}' is not connected or registered.`,
+      });
     }
     yield* report({ _tag: "provider.refresh.started", provider: name });
     const refreshed = yield* provider.login(
@@ -354,12 +347,11 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       yield* provider.decodeConfig(input.profile, config),
       (updated) =>
         profiles.setProviderConfig(input.profile, name, updated).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
+              cause,
+            }),
           ),
         ),
     );

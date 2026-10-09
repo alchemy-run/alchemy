@@ -95,19 +95,19 @@ export const HasherWorkerLoader = (
                     ),
                   )
                   .pipe(
-                    Effect.mapError(
-                      (error) => new HashError({ reason: `dynamic hasher: ${String(error)}` }),
+                    Effect.mapError((error) =>
+                      HashError.make({ reason: `dynamic hasher: ${String(error)}` }),
                     ),
                   );
                 const bytes = new Uint8Array(
                   yield* response.arrayBuffer.pipe(
-                    Effect.mapError(
-                      (error) => new HashError({ reason: `dynamic hasher body: ${String(error)}` }),
+                    Effect.mapError((error) =>
+                      HashError.make({ reason: `dynamic hasher body: ${String(error)}` }),
                     ),
                   ),
                 );
                 if (response.status !== 200) {
-                  return yield* new HashError({
+                  return yield* HashError.make({
                     reason: `dynamic hasher: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
                   });
                 }

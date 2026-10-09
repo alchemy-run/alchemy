@@ -423,6 +423,7 @@ const instrumentLifecycle =
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- generic Exclude on R can't be proven statically
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
@@ -430,19 +431,19 @@ const instrumentLifecycle =
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
           Effect.provideService(ResourceFqn, fqn),
-          Effect.catchCause((cause): Effect.Effect<never, E | DriftResourceError> =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
-              : Effect.fail(
-                  new DriftResourceError({
-                    message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
-                    fqn,
-                    logicalId,
-                    resourceType,
-                    operation: op,
-                    cause: Cause.squash(cause),
-                  }),
-                ),
+          Effect.catchCauseIf(
+            (cause: Cause.Cause<E>) => !Cause.hasInterruptsOnly(cause),
+            (cause) =>
+              Effect.fail(
+                new DriftResourceError({
+                  message: `Resource '${fqn}' (${resourceType}) failed during ${op}`,
+                  fqn,
+                  logicalId,
+                  resourceType,
+                  operation: op,
+                  cause: Cause.squash(cause),
+                }),
+              ),
           ),
         ),
       ),

@@ -85,7 +85,7 @@ const encodeLength = (n: number): Uint8Array => {
  */
 export const pktLine = (payload: Uint8Array): Uint8Array => {
   if (payload.length > MAX_PKT_PAYLOAD) {
-    throw new PktLineError({
+    throw PktLineError.make({
       reason: `pkt-line payload ${payload.length} exceeds ${MAX_PKT_PAYLOAD}`,
     });
   }
@@ -196,9 +196,9 @@ export const decodePktLines = (
           pos = r.next;
           break;
         case "incomplete":
-          return Effect.fail(new PktLineError({ reason: `truncated pkt-line at offset ${pos}` }));
+          return Effect.fail(PktLineError.make({ reason: `truncated pkt-line at offset ${pos}` }));
         case "invalid":
-          return Effect.fail(new PktLineError({ reason: r.reason }));
+          return Effect.fail(PktLineError.make({ reason: r.reason }));
       }
     }
     return Effect.succeed(out);
@@ -229,7 +229,7 @@ export const decodePktStream = <E, R>(
           const r = readPktLineAt(buffer, pos);
           if (r._tag === "incomplete") break;
           if (r._tag === "invalid") {
-            return new PktLineError({ reason: r.reason });
+            return PktLineError.make({ reason: r.reason });
           }
           // copy the payload: the backing buffer is replaced on refill
           out.push(
@@ -249,14 +249,14 @@ export const decodePktStream = <E, R>(
         void
       > = Effect.suspend(() => {
         const drained = drain();
-        if (drained instanceof PktLineError) return Effect.fail(drained);
+        if (Schema.is(PktLineError)(drained)) return Effect.fail(drained);
         if (Arr.isReadonlyArrayNonEmpty(drained)) {
           return Effect.succeed(drained);
         }
         if (upstreamDone) {
           if (buffer.length > 0) {
             return Effect.fail(
-              new PktLineError({
+              PktLineError.make({
                 reason: "byte stream ended inside a pkt-line",
               }),
             );

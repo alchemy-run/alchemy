@@ -172,8 +172,10 @@ const getByName = (name: string) =>
           name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFound: () => Effect.succeed(undefined),
+            SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+          }),
         );
 
 const listAt = (parent: string) =>

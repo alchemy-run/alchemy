@@ -573,16 +573,14 @@ export const TableProvider = () =>
 
           const [first, ...rest] = requested;
           if (!first?.StreamViewType) {
-            return yield* Effect.fail(new MissingStreamViewType());
+            return yield* new MissingStreamViewType();
           }
 
           for (const spec of rest) {
             if (spec.StreamViewType !== first.StreamViewType) {
-              return yield* Effect.fail(
-                new ConflictingStreamViewTypes({
-                  requested: requested.map((item) => item.StreamViewType),
-                }),
-              );
+              return yield* new ConflictingStreamViewTypes({
+                requested: requested.map((item) => item.StreamViewType),
+              });
             }
           }
 
@@ -736,7 +734,7 @@ export const TableProvider = () =>
           });
           const destinations = response.KinesisDataStreamDestinations ?? [];
           if (destinations.some(isKinesisDestinationTransitioning)) {
-            return yield* Effect.fail(new KinesisDestinationNotSettled());
+            return yield* new KinesisDestinationNotSettled();
           }
           return destinations;
         }).pipe(
@@ -827,7 +825,7 @@ export const TableProvider = () =>
           });
           const status = response.ContributorInsightsStatus ?? "DISABLED";
           if (status === "ENABLING" || status === "DISABLING") {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
           return status;
         }).pipe(
@@ -881,7 +879,7 @@ export const TableProvider = () =>
         Effect.gen(function* () {
           const remaining = yield* listContributorInsightsRules(tableName);
           if (remaining.length > 0) {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
         }).pipe(
           Effect.retry({
@@ -934,7 +932,7 @@ export const TableProvider = () =>
           });
           if (response.Table?.TableStatus !== "ACTIVE") {
             progressMessage = `DynamoDB Table provider: table ${tableName} not active yet (status=${response.Table?.TableStatus ?? "undefined"} gsiStatuses=${formatGlobalSecondaryIndexStatuses(response.Table?.GlobalSecondaryIndexes)})`;
-            return yield* Effect.fail(new TableNotActive());
+            return yield* new TableNotActive();
           }
           yield* session.note(
             `DynamoDB Table provider: table ${tableName} is ACTIVE (${formatPollingElapsed(elapsedSeconds)})`,
@@ -979,7 +977,7 @@ export const TableProvider = () =>
 
           if (JSON.stringify(actualIndexNames) !== JSON.stringify(expected) || !allActive) {
             progressMessage = `DynamoDB Table provider: GSIs for ${tableName} not stable yet (expected=${JSON.stringify(expected)} actual=${JSON.stringify(actualIndexNames)} statuses=${JSON.stringify((table?.GlobalSecondaryIndexes ?? []).map((index) => ({ name: index.IndexName, status: index.IndexStatus })))} tableStatus=${table?.TableStatus ?? "undefined"})`;
-            return yield* Effect.fail(new TableIndexesNotStable());
+            return yield* new TableIndexesNotStable();
           }
 
           yield* session.note(
@@ -1014,13 +1012,13 @@ export const TableProvider = () =>
             TableName: tableName,
           });
           progressMessage = `DynamoDB Table provider: table ${tableName} still deleting (status=${response.Table?.TableStatus ?? "undefined"})`;
-          return yield* Effect.fail(new TableStillDeleting());
+          return yield* new TableStillDeleting();
         }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => {
-            return session.note(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            session.note(
               `DynamoDB Table provider: table ${tableName} deletion confirmed (${formatPollingElapsed(elapsedSeconds)})`,
-            );
-          }),
+            ),
+          ),
           Effect.retry({
             while: (error) =>
               error._tag === "TableStillDeleting" || isRetryableControlPlaneError(error),
@@ -1823,14 +1821,12 @@ export const TableProvider = () =>
               (destination) => destination.StreamArn === desiredKinesisDestination.streamArn,
             );
             if (settledDestination?.DestinationStatus !== "ACTIVE") {
-              return yield* Effect.fail(
-                new KinesisStreamingDestinationFailed({
-                  tableName,
-                  streamArn: desiredKinesisDestination.streamArn,
-                  status: settledDestination?.DestinationStatus,
-                  description: settledDestination?.DestinationStatusDescription,
-                }),
-              );
+              return yield* new KinesisStreamingDestinationFailed({
+                tableName,
+                streamArn: desiredKinesisDestination.streamArn,
+                status: settledDestination?.DestinationStatus,
+                description: settledDestination?.DestinationStatusDescription,
+              });
             }
           }
 
@@ -1940,12 +1936,10 @@ export const TableProvider = () =>
               .pipe(
                 Effect.timeout(1000),
                 Effect.as("accepted" as const),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed("already-deleted" as const),
-                ),
-                Effect.catchTag("ResourceInUseException", () =>
-                  Effect.succeed("delete-gsis-first" as const),
-                ),
+                Effect.catchTags({
+                  ResourceNotFoundException: () => Effect.succeed("already-deleted" as const),
+                  ResourceInUseException: () => Effect.succeed("delete-gsis-first" as const),
+                }),
                 Effect.retry({
                   while: (error) =>
                     error._tag === "InternalServerError" || error._tag === "TimeoutError",

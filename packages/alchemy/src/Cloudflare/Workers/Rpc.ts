@@ -57,6 +57,7 @@ export const makeRpcStub = <Shape>(
       return (...args: any[]) =>
         asEffectOrStream(
           Effect.gen(function* () {
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped lazy stub source
             const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
             return yield* Effect.tryPromise({
               try: () => (stub as any)[prop](...args),

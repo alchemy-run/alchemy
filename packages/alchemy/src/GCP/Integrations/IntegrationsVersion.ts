@@ -233,9 +233,11 @@ const deleteIntegration = (name: string) =>
   name.length === 0
     ? Effect.void
     : integrations.deleteProjectsLocationsIntegrations({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
       );
 
 export const IntegrationsVersionProvider = () =>
@@ -386,9 +388,11 @@ export const IntegrationsVersionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* integrations.deleteProjectsLocationsIntegrationsVersions({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
       );
       yield* deleteIntegration(output.integration);
     }),

@@ -75,9 +75,11 @@ const toFrameworkLayer: (
   Options.Options.FrameworkServices
 > = Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
   const resolved = Effect.isEffect(candidate)
-    ? yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
+    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
+      yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
     : candidate;
   if (Layer.isLayer(resolved)) {
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
     return resolved as Options.Options.FrameworkLayer;
   }
   if (typeof resolved === "function") {
@@ -87,7 +89,7 @@ const toFrameworkLayer: (
       specifier,
     );
   }
-  return yield* Effect.fail(invalidExport(specifier));
+  return yield* invalidExport(specifier);
 });
 
 /**
@@ -120,7 +122,7 @@ export const resolve = Effect.fn(function* (options: Options.Options) {
     );
     const candidate = module_.default ?? module_.framework;
     if (candidate === undefined) {
-      return yield* Effect.fail(invalidExport(input));
+      return yield* invalidExport(input);
     }
     return yield* toFrameworkLayer(candidate, options, input);
   }

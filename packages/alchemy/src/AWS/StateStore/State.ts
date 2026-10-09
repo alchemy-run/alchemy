@@ -294,7 +294,9 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         Effect.flatMap((result) =>
           result.Body === undefined
             ? Effect.succeed(undefined)
-            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+            : result.Body.pipe(
+                Stream.decodeText,
+                Stream.mkString,
                 Effect.flatMap((text) =>
                   Effect.try({
                     try: () => JSON.parse(text, reviveState) as T,

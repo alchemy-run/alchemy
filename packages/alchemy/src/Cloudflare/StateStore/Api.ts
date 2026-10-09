@@ -118,7 +118,7 @@ export default Worker(
             .pipe(Effect.orDie, Effect.provide(RuntimeContext.phantom));
           return !!expected && timingSafeEqual(token.trim(), Redacted.value(expected).trim())
             ? yield* Effect.void
-            : yield* new HttpApiError.Unauthorized();
+            : yield* HttpApiError.Unauthorized.make({});
         }),
       }),
     );

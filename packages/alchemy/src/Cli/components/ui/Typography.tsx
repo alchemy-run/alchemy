@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Hyperlink as SigilHyperlink, Text as SigilText } from "@alchemy.run/sigil";
 import type { ComponentProps } from "react";

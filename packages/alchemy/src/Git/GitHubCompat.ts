@@ -589,7 +589,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
           if (!Number.isFinite(number)) return yield* ghNotFound;
-          const raw = yield* request.json.pipe(Effect.catch(() => Effect.succeed({})));
+          const raw = yield* request.json.pipe(Effect.orElseSucceed(() => ({})));
           const body = raw as { commit_message?: string; sha?: string; merge_method?: string };
           if (body.merge_method !== undefined && body.merge_method !== "merge") {
             // squash/rebase rewrite history server-side — not supported.

@@ -166,7 +166,7 @@ export const BackupVaultProvider = () =>
           };
           const tags = yield* backup.listTags({ ResourceArn: found.BackupVaultArn }).pipe(
             Effect.map((r) => r.Tags ?? {}),
-            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string | undefined>),
           );
           return (yield* hasAlchemyTags(id, tags as Record<string, string>))
             ? attrs
@@ -241,7 +241,7 @@ export const BackupVaultProvider = () =>
           // SYNC tags — diff against observed cloud tags.
           const currentTags = yield* backup.listTags({ ResourceArn: backupVaultArn }).pipe(
             Effect.map((r) => r.Tags ?? {}),
-            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string | undefined>),
           );
           const { upsert, removed } = diffTags(currentTags as Record<string, string>, {
             ...news.tags,

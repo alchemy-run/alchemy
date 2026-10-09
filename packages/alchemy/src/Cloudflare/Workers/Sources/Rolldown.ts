@@ -145,12 +145,11 @@ export const WorkerBundle = Effect.gen(function* () {
     );
     const realMain = yield* sanitizeMain(options.main);
     const cwd = yield* findCwdForBundle(realMain).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find cwd for bundle: ${realMain}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find cwd for bundle: ${realMain}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );
@@ -238,12 +237,11 @@ export const WorkerBundle = Effect.gen(function* () {
 
   const sanitizeMain = (main: string) =>
     resolveMainPath(main).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find real path for bundle: ${main}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find real path for bundle: ${main}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );

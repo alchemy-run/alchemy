@@ -352,10 +352,7 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
               times: 8,
               schedule: Schedule.exponential("250 millis"),
             }),
-            Effect.catchIf(
-              (error) => error._tag === "Conflict",
-              () => getByName(name),
-            ),
+            Effect.catchTag("Conflict", () => getByName(name)),
           );
         current = created ?? undefined;
       }

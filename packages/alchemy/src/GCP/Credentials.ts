@@ -59,11 +59,10 @@ export const fromAuthProvider = () =>
               project: creds.project,
               region: creds.region,
             })),
-            Effect.mapError(
-              (e) =>
-                new ConfigError({
-                  message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              ConfigError.make({
+                message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),
@@ -106,27 +105,24 @@ export const fromChain = () =>
           const keyFile = yield* Config.option(Config.String("GOOGLE_APPLICATION_CREDENTIALS"));
           if (Option.isSome(keyFile)) {
             const raw = yield* fs.readFileString(keyFile.value).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ConfigError({
-                    message: `Failed to read GOOGLE_APPLICATION_CREDENTIALS at ${keyFile.value}: ${cause.message}`,
-                  }),
+              Effect.mapError((cause) =>
+                ConfigError.make({
+                  message: `Failed to read GOOGLE_APPLICATION_CREDENTIALS at ${keyFile.value}: ${cause.message}`,
+                }),
               ),
             );
             const sa = yield* parseServiceAccountKey(raw).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ConfigError({
-                    message: `Invalid GOOGLE_APPLICATION_CREDENTIALS JSON: ${cause.message}`,
-                  }),
+              Effect.mapError((cause) =>
+                ConfigError.make({
+                  message: `Invalid GOOGLE_APPLICATION_CREDENTIALS JSON: ${cause.message}`,
+                }),
               ),
             );
             const minted = yield* mintAccessToken(sa).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ConfigError({
-                    message: `Failed to mint a Google access token from the service-account key: ${cause.message}`,
-                  }),
+              Effect.mapError((cause) =>
+                ConfigError.make({
+                  message: `Failed to mint a Google access token from the service-account key: ${cause.message}`,
+                }),
               ),
             );
             return {

@@ -241,7 +241,7 @@ const layerFallback = <I, S>(service: Context.Key<I, S>, defaultValue: NoInfer<S
  */
 export const providerServices = <ROut, E, RIn>(
   self: Layer.Layer<ROut, E, RIn>,
-): Layer.Layer<ROut, E, RIn | AlchemyContext> => providerServicesEffect(Effect.succeed(self));
+): Layer.Layer<ROut, E, RIn | AlchemyContext> => self.pipe(Effect.succeed, providerServicesEffect);
 
 /**
  * Conditionally constructs a layer for use by an RpcProvider.

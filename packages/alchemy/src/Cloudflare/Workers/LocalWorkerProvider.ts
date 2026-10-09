@@ -291,7 +291,7 @@ export const LocalWorkerProvider = () =>
           if (type === "SourceMap") continue;
           if (type === "Data" || type === "Wasm") {
             if (!(file.content instanceof Uint8Array)) {
-              return yield* new WorkerValidationError({
+              return yield* WorkerValidationError.make({
                 message: `Expected Uint8Array for ${file.path} (${type})`,
                 value: file.content,
               });
@@ -1383,12 +1383,10 @@ export const LocalWorkerProvider = () =>
         };
         const handle = yield* source.dev(devCtx);
         if (handle.mode !== "bundle") {
-          return yield* Effect.fail(
-            new SourceProviderError({
-              provider: worker.source!.provider,
-              message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
-            }),
-          );
+          return yield* new SourceProviderError({
+            provider: worker.source!.provider,
+            message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
+          });
         }
         yield* serveBundleStream(worker, proxy, handle.bundles);
         return proxy.url;

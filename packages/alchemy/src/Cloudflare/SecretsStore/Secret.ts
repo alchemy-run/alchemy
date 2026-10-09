@@ -148,8 +148,10 @@ export const SecretProviderLive = () =>
             secretId: output.secretId,
           })
           .pipe(
-            Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              SecretNotFound: () => Effect.succeed(undefined),
+              StoreNotFound: () => Effect.succeed(undefined),
+            }),
           );
       }
       if (!observed) {
@@ -249,9 +251,11 @@ export const SecretProviderLive = () =>
         .pipe(
           Effect.tap(() => Effect.log(`deleted ${output.secretId}`)),
           Effect.tapError(Console.log),
-          Effect.catchTag("SecretNotFound", () => Effect.void),
-          Effect.catchTag("StoreNotFound", () => Effect.void),
-          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catchTags({
+            SecretNotFound: () => Effect.void,
+            StoreNotFound: () => Effect.void,
+            NotFound: () => Effect.void,
+          }),
         );
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -272,8 +276,10 @@ export const SecretProviderLive = () =>
               scopes: output.scopes,
               comment: secret.comment ?? undefined,
             })),
-            Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              SecretNotFound: () => Effect.succeed(undefined),
+              StoreNotFound: () => Effect.succeed(undefined),
+            }),
           );
       }
       // An interrupted first deploy can persist `creating` props whose
@@ -474,8 +480,10 @@ const waitForSecretActive = (
         // The secret was observed moments ago; a NotFound here is a
         // read-replica lag blip, not a deletion. Report the last known
         // status and let the deploy-side retry take over.
-        Effect.catchTag("SecretNotFound", () => Effect.succeed(initialStatus)),
-        Effect.catchTag("StoreNotFound", () => Effect.succeed(initialStatus)),
+        Effect.catchTags({
+          SecretNotFound: () => Effect.succeed(initialStatus),
+          StoreNotFound: () => Effect.succeed(initialStatus),
+        }),
       );
 
 const resolveScopes = (scopes: string[] | undefined): string[] =>
