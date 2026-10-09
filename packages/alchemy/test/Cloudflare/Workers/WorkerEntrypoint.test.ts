@@ -53,7 +53,7 @@ test(
 );
 
 test(
-  "a worker reaches its own NAMED entrypoint through WorkerEntrypoint(Self)",
+  "a worker reaches its own NAMED entrypoint through WorkerEntrypoint(name)",
   Effect.gen(function* () {
     const { targetUrl } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
@@ -62,6 +62,21 @@ test(
     // `greet`: the greeting proves the self binding carried `entrypoint`.
     const res = yield* client.get(`${targetUrl}/self-greet?name=bob`).pipe(coldStartRetry);
     expect(yield* res.text).toBe("hello bob from Api");
+  }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "a worker reaches its own default export through WorkerEntrypoint()",
+  Effect.gen(function* () {
+    const { targetUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${targetUrl}/self-default`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("via self default: hello from EntrypointTargetWorker");
   }),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],

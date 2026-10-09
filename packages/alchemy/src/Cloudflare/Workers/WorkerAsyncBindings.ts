@@ -606,7 +606,7 @@ const toBinding = (
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
     // Tested BEFORE `isWorker` — the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
-    if (isSelf(binding.worker)) {
+    if (binding.worker === undefined) {
       // One of this Worker's own named entrypoints: lowered like `Self`.
       return {
         type: "self_service",

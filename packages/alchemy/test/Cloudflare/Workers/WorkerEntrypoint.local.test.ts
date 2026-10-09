@@ -59,7 +59,7 @@ test.provider(
               "fixtures/worker-entrypoint-binding/entrypoint-target-worker.ts",
             ),
             env: {
-              SELF: Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, {
+              SELF: Cloudflare.WorkerEntrypoint<Api>({
                 entrypoint: "Api",
                 props: { tenant: "self" },
               }),
@@ -94,7 +94,7 @@ test.provider(
       )) as Record<string, unknown>;
       expect(props).toEqual({ tenant: "acme" });
 
-      // The target's own `Api`, bound with `WorkerEntrypoint(Self, ...)`.
+      // The target's own `Api`, bound with `WorkerEntrypoint({ entrypoint, props })`.
       const selfGreeting = yield* getReady(`${deployed.target.url}/self-greet?name=bob`).pipe(
         Effect.flatMap((res) => res.text),
       );

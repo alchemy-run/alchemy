@@ -11,10 +11,11 @@ export const Target = () =>
   Cloudflare.Worker("EntrypointTarget", {
     main: targetMain,
     env: {
-      SELF: Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, {
+      SELF: Cloudflare.WorkerEntrypoint<Api>({
         entrypoint: "Api",
         props: { tenant: "self" },
       }),
+      SELF_DEFAULT: Cloudflare.WorkerEntrypoint(),
     },
   });
 
@@ -36,7 +37,7 @@ export type CallerEnv = Cloudflare.InferEnv<ReturnType<typeof Caller>>;
  *
  * - `EntrypointTarget` — exports a named `Api` entrypoint (greet + a
  *   ctx.props echo) alongside its default handler, and binds its own `Api`
- *   via `Cloudflare.WorkerEntrypoint(Cloudflare.Workers.Self, ...)`.
+ *   via `Cloudflare.WorkerEntrypoint({ entrypoint: "Api", props })`.
  * - `EntrypointCaller` — binds the target's `Api` entrypoint via
  *   `Cloudflare.WorkerEntrypoint(target, { entrypoint: "Api", props })`.
  */

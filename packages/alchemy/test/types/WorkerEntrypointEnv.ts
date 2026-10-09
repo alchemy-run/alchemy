@@ -24,7 +24,8 @@ export const Worker = Cloudflare.Worker("EntrypointEnvTypeProbe", {
     NAMED_ON_EFFECT: Cloudflare.WorkerEntrypoint(effectTarget, "Api"),
     DIRECT_EFFECT: effectTarget,
     SELF: Cloudflare.Workers.Self,
-    SELF_API: Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, "Api"),
+    SELF_API: Cloudflare.WorkerEntrypoint<Api>("Api"),
+    SELF_DEFAULT: Cloudflare.WorkerEntrypoint(),
   },
 });
 
@@ -38,6 +39,7 @@ export const _fetched: Promise<Response> = env.API.fetch("https://example.com");
 export const _connected: Socket = env.API.connect("example.com:443");
 export const _self: Promise<Response> = env.SELF.fetch("https://example.com");
 export const _selfGreeting: Promise<string> = env.SELF_API.greet("alice");
+export const _selfDefault: Promise<Response> = env.SELF_DEFAULT.fetch("https://example.com");
 export const _directEffect: Promise<string | Cloudflare.RpcErrorEnvelope> =
   env.DIRECT_EFFECT.defaultOnly();
 

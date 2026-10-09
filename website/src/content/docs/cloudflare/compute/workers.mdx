@@ -477,27 +477,28 @@ plain `Fetcher` with only `fetch` and `connect`.
 
 ### This Worker's default export
 
-`Cloudflare.Workers.Self` binds the Worker to itself:
+`Cloudflare.WorkerEntrypoint()` with no arguments binds the Worker to itself:
 
 ```typescript
 const api = yield* Cloudflare.Worker("Api", {
   main: "./src/target.ts",
-  env: { SELF: Cloudflare.Workers.Self },
+  env: { SELF: Cloudflare.WorkerEntrypoint() },
 });
 ```
 
 `env.SELF.fetch(request)` re-enters the Worker's own `export default`.
+`Cloudflare.Workers.Self` is the same binding.
 
 ### This Worker's named entrypoint
 
-Pass `Cloudflare.Workers.Self` as the target of `Cloudflare.WorkerEntrypoint`:
+Pass just the name:
 
 ```typescript
 import type { Api } from "./src/target.ts";
 
 const api = yield* Cloudflare.Worker("Api", {
   main: "./src/target.ts",
-  env: { API: Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, "Api") },
+  env: { API: Cloudflare.WorkerEntrypoint<Api>("Api") },
 });
 ```
 
@@ -514,8 +515,9 @@ of `WorkerEnv` works.
 ### Pass `ctx.props` to an entrypoint
 
 The options form attaches properties the entrypoint reads from
-`this.ctx.props`. It works with another Worker or with
-`Cloudflare.Workers.Self`, and `Output` values resolve at deploy time:
+`this.ctx.props`, on another Worker or on this one
+(`Cloudflare.WorkerEntrypoint({ entrypoint, props })`). `Output` values
+resolve at deploy time:
 
 ```typescript
 env: {
