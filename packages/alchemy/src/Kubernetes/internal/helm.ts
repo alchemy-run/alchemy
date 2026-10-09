@@ -19,8 +19,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as YAML from "yaml";
 import { unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets, redactJson } from "../../Util/Redaction.ts";
 import type { KubernetesObjectDefinition } from "./objects.ts";
-import { collectRedactedSecrets, scrubSecrets } from "./redact.ts";
 
 /** A Helm invocation or render failure (bad chart ref, template error, …). */
 export class HelmError extends Data.TaggedError("HelmError")<{
@@ -146,7 +146,7 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
           `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
           result.stderr.trim();
         return yield* Effect.failSync(
-          () => new HelmError({ message: scrubSecrets(detail, secrets) }),
+          () => new HelmError({ message: redactJson(detail, secrets) }),
         );
       }
 
@@ -188,7 +188,7 @@ export const parseRenderedManifests = (
       cause instanceof HelmError
         ? cause
         : new HelmError({
-            message: scrubSecrets(
+            message: redactJson(
               `Failed to parse rendered manifests from chart '${chart}': ${causeText(cause)}`,
               secrets,
             ),
@@ -201,7 +201,7 @@ const parseRenderedManifestsSync = (
   secrets: readonly string[],
 ): Array<KubernetesObjectDefinition> => {
   const fail = (message: string): never => {
-    throw new HelmError({ message: scrubSecrets(message, secrets) });
+    throw new HelmError({ message: redactJson(message, secrets) });
   };
   // Helm 4 writes OCI pull metadata to stdout before the rendered YAML.
   // Strip only that exact leading preamble; chart output remains subject to
@@ -229,7 +229,7 @@ const parseRenderedManifestsSync = (
     if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
       // Scrub the full JSON before truncating so a secret that crosses the
       // 200-character boundary is removed entirely.
-      const snippet = scrubSecrets(JSON.stringify(value), secrets).slice(0, 200);
+      const snippet = redactJson(JSON.stringify(value), secrets).slice(0, 200);
       fail(`Chart '${chart}' rendered an object without apiVersion/kind: ${snippet}`);
     }
     if (typeof object.metadata?.name !== "string") {

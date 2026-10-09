@@ -15,6 +15,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isPlainObject, unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets, redactJson } from "../../Util/Redaction.ts";
 import {
   ClusterNotFoundError,
   findClusterAdapter,
@@ -34,7 +35,6 @@ import {
   type KubernetesObjectKindSpec,
   type KubernetesObjectRef,
 } from "./objects.ts";
-import { collectRedactedSecrets, scrubSecrets } from "./redact.ts";
 
 export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   method: string;
@@ -211,7 +211,7 @@ const requestJson = Effect.fn(function* ({
   if (response.statusCode < 200 || response.statusCode >= 300) {
     // Error bodies can echo the request. Scrub only failures —
     // a successful dry-run is the object we compare for drift.
-    const responseBody = yield* Effect.sync(() => scrubSecrets(response.body, prepared.secrets));
+    const responseBody = yield* Effect.sync(() => redactJson(response.body, prepared.secrets));
     if (response.statusCode === 404) {
       return yield* new KubernetesNotFound({ method, path, body: responseBody });
     }

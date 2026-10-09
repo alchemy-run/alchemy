@@ -5,6 +5,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { collectRedactedSecrets } from "../Util/Redaction.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
@@ -23,7 +24,6 @@ import {
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
 } from "./internal/objects.ts";
-import { collectRedactedSecrets } from "./internal/redact.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 

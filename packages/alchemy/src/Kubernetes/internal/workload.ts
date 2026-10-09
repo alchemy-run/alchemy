@@ -13,6 +13,7 @@ import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import { unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets } from "../../Util/Redaction.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ClusterAdapterService,
@@ -21,7 +22,6 @@ import type {
   WorkloadImageSource,
 } from "../ClusterAdapter.ts";
 import type { ClusterLike, Connection, ConnectionAuth } from "../Connection.ts";
-import { collectRedactedSecrets } from "./redact.ts";
 import type { ConnectionRegistry } from "./registry.ts";
 
 /**
