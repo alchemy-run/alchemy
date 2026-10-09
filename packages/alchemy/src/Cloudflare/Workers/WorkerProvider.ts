@@ -2767,6 +2767,11 @@ export const LiveWorkerProvider = () =>
         }
         appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
         const compatibility = getCompatibility(news);
+        // A version of a parent that hosts Durable Objects must re-declare
+        // the parent's live `exports`: Cloudflare reconciles a deployed
+        // version against its own map and rejects splitting traffic between
+        // versions whose maps differ.
+        const parentExports = yield* getLiveDurableObjectExports(accountId, parentName);
         yield* session.note(`Uploading version of ${parentName} ...`, { kind: "status" });
         const created = yield* workers
           .createScriptVersion({
@@ -2779,6 +2784,7 @@ export const LiveWorkerProvider = () =>
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               cacheOptions: news.cache ?? getCacheBinding(bindings),
+              exports: parentExports,
               annotations:
                 alias !== undefined || version.message !== undefined || version.tag !== undefined
                   ? {
@@ -3765,6 +3771,17 @@ export const LiveWorkerProvider = () =>
             return yield* new WorkerVersionConfigError({
               message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}). Durable Object lifecycle changes cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
             });
+          }
+          if (rolloutTraffic > 0) {
+            // Cloudflare rejects a split between versions that declare
+            // different `exports` — including the first deploy after a
+            // Worker moves from `migrations` to `exports`.
+            const liveExports = yield* getLiveDurableObjectExports(accountId, name);
+            if (!sameDurableObjectExports(metadata.exports, liveExports)) {
+              return yield* new WorkerVersionConfigError({
+                message: `This deploy of '${name}' changes its Durable Object exports${liveExports === undefined ? " (its live version still uses migrations)" : ""}. A gradual rollout needs every version to declare the same exports. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+              });
+            }
           }
           yield* session.note(`Uploading version of ${name} (${bundleSize}) ...`, {
             kind: "status",
@@ -5568,6 +5585,60 @@ const buildDurableObjectExports = (params: {
     };
   }
   return exports;
+};
+
+/**
+ * The Durable Object `exports` of the version serving most of a script's
+ * traffic, as live entries (Cloudflare omits tombstones). `undefined` when
+ * nothing is deployed or the live version predates `exports` (the legacy
+ * `migrations` flow).
+ *
+ * @internal
+ */
+const getLiveDurableObjectExports = (accountId: string, scriptName: string) =>
+  Effect.gen(function* () {
+    const { deployments } = yield* workers.listScriptDeployments({ accountId, scriptName });
+    const live = [...(deployments[0]?.versions ?? [])].sort(
+      (a, b) => b.percentage - a.percentage,
+    )[0];
+    if (!live) return undefined;
+    const version = yield* workers.getScriptVersion({
+      accountId,
+      scriptName,
+      versionId: live.versionId,
+    });
+    const exports = version.resources?.scriptRuntime?.exports;
+    if (exports == null) return undefined;
+    const durableObjects: Record<string, workers.PutScriptMetadataExport> = {};
+    for (const [className, entry] of Object.entries(exports)) {
+      if (entry?.type === "durable-object") {
+        durableObjects[className] = {
+          type: "durable-object",
+          storage: "storage" in entry ? (entry.storage ?? undefined) : undefined,
+        };
+      }
+    }
+    return Object.keys(durableObjects).length > 0 ? durableObjects : undefined;
+  });
+
+/**
+ * Whether two `exports` maps declare the same live Durable Object classes
+ * with the same storage. Cloudflare requires every version in a
+ * multi-version (gradual) deployment to declare identical `exports`.
+ *
+ * @internal
+ */
+const sameDurableObjectExports = (
+  a: Record<string, workers.PutScriptMetadataExport | undefined> | undefined,
+  b: Record<string, workers.PutScriptMetadataExport | undefined> | undefined,
+): boolean => {
+  const live = (map: typeof a) =>
+    Object.entries(map ?? {})
+      .filter(([, entry]) => entry?.type === "durable-object" && entry.state === undefined)
+      .map(([className, entry]) => `${className}:${entry?.storage ?? ""}`)
+      .sort()
+      .join(",");
+  return live(a) === live(b);
 };
 
 /**
