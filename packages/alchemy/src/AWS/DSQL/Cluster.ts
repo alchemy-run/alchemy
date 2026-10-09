@@ -4,7 +4,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import { InstanceId } from "../../InstanceId.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -226,11 +225,11 @@ export const ClusterProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, output }) {
+        read: Effect.fn(function* ({ id, instanceId, output }) {
           const { region } = yield* AWSEnvironment.current;
           const cluster = output?.clusterId
             ? yield* readCluster(output.clusterId)
-            : yield* findCluster(id, yield* InstanceId);
+            : yield* findCluster(id, instanceId);
           if (cluster === undefined || cluster.status === "DELETED") {
             return undefined;
           }
