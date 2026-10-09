@@ -5,6 +5,7 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { asEffect } from ".//Util/types.ts";
@@ -2308,9 +2309,13 @@ const providePlanScope =
       Effect.flatMap((store) =>
         effect.pipe(
           failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
-          Effect.provideService(ResourceFqn, fqn),
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
+              Layer.succeed(InstanceId, instanceId),
+              Layer.succeed(ResourceFqn, fqn),
+            ),
+          ),
         ),
       ),
     );
