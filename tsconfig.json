@@ -215,6 +215,18 @@
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-foldkit-spa/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-hybrid/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssg/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssr/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-tanstack-start/tsconfig.json"
     },
     {

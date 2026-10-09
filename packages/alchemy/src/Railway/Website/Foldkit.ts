@@ -1,37 +1,38 @@
-import { Vite, type ViteProps } from "./Vite.ts";
+import * as Namespace from "../../Namespace.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import type { ViteProps } from "./Vite.ts";
 
-export interface FoldkitProps extends ViteProps {}
+/** Configuration for a Foldkit website. */
+export interface FoldkitProps extends FrameworkSiteProps {
+  /** Serializable overrides merged over vite.config.*. */
+  vite?: ViteProps["vite"];
+}
 
 /**
- * Deploy a [Foldkit](https://foldkit.dev) app to Railway: a Vite SPA with
- * unmatched paths falling back to `index.html` so deep links boot the
- * Foldkit router. Same Node static-file Service as {@link Vite}.
+ * Deploy a [Foldkit](https://foldkit.dev) application to Railway.
+ * Browser-only apps use SPA routing. With `ssr.build` enabled in the
+ * Foldkit Vite plugin, prerendered pages and assets are served first,
+ * followed by Foldkit's generated request handler for SSR and hybrid routes.
  *
- * Foldkit apps are client-only Vite projects — the Foldkit Vite plugin in
- * the app's `vite.config.ts` composes with the project's own Vite build.
+ * The build uses `@alchemy.run/frontend-frameworks/foldkit` and the
+ * project's Vite configuration. No application adapter is required.
+ * Native Foldkit development and live reload run without cloud resources;
+ * `Alchemy.remote()` opts into a live deployment during development.
  *
- * During `alchemy dev` the site is Vite's own dev server and no cloud
- * resources are created. `Alchemy.remote()` opts back into the live
- * Service path.
- *
- * ### Deploying a Foldkit App
- * **Example:** Foldkit app
+ * ### Creating a Website
+ * **Example:** SPA, SSR, or prerendered Foldkit application
  * ```typescript
- * const site = yield* Railway.Website.Foldkit("Website");
- * ```
- *
- * **Example:** Foldkit project in a subdirectory
- * ```typescript
- * const site = yield* Railway.Website.Foldkit("Website", {
- *   rootDir: "applications/web",
+ * const site = yield* Railway.Website.Foldkit("Web", {
+ *   rootDir: "./app",
  * });
  * ```
  *
- * ### Single-Page Application Routing
- * **Example:** Serving a real 404 page
+ * ### Server Configuration
+ * **Example:** Runtime environment for server-rendered pages
  * ```typescript
- * const site = yield* Railway.Website.Foldkit("Website", {
- *   assets: { notFoundHandling: "404-page" },
+ * const site = yield* Railway.Website.Foldkit("Web", {
+ *   rootDir: "./app",
+ *   env: { API_BASE: "https://api.example.com" },
  * });
  * ```
  *
@@ -39,10 +40,16 @@ export interface FoldkitProps extends ViteProps {}
  * @product Website
  */
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
-  Vite(id, {
-    ...props,
-    assets: {
-      notFoundHandling: "single-page-application",
-      ...props.assets,
+  makeFrameworkSite(id, props, {
+    name: "Foldkit",
+    framework: "@alchemy.run/frontend-frameworks/foldkit",
+    target: "@alchemy.run/frontend-frameworks/foldkit/node",
+    options: {
+      vite: props.vite,
+      notFoundHandling:
+        props.assets?.notFoundHandling === "single-page-application"
+          ? "spa"
+          : props.assets?.notFoundHandling,
+      htmlHandling: props.assets?.htmlHandling,
     },
-  });
+  }).pipe(Namespace.push(id));

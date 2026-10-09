@@ -43,12 +43,16 @@ export interface NodeServeEntryOptions {
    * Omit to skip static-file serving (Next.js handles its own assets).
    */
   readonly clientDirExpression?: string | undefined;
+  /** Mount the client directory at this URL pathname. @default "/" */
+  readonly assetBasePath?: string | undefined;
   /**
    * Framework request handler. Omit for assets-only sites (Vite SPA,
    * `vite build` output): unmatched GETs 404 after static lookup / SPA
    * fallback.
    */
   readonly handler?: NodeServeHandler | undefined;
+  /** Serve a prerendered index.html at / even when a handler exists. @default false */
+  readonly serveRootIndex?: boolean | undefined;
   /**
    * Vocs/Waku: serve `about/index.html` at `/about` (CF
    * `htmlHandling: "drop-trailing-slash"`).
@@ -107,6 +111,19 @@ export const pinNodeServeModule = (output: BuildOutput, serveModule: OutputFile)
   ],
 });
 
+/** Shared URL-to-asset mapping; framework handlers retain the original request URL. */
+export const staticAssetPathSource = (assetBasePath = "/"): string => {
+  const base = assetBasePath.replace(/\/+$/, "");
+  return `const staticPathFor = (pathname) => {
+  const base = ${JSON.stringify(base)};
+  if (base === "") return pathname;
+  if (pathname === base) return "/";
+  if (!pathname.startsWith(base + "/")) return undefined;
+  return pathname.slice(base.length);
+};
+`;
+};
+
 /**
  * Generate a complete Node/Bun HTTP program: `/health`, GET static assets,
  * then the framework handler. No package imports other than `node:*` and
@@ -126,7 +143,7 @@ export const makeNodeServeEntrySource = (options: NodeServeEntryOptions): string
   const staticBlock = hasStatic
     ? `
 const CLIENT_DIR = ${options.clientDirExpression};
-
+${staticAssetPathSource(options.assetBasePath)}
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -179,7 +196,7 @@ const safeJoin = (urlPath) => {
 const lookupStatic = (urlPath) => {
   const base = safeJoin(urlPath);
   if (base === undefined) return undefined;
-  const isRoot = ${handler === undefined ? "false" : `(urlPath === "/" || urlPath === "")`};
+  const isRoot = ${handler === undefined || options.serveRootIndex ? "false" : `(urlPath === "/" || urlPath === "")`};
   const direct = existingFile(base, !isRoot);
   if (direct) return direct;
 ${
@@ -210,8 +227,9 @@ const sendFile = (res, filePath, status) => {
 
   const staticDispatch = hasStatic
     ? `
-    if (req.method === "GET" || req.method === "HEAD") {
-      const file = lookupStatic(urlPath);
+    const staticPath = staticPathFor(urlPath);
+    if ((req.method === "GET" || req.method === "HEAD") && staticPath !== undefined) {
+      const file = lookupStatic(staticPath);
       if (file !== undefined) {
         if (req.method === "HEAD") {
           res.writeHead(200);
@@ -423,7 +441,9 @@ export const writeNodeServeEntry = (
         ...options.output,
         nodeServe: {
           clientDirExpression: options.clientDirExpression,
+          assetBasePath: options.assetBasePath,
           handler: options.handler,
+          serveRootIndex: options.serveRootIndex,
           htmlHandling: options.htmlHandling,
           notFoundHandling: options.notFoundHandling,
         },

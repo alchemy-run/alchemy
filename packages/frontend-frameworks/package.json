@@ -107,6 +107,24 @@
       "import": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js"
     },
     "./astro/types.d.ts": "./src/astro/types.d.ts",
+    "./foldkit": {
+      "types": "./dist/foldkit/index.d.ts",
+      "bun": "./dist/foldkit/index.js",
+      "worker": "./dist/foldkit/index.js",
+      "import": "./dist/foldkit/index.js"
+    },
+    "./foldkit/aws": {
+      "types": "./dist/foldkit/aws.d.ts",
+      "bun": "./dist/foldkit/aws.js",
+      "worker": "./dist/foldkit/aws.js",
+      "import": "./dist/foldkit/aws.js"
+    },
+    "./foldkit/node": {
+      "types": "./dist/foldkit/node.d.ts",
+      "bun": "./dist/foldkit/node.js",
+      "worker": "./dist/foldkit/node.js",
+      "import": "./dist/foldkit/node.js"
+    },
     "./nextjs": {
       "types": "./dist/nextjs/index.d.ts",
       "bun": "./dist/nextjs/index.js",

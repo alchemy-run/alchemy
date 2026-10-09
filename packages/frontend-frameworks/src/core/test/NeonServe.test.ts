@@ -39,6 +39,75 @@ const call = (module: Entry, pathname: string, method = "GET") =>
 const text = (response: Response) => Effect.tryPromise(() => response.text());
 
 describe("Neon Fetch entry", () => {
+  it("applies explicit 404-page routing before SSR, matching the Node host", () =>
+    run(
+      Effect.gen(function* () {
+        const module = yield* entry(
+          {
+            notFoundHandling: "404-page",
+            handler: {
+              kind: "fetch",
+              imports: "",
+              expr: "request => new Response(request.method)",
+            },
+          },
+          { "404.html": "Custom missing page" },
+        );
+        const missing = yield* call(module, "/missing");
+        expect(missing.status).toBe(404);
+        expect(yield* text(missing)).toBe("Custom missing page");
+        const head = yield* call(module, "/missing", "HEAD");
+        expect(head.status).toBe(404);
+        expect(yield* text(head)).toBe("");
+        expect(yield* text(yield* call(module, "/missing", "POST"))).toBe("POST");
+      }),
+    ));
+
+  it("scopes assets, HTML routing and fallbacks to the configured mount", () =>
+    run(
+      Effect.gen(function* () {
+        for (const notFoundHandling of ["spa", "404-page"] as const) {
+          const module = yield* entry(
+            { assetBasePath: "/app/", notFoundHandling, htmlHandling: "drop-trailing-slash" },
+            {
+              "index.html": "Home",
+              "about.html": "About",
+              "404.html": "Missing",
+              "app.css": "body{}",
+            },
+          );
+          expect(yield* text(yield* call(module, "/app"))).toBe("Home");
+          expect(yield* text(yield* call(module, "/app/about"))).toBe("About");
+          expect(yield* text(yield* call(module, "/app/app.css"))).toBe("body{}");
+          const missing = yield* call(module, "/app/deep/link");
+          expect(missing.status).toBe(notFoundHandling === "spa" ? 200 : 404);
+          expect(yield* text(missing)).toBe(notFoundHandling === "spa" ? "Home" : "Missing");
+          expect(yield* text(yield* call(module, "/app/deep/link", "HEAD"))).toBe("");
+          expect((yield* call(module, "/app/app.css", "POST")).status).toBe(404);
+          for (const pathname of ["/app.css", "/application/app.css", "/deep/link"]) {
+            expect((yield* call(module, pathname)).status).toBe(404);
+          }
+        }
+      }),
+    ));
+
+  it("preserves SSR home routing and the original URL under a mount", () =>
+    run(
+      Effect.gen(function* () {
+        const module = yield* entry(
+          {
+            assetBasePath: "/app/",
+            handler: { kind: "fetch", imports: "", expr: "request => new Response(request.url)" },
+          },
+          { "index.html": "static" },
+        );
+        expect(yield* text(yield* call(module, "/app/?q=1"))).toBe(
+          "https://function.neon.run/app/?q=1",
+        );
+        expect(yield* text(yield* call(module, "/?q=1"))).toBe("https://function.neon.run/?q=1");
+      }),
+    ));
+
   it("exports Fetch without binding a listening socket", () => {
     const source = makeNeonServeEntrySource({});
     expect(source).toContain("export default");
