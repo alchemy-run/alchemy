@@ -382,9 +382,14 @@ for (const dev of [true, false]) {
             Effect.gen(function* () {
               yield* stack.destroy();
 
-              /** Exec routes are safe to retry while a new Worker comes up. */
-              const exec = (url: string, path: string) =>
-                getJson<ExecResult>(url, path).pipe(
+              /**
+               * Exec and lifecycle routes are safe to repeat. A fresh workers.dev
+               * route can briefly 404 or drop a request while it settles, so
+               * each attempt is bounded and retried.
+               */
+              const call = <A>(url: string, path: string) =>
+                getJson<A>(url, path).pipe(
+                  within(`${url}${path}`, "10 seconds"),
                   Effect.tapError((error) =>
                     Effect.logWarning(`${url}${path} attempt failed`, error),
                   ),
@@ -392,8 +397,9 @@ for (const dev of [true, false]) {
                     schedule: Schedule.spaced("1 second"),
                     times: 8,
                   }),
-                  within(`${url}${path}`, "25 seconds"),
+                  within(`${url}${path}`, "45 seconds"),
                 );
+              const exec = (url: string, path: string) => call<ExecResult>(url, path);
 
               const applications = yield* Effect.gen(function* () {
                 const deployed = yield* stack.deploy(nativeStack);
@@ -422,10 +428,7 @@ for (const dev of [true, false]) {
                   // Closing an exec's scope kills the process; stdout streams;
                   // a failed container surfaces as ContainerError from monitor().
                   const lifecycle = (mode: string) =>
-                    getJson<Record<string, unknown>>(
-                      deployed.worker.url!,
-                      `/lifecycle/${mode}`,
-                    ).pipe(within(`/lifecycle/${mode}`, "25 seconds"));
+                    call<Record<string, unknown>>(deployed.worker.url!, `/lifecycle/${mode}`);
                   expect(yield* lifecycle("interrupt")).toEqual({ remaining: "" });
                   expect(yield* lifecycle("stream")).toEqual({ stdout: "ab" });
                   expect(yield* lifecycle("monitor")).toEqual({
@@ -564,7 +567,7 @@ for (const dev of [true, false]) {
                 }
               }
             }),
-          { timeout: 120_000, retry: 0 },
+          { timeout: 180_000, retry: 0 },
         );
       }
     },
