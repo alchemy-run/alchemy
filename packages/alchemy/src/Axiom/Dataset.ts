@@ -169,7 +169,10 @@ export const DatasetProvider = () =>
   Provider.effect(
     Dataset,
     Effect.gen(function* () {
-      const { apiBaseUrl } = yield* yield* Credentials;
+      // Resolve credentials on first use, not while building the provider:
+      // registering Axiom.providers() must not require Axiom credentials in
+      // stages that declare no Axiom resources.
+      const credentials = yield* Credentials;
       const create = yield* Axiom.createDataset;
       const update = yield* Axiom.updateDataset;
       const get = yield* Axiom.getDataset;
@@ -182,6 +185,7 @@ export const DatasetProvider = () =>
             new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
           );
         }
+        const { apiBaseUrl } = yield* credentials;
         const apiRoot = apiBaseUrl.replace(/\/$/, "");
         const otelRoot = dataset.edgeDeploymentUrl.replace(/\/$/, "");
         return {
