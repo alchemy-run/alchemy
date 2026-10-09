@@ -1,10 +1,12 @@
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { DocsText, DocsVectors, IndexDocs } from "./search/index.ts";
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Website>;
 
@@ -24,8 +26,34 @@ const Website = Cloudflare.Website.StaticSite(
             ? "alchemy-website-prod"
             : undefined;
 
+    // Docs search: production owns the index (see search/index.ts) and the
+    // query log; every other stage proxies `/api/search` to production.
+    let env;
+    if (stack.stage === "prod") {
+      // Every docs search query is logged to Axiom (see src/search-api.ts).
+      const datasetName = `alchemy-docs-search-${stack.stage}`;
+      const queries = yield* Axiom.Dataset("DocsSearchQueries", {
+        name: datasetName,
+        description: "Queries typed into the docs search on alchemy.run",
+      });
+      const ingest = yield* Axiom.ApiToken("DocsSearchIngest", {
+        name: `alchemy-docs-search-ingest-${stack.stage}`,
+        datasetCapabilities: { [datasetName]: { ingest: ["create"] } },
+      });
+      env = {
+        AI: Cloudflare.Workers.AI(),
+        // Keys the search response cache to the deployed version.
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        DOCS_VECTORS: yield* DocsVectors,
+        DOCS_TEXT: yield* DocsText,
+        SEARCH_LOG_URL: Output.interpolate`${queries.edgeDeploymentUrl}/v1/ingest/${queries.name}`,
+        SEARCH_LOG_TOKEN: ingest.token,
+      };
+    }
+
     return {
       name,
+      env,
       command: "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",
@@ -74,12 +102,17 @@ const Website = Cloudflare.Website.StaticSite(
 export default Alchemy.Stack(
   "AlchemyEffectWebsite",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers(), Axiom.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const { stage } = yield* Alchemy.Stack;
     const website = yield* Website;
+
+    if (stage === "prod") {
+      // Re-index whenever the built site changes.
+      yield* IndexDocs({ assets: Output.map(website.hash, (hash) => hash?.assets) });
+    }
 
     if (stage.startsWith("pr-")) {
       yield* GitHub.Comment("preview-comment", {

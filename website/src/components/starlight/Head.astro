@@ -16,6 +16,7 @@ import PostHog from "../analytics/PostHog.astro";
 import BrandIcons from "../../brand/Icons.astro";
 import StructuredData from "../StructuredData.astro";
 import { socialOrigin } from "../../social-origin";
+import { searchFacets } from "../../docs-search";
 
 // Starlight injects route data via Astro.locals at runtime; the public
 // types aren't ambient-declared in this project, so we cast through any.
@@ -44,6 +45,9 @@ const ogImage = new URL(`/og/${ogSlug}.webp`, socialOrigin(Astro.site, Astro.url
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:site" content="@alchemy_run" />
 <meta name="twitter:image" content={ogImage.href} />
+
+{/* Provider facet for the Pagefind fallback index (see DocsSearch.astro). */}
+<meta data-pagefind-filter="provider[content]" content={searchFacets(Astro.url.pathname).provider} />
 
 {/* Organization (sameAs → social profiles) + WebSite JSON-LD. */}
 <StructuredData />
