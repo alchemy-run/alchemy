@@ -294,12 +294,10 @@ export const AccessPointProvider = () =>
                 : yield* findByAlchemyTags(id, news.fileSystemId);
           }
           if (live === undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: `access point on ${news.fileSystemId}`,
-                status: undefined,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: `access point on ${news.fileSystemId}`,
+              status: undefined,
+            });
           }
           const accessPointId = live.accessPointId;
 
@@ -309,12 +307,10 @@ export const AccessPointProvider = () =>
             (ap) => ap === undefined || ap.status !== "creating",
           );
           if (settled === undefined || settled.status !== "available") {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: accessPointId,
-                status: settled?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: accessPointId,
+              status: settled?.status,
+            });
           }
 
           // 3. SYNC TAGS — diff against observed cloud tags so adoption and

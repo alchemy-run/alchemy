@@ -225,7 +225,7 @@ const artifactContent = (
         const dockerfilePath = path.join(news.context, dockerfileName);
         const content = yield* fs
           .readFile(dockerfilePath)
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         if (content) files.push({ path: "Dockerfile", content });
       }
       // Hash the BYTES, not `path:byteLength` — a same-length edit (a
@@ -559,7 +559,7 @@ const buildFailureReason = Effect.fn(function* (
   if (!imageVersion) return undefined;
   const version = yield* microvms
     .getMicrovmImageVersion({ imageIdentifier: imageArn, imageVersion })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   // A version fans out to one build per architecture/chipset; report the reason
   // from each build that actually FAILED (keyed by architecture so multi-platform
   // failures are distinguishable). `buildState` is the reliable signal — don't
@@ -569,7 +569,7 @@ const buildFailureReason = Effect.fn(function* (
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catch(() => Effect.succeed([] as microvms.MicrovmImageBuildSummary[])),
+      Effect.orElseSucceed(() => [] as microvms.MicrovmImageBuildSummary[]),
     );
   const failedBuildReasons = builds
     .filter((b) => b.buildState === "FAILED" && b.stateReason)

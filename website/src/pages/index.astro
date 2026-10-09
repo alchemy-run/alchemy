@@ -17,27 +17,9 @@ import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
 import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
+import PhotosLayers from "../components/marketing-islands/PhotosLayers.tsx";
 
 const alchemySpec = installSpec("alchemy");
-
-// Modules: one Layer creates the resource, binds it, and exposes the API.
-const PHOTOS_SRC = `export class Photos extends Context.Service<Photos, {
-  upload(name: string, body: string): Effect.Effect<void>;
-}>()("Photos") {}
-
-export const PhotosR2 = Layer.effect(
-  Photos,
-  Effect.gen(function* () {
-    // resource
-    const bucket = yield* Cloudflare.R2.Bucket("Photos");
-    // binding: read/write access for this Worker only
-    const photos = yield* Cloudflare.R2.ReadWriteBucket(bucket);
-    // API
-    return {
-      upload: (name, body) => photos.put(name, body),
-    };
-  }),
-);`;
 
 // The hero terminal covers the code card's empty bottom-right corner: it
 // starts below the last line that reaches TERM_COL, so no code is hidden.
@@ -390,7 +372,7 @@ const PROVIDERS = [
           <span class="v2-pyramid__program v2-pyramid__program--above" data-copy>runtime program</span>
           <span class="v2-pyramid__program v2-pyramid__program--below" data-copy>infrastructure program</span>
         </figure>
-        <CodeBlock filename="src/Photos.ts" code={PHOTOS_SRC} compact />
+        <PhotosLayers client:visible />
       </div>
     </div>
   </section>

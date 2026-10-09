@@ -173,7 +173,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
           });
           const option = yield* retryWhileInUse(ensureOption);
           if (!option) {
-            return yield* Effect.fail(new LoggingOptionNotFound({ applicationName, logStreamArn }));
+            return yield* new LoggingOptionNotFound({ applicationName, logStreamArn });
           }
 
           yield* session.note(

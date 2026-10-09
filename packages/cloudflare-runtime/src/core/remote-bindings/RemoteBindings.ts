@@ -62,7 +62,7 @@ export const RemoteBindingsLive = Layer.effect(
         const deploy = prefetched ? Fiber.join(prefetched) : remoteWorker.deploy(json);
         return yield* deploy.pipe(
           Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result })),
-          Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))),
+          Effect.tapCause((cause) => cause.pipe(Cause.pretty, Effect.logError)),
           Effect.catch((error) => HttpServerResponse.json({ ok: false, error }, { status: 500 })),
         );
       }),

@@ -111,7 +111,7 @@ const runR2 =
   (what: string) =>
   <A>(effect: Effect.Effect<A, BlobStoreError, RuntimeContext>): Effect.Effect<A, StoreError> =>
     effect.pipe(
-      Effect.mapError((error) => new StoreError({ reason: `${what}: ${error.reason}` })),
+      Effect.mapError((error) => StoreError.make({ reason: `${what}: ${error.reason}` })),
       Effect.provide(RuntimeContext.phantom),
     );
 
@@ -405,7 +405,7 @@ export const runGeometricMergeJob = (options: {
         let at = bodyOffset;
         for (const row of rows) {
           if (row.pack_offset + row.zsize > bytes.length) {
-            return yield* new StoreError({
+            return yield* StoreError.make({
               reason: `merge: ${row.oid} points past the end of wire pack ${source.id}`,
             });
           }
@@ -427,7 +427,7 @@ export const runGeometricMergeJob = (options: {
         bytes[2] !== 0x43 ||
         bytes[3] !== 0x4b
       ) {
-        return yield* new StoreError({
+        return yield* StoreError.make({
           reason: `merge: pack ${source.id} is not a packfile`,
         });
       }

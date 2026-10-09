@@ -15,6 +15,7 @@ export function assert(condition: unknown, message?: string): asserts condition 
   if (!condition) throw new Error(message ?? "Assertion failed");
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd runtime code (no Effect); `name`/`toResponse` form the HTTP error protocol
 export class HttpError extends Error {
   constructor(
     readonly code: number,

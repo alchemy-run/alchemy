@@ -378,7 +378,7 @@ export const VpcOriginProvider = () =>
             observed.vpcOrigin.Status === "Deployed"
               ? observed
               : yield* waitForDeployment(output.vpcOriginId).pipe(
-                  Effect.catch(() => Effect.succeed(observed)),
+                  Effect.orElseSucceed(() => observed),
                 );
           yield* cloudfront
             .deleteVpcOrigin({
@@ -386,16 +386,17 @@ export const VpcOriginProvider = () =>
               IfMatch: current.etag ?? observed.etag ?? "",
             })
             .pipe(
-              Effect.catchTag("EntityNotFound", () => Effect.void),
-              // The VPC origin may still be referenced by a distribution origin
-              // that is mid-removal; retry on the in-use signal.
-              Effect.catchTag("CannotDeleteEntityWhileInUse", (error) =>
-                Effect.fail(
-                  new VpcOriginStillInUse({
-                    message: error.message ?? "VPC origin still in use",
-                  }),
-                ),
-              ),
+              Effect.catchTags({
+                EntityNotFound: () => Effect.void,
+                // The VPC origin may still be referenced by a distribution origin
+                // that is mid-removal; retry on the in-use signal.
+                CannotDeleteEntityWhileInUse: (error) =>
+                  Effect.fail(
+                    new VpcOriginStillInUse({
+                      message: error.message ?? "VPC origin still in use",
+                    }),
+                  ),
+              }),
               Effect.retry({
                 while: (error) => error._tag === "VpcOriginStillInUse",
                 schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),

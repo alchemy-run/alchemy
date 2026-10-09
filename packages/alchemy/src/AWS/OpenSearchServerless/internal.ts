@@ -82,15 +82,13 @@ export const awaitCollectionActive = Effect.fn("AWS.OpenSearchServerless.awaitCo
   function* (id: string) {
     const detail = yield* untilCollectionTerminal(aoss.batchGetCollection({ ids: [id] }));
     if (detail?.status !== "ACTIVE") {
-      return yield* Effect.fail(
-        new OpenSearchServerlessProvisioningFailed({
-          resource: "Collection",
-          id,
-          status: detail?.status,
-          failureCode: detail?.failureCode,
-          failureMessage: detail?.failureMessage,
-        }),
-      );
+      return yield* new OpenSearchServerlessProvisioningFailed({
+        resource: "Collection",
+        id,
+        status: detail?.status,
+        failureCode: detail?.failureCode,
+        failureMessage: detail?.failureMessage,
+      });
     }
     return detail;
   },
@@ -117,15 +115,13 @@ export const awaitVpcEndpointActive = Effect.fn("AWS.OpenSearchServerless.awaitV
   function* (id: string) {
     const detail = yield* untilVpcEndpointTerminal(aoss.batchGetVpcEndpoint({ ids: [id] }));
     if (detail?.status !== "ACTIVE") {
-      return yield* Effect.fail(
-        new OpenSearchServerlessProvisioningFailed({
-          resource: "VpcEndpoint",
-          id,
-          status: detail?.status,
-          failureCode: detail?.failureCode,
-          failureMessage: detail?.failureMessage,
-        }),
-      );
+      return yield* new OpenSearchServerlessProvisioningFailed({
+        resource: "VpcEndpoint",
+        id,
+        status: detail?.status,
+        failureCode: detail?.failureCode,
+        failureMessage: detail?.failureMessage,
+      });
     }
     return detail;
   },

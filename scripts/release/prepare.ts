@@ -1,17 +1,27 @@
 // Picks the release version and stamps it on every publishable package.
 //
-// The spec selects the version:
-// - `beta` (default), `alpha` or `rc`: the next `2.0.0-<channel>.N`. A
-//   previous candidate that reached npm for only some packages, or never got
-//   its git tag, is retried instead of skipped.
-// - `beta.N`, `alpha.N`, `rc.N`: that exact candidate.
-// - `x.y.z`, or `patch` / `minor` / `major` of the latest stable on npm.
-// - anything else: `0.0.0-<spec>`.
+// The packages' `package.json` version is the source of truth: every package
+// must carry the same one (anything else fails), and the spec bumps from it.
+// npm and git tags are never consulted.
+//
+// - `beta` (default), `rc` or `alpha`: the next candidate on that channel.
+//   `2.0.0-beta.81` becomes `2.0.0-beta.82`; `2.0.0-beta.81` with `rc`
+//   becomes `2.0.0-rc.1`. Moving to an earlier channel, or starting one from
+//   a stable version, needs an explicit version.
+// - `beta.N`, `rc.N`, `alpha.N`: that candidate of the current version.
+// - `patch` / `minor` / `major`: the semver bump, so a prerelease graduates
+//   (`2.0.0-beta.81` with `major` becomes `2.0.0`).
+// - `x.y.z` or `x.y.z-<channel>.N`: exactly that version.
+// - anything else: `0.0.0-<spec>`, a tag release that is published but never
+//   committed, so it does not move the version later releases bump from.
+//
+// Every version except a tag release must be newer than the current one.
 //
 // Writes the version into each `packages/*/package.json`, records the
 // packages in `release-packages.json`, refreshes the lockfile and validates
-// the result. stdout carries only `version=` and `channel=` lines for
-// `$GITHUB_OUTPUT`; everything else goes to stderr.
+// the result (`scripts/validate-publish-packages.ts`). stdout
+// carries only `version=` and `channel=` lines for `$GITHUB_OUTPUT`;
+// everything else goes to stderr.
 //
 // Usage: node scripts/release/prepare.ts [spec]
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -22,27 +32,31 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { publishablePackages, type WorkspacePackage } from "../package-manifest.ts";
+import { publishablePackages, sharedVersion } from "../package-manifest.ts";
 
-type Channel = "release" | "beta" | "alpha" | "rc" | "tag";
+const PRERELEASE_CHANNELS = ["alpha", "beta", "rc"] as const;
+type PrereleaseChannel = (typeof PRERELEASE_CHANNELS)[number];
+type Channel = "release" | PrereleaseChannel | "tag";
 
 export class InvalidReleaseSpec extends Data.TaggedError("InvalidReleaseSpec")<{
   readonly message: string;
   readonly spec: string;
 }> {}
 
-export class NoStableVersion extends Data.TaggedError("NoStableVersion")<{
+export class InvalidCurrentVersion extends Data.TaggedError("InvalidCurrentVersion")<{
   readonly message: string;
-  readonly name: string;
+  readonly version: string;
+}> {}
+
+export class VersionNotNewer extends Data.TaggedError("VersionNotNewer")<{
+  readonly message: string;
+  readonly current: string;
+  readonly next: string;
 }> {}
 
 export class CommandFailed extends Data.TaggedError("CommandFailed")<{
@@ -51,16 +65,110 @@ export class CommandFailed extends Data.TaggedError("CommandFailed")<{
   readonly exitCode: number;
 }> {}
 
-/** The part of an npm packument the release reads. */
-const Packument = Schema.Struct({
-  versions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+/** `x.y.z` with an optional `-<channel>.N`. */
+interface Version {
+  readonly core: readonly [number, number, number];
+  readonly pre?: { readonly channel: PrereleaseChannel; readonly n: number };
+}
+
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/;
+
+const parse = (text: string): Version | undefined => {
+  const match = text.match(VERSION);
+  if (!match) return undefined;
+  const [, major, minor, patch, channel, n] = match;
+  return {
+    core: [Number(major), Number(minor), Number(patch)],
+    pre: channel ? { channel: channel as PrereleaseChannel, n: Number(n) } : undefined,
+  };
+};
+
+const format = ({ core, pre }: Version) =>
+  `${core.join(".")}${pre ? `-${pre.channel}.${pre.n}` : ""}`;
+
+/** Semver precedence: a prerelease sorts before its stable version. */
+const compare = (a: Version, b: Version) => {
+  for (const i of [0, 1, 2] as const) {
+    if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
+  }
+  if (!a.pre || !b.pre) return (a.pre ? -1 : 0) - (b.pre ? -1 : 0);
+  return (
+    PRERELEASE_CHANNELS.indexOf(a.pre.channel) - PRERELEASE_CHANNELS.indexOf(b.pre.channel) ||
+    a.pre.n - b.pre.n
+  );
+};
+
+/** The version `spec` selects, bumped from `current`. */
+const nextVersion = Effect.fn(function* (
+  current: Version,
+  spec: string,
+): Effect.fn.Return<Version, InvalidReleaseSpec> {
+  const invalid = (reason: string) =>
+    new InvalidReleaseSpec({ message: `Cannot release ${spec}: ${reason}`, spec });
+
+  const prerelease = spec.match(/^(alpha|beta|rc)(?:\.(\d+))?$/);
+  if (prerelease) {
+    const channel = prerelease[1] as PrereleaseChannel;
+    if (prerelease[2] !== undefined) {
+      return { core: current.core, pre: { channel, n: Number(prerelease[2]) } };
+    }
+    if (!current.pre) {
+      return yield* invalid(`${format(current)} is stable; pass an explicit x.y.z-${channel}.N`);
+    }
+    return {
+      core: current.core,
+      pre: { channel, n: current.pre.channel === channel ? current.pre.n + 1 : 1 },
+    };
+  }
+
+  if (spec === "patch" || spec === "minor" || spec === "major") {
+    const [major, minor, patch] = current.core;
+    // A prerelease graduates to its own version when that already is the bump.
+    if (spec === "major") {
+      return { core: current.pre && minor === 0 && patch === 0 ? current.core : [major + 1, 0, 0] };
+    }
+    if (spec === "minor") {
+      return { core: current.pre && patch === 0 ? current.core : [major, minor + 1, 0] };
+    }
+    return { core: current.pre ? current.core : [major, minor, patch + 1] };
+  }
+
+  const exact = parse(spec);
+  if (exact) return exact;
+  return yield* invalid("expected rc, beta, alpha, <channel>.N, patch, minor, major or x.y.z");
 });
-const decodePackument = Schema.decodeUnknownEffect(Packument);
+
+const resolveVersion = Effect.fn(function* (currentText: string, spec: string) {
+  // Anything that is not a version bump is a tag release.
+  if (
+    /^[A-Za-z][A-Za-z0-9.-]*$/.test(spec) &&
+    !/^(alpha|beta|rc)(\.\d+)?$|^(patch|minor|major)$/.test(spec)
+  ) {
+    return { channel: "tag" as Channel, version: `0.0.0-${spec}` };
+  }
+
+  const current = parse(currentText);
+  if (!current) {
+    return yield* new InvalidCurrentVersion({
+      message: `The packages' version ${currentText} is not x.y.z or x.y.z-<alpha|beta|rc>.N`,
+      version: currentText,
+    });
+  }
+  const next = yield* nextVersion(current, spec);
+  if (compare(next, current) <= 0) {
+    return yield* new VersionNotNewer({
+      message: `${format(next)} is not newer than the current ${currentText}`,
+      current: currentText,
+      next: format(next),
+    });
+  }
+  return { channel: (next.pre?.channel ?? "release") as Channel, version: format(next) };
+});
 
 /** Runs a command; stdout is captured (and echoed to stderr), stderr inherited. */
-const run = Effect.fn(function* (command: string, args: ReadonlyArray<string>, cwd: string) {
+const runOrFail = Effect.fn(function* (command: string, args: ReadonlyArray<string>, cwd: string) {
   const spawner = yield* ChildProcessSpawner;
-  return yield* Effect.scoped(
+  const { stdout, exitCode } = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
         ChildProcess.make(command, [...args], { cwd, stdout: "pipe", stderr: "inherit" }),
@@ -69,104 +177,18 @@ const run = Effect.fn(function* (command: string, args: ReadonlyArray<string>, c
         [handle.stdout.pipe(Stream.decodeText(), Stream.mkString), handle.exitCode],
         { concurrency: "unbounded" },
       );
-      return { exitCode: Number(exitCode), stdout: stdout.trim() };
+      return { stdout: stdout.trim(), exitCode: Number(exitCode) };
     }),
   );
-});
-
-const runOrFail = Effect.fn(function* (command: string, args: ReadonlyArray<string>, cwd: string) {
-  const result = yield* run(command, args, cwd);
-  if (result.stdout) yield* Console.error(result.stdout);
-  if (result.exitCode !== 0) {
+  if (stdout) yield* Console.error(stdout);
+  if (exitCode !== 0) {
     const line = [command, ...args].join(" ");
     return yield* new CommandFailed({
-      message: `${line} exited with code ${result.exitCode}`,
+      message: `${line} exited with code ${exitCode}`,
       command: line,
-      exitCode: result.exitCode,
+      exitCode,
     });
   }
-});
-
-/** Every version of `name` on npm (empty when unpublished). */
-const npmVersions = Effect.fn(function* (name: string) {
-  const response = yield* HttpClient.get(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
-  if (response.status !== 200) return [];
-  const packument = yield* decodePackument(yield* response.json);
-  return Object.keys(packument.versions ?? {});
-});
-
-const compare = (a: string, b: string) => {
-  const aa = a.split(".").map(Number);
-  const bb = b.split(".").map(Number);
-  return aa[0]! - bb[0]! || aa[1]! - bb[1]! || aa[2]! - bb[2]!;
-};
-
-/** The next `2.0.0-<channel>.N`, retrying an incomplete previous candidate. */
-const nextPrerelease = Effect.fn(function* (
-  root: string,
-  packages: ReadonlyArray<WorkspacePackage>,
-  channel: Channel,
-) {
-  const matcher = new RegExp(`^2\\.0\\.0-${channel}\\.(\\d+)$`);
-  const maxima = yield* Effect.forEach(
-    packages,
-    ({ manifest }) =>
-      npmVersions(manifest.name).pipe(
-        Effect.map((versions) =>
-          Math.max(0, ...versions.map((candidate) => Number(candidate.match(matcher)?.[1] ?? 0))),
-        ),
-      ),
-    { concurrency: "unbounded" },
-  );
-  const maximum = Math.max(0, ...maxima);
-  const tagged =
-    maximum > 0 &&
-    (yield* run(
-      "git",
-      ["ls-remote", "--exit-code", "--tags", "origin", `refs/tags/v2.0.0-${channel}.${maximum}`],
-      root,
-    )).exitCode === 0;
-  const complete = maximum > 0 && maxima.every((value) => value === maximum);
-  return `2.0.0-${channel}.${complete && tagged ? maximum + 1 : maximum || 1}`;
-});
-
-const resolveVersion = Effect.fn(function* (
-  root: string,
-  packages: ReadonlyArray<WorkspacePackage>,
-  spec: string,
-) {
-  const prerelease = spec.match(/^(beta|alpha|rc)(?:\.(\d+))?$/);
-  if (spec === "" || prerelease) {
-    const channel = (prerelease?.[1] ?? "beta") as Channel;
-    const explicit = prerelease?.[2];
-    const version = explicit
-      ? `2.0.0-${channel}.${explicit}`
-      : yield* nextPrerelease(root, packages, channel);
-    return { channel, version };
-  }
-  if (/^\d+\.\d+\.\d+$/.test(spec)) return { channel: "release" as Channel, version: spec };
-  if (spec === "patch" || spec === "minor" || spec === "major") {
-    const stable = (yield* npmVersions(packages[0]!.manifest.name))
-      .filter((candidate) => /^\d+\.\d+\.\d+$/.test(candidate))
-      .sort(compare)
-      .at(-1);
-    if (!stable) {
-      const name = packages[0]!.manifest.name;
-      return yield* new NoStableVersion({
-        message: `Cannot ${spec}-bump: ${name} has no stable version on npm`,
-        name,
-      });
-    }
-    let [major, minor, patch] = stable.split(".").map(Number) as [number, number, number];
-    if (spec === "major") [major, minor, patch] = [major + 1, 0, 0];
-    if (spec === "minor") [minor, patch] = [minor + 1, 0];
-    if (spec === "patch") patch += 1;
-    return { channel: "release" as Channel, version: `${major}.${minor}.${patch}` };
-  }
-  if (!/^[A-Za-z][A-Za-z0-9.-]*$/.test(spec)) {
-    return yield* new InvalidReleaseSpec({ message: `Invalid release spec: ${spec}`, spec });
-  }
-  return { channel: "tag" as Channel, version: `0.0.0-${spec}` };
 });
 
 const command = Command.make(
@@ -183,13 +205,15 @@ const command = Command.make(
     const root = path.resolve(import.meta.dirname, "../..");
 
     const packages = yield* publishablePackages(root, "packages");
+    const current = yield* sharedVersion(packages);
 
     const { channel, version } = yield* resolveVersion(
-      root,
-      packages,
-      Option.getOrElse(spec, () => "").trim(),
+      current,
+      Option.getOrElse(spec, () => "").trim() || "beta",
     );
-    yield* Console.error(`Releasing ${packages.length} packages at ${version} (${channel})`);
+    yield* Console.error(
+      `Releasing ${packages.length} packages at ${version} (${channel}), from ${current}`,
+    );
 
     yield* Effect.forEach(packages, (pkg) =>
       fs.writeFileString(
@@ -212,10 +236,10 @@ const command = Command.make(
     yield* Console.log(`version=${version}`);
     yield* Console.log(`channel=${channel}`);
   }),
-).pipe(Command.withDescription("Pick the release version and stamp it on every package"));
+).pipe(Command.withDescription("Bump every package from the version they share"));
 
 Command.run(command, { version: "0.0.0" }).pipe(
-  Effect.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+  Effect.provide(NodeServices.layer),
   // Report failures on stderr: stdout is reserved for `$GITHUB_OUTPUT`.
   Effect.catchCause((cause) =>
     Console.error(Cause.pretty(cause)).pipe(

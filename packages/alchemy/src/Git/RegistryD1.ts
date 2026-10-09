@@ -69,7 +69,7 @@ const d1 = <A>(
   effect: Effect.Effect<A, never, RuntimeContext>,
 ): Effect.Effect<A, StoreError, RuntimeContext> =>
   Effect.catchCause(effect, (cause) =>
-    Effect.fail(new StoreError({ reason: `registry ${what}: ${cause}` })),
+    Effect.fail(StoreError.make({ reason: `registry ${what}: ${cause}` })),
   );
 
 /**
@@ -98,7 +98,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
           const owner = input.owner.toLowerCase();
           const name = input.name.toLowerCase();
           if (RESERVED_OWNERS.has(owner)) {
-            return yield* new ValidationError({
+            return yield* ValidationError.make({
               message: `owner name '${owner}' is reserved`,
             });
           }
@@ -135,7 +135,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
               .run(),
           );
           if ((inserted.meta?.changes ?? 0) === 0) {
-            return yield* new RepoAlreadyExists({ owner, repo: name });
+            return yield* RepoAlreadyExists.make({ owner, repo: name });
           }
           if (input.forkOf !== undefined) {
             // Deliberately not batched with the insert: the fork count is

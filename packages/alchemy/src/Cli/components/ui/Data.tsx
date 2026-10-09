@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import type { ReactNode } from "react";
 import { Box } from "./Layout.tsx";

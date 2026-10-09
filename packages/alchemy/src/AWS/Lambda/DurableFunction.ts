@@ -321,7 +321,8 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
 
 const mapDurablePropsInput = (props: unknown) =>
   Effect.isEffect(props)
-    ? Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
+    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
+      Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
     : mapDurableProps(props as DurableFunctionProps);
 
 const resolveDurableHandle = (id: string) => (instance: unknown) => {
@@ -474,6 +475,7 @@ const composeDurableImpl = (
       makeDurableListener({
         name,
         run: (input) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining run services are provided per invocation by the durable bridge
           fn(input).pipe(Effect.provideService(RuntimeContext, runtime)) as Effect.Effect<unknown>,
       }),
     );

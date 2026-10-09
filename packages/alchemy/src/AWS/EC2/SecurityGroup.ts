@@ -883,7 +883,7 @@ export const SecurityGroupProvider = () =>
             }),
           );
           if (!matches(finalRules)) {
-            return yield* Effect.fail(new SecurityGroupRulesNotSettled({ groupId }));
+            return yield* new SecurityGroupRulesNotSettled({ groupId });
           }
           return yield* toAttrs(finalSg, finalRules);
         }),

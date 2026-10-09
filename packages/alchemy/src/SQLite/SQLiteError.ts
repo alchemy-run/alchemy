@@ -532,15 +532,12 @@ export type SQLiteErrorType =
 /**
  * Type guard to check if an error is a SQLite error with a _tag.
  */
-export const isSQLiteError = (error: unknown): error is SQLiteErrorType => {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    typeof error._tag === "string" &&
-    error._tag.startsWith("SQLITE_")
-  );
-};
+export const isSQLiteError = (error: unknown): error is SQLiteErrorType =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  typeof error._tag === "string" &&
+  error._tag.startsWith("SQLITE_");
 
 /**
  * Check if the error is retryable (busy or locked errors).

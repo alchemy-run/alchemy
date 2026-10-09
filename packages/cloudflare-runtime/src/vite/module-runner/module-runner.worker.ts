@@ -225,9 +225,8 @@ export class ModuleRunnerDO extends DurableObject<Env> {
           // Wrap dynamic imports to route deferred dynamic imports
           // through the DO's IoContext.
           const originalDynamicImport = context[ssrDynamicImportKey];
-          context[ssrDynamicImportKey] = (dep) => {
-            return runInModuleRunner(env, () => originalDynamicImport(dep));
-          };
+          context[ssrDynamicImportKey] = (dep) =>
+            runInModuleRunner(env, () => originalDynamicImport(dep));
 
           // The trailing newline ensures a `//` comment on the last line of
           // `transformed` (e.g. a sourceMappingURL comment preserved by
@@ -271,6 +270,7 @@ function isRequestExportTypes(data: string | ArrayBuffer): boolean {
   }
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd script (no Effect); thrown to the Vite module runner
 class NotInitializedError extends Error {
   constructor(environmentName: string) {
     super(

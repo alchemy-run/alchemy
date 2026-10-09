@@ -15,15 +15,13 @@ export const waitUntil = <A, E, R>(
     const context = yield* Effect.context<Exclude<R, Scope.Scope>>();
     const memoMap = yield* Layer.makeMemoMap;
     yield* Effect.sync(() =>
-      nativeWaitUntil(
-        Effect.runPromiseWith(context)(
-          effect.pipe(
-            Effect.scoped,
-            Effect.provideService(Layer.CurrentMemoMap, memoMap),
-            Effect.timeout("15 minutes"),
-            Effect.tapCause(() => Effect.logError("Neon waitUntil task failed")),
-          ),
-        ),
+      effect.pipe(
+        Effect.scoped,
+        Effect.provideService(Layer.CurrentMemoMap, memoMap),
+        Effect.timeout("15 minutes"),
+        Effect.tapCause(() => Effect.logError("Neon waitUntil task failed")),
+        Effect.runPromiseWith(context),
+        nativeWaitUntil,
       ),
     );
   });

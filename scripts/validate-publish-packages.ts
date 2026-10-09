@@ -3,7 +3,8 @@
 // - Every publishable alchemy package (`packages/*`) carries the npm metadata
 //   a release needs.
 // - The alchemy packages share one version, and so do the distilled packages
-//   (`submodules/distilled/packages/*`): each group is released in lockstep.
+//   (`submodules/distilled/packages/*`): each group is released in lockstep,
+//   and `scripts/release/prepare.ts` bumps the alchemy packages from theirs.
 //
 // Usage: node scripts/validate-publish-packages.ts
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -13,18 +14,12 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import { publishablePackages, type WorkspacePackage } from "./package-manifest.ts";
+import { publishablePackages, sharedVersion, type WorkspacePackage } from "./package-manifest.ts";
 
 export class MissingPublishMetadata extends Data.TaggedError("MissingPublishMetadata")<{
   readonly message: string;
   readonly dir: string;
   readonly fields: ReadonlyArray<string>;
-}> {}
-
-export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
-  readonly message: string;
-  readonly group: string;
-  readonly specs: ReadonlyArray<string>;
 }> {}
 
 const REQUIRED = [
@@ -60,16 +55,8 @@ const assertOneVersion = Effect.fn(function* (
   group: string,
   packages: ReadonlyArray<WorkspacePackage>,
 ) {
-  const versions = new Set(packages.map(({ manifest }) => manifest.version));
-  if (versions.size !== 1) {
-    const specs = packages.map(({ manifest }) => `${manifest.name}@${manifest.version}`);
-    return yield* new VersionMismatch({
-      message: `${group} packages must share one version: ${specs.join(", ")}`,
-      group,
-      specs,
-    });
-  }
-  yield* Console.log(`Validated ${packages.length} ${group} packages at ${[...versions][0]}`);
+  const version = yield* sharedVersion(packages);
+  yield* Console.log(`Validated ${packages.length} ${group} packages at ${version}`);
 });
 
 const command = Command.make(
