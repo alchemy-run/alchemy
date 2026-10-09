@@ -40,7 +40,8 @@ export interface BranchProtectionProps {
 
     /**
      * Status checks that must pass, optionally pinned to the GitHub App that
-     * must report them.
+     * must report them. When this is set, the update sends `checks` and
+     * omits `contexts`. GitHub rejects a request that includes both.
      */
     checks?: {
       /**
@@ -427,9 +428,11 @@ export const BranchProtectionProvider = () =>
                 ? null
                 : {
                     strict: checks.strict ?? false,
-                    contexts: checks.contexts ?? [],
+                    // GitHub rejects a body that contains both `contexts` and
+                    // `checks`. A set `checks` array is the request; `contexts`
+                    // is sent only when `checks` is omitted.
                     ...(checks.checks === undefined
-                      ? {}
+                      ? { contexts: checks.contexts ?? [] }
                       : {
                           checks: checks.checks.map((check) => ({
                             context: check.context,
