@@ -189,7 +189,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         ),
       );
 
-      if (token == null || token.length === 0) {
+      if (token === undefined) {
         yield* cancel;
         return yield* AuthError.make({
           message: "Railway login session timed out after 5 minutes.",
@@ -199,7 +199,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       yield* interaction.output.success("Railway: OAuth credentials saved.");
       return {
         method: "oauth" as const,
-        token,
+        token: Redacted.value(token),
         apiBaseUrl: apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
       };
     });

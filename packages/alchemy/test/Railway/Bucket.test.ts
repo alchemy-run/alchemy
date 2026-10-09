@@ -88,7 +88,12 @@ const waitUntilBucketGone = (environmentId: string, projectId: string, bucketId:
   );
 
 const withBucketS3 = <A, E, R>(
-  creds: { accessKeyId: string; secretAccessKey: string; endpoint: string; region: string },
+  creds: {
+    accessKeyId: string;
+    secretAccessKey: Redacted.Redacted<string>;
+    endpoint: string;
+    region: string;
+  },
   operation: Effect.Effect<A, E, R>,
 ) =>
   operation.pipe(
@@ -97,7 +102,7 @@ const withBucketS3 = <A, E, R>(
         fromCredentials(
           {
             accessKeyId: Redacted.make(creds.accessKeyId),
-            secretAccessKey: Redacted.make(creds.secretAccessKey),
+            secretAccessKey: creds.secretAccessKey,
           },
           creds.region as RegionName,
         ),
@@ -160,7 +165,7 @@ test.provider(
       expect(creds.bucketName.length).toBeGreaterThan(0);
       expect(creds.endpoint.length).toBeGreaterThan(0);
       expect(creds.accessKeyId.length).toBeGreaterThan(0);
-      expect(creds.secretAccessKey.length).toBeGreaterThan(0);
+      expect(Redacted.value(creds.secretAccessKey).length).toBeGreaterThan(0);
 
       yield* withBucketS3(
         creds,
