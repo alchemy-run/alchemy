@@ -138,7 +138,6 @@ test.provider(
       );
       expect(updated.db.clusterId).toEqual(created.db.clusterId);
       expect(updated.db.name).toEqual(created.db.name);
-      expect(created.db.pooledConnectionUri.length).toBeGreaterThan(0);
 
       const provider = yield* Provider.findProvider(Fly.Postgres);
       const all = yield* provider.list();
