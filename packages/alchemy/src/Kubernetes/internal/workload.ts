@@ -7,10 +7,13 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
+import { unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets } from "../../Util/Redaction.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ClusterAdapterService,
@@ -139,6 +142,21 @@ export const collectBindingEnv = (
   ];
 
   return { env, grantKeys };
+};
+
+/**
+ * Kubernetes env values are strings. A {@link Redacted} string stays wrapped
+ * so the request serializer unwraps it. Any other value that holds a secret
+ * is JSON, still wrapped, so a failed apply can scrub the inner strings.
+ */
+export const containerEnvValue = (value: unknown): string | Redacted.Redacted<string> => {
+  if (typeof value === "string") return value;
+  if (Redacted.isRedacted(value)) {
+    const inner = Redacted.value(value);
+    if (typeof inner === "string") return Redacted.make(inner);
+  }
+  const json = JSON.stringify(unwrapRedacted(value));
+  return collectRedactedSecrets(value).length > 0 ? Redacted.make(json) : json;
 };
 
 export type ImageSourceKind = "main" | "context" | "image";

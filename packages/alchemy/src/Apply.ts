@@ -28,7 +28,7 @@ import {
 } from "./Auth/Demand.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
 import {
@@ -101,7 +101,6 @@ const provideLifecycleScope =
           failCredentialsRequired(resource.fqn),
           Effect.provide([
             Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.fqn)),
-            Layer.succeed(InstanceId, resource.instanceId),
             Layer.succeed(ResourceContext, resource),
           ]),
         ),
@@ -111,7 +110,7 @@ const provideLifecycleScope =
 /**
  * Instruments a single provider lifecycle call with an OTel span
  * (`provider.<op>`), the resource counter / duration histogram, and the
- * scoped artifacts/instance services normally supplied by
+ * scoped artifacts/resource context normally supplied by
  * {@link provideLifecycleScope}.
  *
  * This is the only call site through which provider lifecycle methods

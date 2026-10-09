@@ -14,7 +14,6 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { deepEqual } from "./Diff.ts";
-import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
@@ -417,13 +416,13 @@ export const repair = (stack: { name: string; stage: string }, options: DriftOpt
 
 /**
  * Same shape as Apply's lifecycle instrumentation: scoped artifacts +
- * instance id, the resource op metrics, and a `provider.<op>` span.
+ * resource context, the resource op metrics, and a `provider.<op>` span.
  */
 const instrumentLifecycle =
   (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>> =>
+  ): Effect.Effect<A, E | DriftResourceError, Exclude<R, ResourceContext | Artifacts>> =>
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- generic Exclude on R can't be proven statically
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
@@ -431,7 +430,6 @@ const instrumentLifecycle =
         effect.pipe(
           Effect.provide([
             Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
-            Layer.succeed(InstanceId, instanceId),
             Layer.succeed(ResourceContext, { logicalId, fqn, instanceId, type: resourceType }),
           ]),
           Effect.catchCauseIf(
@@ -460,7 +458,7 @@ const instrumentLifecycle =
           "alchemy.resource.op": op,
         },
       }),
-    ) as Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>>;
+    ) as Effect.Effect<A, E | DriftResourceError, Exclude<R, ResourceContext | Artifacts>>;
 
 export interface DriftPlan {
   /** Per-resource detection outcome (a dry-run {@link DriftResult}). */

@@ -30,7 +30,7 @@ import {
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
   tryFindProviderRegistrationByType,
@@ -2311,7 +2311,6 @@ const providePlanScope =
           failCredentialsRequired(resource.FQN),
           Effect.provide([
             Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.FQN)),
-            Layer.succeed(InstanceId, instanceId),
             Layer.succeed(ResourceContext, {
               logicalId: resource.LogicalId,
               fqn: resource.FQN,
