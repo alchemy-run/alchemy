@@ -99,7 +99,10 @@
     "./State": "./src/State/index.ts",
     "./Util": "./src/Util/index.ts",
     "./bin/alchemy.js": "./bin/alchemy.js",
-    "./bin/exec.js": "./bin/exec.js"
+    "./bin/exec.js": "./bin/exec.js",
+    "./Cloudflare/Workers/Sources/Rolldown": "./src/Cloudflare/Workers/Sources/Rolldown.ts",
+    "./Planetscale/AuthProvider": "./src/Planetscale/AuthProvider.ts",
+    "./Cloudflare/Auth/AuthConfig": "./src/Cloudflare/Auth/AuthConfig.ts"
   },
   "publishConfig": {
     "exports": {
@@ -398,7 +401,22 @@
         "default": "./lib/Util/index.js"
       },
       "./bin/alchemy.js": "./bin/alchemy.js",
-      "./bin/exec.js": "./bin/exec.js"
+      "./bin/exec.js": "./bin/exec.js",
+      "./Cloudflare/Workers/Sources/Rolldown": {
+        "types": "./lib/Cloudflare/Workers/Sources/Rolldown.d.ts",
+        "bun": "./src/Cloudflare/Workers/Sources/Rolldown.ts",
+        "default": "./lib/Cloudflare/Workers/Sources/Rolldown.js"
+      },
+      "./Planetscale/AuthProvider": {
+        "types": "./lib/Planetscale/AuthProvider.d.ts",
+        "bun": "./src/Planetscale/AuthProvider.ts",
+        "default": "./lib/Planetscale/AuthProvider.js"
+      },
+      "./Cloudflare/Auth/AuthConfig": {
+        "types": "./lib/Cloudflare/Auth/AuthConfig.d.ts",
+        "bun": "./src/Cloudflare/Auth/AuthConfig.ts",
+        "default": "./lib/Cloudflare/Auth/AuthConfig.js"
+      }
     },
     "access": "public"
   },
