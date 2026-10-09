@@ -1346,6 +1346,26 @@ describe.concurrent(
       }).pipe(logLevel),
     );
 
+    // Right after a Worker upload creates a Durable Object namespace, the
+    // containers API can briefly report it missing; the provider retries this
+    // typed error. A namespace that never existed returns the same response,
+    // which pins the error to its tag.
+    test.provider(
+      "attaching an application to a missing Durable Object namespace fails with DurableObjectNamespaceNotFound",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const error = yield* Containers.createDurableObjectContainerApplication({
+            accountId,
+            name: `alchemy-missing-namespace-${stack.stage}`,
+            schedulingPolicy: "durable_object",
+            durableObjects: { namespaceId: "0".repeat(32) },
+            configuration: {},
+          }).pipe(Effect.flip);
+          expect(error._tag).toBe("DurableObjectNamespaceNotFound");
+        }).pipe(logLevel),
+    );
+
     // Issue #953 (2): an `image` that already references the target registry
     // (e.g. pushed by CI) is deployed as-is — no docker pull/tag/push
     // round-trip. The first deploy pushes a public image into the account

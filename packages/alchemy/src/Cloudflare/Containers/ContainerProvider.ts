@@ -981,14 +981,16 @@ export const LiveContainerProvider = () =>
         // 3. Ensure the application exists
         if (!application) {
           yield* session.note(`Creating container application ${name}...`);
-          application = yield* Containers.createDurableObjectContainerApplication({
-            accountId,
-            name,
-            schedulingPolicy: "durable_object",
-            durableObjects,
-            configuration,
-            observability: news.observability,
-          }).pipe(Effect.catchTag("DurableObjectAlreadyHasApplication", () => getApplication));
+          application = yield* retryNamespacePropagation(
+            Containers.createDurableObjectContainerApplication({
+              accountId,
+              name,
+              schedulingPolicy: "durable_object",
+              durableObjects,
+              configuration,
+              observability: news.observability,
+            }),
+          ).pipe(Effect.catchTag("DurableObjectAlreadyHasApplication", () => getApplication));
           yield* assertMatchesDeclaration(application);
         }
 
@@ -1116,14 +1118,16 @@ export const LiveContainerProvider = () =>
           });
         });
 
-        const application = yield* Containers.createContainerApplication({
-          accountId,
-          name,
-          ...scalingDefaults(news),
-          affinities: news.affinities,
-          configuration,
-          durableObjects,
-        }).pipe(
+        const application = yield* retryNamespacePropagation(
+          Containers.createContainerApplication({
+            accountId,
+            name,
+            ...scalingDefaults(news),
+            affinities: news.affinities,
+            configuration,
+            durableObjects,
+          }),
+        ).pipe(
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
             durableObjects
               ? Effect.gen(function* () {
@@ -1253,14 +1257,16 @@ export const LiveContainerProvider = () =>
               yield* Effect.logInfo(
                 `Cloudflare Container update: ${existing.applicationName} no longer exists, creating fresh`,
               );
-              return yield* Containers.createContainerApplication({
-                accountId,
-                name: existing.applicationName,
-                ...scaling,
-                affinities: news.affinities,
-                configuration,
-                durableObjects,
-              });
+              return yield* retryNamespacePropagation(
+                Containers.createContainerApplication({
+                  accountId,
+                  name: existing.applicationName,
+                  ...scaling,
+                  affinities: news.affinities,
+                  configuration,
+                  durableObjects,
+                }),
+              );
             }),
           ),
         );
@@ -1824,6 +1830,27 @@ const isContainerApplicationNotFound = (
   error !== null &&
   "_tag" in error &&
   error._tag === "ContainerApplicationNotFound";
+
+/**
+ * Right after a Worker upload creates a Durable Object namespace, the
+ * containers API can report the namespace missing for a few seconds before it
+ * sees it. Retry creates that attach to it, bounded at ~30s.
+ */
+const retryNamespacePropagation = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.tapError((error) =>
+      error._tag === "DurableObjectNamespaceNotFound"
+        ? Effect.logDebug("Cloudflare Container create: namespace not visible yet, retrying")
+        : Effect.void,
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "DurableObjectNamespaceNotFound",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
 
 export const retryForContainerApplicationReadiness = <A, E, R>(
   operation: string,
