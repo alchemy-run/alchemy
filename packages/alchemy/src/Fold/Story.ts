@@ -8,7 +8,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Domain from "./Domain.ts";
-import type * as Feed from "./Feed.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Port from "./Port.ts";
 import type * as View from "./View.ts";
@@ -54,8 +53,8 @@ export type Step =
       readonly expected: unknown;
     }
   | {
-      readonly _tag: "Feed";
-      readonly feed: Feed.Any;
+      readonly _tag: "Emitted";
+      readonly view: View.Any;
       readonly key: Aggregate.Ref;
       readonly expected: unknown;
     }
@@ -121,14 +120,17 @@ const view = <V extends View.Any>(
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
 ): Step => ({ _tag: "View", view, key, expected });
 
-/** Assert on a feed key's entries: expected (partial) entries in order, or a function. */
-const feed = <F extends Feed.Any>(
-  feed: F,
-  key: Aggregate.Ref<F["definition"]["key"]>,
+/**
+ * Assert on every event a view key has emitted: the expected (partial) events
+ * in order, or a function over the entries (each event with the state after it).
+ */
+const emitted = <V extends View.Any>(
+  view: V,
+  key: Aggregate.Ref<View.KeyOf<V>>,
   expected:
-    | ReadonlyArray<Partial<Feed.EntryOf<F>>>
-    | ((entries: ReadonlyArray<Feed.EntryOf<F>>) => void),
-): Step => ({ _tag: "Feed", feed, key, expected });
+    | ReadonlyArray<Partial<View.EventOf<V>>>
+    | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
+): Step => ({ _tag: "Emitted", view, key, expected });
 
 /** A policy called this Port operation with these (partial) arguments and is waiting. */
 const expectCall = <Args>(op: Port.Op<Args, any>, args: Partial<Args>): Step => ({
@@ -384,7 +386,7 @@ const make =
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any>
+                View.Host<unknown, Aggregate.Any, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
@@ -409,10 +411,10 @@ const make =
               }
               break;
             }
-            case "Feed": {
-              const host = yield* s.feed as unknown as Context.Key<
+            case "Emitted": {
+              const host = yield* s.view as unknown as Context.Key<
                 never,
-                Feed.Host<unknown, Aggregate.Any>
+                View.Host<unknown, Aggregate.Any, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -420,12 +422,13 @@ const make =
                 yield* Effect.try({ try: () => assert(entries), catch: (e) => fail(String(e)) });
               } else {
                 const expected = s.expected as ReadonlyArray<unknown>;
+                const events = entries.map((entry) => entry.event);
                 const ok =
-                  expected.length === entries.length &&
-                  expected.every((e, i) => partial(e, entries[i]));
+                  expected.length === events.length &&
+                  expected.every((e, i) => partial(e, events[i]));
                 if (!ok)
                   return yield* fail(
-                    `${s.feed.feedName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(entries)}`,
+                    `${s.view.viewName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
                   );
               }
               break;
@@ -495,7 +498,7 @@ export const Story = {
   replied,
   state,
   view,
-  feed,
+  emitted,
   expectCall,
   resolve,
   clock,

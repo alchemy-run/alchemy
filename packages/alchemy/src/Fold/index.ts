@@ -3,7 +3,6 @@ export * as Api from "./Api.ts";
 export * as Command from "./Command.ts";
 export * as Domain from "./Domain.ts";
 export * as Event from "./Event.ts";
-export * as Feed from "./Feed.ts";
 export * as Mutation from "./Mutation.ts";
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";

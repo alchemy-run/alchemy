@@ -90,7 +90,7 @@ export interface OperationClass<
   ): OperationClass<K, Name, Rpc.AddMiddleware<R, M>, I, O, E>;
   /**
    * Implement the operation. The construction Effect runs once and resolves
-   * every service the handler uses (aggregate clients, views, feeds); the
+   * every service the handler uses (aggregate clients, views); the
    * handler may only require what this operation's middleware provides.
    */
   toLayer<EB, RB>(

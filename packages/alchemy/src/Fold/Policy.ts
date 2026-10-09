@@ -3,17 +3,20 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
+import type * as View from "./View.ts";
 
 /**
  * What a policy receives for each event it subscribes to.
  */
-export interface Trigger<From extends Aggregate.Any, E> {
-  /** The aggregate instance that committed the event. */
-  readonly source: Aggregate.Ref<From>;
+export interface Trigger<From extends View.Source, E> {
+  /** The aggregate or view instance the event came from. */
+  readonly source: Aggregate.Ref<View.SourceKey<From>>;
   /** The event. */
   readonly event: E;
   /** The event's envelope. */
-  readonly envelope: Aggregate.Envelope<Aggregate.IdOf<From>>;
+  readonly envelope: Aggregate.Envelope<Aggregate.IdOf<View.SourceKey<From>>>;
+  /** For a view source: the view's state after the event. */
+  readonly state: View.SourceState<From>;
 }
 
 /**
@@ -31,7 +34,7 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Policy";
   readonly policyName: string;
   readonly definition: {
-    readonly from: Aggregate.Any;
+    readonly from: View.Source;
     readonly on: ReadonlyArray<Event.Any>;
   };
 }
@@ -54,7 +57,8 @@ export interface PolicyKey<Name extends string> {
 
 /**
  * Declare a Policy: "whenever these events happen, do this". A policy reacts
- * by sending commands and calling Ports.
+ * by sending commands and calling Ports. It listens to an aggregate, or to a
+ * view's emitted events (receiving the view's state with each).
  *
  * The class is the contract; its implementation is a Layer built with
  * `toLayer`, so it can depend on Ports and other services.
@@ -80,7 +84,7 @@ export interface PolicyKey<Name extends string> {
  */
 export const make = <
   const Name extends string,
-  From extends Aggregate.Any,
+  From extends View.Source,
   const On extends ReadonlyArray<Event.Any>,
 >(
   name: Name,
@@ -111,7 +115,7 @@ export const make = <
  */
 export interface PolicyClass<
   Name extends string,
-  From extends Aggregate.Any,
+  From extends View.Source,
   On extends ReadonlyArray<Event.Any>,
 > extends Context.ServiceClass<
   PolicyKey<Name>,

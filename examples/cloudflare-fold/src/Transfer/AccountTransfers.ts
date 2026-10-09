@@ -1,27 +1,34 @@
-import { Feed } from "alchemy/Fold";
+import { Event, View } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { Account } from "../Account/Account.ts";
 import { Cents } from "../Money.ts";
-import { Transfer } from "./Transfer.ts";
+import { Transfer, type TransferRequested } from "./Transfer.ts";
 import { TransferId } from "./TransferId.ts";
 
-/** Transfers touching an account. One event fans out to both accounts. */
-export class AccountTransfers extends Feed.make("AccountTransfers", {
-  from: [Transfer],
-  key: Account,
-  keyOf: {
-    TransferRequested: ({ event }) => [Account.ref(event.from), Account.ref(event.to)],
-  },
-  entry: Schema.Struct({
+/** Money moved in or out of an account by a transfer. */
+export class TransferMoved extends Event.make("TransferMoved", {
+  data: {
     transferId: TransferId,
     amount: Cents,
     direction: Schema.Literals(["in", "out"]),
-  }),
-  map: {
-    TransferRequested: (e, { key }) => ({
-      transferId: e.transferId,
-      amount: e.amount,
-      direction: key.id === e.from ? ("out" as const) : ("in" as const),
-    }),
+  },
+}) {}
+
+const moved = (direction: "in" | "out") => (e: TransferRequested) =>
+  new TransferMoved({ transferId: e.transferId, amount: e.amount, direction });
+
+/** Transfers touching an account. One request is routed to both accounts. */
+export class AccountTransfers extends View.make("AccountTransfers", {
+  from: [Transfer],
+  key: Account,
+  keyOf: {
+    TransferRequested: {
+      out: ({ event }) => Account.ref(event.from),
+      in: ({ event }) => Account.ref(event.to),
+    },
+  },
+  events: [TransferMoved],
+  emit: {
+    TransferRequested: { out: moved("out"), in: moved("in") },
   },
 }) {}

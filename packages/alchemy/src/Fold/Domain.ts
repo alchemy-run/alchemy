@@ -6,13 +6,11 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
-import type * as Feed from "./Feed.ts";
-import { matches, sort } from "./Filter.ts";
+import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import {
   type AggregateStore,
   type Delivery,
-  type FeedStore,
   FoldPlatform,
   type PolicyStore,
   type ViewSnapshot,
@@ -35,7 +33,6 @@ export class Internals extends Context.Service<
     readonly kernel: Kernel.Kernel;
     readonly aggregates: ReadonlyMap<string, AggregateStore>;
     readonly views: ReadonlyMap<string, ViewStore>;
-    readonly feeds: ReadonlyMap<string, FeedStore>;
   }
 >()("alchemy/Fold/DomainInternals") {}
 
@@ -45,19 +42,17 @@ export class Internals extends Context.Service<
 export interface Members<
   A extends ReadonlyArray<Aggregate.Any>,
   V extends ReadonlyArray<View.Any>,
-  F extends ReadonlyArray<Feed.Any>,
   P extends ReadonlyArray<Policy.Any>,
 > {
   readonly aggregates: A;
   readonly views?: V;
-  readonly feeds?: F;
   readonly policies?: P;
 }
 
 /**
  * The class type returned by {@link make}.
  *
- * `Provided` is every aggregate, view and feed service the Domain provides;
+ * `Provided` is every aggregate and view service the Domain provides;
  * `Policies` is every policy whose implementation `layer` requires.
  */
 export interface DomainClass<Name extends string, Provided, Policies> {
@@ -67,7 +62,7 @@ export interface DomainClass<Name extends string, Provided, Policies> {
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link FoldPlatform}. The policy Layers
-   * are built after the aggregates, views and feeds exist, so a policy can
+   * are built after the aggregates and views exist, so a policy can
    * resolve their clients while it is constructed.
    */
   layer<E = never, R = never>(
@@ -85,11 +80,11 @@ export interface Any {
 }
 
 /**
- * Declare a Domain: the complete set of aggregates, views, feeds and policies
- * hosted together.
+ * Declare a Domain: the complete set of aggregates, views and policies hosted
+ * together.
  *
  * `MyDomain.layer(policies)` builds every entity on the ambient
- * {@link FoldPlatform} and provides each aggregate, view and feed as a
+ * {@link FoldPlatform} and provides each aggregate and view as a
  * service. The policies' Layers are part of the call because they are built
  * with those services available.
  *
@@ -97,8 +92,7 @@ export interface Any {
  * ```typescript
  * export class Bank extends Domain.make("Bank", {
  *   aggregates: [Customer, Account, Transfer],
- *   views: [AccountSummary, TransferStatus],
- *   feeds: [Statement],
+ *   views: [AccountSummary, TransferStatus, Statement],
  *   policies: [TransferExecution, FraudReview],
  * }) {}
  *
@@ -111,20 +105,14 @@ export const make = <
   const Name extends string,
   const A extends ReadonlyArray<Aggregate.Any>,
   const V extends ReadonlyArray<View.Any> = readonly [],
-  const F extends ReadonlyArray<Feed.Any> = readonly [],
   const P extends ReadonlyArray<Policy.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, F, P>,
-): DomainClass<
-  Name,
-  Identifier<A[number]> | Identifier<V[number]> | Identifier<F[number]>,
-  Identifier<P[number]>
-> => {
+  members: Members<A, V, P>,
+): DomainClass<Name, Identifier<A[number]> | Identifier<V[number]>, Identifier<P[number]>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
-    feeds: members.feeds ?? [],
     policies: members.policies ?? [],
   };
   return class {
@@ -136,7 +124,7 @@ export const make = <
     }
   } as unknown as DomainClass<
     Name,
-    Identifier<A[number]> | Identifier<V[number]> | Identifier<F[number]>,
+    Identifier<A[number]> | Identifier<V[number]>,
     Identifier<P[number]>
   >;
 };
@@ -148,14 +136,12 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
-    const feedStores = new Map<string, FeedStore>();
     const policyStores = new Map<string, PolicyStore>();
 
     const deliver = (delivery: Delivery): Effect.Effect<void> =>
       Effect.suspend(() => {
         const { kind, name } = delivery.target;
         if (kind === "view") return viewStores.get(name)!.receive(delivery.key, [delivery]);
-        if (kind === "feed") return feedStores.get(name)!.receive(delivery.key, [delivery]);
         const store = policyStores.get(name);
         return store
           ? store.receive(delivery)
@@ -171,9 +157,6 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
     for (const view of definitions.views) {
       viewStores.set(view.viewName, yield* platform.view(view, kernel.viewKit(view, deliver)));
     }
-    for (const feed of definitions.feeds) {
-      feedStores.set(feed.feedName, yield* platform.feed(feed, kernel.feedKit(feed)));
-    }
 
     let hosts = Context.empty() as Context.Context<unknown>;
     for (const aggregate of definitions.aggregates) {
@@ -185,9 +168,6 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
     }
     for (const view of definitions.views) {
       hosts = Context.add(hosts, view, viewHost(kernel, view, viewStores.get(view.viewName)!));
-    }
-    for (const feed of definitions.feeds) {
-      hosts = Context.add(hosts, feed, feedHost(kernel, feed, feedStores.get(feed.feedName)!));
     }
 
     // Policies are built with the clients available, then hosted.
@@ -207,7 +187,6 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       kernel,
       aggregates: aggregateStores,
       views: viewStores,
-      feeds: feedStores,
     });
   });
 
@@ -247,7 +226,7 @@ const viewHost = (
   kernel: Kernel.Kernel,
   view: View.Any,
   store: ViewStore,
-): View.Host<unknown, Aggregate.Any> => {
+): View.Host<unknown, Aggregate.Any, unknown> => {
   const watch = (key: Aggregate.Ref, options?: View.WatchOptions<unknown>) =>
     store.changes(key.id).pipe(
       Stream.map((snapshot) =>
@@ -331,42 +310,28 @@ const viewHost = (
       ),
     watch,
     watchEach,
+    events: (key, options) =>
+      store.tail(key.id, options?.after ? Number(options.after) : 0).pipe(
+        Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
+        Stream.filter((entry) => matches(options?.where, entry.event)),
+      ),
+    list: (key, options) =>
+      store.list(key.id).pipe(
+        Effect.map((stored) => {
+          const desc = options?.order === "desc";
+          const after = options?.after === undefined ? undefined : Number(options.after);
+          const rows = (desc ? [...stored].reverse() : stored)
+            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
+            .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
+            .filter((row) => matches(options?.where, row.entry.event));
+          const take = options?.take ?? rows.length;
+          const page = rows.slice(0, take);
+          return {
+            entries: page.map((row) => row.entry),
+            cursor:
+              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+          };
+        }),
+      ),
   };
 };
-
-const feedHost = (
-  kernel: Kernel.Kernel,
-  feed: Feed.Any,
-  store: FeedStore,
-): Feed.Host<unknown, Aggregate.Any> => ({
-  list: (key, options) =>
-    store.list(key.id).pipe(
-      Effect.map((stored) => {
-        let rows = stored
-          .map((row) => ({ seq: row.seq, entry: kernel.decodeFeedEntry(feed, row.entry) }))
-          .filter((row) => matches(options?.where, row.entry));
-        if (options?.orderBy) {
-          const sorted = sort(
-            rows.map((row) => row.entry),
-            options.orderBy,
-          );
-          rows = sorted.map((entry) => rows.find((row) => row.entry === entry)!);
-        }
-        if (options?.after !== undefined) {
-          const index = rows.findIndex((row) => String(row.seq) === options.after);
-          rows = index === -1 ? rows : rows.slice(index + 1);
-        }
-        const take = options?.take ?? rows.length;
-        const page = rows.slice(0, take);
-        return {
-          entries: page.map((row) => row.entry),
-          cursor: rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
-        };
-      }),
-    ),
-  tail: (key, options) =>
-    store.tail(key.id, options?.after ? Number(options.after) : 0).pipe(
-      Stream.map((row) => kernel.decodeFeedEntry(feed, row.entry)),
-      Stream.filter((entry) => matches(options?.where, entry)),
-    ),
-});

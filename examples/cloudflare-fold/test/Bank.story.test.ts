@@ -33,6 +33,7 @@ import { Bank, BankPolicies } from "../src/Bank.ts";
 import { Customer, CustomerRegistered, Register } from "../src/Customer/Customer.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 import { AccountTransfers } from "../src/Transfer/AccountTransfers.ts";
@@ -45,7 +46,7 @@ import {
 } from "../src/Transfer/Transfer.ts";
 import { TransferStatus } from "../src/Transfer/TransferStatus.ts";
 
-const { clock, expectCall, feed, given, rejected, replied, resolve, state, then, view, when } =
+const { clock, emitted, expectCall, given, rejected, replied, resolve, state, then, view, when } =
   Story;
 
 const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
@@ -85,7 +86,7 @@ it.effect("withdraw replies with the new balance and updates projections", () =>
     then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     replied({ balance: 70 }),
     view(AccountSummary, a1, { balance: 70 }),
-    feed(Statement, a1, [
+    emitted(Statement, a1, [
       { kind: "deposit", amount: 100, balance: 100 },
       { kind: "withdrawal", amount: 30, balance: 70 },
     ]),
@@ -114,6 +115,8 @@ it.effect("the daily limit uses the story clock", () =>
     given(a1, opened(), new MoneyDeposited({ amount: 300_000, balanceAfter: 300_000 })),
     when(a1, new Withdraw({ amount: 40_000, by: sam })),
     when(a1, new Withdraw({ amount: 40_000, by: sam })),
+    expectCall(FraudCheck.score, { accountId: a1.id, amount: 80_000 }),
+    resolve(FraudCheck.score, { risk: 0.1 }),
     when(a1, new Withdraw({ amount: 30_000, by: sam })),
     rejected(new DailyLimitExceeded({ remaining: 20_000 })),
     clock("2026-10-10T00:00:01Z"),
@@ -149,6 +152,25 @@ it.effect("a risky withdrawal freezes the account (a Port call suspends until re
   ),
 );
 
+it.effect(
+  "split withdrawals that cross the daily threshold are reviewed (a policy on a view)",
+  () =>
+    story(
+      given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
+      when(a1, new Withdraw({ amount: 30_000, by: sam })),
+      when(a1, new Withdraw({ amount: 30_000, by: sam })),
+      then(
+        a1,
+        new MoneyWithdrawn({ amount: 30_000, balanceAfter: 60_000 }),
+        new MoneyWithdrawn({ amount: 30_000, balanceAfter: 30_000 }),
+      ),
+      emitted(DailyOutflow, a1, [{ day: "2026-01-01", total: 60_000 }]),
+      expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
+      resolve(FraudCheck.score, { risk: 0.1 }),
+      then(a1),
+    ),
+);
+
 it.effect("race: the account is closed while the fraud check is pending", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 60_000, balanceAfter: 60_000 })),
@@ -158,7 +180,7 @@ it.effect("race: the account is closed while the fraud check is pending", () =>
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 0 }), new AccountClosed()),
     resolve(FraudCheck.score, { risk: 0.95 }),
     then(a1),
-    view(AccountSummary, a1, Story.none),
+    view(AccountSummary, a1, { closed: true }),
   ),
 );
 
@@ -181,8 +203,8 @@ it.effect("a transfer completes: the process manager drives both accounts", () =
     then(a2, new TransferCredited({ transferId: t1.id, amount: 40, balanceAfter: 40 })),
     then(t1, new TransferCompleted({ transferId: t1.id })),
     view(TransferStatus, t1, (v) => expect(TransferStatus.computed.status(v)).toBe("completed")),
-    feed(AccountTransfers, a1, [{ transferId: t1.id, amount: 40, direction: "out" }]),
-    feed(AccountTransfers, a2, [{ transferId: t1.id, amount: 40, direction: "in" }]),
+    emitted(AccountTransfers, a1, [{ transferId: t1.id, amount: 40, direction: "out" }]),
+    emitted(AccountTransfers, a2, [{ transferId: t1.id, amount: 40, direction: "in" }]),
   ),
 );
 
@@ -238,7 +260,7 @@ it.effect("a settlement on a closed account can't be rejected, so it is refunded
     then(a1, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
     expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
     resolve(Payments.refund, { refundId: "re_1" }),
-    feed(AccountActivity, a1, (entries) =>
+    emitted(AccountActivity, a1, (entries) =>
       expect(entries.at(-1)?.event._tag).toBe("SettlementOnClosedAccount"),
     ),
   ),
@@ -253,7 +275,7 @@ it.effect("only agents reassign accounts, and the dashboards re-key", () =>
     when(a1, new ChangeOwner({ customerId: c2.id, by: sam })),
     rejected(new NotPermitted()),
     when(a1, new ChangeOwner({ customerId: c2.id, by: agent("support-7") })),
-    then(a1, new OwnerChanged({ customerId: c2.id, by: agent("support-7") })),
+    then(a1, new OwnerChanged({ previous: c1.id, customerId: c2.id, by: agent("support-7") })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({} as any)),
     view(CustomerDashboard, c2, (d) =>
       expect(CustomerDashboard.computed.totalBalance(d)).toBe(100),

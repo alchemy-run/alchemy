@@ -7,7 +7,7 @@ import { Statement } from "../Account/Statement.ts";
 import { Cents } from "../Money.ts";
 import { CustomerSession } from "./CustomerSession.ts";
 import { makeOwnedAccount } from "./ownedAccount.ts";
-import { StatementEntry } from "./StatementEntry.ts";
+import { StatementEntry, toStatementEntry } from "./StatementEntry.ts";
 
 /** A page of an account's statement, newest first. */
 export class StatementHistory extends Query.make("statement", {
@@ -29,12 +29,13 @@ export const StatementHistoryLive = StatementHistory.toLayer(
     const ownedAccount = yield* makeOwnedAccount;
     return Effect.fn(function* ({ accountId, minAmount, cursor }) {
       yield* ownedAccount(accountId);
-      return yield* statement.list(Account.ref(accountId), {
+      const page = yield* statement.list(Account.ref(accountId), {
         where: { amount: { gte: minAmount ?? 0 } },
-        orderBy: { at: "desc" },
+        order: "desc",
         take: 50,
         after: cursor,
       });
+      return { entries: page.entries.map(toStatementEntry), cursor: page.cursor };
     });
   }),
 );

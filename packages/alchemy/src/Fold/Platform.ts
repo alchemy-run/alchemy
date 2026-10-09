@@ -2,7 +2,6 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
-import type * as Feed from "./Feed.ts";
 import type * as Policy from "./Policy.ts";
 import type * as View from "./View.ts";
 
@@ -32,38 +31,30 @@ export interface StoredEvent {
 }
 
 /**
- * The payload of a delivery: an event, or another view's change.
- */
-export type DeliveryBody =
-  | {
-      readonly type: "event";
-      readonly tag: string;
-      readonly event: Json;
-      readonly envelope: EnvelopeJson;
-    }
-  | {
-      readonly type: "change";
-      readonly view: string;
-      readonly key: string;
-      readonly before: Json | null;
-      readonly after: Json | null;
-    };
-
-/**
- * A unit of work routed from one host to another: an event to a view, feed or
- * policy, or a view change to a downstream view. Deliveries are at least once;
- * targets drop duplicates by `(source, seq)`. Platforms must deliver in order
- * per `(source, target)`.
+ * A unit of work routed from one host to another: an event (from an aggregate
+ * or a view) to a view or policy. Deliveries are at least once; targets drop
+ * duplicates by `(source, seq)`. Platforms must deliver in order per
+ * `(source, target)`.
  */
 export interface Delivery {
-  readonly target: { readonly kind: "view" | "feed" | "policy"; readonly name: string };
+  readonly target: { readonly kind: "view" | "policy"; readonly name: string };
   /** The target instance key (an aggregate id; the source stream for policies). */
   readonly key: string;
-  /** The source stream, e.g. `Account/a-1` or `AccountSummary/a-1`. */
+  /** Named routes (from `keyOf`) the event takes into this key; absent for the default route. */
+  readonly routes?: ReadonlyArray<string>;
+  /** The source stream, e.g. `Account/a-1` or `Statement/a-1`. */
   readonly source: string;
-  /** The source's sequence number (event seq, or view version). */
+  /** The event's sequence number in its source stream. */
   readonly seq: number;
-  readonly body: DeliveryBody;
+  /** The aggregate or view that produced the event. */
+  readonly origin: string;
+  readonly tag: string;
+  readonly event: Json;
+  readonly envelope: EnvelopeJson;
+  /** For an event from a view: the view's encoded state after it. */
+  readonly state?: Json | null;
+  /** Seeded history (story `given`): views apply it, policies ignore it. */
+  readonly history?: boolean;
 }
 
 /**
@@ -169,8 +160,8 @@ export interface AggregateStore {
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /**
-   * Append events without deciding, routing them to views and feeds but not
-   * policies (tests; optional).
+   * Append events without deciding. They reach views as history, and never
+   * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
 }
@@ -185,24 +176,42 @@ export interface ViewSnapshot {
   readonly version: number;
   /** Last applied `seq` per source. */
   readonly checkpoints: Readonly<Record<string, number>>;
+  /** Number of events the key has emitted. */
+  readonly seq: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
-export const emptySnapshot: ViewSnapshot = { state: null, version: 0, checkpoints: {} };
+export const emptySnapshot: ViewSnapshot = { state: null, version: 0, checkpoints: {}, seq: 0 };
+
+/**
+ * One event a view key emitted, with the key's state after it.
+ */
+export interface ViewEntry {
+  readonly seq: number;
+  readonly event: Json;
+  readonly envelope: EnvelopeJson;
+  readonly state: Json | null;
+}
 
 /**
  * The kernel for one view, handed to a platform.
  */
 export interface ViewKit {
   readonly name: string;
-  /** Apply deliveries to a key's snapshot. Drops duplicates. */
+  /**
+   * Apply deliveries to a key's snapshot: evolve its state and emit events.
+   * Drops duplicates. Persist the snapshot and entries together, then send
+   * the downstream deliveries.
+   */
   readonly apply: (
     key: string,
     snapshot: ViewSnapshot,
     deliveries: ReadonlyArray<Delivery>,
   ) => {
     readonly snapshot: ViewSnapshot;
+    /** `false` when every delivery was a duplicate. */
     readonly changed: boolean;
+    readonly entries: ReadonlyArray<ViewEntry>;
     readonly downstream: ReadonlyArray<Delivery>;
   };
   /** Route a downstream delivery to its target's host. */
@@ -218,48 +227,10 @@ export interface ViewStore {
   readonly read: (key: string) => Effect.Effect<ViewSnapshot>;
   /** The current snapshot, then every new one. */
   readonly changes: (key: string) => Stream.Stream<ViewSnapshot>;
-}
-
-/**
- * The stored cursor state of one feed key.
- */
-export interface FeedState {
-  readonly seq: number;
-  readonly checkpoints: Readonly<Record<string, number>>;
-}
-
-/** The state of a feed key that has never received a delivery. */
-export const emptyFeedState: FeedState = { seq: 0, checkpoints: {} };
-
-/**
- * One stored feed entry.
- */
-export interface FeedEntry {
-  readonly seq: number;
-  readonly entry: Json;
-}
-
-/**
- * The kernel for one feed, handed to a platform.
- */
-export interface FeedKit {
-  readonly name: string;
-  /** Map deliveries to new entries for a key. Drops duplicates. */
-  readonly append: (
-    key: string,
-    state: FeedState,
-    deliveries: ReadonlyArray<Delivery>,
-  ) => { readonly state: FeedState; readonly entries: ReadonlyArray<FeedEntry> };
-}
-
-/**
- * What a platform provides for a feed.
- */
-export interface FeedStore {
-  readonly receive: (key: string, deliveries: ReadonlyArray<Delivery>) => Effect.Effect<void>;
-  readonly list: (key: string) => Effect.Effect<ReadonlyArray<FeedEntry>>;
+  /** Every entry of a key. */
+  readonly list: (key: string) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */
-  readonly tail: (key: string, after: number) => Stream.Stream<FeedEntry>;
+  readonly tail: (key: string, after: number) => Stream.Stream<ViewEntry>;
 }
 
 /**
@@ -295,7 +266,6 @@ export class FoldPlatform extends Context.Service<
       kit: AggregateKit,
     ) => Effect.Effect<AggregateStore>;
     readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
-    readonly feed: (feed: Feed.Any, kit: FeedKit) => Effect.Effect<FeedStore>;
     readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
   }
 >()("alchemy/Fold/FoldPlatform") {}

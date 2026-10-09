@@ -5,18 +5,15 @@ import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
-import type * as Feed from "./Feed.ts";
 import type {
   AggregateKit,
   Delivery,
   EnvelopeJson,
-  FeedEntry,
-  FeedKit,
-  FeedState,
   Json,
   PolicyKit,
   ReceiptJson,
   StoredEvent,
+  ViewEntry,
   ViewKit,
   ViewSnapshot,
 } from "./Platform.ts";
@@ -29,7 +26,6 @@ import type * as View from "./View.ts";
 export interface Definitions {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
   readonly views: ReadonlyArray<View.Any>;
-  readonly feeds: ReadonlyArray<Feed.Any>;
   readonly policies: ReadonlyArray<Policy.Any>;
 }
 
@@ -73,27 +69,9 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   at: DateTime.makeUnsafe(json.at),
 });
 
-type KeyRoute = (
-  event: any,
-  source: Aggregate.Ref,
-  envelope: Aggregate.Envelope,
-) => ReadonlyArray<string>;
-
-interface Subscriber {
-  readonly kind: "view" | "feed" | "policy";
-  readonly name: string;
-  readonly route: KeyRoute;
-}
-
-const toKeys = (value: unknown): ReadonlyArray<string> => {
-  if (value === undefined || value === null) return [];
-  if (Array.isArray(value)) return value.map((ref: Aggregate.Ref) => ref.id as string);
-  return [(value as Aggregate.Ref).id as string];
-};
-
 /**
  * The pure semantics shared by every platform: decide, evolve, reply,
- * routing, view application and feed mapping, plus every codec.
+ * routing and view application, plus every codec.
  */
 export interface Kernel {
   readonly aggregateKit: (
@@ -101,7 +79,6 @@ export interface Kernel {
     deliver: (d: Delivery) => Effect.Effect<void>,
   ) => AggregateKit;
   readonly viewKit: (view: View.Any, deliver: (d: Delivery) => Effect.Effect<void>) => ViewKit;
-  readonly feedKit: (feed: Feed.Any) => FeedKit;
   readonly policyKit: (policy: Policy.Any, handler: Policy.Handler<unknown>) => PolicyKit;
   readonly encodeCommand: (aggregate: Aggregate.Any, command: { readonly _tag: string }) => Json;
   readonly decodeRejection: (aggregate: Aggregate.Any, json: Json) => unknown;
@@ -112,7 +89,7 @@ export interface Kernel {
   ) => Aggregate.Receipt;
   readonly decodeState: (aggregate: Aggregate.Any, json: Json | null) => unknown;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
-  readonly decodeFeedEntry: (feed: Feed.Any, json: Json) => unknown;
+  readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
   readonly decodeEvent: (json: Json) => unknown;
   readonly encodeEvent: (event: { readonly _tag: string }) => Json;
 }
@@ -182,142 +159,232 @@ export const make = (definitions: Definitions): Kernel => {
     });
   }
   const codecsOf = (aggregate: Aggregate.Any) => aggregateCodecs.get(aggregate.aggregateName)!;
-  const includes = (from: ReadonlyArray<unknown>, entity: unknown) => from.includes(entity);
+
+  // --------------------------------------------------------------- sources
+  type SourceEntry =
+    | { readonly kind: "aggregate"; readonly aggregate: Aggregate.Any }
+    | { readonly kind: "view"; readonly view: View.Any };
+  const sources = new Map<string, SourceEntry>();
+  const addSource = (name: string, entry: SourceEntry) => {
+    if (sources.has(name)) throw new DefinitionError(`Two entities are named '${name}'`);
+    sources.set(name, entry);
+  };
+  for (const aggregate of definitions.aggregates) {
+    addSource(aggregate.aggregateName, { kind: "aggregate", aggregate });
+  }
+  for (const view of definitions.views) {
+    addSource(view.viewName, { kind: "view", view });
+    for (const event of view.definition.events ?? []) registerEvent(event);
+  }
+  const nameOf = (source: View.Source) =>
+    source.kind === "Aggregate"
+      ? (source as Aggregate.Any).aggregateName
+      : (source as View.Any).viewName;
+  const sourceEntry = (owner: string, source: View.Source) => {
+    const entry = sources.get(nameOf(source));
+    const entity = entry?.kind === "aggregate" ? entry.aggregate : entry?.view;
+    if (entity !== source) {
+      throw new DefinitionError(`${owner} consumes ${nameOf(source)}, which is not in the Domain`);
+    }
+    return entry!;
+  };
+  /** The aggregate whose refs identify a source's instances. */
+  const keyAggregateOf = (entry: SourceEntry) =>
+    entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
+
+  /** Does a view take this event from this source? */
+  const consumes = (view: View.Any, tag: string, source: string) => {
+    const def = view.definition;
+    return Boolean(
+      def.evolve?.[tag] ||
+      def.evolve?.[source] ||
+      def.emit?.[tag] ||
+      def.emit?.[source] ||
+      def.events?.some((event) => event.tag === tag),
+    );
+  };
+  /** The tags of the events a source produces. */
+  const outputs = new Map<string, ReadonlySet<string>>();
+  const visiting = new Set<string>();
+  const outputTags = (entry: SourceEntry): ReadonlySet<string> => {
+    if (entry.kind === "aggregate") return codecsOf(entry.aggregate).events;
+    const view = entry.view;
+    const known = outputs.get(view.viewName);
+    if (known) return known;
+    if (view.definition.events) {
+      const declared = new Set(view.definition.events.map((event) => event.tag));
+      outputs.set(view.viewName, declared);
+      return declared;
+    }
+    if (visiting.has(view.viewName)) {
+      throw new DefinitionError(`${view.viewName} consumes itself through other views`);
+    }
+    visiting.add(view.viewName);
+    const tags = new Set<string>();
+    for (const source of view.definition.from) {
+      const upstream = sourceEntry(view.viewName, source);
+      for (const tag of outputTags(upstream)) {
+        if (consumes(view, tag, nameOf(source))) tags.add(tag);
+      }
+    }
+    visiting.delete(view.viewName);
+    outputs.set(view.viewName, tags);
+    return tags;
+  };
 
   // --------------------------------------------------------------- routing
+  /** What routing sees of an event. */
+  interface RouteInput {
+    readonly event: unknown;
+    readonly source: Aggregate.Ref;
+    readonly envelope: Aggregate.Envelope;
+    readonly state: unknown;
+    /** The source stream, e.g. `Account/a-1`. */
+    readonly stream: string;
+  }
+  type Route = (input: RouteInput) => ReadonlyArray<{
+    readonly key: string;
+    readonly routes?: ReadonlyArray<string>;
+  }>;
+  interface Subscriber {
+    readonly kind: "view" | "policy";
+    readonly name: string;
+    readonly route: Route;
+  }
+  type Handler = (...args: ReadonlyArray<unknown>) => unknown;
+  type HandlerMap = { readonly [key: string]: Handler | Record<string, Handler | undefined> };
+  const handlers = (value: unknown) => value as HandlerMap | undefined;
+
   const subscribers = new Map<string, Map<string, Array<Subscriber>>>();
-  const subscribe = (aggregate: Aggregate.Any, tag: string, subscriber: Subscriber) => {
-    if (!codecsOf(aggregate).events.has(tag)) return;
-    const byTag = subscribers.get(aggregate.aggregateName) ?? new Map<string, Array<Subscriber>>();
-    subscribers.set(aggregate.aggregateName, byTag);
+  const subscribe = (source: string, tag: string, subscriber: Subscriber) => {
+    const byTag = subscribers.get(source) ?? new Map<string, Array<Subscriber>>();
+    subscribers.set(source, byTag);
     const list = byTag.get(tag) ?? [];
     byTag.set(tag, list);
     list.push(subscriber);
   };
-  const eventRoute = (
-    owner: string,
-    keyAggregate: Aggregate.Any,
-    keyOf: { readonly [tag: string]: ((...args: any[]) => unknown) | undefined } | undefined,
-    source: Aggregate.Any,
-    tag: string,
-  ): KeyRoute => {
-    const custom = keyOf?.[tag];
-    if (custom) {
-      return (event, sourceRef, envelope) => toKeys(custom({ event, source: sourceRef, envelope }));
+
+  const keyRoute = (view: View.Any, upstream: SourceEntry, source: string, tag: string): Route => {
+    const def = view.definition;
+    const custom = handlers(def.keyOf)?.[tag] ?? handlers(def.keyOf)?.[source];
+    const routing = (input: RouteInput) => ({
+      event: input.event,
+      source: input.source,
+      state: input.state,
+      envelope: input.envelope,
+    });
+    if (typeof custom === "function") {
+      return (input) => {
+        const ref = custom(routing(input)) as Aggregate.Ref | undefined;
+        return ref ? [{ key: ref.id as string }] : [];
+      };
     }
-    if (keyAggregate === source) return (_event, sourceRef) => [sourceRef.id as string];
+    if (custom) {
+      const routes = Object.entries(custom);
+      return (input) => {
+        const byKey = new Map<string, Array<string>>();
+        for (const [route, fn] of routes) {
+          const ref = fn?.(routing(input)) as Aggregate.Ref | undefined;
+          if (!ref) continue;
+          const list = byKey.get(ref.id as string) ?? [];
+          byKey.set(ref.id as string, list);
+          list.push(route);
+        }
+        return [...byKey].map(([key, names]) => ({ key, routes: names }));
+      };
+    }
+    if (keyAggregateOf(upstream) === def.key)
+      return (input) => [{ key: input.source.id as string }];
     throw new DefinitionError(
-      `${owner} consumes '${tag}' from ${source.aggregateName} but is keyed by ${keyAggregate.aggregateName}: add keyOf.${tag}`,
+      `${view.viewName} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
     );
   };
 
-  const viewByName = new Map<string, View.Any>();
-  for (const view of definitions.views) {
-    if (viewByName.has(view.viewName))
-      throw new DefinitionError(`Duplicate view '${view.viewName}'`);
-    viewByName.set(view.viewName, view);
-  }
   for (const view of definitions.views) {
     const def = view.definition;
+    if (def.state !== undefined && def.initial === undefined) {
+      throw new DefinitionError(`${view.viewName} declares state without initial`);
+    }
+    // Route-keyed handlers need the same routes in keyOf.
+    for (const field of ["evolve", "emit"] as const) {
+      for (const [name, handler] of Object.entries(handlers(def[field]) ?? {})) {
+        if (typeof handler === "function" || !handler) continue;
+        const routes = handlers(def.keyOf)?.[name];
+        for (const route of Object.keys(handler)) {
+          if (typeof routes !== "object" || !(route in routes)) {
+            throw new DefinitionError(
+              `${view.viewName}.${field}.${name}.${route} has no matching route in keyOf.${name}`,
+            );
+          }
+        }
+      }
+    }
     for (const source of def.from) {
-      if ((source as Aggregate.Any).kind !== "Aggregate") continue;
-      const aggregate = source as Aggregate.Any;
-      for (const tag of Object.keys(def.evolve)) {
-        if (!codecsOf(aggregate).events.has(tag)) continue;
-        subscribe(aggregate, tag, {
+      const upstream = sourceEntry(view.viewName, source);
+      const name = nameOf(source);
+      for (const tag of outputTags(upstream)) {
+        if (!consumes(view, tag, name)) continue;
+        subscribe(name, tag, {
           kind: "view",
           name: view.viewName,
-          route: eventRoute(view.viewName, def.key, def.keyOf, aggregate, tag),
+          route: keyRoute(view, upstream, name, tag),
         });
       }
     }
   }
-  const feedByName = new Map<string, Feed.Any>();
-  for (const feed of definitions.feeds) {
-    if (feedByName.has(feed.feedName))
-      throw new DefinitionError(`Duplicate feed '${feed.feedName}'`);
-    feedByName.set(feed.feedName, feed);
-    const def = feed.definition;
-    const tags = def.map ? Object.keys(def.map) : (def.events ?? []).map((e) => e.tag);
-    for (const aggregate of def.from) {
-      for (const tag of tags) {
-        if (!codecsOf(aggregate).events.has(tag)) continue;
-        subscribe(aggregate, tag, {
-          kind: "feed",
-          name: feed.feedName,
-          route: eventRoute(feed.feedName, def.key, def.keyOf, aggregate, tag),
-        });
-      }
-    }
-  }
+
   const policyByName = new Map<string, Policy.Any>();
   for (const policy of definitions.policies) {
     if (policyByName.has(policy.policyName))
       throw new DefinitionError(`Duplicate policy '${policy.policyName}'`);
     policyByName.set(policy.policyName, policy);
     const { from, on } = policy.definition;
-    if (!includes(definitions.aggregates, from)) {
-      throw new DefinitionError(
-        `Policy ${policy.policyName} listens to an aggregate missing from the Domain`,
-      );
-    }
+    const upstream = sourceEntry(`Policy ${policy.policyName}`, from);
     for (const event of on) {
-      if (!codecsOf(from).events.has(event.tag)) {
+      if (!outputTags(upstream).has(event.tag)) {
         throw new DefinitionError(
-          `Policy ${policy.policyName}: ${from.aggregateName} does not emit '${event.tag}'`,
+          `Policy ${policy.policyName}: ${nameOf(from)} does not emit '${event.tag}'`,
         );
       }
-      subscribe(from, event.tag, {
+      // One policy instance per source instance, so triggers run in order.
+      subscribe(nameOf(from), event.tag, {
         kind: "policy",
         name: policy.policyName,
-        route: (_event, sourceRef) => [Aggregate.streamOf(sourceRef as any)],
+        route: (input) => [{ key: input.stream }],
       });
     }
   }
 
-  // downstream view routes: source view name → [{ target, route(state) }]
-  const downstream = new Map<
-    string,
-    Array<{
-      readonly target: View.Any;
-      readonly route: (state: unknown, key: string) => string | undefined;
-    }>
-  >();
-  for (const view of definitions.views) {
-    for (const source of view.definition.from) {
-      if ((source as View.Any).kind !== "View") continue;
-      const upstream = source as View.Any;
-      if (!view.definition.evolve[upstream.viewName]) continue;
-      const custom = view.definition.keyOf?.[upstream.viewName];
-      const route = custom
-        ? (state: unknown) => toKeys(custom(state))[0]
-        : upstream.definition.key === view.definition.key
-          ? (_state: unknown, key: string) => key
-          : (() => {
-              throw new DefinitionError(
-                `${view.viewName} consumes ${upstream.viewName} with a different key: add keyOf.${upstream.viewName}`,
-              );
-            })();
-      const list = downstream.get(upstream.viewName) ?? [];
-      downstream.set(upstream.viewName, list);
-      list.push({ target: view, route });
+  /** Every delivery an event produces. */
+  const fanOut = (
+    input: RouteInput,
+    delivery: Omit<Delivery, "target" | "key" | "routes">,
+  ): Array<Delivery> => {
+    const out: Array<Delivery> = [];
+    for (const subscriber of subscribers.get(delivery.origin)?.get(delivery.tag) ?? []) {
+      for (const { key, routes } of subscriber.route(input)) {
+        out.push({
+          ...delivery,
+          target: { kind: subscriber.kind, name: subscriber.name },
+          key,
+          ...(routes ? { routes } : {}),
+        });
+      }
     }
-  }
+    return out;
+  };
 
   const viewCodecs = new Map<string, JsonCodec>();
   const viewCodec = (view: View.Any) => {
     let codec = viewCodecs.get(view.viewName);
-    if (!codec) viewCodecs.set(view.viewName, (codec = jsonCodec(view.definition.state)));
+    if (!codec) viewCodecs.set(view.viewName, (codec = jsonCodec(view.definition.state!)));
     return codec;
   };
-  const feedCodecs = new Map<string, JsonCodec>();
-  const feedCodec = (feed: Feed.Any) => {
-    let codec = feedCodecs.get(feed.feedName);
-    if (!codec && feed.definition.entry) {
-      feedCodecs.set(feed.feedName, (codec = jsonCodec(feed.definition.entry)));
-    }
-    return codec;
-  };
+  /** Decode the state a delivery carries from a view source. */
+  const sourceState = (entry: SourceEntry, json: Json | null | undefined) =>
+    json === undefined || json === null || entry.kind !== "view" || !entry.view.definition.state
+      ? json
+      : viewCodec(entry.view).decode(json);
 
   // ------------------------------------------------------------------ kits
   const aggregateKit = (
@@ -326,7 +393,6 @@ export const make = (definitions: Definitions): Kernel => {
   ): AggregateKit => {
     const def = aggregate.definition;
     const codecs = codecsOf(aggregate);
-    const routes = subscribers.get(aggregate.aggregateName);
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
     const commit = (
       id: string,
@@ -335,6 +401,7 @@ export const make = (definitions: Definitions): Kernel => {
       decided: ReadonlyArray<{ readonly _tag: string }>,
       now: DateTime.Utc,
       commandId: string,
+      history: boolean,
     ) => {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -364,22 +431,20 @@ export const make = (definitions: Definitions): Kernel => {
           envelope: encodeEnvelope(envelope),
         };
         events.push(stored);
-        for (const subscriber of routes?.get(event._tag) ?? []) {
-          for (const key of subscriber.route(event, sourceRef, envelope)) {
-            deliveries.push({
-              target: { kind: subscriber.kind, name: subscriber.name },
-              key,
+        deliveries.push(
+          ...fanOut(
+            { event, source: sourceRef, envelope, state: undefined, stream },
+            {
               source: stream,
               seq: envelope.seq,
-              body: {
-                type: "event",
-                tag: event._tag,
-                event: stored.event,
-                envelope: stored.envelope,
-              },
-            });
-          }
-        }
+              origin: aggregate.aggregateName,
+              tag: event._tag,
+              event: stored.event,
+              envelope: stored.envelope,
+              ...(history ? { history } : {}),
+            },
+          ),
+        );
       });
       return { next, events, deliveries };
     };
@@ -397,6 +462,7 @@ export const make = (definitions: Definitions): Kernel => {
           decided,
           DateTime.makeUnsafe(input.now),
           input.commandId,
+          true,
         );
         return {
           state: codecs.state.encode(result.next),
@@ -440,6 +506,7 @@ export const make = (definitions: Definitions): Kernel => {
           decision,
           now,
           input.commandId,
+          false,
         );
         const replyFn = (def.reply as Record<string, (...args: any[]) => unknown> | undefined)?.[
           decoded._tag
@@ -458,130 +525,132 @@ export const make = (definitions: Definitions): Kernel => {
     };
   };
 
+  /** The handler for an input: by event tag, else by source name; per route if routed. */
+  const pick = (
+    map: HandlerMap | undefined,
+    tag: string,
+    source: string,
+    route: string | undefined,
+  ): Handler | undefined => {
+    const handler = map?.[tag] ?? map?.[source];
+    if (typeof handler === "function") return handler;
+    return handler && route !== undefined ? handler[route] : undefined;
+  };
+
   const viewKit = (view: View.Any, deliver: (d: Delivery) => Effect.Effect<void>): ViewKit => {
     const def = view.definition;
-    const codec = viewCodec(view);
-    const evolve = def.evolve as Record<string, ((...args: any[]) => unknown) | undefined>;
-    const targets = downstream.get(view.viewName) ?? [];
+    const stateful = def.state !== undefined;
+    const codec = stateful ? viewCodec(view) : undefined;
+    const declared = def.events ? new Set(def.events.map((event) => event.tag)) : undefined;
+    const evolve = handlers(def.evolve);
+    const emit = handlers(def.emit);
+    const encodeState = (state: unknown) =>
+      codec && state !== null && state !== undefined ? codec.encode(state) : null;
     return {
       name: view.viewName,
       deliver,
       apply: (key, snapshot, batch) => {
-        const before = snapshot.state === null ? null : codec.decode(snapshot.state);
-        let current: unknown = before;
-        let version = snapshot.version;
+        let current: unknown =
+          codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
+        let { version, seq } = snapshot;
         const checkpoints: Record<string, number> = { ...snapshot.checkpoints };
         let changed = false;
+        const entries: Array<ViewEntry> = [];
+        const downstream: Array<Delivery> = [];
+        const keyRef = Aggregate.makeRef(def.key, key);
+        const stream = `${view.viewName}/${key}`;
         for (const delivery of batch) {
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
           checkpoints[delivery.source] = delivery.seq;
-          const base = current ?? def.initial;
-          const body = delivery.body;
-          let next: unknown;
-          if (body.type === "event") {
-            const handler = evolve[body.tag];
-            if (!handler) continue;
-            next = handler(base, decodeEvent(body.event), decodeEnvelope(body.envelope));
-          } else {
-            const handler = evolve[body.view];
-            const upstream = viewByName.get(body.view);
-            if (!handler || !upstream) continue;
-            const upstreamCodec = viewCodec(upstream);
-            next = handler(base, {
-              source: Aggregate.makeRef(upstream.definition.key, body.key),
-              before: body.before === null ? null : upstreamCodec.decode(body.before),
-              after: body.after === null ? null : upstreamCodec.decode(body.after),
-            });
-          }
-          current = next ?? null;
-          version += 1;
           changed = true;
-        }
-        const next: ViewSnapshot = {
-          state: current === null ? null : codec.encode(current),
-          version,
-          checkpoints,
-        };
-        const out: Array<Delivery> = [];
-        if (changed) {
-          const source = `${view.viewName}/${key}`;
-          for (const { target, route } of targets) {
-            const keyBefore = before === null ? undefined : route(before, key);
-            const keyAfter = current === null ? undefined : route(current, key);
-            const body = (b: unknown, a: unknown) =>
-              ({ type: "change", view: view.viewName, key, before: b, after: a }) as const;
-            if (keyBefore !== undefined && keyBefore !== keyAfter) {
-              out.push({
-                target: { kind: "view", name: target.viewName },
-                key: keyBefore,
-                source,
-                seq: version,
-                body: body(snapshot.state, null),
-              });
+          const origin = sources.get(delivery.origin)!;
+          const event = decodeEvent(delivery.event) as { readonly _tag: string };
+          const envelope = decodeEnvelope(delivery.envelope);
+          const context = {
+            key: keyRef,
+            source: Aggregate.makeRef(keyAggregateOf(origin), envelope.id),
+            state: sourceState(origin, delivery.state),
+            envelope,
+            at: envelope.at,
+          };
+          for (const route of delivery.routes ?? [undefined]) {
+            const before = stateful ? (current ?? def.initial) : null;
+            const evolveFn = stateful
+              ? pick(evolve, delivery.tag, delivery.origin, route)
+              : undefined;
+            if (evolveFn) {
+              current = evolveFn(before, event, context) ?? null;
+              version += 1;
             }
-            if (keyAfter !== undefined) {
-              out.push({
-                target: { kind: "view", name: target.viewName },
-                key: keyAfter,
-                source,
-                seq: version,
-                body: body(keyBefore === keyAfter ? snapshot.state : null, next.state),
-              });
+            const emitFn = pick(emit, delivery.tag, delivery.origin, route);
+            const emitted = !declared
+              ? evolveFn
+                ? [event]
+                : []
+              : emitFn
+                ? [emitFn(event, { ...context, before, after: current })].flat()
+                : declared.has(delivery.tag)
+                  ? [event]
+                  : [];
+            for (const out of emitted as ReadonlyArray<{ readonly _tag: string } | undefined>) {
+              if (out === undefined) continue;
+              if (declared && !declared.has(out._tag)) {
+                throw new DefinitionError(
+                  `${view.viewName} emitted '${out._tag}', which it does not declare in events`,
+                );
+              }
+              seq += 1;
+              const outEnvelope: Aggregate.Envelope = {
+                id: key,
+                stream,
+                seq,
+                at: envelope.at,
+                commandId: envelope.commandId,
+              };
+              const entry: ViewEntry = {
+                seq,
+                event: encodeEvent(out),
+                envelope: encodeEnvelope(outEnvelope),
+                state: encodeState(current),
+              };
+              entries.push(entry);
+              downstream.push(
+                ...fanOut(
+                  { event: out, source: keyRef, envelope: outEnvelope, state: current, stream },
+                  {
+                    source: stream,
+                    seq,
+                    origin: view.viewName,
+                    tag: out._tag,
+                    event: entry.event,
+                    envelope: entry.envelope,
+                    state: entry.state,
+                    ...(delivery.history ? { history: true } : {}),
+                  },
+                ),
+              );
             }
           }
         }
-        return { snapshot: next, changed, downstream: out };
-      },
-    };
-  };
-
-  const feedKit = (feed: Feed.Any): FeedKit => {
-    const def = feed.definition;
-    const codec = feedCodec(feed);
-    const map = def.map as Record<string, ((...args: any[]) => unknown) | undefined> | undefined;
-    return {
-      name: feed.feedName,
-      append: (key, state, batch) => {
-        let seq = state.seq;
-        const checkpoints: Record<string, number> = { ...state.checkpoints };
-        const entries: Array<FeedEntry> = [];
-        for (const delivery of batch) {
-          if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
-          checkpoints[delivery.source] = delivery.seq;
-          const body = delivery.body;
-          if (body.type !== "event") continue;
-          if (map) {
-            const handler = map[body.tag];
-            if (!handler || !codec) continue;
-            const envelope = decodeEnvelope(body.envelope);
-            const entry = handler(decodeEvent(body.event), {
-              key: Aggregate.makeRef(def.key, key),
-              at: envelope.at,
-              envelope,
-            });
-            if (entry === undefined) continue;
-            entries.push({ seq: ++seq, entry: codec.encode(entry) });
-          } else {
-            entries.push({ seq: ++seq, entry: { event: body.event, envelope: body.envelope } });
-          }
-        }
-        return { state: { seq, checkpoints } satisfies FeedState, entries };
+        const next: ViewSnapshot = { state: encodeState(current), version, checkpoints, seq };
+        return { snapshot: next, changed, entries, downstream };
       },
     };
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
-    const from = policy.definition.from;
+    const upstream = sources.get(nameOf(policy.definition.from))!;
     return {
       name: policy.policyName,
       run: (delivery) => {
-        const body = delivery.body;
-        if (body.type !== "event") return Effect.void;
-        const envelope = decodeEnvelope(body.envelope);
+        // Seeded history is the past; policies only react to what happens now.
+        if (delivery.history) return Effect.void;
+        const envelope = decodeEnvelope(delivery.envelope);
         const trigger = {
-          source: Aggregate.makeRef(from, envelope.id),
-          event: decodeEvent(body.event),
+          source: Aggregate.makeRef(keyAggregateOf(upstream), envelope.id),
+          event: decodeEvent(delivery.event),
           envelope,
+          state: sourceState(upstream, delivery.state),
         };
         let n = 0;
         const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}`;
@@ -595,7 +664,6 @@ export const make = (definitions: Definitions): Kernel => {
   return {
     aggregateKit,
     viewKit,
-    feedKit,
     policyKit,
     decodeEvent,
     encodeEvent,
@@ -623,11 +691,11 @@ export const make = (definitions: Definitions): Kernel => {
       return codecs.state.decode(json ?? codecs.initial);
     },
     decodeViewState: (view, json) => viewCodec(view).decode(json),
-    decodeFeedEntry: (feed, json) => {
-      const codec = feedCodec(feed);
-      if (codec) return codec.decode(json);
-      const raw = json as { event: Json; envelope: EnvelopeJson };
-      return { event: decodeEvent(raw.event), envelope: decodeEnvelope(raw.envelope) };
-    },
+    decodeViewEntry: (view, entry) => ({
+      event: decodeEvent(entry.event),
+      state:
+        entry.state === null || !view.definition.state ? null : viewCodec(view).decode(entry.state),
+      envelope: decodeEnvelope(entry.envelope),
+    }),
   };
 };

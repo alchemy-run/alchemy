@@ -1,7 +1,7 @@
 import * as Operation from "./Operation.ts";
 
 /**
- * Declare a Query: a public one-shot read. Its handler reads views and feeds
+ * Declare a Query: a public one-shot read. Its handler reads views
  * (or calls Ports). The class is the contract (browser-safe); implement it
  * with `toLayer`.
  *

@@ -10,6 +10,7 @@ import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
 } from "./Customer/MainAccountProvisioning.ts";
+import { DailyOutflow } from "./Fraud/DailyOutflow.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
@@ -17,11 +18,18 @@ import { Transfer } from "./Transfer/Transfer.ts";
 import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.ts";
 
-/** The bank: every aggregate, view, feed and policy, hosted together. */
+/** The bank: every aggregate, view and policy, hosted together. */
 export class Bank extends Domain.make("Bank", {
   aggregates: [Customer, Account, Transfer],
-  views: [AccountSummary, TransferStatus, CustomerDashboard],
-  feeds: [Statement, AccountActivity, AccountTransfers],
+  views: [
+    AccountSummary,
+    CustomerDashboard,
+    Statement,
+    AccountActivity,
+    TransferStatus,
+    AccountTransfers,
+    DailyOutflow,
+  ],
   policies: [MainAccountProvisioning, TransferExecution, FraudReview, SettlementRefund],
 }) {}
 

@@ -5,14 +5,12 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import {
   type Delivery,
-  emptyFeedState,
   emptySnapshot,
-  type FeedEntry,
-  type FeedState,
   FoldPlatform,
   type Json,
   type SendResult,
   type StoredEvent,
+  type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
 
@@ -165,10 +163,7 @@ export const make = (
                 current.state = result.state;
                 current.version = result.version;
                 current.events.push(...result.events);
-                return enqueue(
-                  result.deliveries.filter((d) => d.target.kind !== "policy"),
-                  kit.deliver,
-                );
+                return enqueue(result.deliveries, kit.deliver);
               }),
             ),
         };
@@ -176,39 +171,11 @@ export const make = (
 
     view: (_view, kit) =>
       Effect.sync(() => {
-        const keys = new Map<string, SubscriptionRef.SubscriptionRef<ViewSnapshot>>();
-        const lock = Semaphore.makeUnsafe(1);
-        const ref = (key: string) =>
-          Effect.suspend(() => {
-            const found = keys.get(key);
-            if (found) return Effect.succeed(found);
-            return SubscriptionRef.make(emptySnapshot).pipe(
-              Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
-            );
-          });
-        return {
-          receive: (key, deliveries) =>
-            lock.withPermits(1)(
-              Effect.gen(function* () {
-                const r = yield* ref(key);
-                const result = kit.apply(key, yield* SubscriptionRef.get(r), deliveries);
-                if (!result.changed) return;
-                yield* SubscriptionRef.set(r, result.snapshot);
-                yield* enqueue(result.downstream, kit.deliver);
-              }),
-            ),
-          read: (key) => ref(key).pipe(Effect.flatMap(SubscriptionRef.get)),
-          changes: (key) => Stream.unwrap(ref(key).pipe(Effect.map(SubscriptionRef.changes))),
-        };
-      }),
-
-    feed: (_feed, kit) =>
-      Effect.sync(() => {
         const keys = new Map<
           string,
           {
-            state: FeedState;
-            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<FeedEntry>>;
+            readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
+            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
           }
         >();
         const lock = Semaphore.makeUnsafe(1);
@@ -216,28 +183,37 @@ export const make = (
           Effect.suspend(() => {
             const found = keys.get(key);
             if (found) return Effect.succeed(found);
-            return SubscriptionRef.make<ReadonlyArray<FeedEntry>>([]).pipe(
-              Effect.map((entries) => {
-                const created = { state: emptyFeedState, entries };
-                keys.set(key, created);
-                return created;
-              }),
-            );
+            return Effect.all({
+              snapshot: SubscriptionRef.make(emptySnapshot),
+              entries: SubscriptionRef.make<ReadonlyArray<ViewEntry>>([]),
+            }).pipe(Effect.tap((created) => Effect.sync(() => keys.set(key, created))));
           });
         return {
           receive: (key, deliveries) =>
             lock.withPermits(1)(
               Effect.gen(function* () {
                 const current = yield* get(key);
-                const result = kit.append(key, current.state, deliveries);
-                current.state = result.state;
+                const result = kit.apply(
+                  key,
+                  yield* SubscriptionRef.get(current.snapshot),
+                  deliveries,
+                );
+                if (!result.changed) return;
                 if (result.entries.length > 0) {
                   yield* SubscriptionRef.update(current.entries, (entries) => [
                     ...entries,
                     ...result.entries,
                   ]);
                 }
+                yield* SubscriptionRef.set(current.snapshot, result.snapshot);
+                yield* enqueue(result.downstream, kit.deliver);
               }),
+            ),
+          read: (key) =>
+            get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+          changes: (key) =>
+            Stream.unwrap(
+              get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
             ),
           list: (key) =>
             get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
@@ -292,7 +268,7 @@ export const make = (
 };
 
 /**
- * An in-memory platform: every aggregate, view, feed and policy lives in the
+ * An in-memory platform: every aggregate, view and policy lives in the
  * current process. Use it for tests and single-process servers.
  */
 export const InMemory: Layer.Layer<FoldPlatform> = Layer.suspend(() => make().layer);

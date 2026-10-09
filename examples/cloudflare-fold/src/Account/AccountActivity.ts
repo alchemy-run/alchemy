@@ -1,4 +1,4 @@
-import { Feed } from "alchemy/Fold";
+import { View } from "alchemy/Fold";
 import {
   Account,
   AccountClosed,
@@ -8,8 +8,8 @@ import {
   SettlementOnClosedAccount,
 } from "./Account.ts";
 
-/** Raw operational events for support tooling. */
-export class AccountActivity extends Feed.make("AccountActivity", {
+/** Operational events for support tooling, passed through unchanged. */
+export class AccountActivity extends View.make("AccountActivity", {
   from: [Account],
   key: Account,
   events: [AccountFrozen, AccountClosed, OwnerChanged, RefundStranded, SettlementOnClosedAccount],

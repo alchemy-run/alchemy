@@ -5,16 +5,27 @@ import { AccountSummary } from "../Account/AccountSummary.ts";
 import { Cents } from "../Money.ts";
 import { Customer } from "./Customer.ts";
 
+type Balances = Readonly<Record<AccountId, number>>;
+
+const without = (balances: Balances, id: AccountId): Balances => {
+  const { [id]: _removed, ...rest } = balances;
+  return rest;
+};
+
 /**
- * A customer's accounts and balances. Consumes AccountSummary changes and
- * re-keys them by customer, so an ownership change moves the account between
+ * A customer's accounts and balances, built from AccountSummary's events and
+ * the summary after each. An ownership change moves the account between
  * dashboards.
  */
 export class CustomerDashboard extends View.make("CustomerDashboard", {
   from: [Customer, AccountSummary],
   key: Customer,
   keyOf: {
-    AccountSummary: (s) => (s.customerId ? Customer.ref(s.customerId) : undefined),
+    AccountSummary: ({ state }) => (state?.customerId ? Customer.ref(state.customerId) : undefined),
+    OwnerChanged: {
+      previous: ({ event }) => Customer.ref(event.previous),
+      current: ({ event }) => Customer.ref(event.customerId),
+    },
   },
   state: Schema.Struct({
     name: Schema.NullOr(Schema.String),
@@ -23,10 +34,20 @@ export class CustomerDashboard extends View.make("CustomerDashboard", {
   initial: { name: null, balances: {} },
   evolve: {
     CustomerRegistered: (d, e) => ({ ...d, name: e.name }),
-    AccountSummary: (d, { source, after }) => {
-      const { [source.id]: _removed, ...rest } = d.balances;
-      return { ...d, balances: after ? { ...rest, [source.id]: after.balance } : rest };
+    OwnerChanged: {
+      previous: (d, _, { source }) => ({ ...d, balances: without(d.balances, source.id) }),
+      current: (d, _, { source, state }) => ({
+        ...d,
+        balances: { ...d.balances, [source.id]: state?.balance ?? 0 },
+      }),
     },
+    AccountSummary: (d, _, { source, state }) => ({
+      ...d,
+      balances:
+        state && !state.closed
+          ? { ...d.balances, [source.id]: state.balance }
+          : without(d.balances, source.id),
+    }),
   },
   computed: {
     totalBalance: (d) => Object.values<number>(d.balances).reduce((a, b) => a + b, 0),

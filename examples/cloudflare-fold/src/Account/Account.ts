@@ -41,7 +41,7 @@ export class AccountOpened extends Event.make("AccountOpened", {
 }) {}
 
 export class OwnerChanged extends Event.make("OwnerChanged", {
-  data: { customerId: CustomerId, by: Actor },
+  data: { previous: CustomerId, customerId: CustomerId, by: Actor },
 }) {}
 
 export class MoneyDeposited extends Event.make("MoneyDeposited", {
@@ -217,7 +217,7 @@ export class Account extends Aggregate.make("Account", {
         ? new NotOpen()
         : cmd.by._tag !== "Agent"
           ? new NotPermitted()
-          : [new OwnerChanged({ customerId: cmd.customerId, by: cmd.by })],
+          : [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: cmd.by })],
 
     Deposit: (s, cmd) => {
       const o = openFor(s, cmd.by);

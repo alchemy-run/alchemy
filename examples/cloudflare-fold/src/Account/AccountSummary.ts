@@ -12,7 +12,10 @@ const setBalance = <V extends { balance: number }>(
   balance: e.balanceAfter,
 });
 
-/** The current balance and status of one account. */
+/**
+ * The current balance and status of one account. It declares no events, so
+ * it emits every event it applies, each with the summary after it.
+ */
 export class AccountSummary extends View.make("AccountSummary", {
   from: [Account],
   key: Account,
@@ -21,8 +24,9 @@ export class AccountSummary extends View.make("AccountSummary", {
     owner: Schema.NullOr(Schema.String),
     balance: Cents,
     frozen: Schema.Boolean,
+    closed: Schema.Boolean,
   }),
-  initial: { customerId: null, owner: null, balance: 0, frozen: false },
+  initial: { customerId: null, owner: null, balance: 0, frozen: false, closed: false },
   evolve: {
     AccountOpened: (v, e) => ({ ...v, customerId: e.customerId, owner: e.owner }),
     OwnerChanged: (v, e) => ({ ...v, customerId: e.customerId }),
@@ -33,6 +37,6 @@ export class AccountSummary extends View.make("AccountSummary", {
     TransferRefunded: setBalance,
     SettlementReceived: setBalance,
     AccountFrozen: (v) => ({ ...v, frozen: true }),
-    AccountClosed: () => null,
+    AccountClosed: (v) => ({ ...v, closed: true }),
   },
 }) {}

@@ -14,16 +14,13 @@ import { captureContext } from "./internal.ts";
 import {
   type AggregateKit,
   type Delivery,
-  emptyFeedState,
   emptySnapshot,
-  type FeedEntry,
-  type FeedKit,
-  type FeedState,
   FoldPlatform,
   type Json,
   type PolicyKit,
   type SendResult,
   type StoredEvent,
+  type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
 } from "./Platform.ts";
@@ -235,6 +232,10 @@ const viewObject = (kit: ViewKit) =>
       const read = state.storage
         .get<ViewSnapshot>("snapshot")
         .pipe(Effect.map((s) => s ?? emptySnapshot));
+      const entriesAfter = (after: number) =>
+        state.storage
+          .list<ViewEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
+          .pipe(Effect.map((rows) => [...rows.values()]));
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
@@ -243,9 +244,12 @@ const viewObject = (kit: ViewKit) =>
                 Effect.gen(function* () {
                   const result = kit.apply(key, yield* read, deliveries);
                   if (!result.changed) return false;
+                  const rows: Record<string, ViewEntry> = {};
+                  for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
                   yield* state.storage.transaction(
                     Effect.gen(function* () {
                       yield* state.storage.put("snapshot", result.snapshot);
+                      if (result.entries.length > 0) yield* state.storage.put(rows);
                       yield* outbox.stage(result.downstream);
                     }),
                   );
@@ -256,37 +260,6 @@ const viewObject = (kit: ViewKit) =>
             }),
           ),
         read: () => reportDefects(read),
-      };
-    });
-  });
-
-const feedObject = (kit: FeedKit) =>
-  Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    return Effect.gen(function* () {
-      const entriesAfter = (after: number) =>
-        state.storage
-          .list<FeedEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
-          .pipe(Effect.map((rows) => [...rows.values()]));
-      return {
-        receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const cursor = (yield* state.storage.get<FeedState>("state")) ?? emptyFeedState;
-                const result = kit.append(key, cursor, deliveries);
-                const rows: Record<string, FeedEntry> = {};
-                for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
-                yield* state.storage.transaction(
-                  Effect.gen(function* () {
-                    yield* state.storage.put(rows);
-                    yield* state.storage.put("state", result.state);
-                  }),
-                );
-              }),
-            ),
-          ),
-        list: () => reportDefects(entriesAfter(0)),
         after: (after: number) => reportDefects(entriesAfter(after)),
       };
     });
@@ -325,18 +298,19 @@ const POLL = Schedule.spaced("300 millis");
 /**
  * Host a Domain on Cloudflare Durable Objects.
  *
- * Every aggregate, view, feed and policy becomes a Durable Object class on
- * the host Worker (`AccountAggregate`, `AccountSummaryView`, `StatementFeed`,
- * `FraudReviewPolicy`), declared while the Domain's Layer is built, so no
- * bindings or exports are written by hand:
+ * Every aggregate, view and policy becomes a Durable Object class on the host
+ * Worker (`AccountAggregate`, `AccountSummaryView`, `FraudReviewPolicy`),
+ * declared while the Domain's Layer is built, so no bindings or exports are
+ * written by hand:
  *
  * - **Aggregates**: one instance per id. Commands are serialized; events,
  *   state, the receipt (for idempotency) and an outbox commit in one storage
  *   transaction. The outbox is delivered right after the commit, in order,
  *   with a durable callback as the backstop.
- * - **Views and feeds**: one instance per key, with per-source checkpoints so
- *   repeated deliveries are harmless. `watch` and `tail` poll the instance
- *   that owns the key.
+ * - **Views**: one instance per key, with per-source checkpoints so repeated
+ *   deliveries are harmless. State, emitted events and the outbox to
+ *   downstream views and policies commit together. `watch` and `events` poll
+ *   the instance that owns the key.
  * - **Policies**: one instance per (policy, source instance), running
  *   triggers in order from a durable inbox.
  *
@@ -378,6 +352,8 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
             const namespace = yield* declare(`${view.viewName}View`, viewObject(kit));
             const read = (key: string) =>
               unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
+            const after = (key: string, cursor: number) =>
+              unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
             return {
               receive: (key, deliveries) =>
                 unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
@@ -387,24 +363,12 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
                 Stream.fromEffectSchedule(read(key), POLL).pipe(
                   Stream.changesWith((a, b) => a.version === b.version),
                 ),
-            };
-          }),
-        ),
-      feed: (feed, kit) =>
-        inInit(
-          Effect.gen(function* () {
-            const namespace = yield* declare(`${feed.feedName}Feed`, feedObject(kit));
-            return {
-              receive: (key, deliveries) =>
-                unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
-              list: (key) => unwrapDefects(namespace.getByName(key).list()),
-              tail: (key, after) =>
+              list: (key) => after(key, 0),
+              tail: (key, from) =>
                 Stream.suspend(() => {
                   let first = true;
-                  return Stream.paginate(after, (cursor: number) => {
-                    const poll = unwrapDefects<ReadonlyArray<FeedEntry>>(
-                      namespace.getByName(key).after(cursor),
-                    );
+                  return Stream.paginate(from, (cursor: number) => {
+                    const poll = after(key, cursor);
                     const next = first ? poll : Effect.delay(poll, "300 millis");
                     first = false;
                     return Effect.map(

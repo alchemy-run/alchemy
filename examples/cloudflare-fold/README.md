@@ -1,6 +1,6 @@
 # cloudflare-fold
 
-A bank built with `alchemy/Fold`: aggregates, views, feeds, policies and ports declared as pure, typed definitions, exposed through two Apis, and hosted on Cloudflare Durable Objects.
+A bank built with `alchemy/Fold`: aggregates, views, policies and ports declared as pure, typed definitions, exposed through two Apis, and hosted on Cloudflare Durable Objects.
 
 ```ts
 export class Account extends Aggregate.make("Account", {
@@ -29,12 +29,13 @@ Folders are subdomains; every file is named after the thing it declares.
 
 ```
 src/
-  Account/      Account (aggregate + its commands, events, rejections), AccountSummary (view),
-                Statement and AccountActivity (feeds), AccountId
-  Customer/     Customer, CustomerDashboard (view-to-view), MainAccountProvisioning (policy)
+  Account/      Account (aggregate + its commands, events, rejections), AccountSummary (read model),
+                Statement (maps six events to StatementLine), AccountActivity (pass-through), AccountId
+  Customer/     Customer, CustomerDashboard (view of a view), MainAccountProvisioning (policy)
   Transfer/     Transfer (process manager state), TransferExecution (policy),
-                TransferStatus (multi-source view), AccountTransfers (fan-out feed)
-  Fraud/        FraudCheck (port), SiftFraudCheck (adapter), FraudReview (policy)
+                TransferStatus (multi-source view), AccountTransfers (one event routed to two accounts)
+  Fraud/        FraudCheck (port), SiftFraudCheck (adapter), DailyOutflow (stateful view emitting
+                DailyOutflowExceeded), FraudReview (policy on that view)
   Settlement/   Payments (port), StripePayments (adapter), SettlementRefund (policy),
                 StripeSettlements (Stripe.consumeEvents: payment_intent.succeeded → RecordSettlement)
   CustomerApi/  the customer-facing Api: one file per Mutation / Query / Subscription,
@@ -46,7 +47,7 @@ src/
 
 ## Hosting
 
-The Domain is hosted by whichever `FoldPlatform` Layer is provided. On Cloudflare every aggregate, view, feed and policy becomes a Durable Object class, declared while the Domain's Layer is built:
+The Domain is hosted by whichever `FoldPlatform` Layer is provided. On Cloudflare every aggregate, view and policy becomes a Durable Object class, declared while the Domain's Layer is built:
 
 ```ts
 const BankLive = Layer.mergeAll(CustomerApiLive, SupportApiLive, CustomerSessionLive, ...).pipe(

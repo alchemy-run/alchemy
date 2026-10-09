@@ -93,7 +93,7 @@ test(
     );
     expect(forged.status).toBe(401);
 
-    // feeds, eventually consistent: wait until the transfer has been projected
+    // views are eventually consistent: wait until the transfer has been projected
     const page = yield* sam.statement({ accountId: samMain }).pipe(
       Effect.filterOrFail(
         (p) => p.entries.length === 3,

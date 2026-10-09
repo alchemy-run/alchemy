@@ -18,7 +18,7 @@ export const ActivityLogLive = ActivityLog.toLayer(
   Effect.gen(function* () {
     const activity = yield* AccountActivity;
     return Effect.fn(function* ({ accountId }) {
-      return activity.tail(Account.ref(accountId)).pipe(
+      return activity.events(Account.ref(accountId)).pipe(
         Stream.map(({ event, envelope }) => ({
           at: DateTime.formatIso(envelope.at),
           kind: event._tag,

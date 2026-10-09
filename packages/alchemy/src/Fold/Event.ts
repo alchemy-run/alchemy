@@ -28,7 +28,7 @@ export interface Any extends Schema.Top {
  * Declare an Event: an immutable fact recorded on an aggregate's stream.
  *
  * Events are past-tense facts. They are produced by an aggregate's `decide`,
- * folded into state by `evolve`, and delivered to Views, Feeds and Policies.
+ * folded into state by `evolve`, and delivered to Views and Policies.
  *
  * **Example:** Declaring events
  * ```typescript

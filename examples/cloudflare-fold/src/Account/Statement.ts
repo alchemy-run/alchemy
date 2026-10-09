@@ -1,14 +1,11 @@
-import { Feed } from "alchemy/Fold";
+import { Event, View } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 import { Account } from "./Account.ts";
 
-/** Every movement of money on an account, oldest first. */
-export class Statement extends Feed.make("Statement", {
-  from: [Account],
-  key: Account,
-  entry: Schema.Struct({
-    at: Schema.DateTimeUtc,
+/** One movement of money on an account. */
+export class StatementLine extends Event.make("StatementLine", {
+  data: {
     kind: Schema.Literals([
       "deposit",
       "withdrawal",
@@ -19,43 +16,25 @@ export class Statement extends Feed.make("Statement", {
     ]),
     amount: Cents,
     balance: Cents,
-  }),
-  map: {
-    MoneyDeposited: (e, { at }) => ({
-      at,
-      kind: "deposit" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
-    MoneyWithdrawn: (e, { at }) => ({
-      at,
-      kind: "withdrawal" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
-    TransferCredited: (e, { at }) => ({
-      at,
-      kind: "transfer-in" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
-    TransferDebited: (e, { at }) => ({
-      at,
-      kind: "transfer-out" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
-    TransferRefunded: (e, { at }) => ({
-      at,
-      kind: "refund" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
-    SettlementReceived: (e, { at }) => ({
-      at,
-      kind: "settlement" as const,
-      amount: e.amount,
-      balance: e.balanceAfter,
-    }),
+  },
+}) {}
+
+const line =
+  (kind: StatementLine["kind"]) =>
+  (e: { readonly amount: number; readonly balanceAfter: number }) =>
+    new StatementLine({ kind, amount: e.amount, balance: e.balanceAfter });
+
+/** Every movement of money on an account, oldest first. Six events become one. */
+export class Statement extends View.make("Statement", {
+  from: [Account],
+  key: Account,
+  events: [StatementLine],
+  emit: {
+    MoneyDeposited: line("deposit"),
+    MoneyWithdrawn: line("withdrawal"),
+    TransferCredited: line("transfer-in"),
+    TransferDebited: line("transfer-out"),
+    TransferRefunded: line("refund"),
+    SettlementReceived: line("settlement"),
   },
 }) {}

@@ -7,7 +7,6 @@ import {
   Command,
   Domain,
   Event,
-  Feed,
   Policy,
   Port,
   Rejection,
@@ -60,12 +59,82 @@ class Totals extends View.make("Totals", {
   },
 }) {}
 
-class History extends Feed.make("History", {
+class Logged extends Event.make("Logged", { data: { by: Schema.Number } }) {}
+
+// A view without state that maps events.
+class History extends View.make("History", {
   from: [Counter],
   key: Counter,
-  entry: Schema.Struct({ by: Schema.Number }),
-  map: { Incremented: (e) => ({ by: e.by }) },
+  events: [Logged],
+  emit: { Incremented: (e) => new Logged({ by: e.by }) },
 }) {}
+
+// Moves between counters exercise named routes, view-to-view state and a
+// policy listening to a view.
+class Moved extends Event.make("Moved", {
+  data: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+}) {}
+class MakeMove extends Command.make("MakeMove", {
+  input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+}) {}
+class Move extends Aggregate.make("Move", {
+  id: Schema.String,
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [MakeMove],
+  events: [Moved],
+  decide: { MakeMove: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
+  evolve: { Moved: (s) => s },
+}) {}
+
+class Flowed extends Event.make("Flowed", {
+  data: { direction: Schema.Literals(["in", "out"]), amount: Schema.Number },
+}) {}
+
+class Flows extends View.make("Flows", {
+  from: [Move],
+  key: Counter,
+  keyOf: {
+    Moved: {
+      out: ({ event }) => Counter.ref(event.from),
+      in: ({ event }) => Counter.ref(event.to),
+    },
+  },
+  state: Schema.Struct({ balance: Schema.Number }),
+  initial: { balance: 0 },
+  evolve: {
+    Moved: {
+      out: (s, e) => ({ balance: s.balance - e.amount }),
+      in: (s, e) => ({ balance: s.balance + e.amount }),
+    },
+  },
+  events: [Flowed],
+  emit: {
+    Moved: {
+      out: (e) => new Flowed({ direction: "out", amount: e.amount }),
+      in: (e) => new Flowed({ direction: "in", amount: e.amount }),
+    },
+  },
+}) {}
+
+// Consumes Flows' events with Flows' state after each.
+class Rich extends View.make("Rich", {
+  from: [Flows],
+  key: Counter,
+  state: Schema.Struct({ rich: Schema.Boolean }),
+  initial: { rich: false },
+  evolve: { Flows: (_, __, { state }) => ({ rich: (state?.balance ?? 0) >= 100 }) },
+}) {}
+
+class CapWhenOverdrawn extends Policy.make("CapWhenOverdrawn", { from: Flows, on: [Flowed] }) {}
+const CapWhenOverdrawnLive = CapWhenOverdrawn.toLayer(
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return Effect.fn(function* ({ source, state }) {
+      if (state && state.balance < 0) yield* counters.send(source, new Cap());
+    });
+  }),
+);
 
 class Approval extends Port.make("Approval", {
   check: { args: { total: Schema.Number }, success: { ok: Schema.Boolean } },
@@ -85,14 +154,18 @@ const CapWhenLargeLive = CapWhenLarge.toLayer(
 );
 
 class Counters extends Domain.make("Counters", {
-  aggregates: [Counter],
-  views: [Totals],
-  feeds: [History],
-  policies: [CapWhenLarge],
+  aggregates: [Counter, Move],
+  views: [Totals, History, Flows, Rich],
+  policies: [CapWhenLarge, CapWhenOverdrawn],
 }) {}
 
-const story = Story.make(Counters, { layer: Layer.mergeAll(CapWhenLargeLive), ports: [Approval] });
+const story = Story.make(Counters, {
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive),
+  ports: [Approval],
+});
 const c1 = Counter.ref("c-1");
+const c2 = Counter.ref("c-2");
+const m1 = Move.ref("m-1");
 
 describe("Fold Story", () => {
   it.effect("decides, evolves, replies and projects", () =>
@@ -102,7 +175,7 @@ describe("Fold Story", () => {
       Story.then(c1, new Incremented({ by: 3, total: 5 })),
       Story.replied({ total: 5 }),
       Story.view(Totals, c1, { total: 5 }),
-      Story.feed(History, c1, [{ by: 2 }, { by: 3 }]),
+      Story.emitted(History, c1, [{ by: 2 }, { by: 3 }]),
     ),
   );
 
@@ -142,6 +215,39 @@ describe("Fold Story", () => {
       Effect.map((failure) =>
         expect(String((failure as any).message)).toContain("unresolved Port calls"),
       ),
+    ),
+  );
+
+  it.effect("routes one event to two keys, each with its own handlers", () =>
+    story(
+      Story.when(m1, new MakeMove({ from: "c-1", to: "c-2", amount: 30 })),
+      Story.then(m1, new Moved({ from: "c-1", to: "c-2", amount: 30 })),
+      Story.view(Flows, c1, { balance: -30 }),
+      Story.view(Flows, c2, { balance: 30 }),
+      Story.emitted(Flows, c1, [{ direction: "out", amount: 30 }]),
+      Story.emitted(Flows, c2, (entries) => {
+        expect(entries.map((e) => e.event.direction)).toEqual(["in"]);
+        expect(entries[0]!.state).toEqual({ balance: 30 });
+      }),
+      // A policy listening to a view receives the view's state.
+      Story.then(c1, new Capped()),
+      Story.then(c2),
+    ),
+  );
+
+  it.effect("a view consumes another view's events with its state", () =>
+    story(
+      Story.given(m1, new Moved({ from: "c-1", to: "c-2", amount: 120 })),
+      Story.view(Rich, c2, { rich: true }),
+      Story.view(Rich, c1, { rich: false }),
+    ),
+  );
+
+  it.effect("history reaches views but never policies", () =>
+    story(
+      Story.given(m1, new Moved({ from: "c-1", to: "c-2", amount: 30 })),
+      Story.view(Flows, c1, { balance: -30 }),
+      Story.then(c1),
     ),
   );
 });
