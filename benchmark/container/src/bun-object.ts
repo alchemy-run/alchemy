@@ -23,6 +23,7 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
+            yield* container.start({ enableInternet: true });
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
@@ -39,11 +40,5 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
         shutdown: () => container.destroy().pipe(Effect.ignore),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(BunContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

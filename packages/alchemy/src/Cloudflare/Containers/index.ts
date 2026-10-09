@@ -1,15 +1,18 @@
 export * from "./Container.ts";
 export * from "./ContainerApplication.ts";
 export * from "./ContainerBundle.ts";
-export {
-  bind,
-  type ContainerClient,
-  type ContainerProcess,
-  type ContainerExecOptions,
-  type ContainerExecOutput,
-  type ContainerInfo,
-  type ContainerSnapshot,
-  type ContainerSnapshotOptions,
+export type {
+  ContainerClient,
+  ContainerExecOptions,
+  ContainerExecOutput,
+  ContainerInfo,
+  ContainerPort,
+  ContainerPortError,
+  ContainerProcess,
+  ContainerSnapshot,
+  ContainerSnapshotOptions,
+  ContainerStartError,
+  ReservedContainerKey,
 } from "./ContainerClient.ts";
 export {
   ContainerConfigurationError,
@@ -18,4 +21,3 @@ export {
 export { ContainerPlatform } from "./ContainerPlatform.ts";
 export * from "./ContainerProvider.ts";
 export * from "./LocalContainerProvider.ts";
-export * from "./StartContainer.ts";

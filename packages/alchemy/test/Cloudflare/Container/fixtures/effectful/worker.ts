@@ -21,13 +21,13 @@ export default Cloudflare.Worker(
 
         // Plain RPC into the container (no bucket).
         if (url.pathname === "/ping") {
-          const pong = yield* object.ping();
+          const pong = yield* object.ping().pipe(Effect.orDie);
           return HttpServerResponse.text(pong);
         }
 
         // The env var a `Binding.Service` bound onto the container.
         if (url.pathname === "/bound-env") {
-          const value = yield* object.boundEnv();
+          const value = yield* object.boundEnv().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value: value ?? null });
         }
 

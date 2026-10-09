@@ -29,6 +29,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
+            yield* container.start({ enableInternet: true });
             yield* Effect.gen(function* () {
               const health = yield* fetch(
                 HttpClientRequest.get("http://container/global/health").pipe(
@@ -70,11 +71,5 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
         shutdown: () => container.destroy().pipe(Effect.ignore),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(OpencodeContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

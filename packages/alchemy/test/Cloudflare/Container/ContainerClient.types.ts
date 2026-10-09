@@ -8,9 +8,12 @@ import type { Output } from "@/Output.ts";
 type Assert<T extends true> = T;
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+// `yield* Container` returns the handle; its `images` are typed by declaration.
 type ImagesOf<T> =
-  T extends Effect.Effect<Cloudflare.Containers.ContainerClient<infer Name>, infer _E, infer _R>
-    ? Effect.Success<Cloudflare.Containers.ContainerClient<Name>["images"]>
+  T extends Effect.Effect<infer Handle, infer _E, infer _R>
+    ? Handle extends { readonly images: Effect.Effect<infer Images, infer _IE, infer _IR> }
+      ? Images
+      : never
     : never;
 
 class Sandbox extends Cloudflare.Container<Sandbox>()("SandboxTypes", {
@@ -21,17 +24,15 @@ class Sandbox extends Cloudflare.Container<Sandbox>()("SandboxTypes", {
   },
 }) {}
 
-const sandbox = Cloudflare.Containers.bind(Sandbox);
+const sandbox = Sandbox;
 type _ClassImageNames = Assert<
   Equal<ImagesOf<typeof sandbox>, Readonly<Record<"shell" | "node", string>>>
 >;
 
-const direct = Cloudflare.Containers.bind(
-  Cloudflare.Container("DirectTypes", {
-    schedulingPolicy: "durable_object",
-    images: { shell: { image: "alpine:3.21" } },
-  }),
-);
+const direct = Cloudflare.Container("DirectTypes", {
+  schedulingPolicy: "durable_object",
+  images: { shell: { image: "alpine:3.21" } },
+});
 type _DirectImageNames = Assert<Equal<ImagesOf<typeof direct>, Readonly<Record<"shell", string>>>>;
 
 class ImageSource extends Context.Service<ImageSource, { image: string }>()(
@@ -46,7 +47,7 @@ class Effectful extends Cloudflare.Container<Effectful>()(
   }),
 ) {}
 
-const effectful = Cloudflare.Containers.bind(Effectful);
+const effectful = Effectful;
 type _EffectImageNames = Assert<
   Equal<ImagesOf<typeof effectful>, Readonly<Record<"shell", string>>>
 >;
@@ -54,56 +55,46 @@ type _PreservesPropsRequirements = Assert<
   Equal<Extract<Effect.Services<typeof effectful>, ImageSource>, ImageSource>
 >;
 
-const config = Cloudflare.Containers.bind(
-  Cloudflare.Container("ConfigTypes", {
-    schedulingPolicy: "durable_object",
-    images: Config.succeed({ shell: { image: "alpine:3.21" } }),
-  }),
-);
+const config = Cloudflare.Container("ConfigTypes", {
+  schedulingPolicy: "durable_object",
+  images: Config.succeed({ shell: { image: "alpine:3.21" } }),
+});
 type _ConfigImageNames = Assert<Equal<ImagesOf<typeof config>, Readonly<Record<"shell", string>>>>;
 
 const output = (images: Output<{ shell: Cloudflare.Containers.ContainerImageProps }>) =>
-  Cloudflare.Containers.bind(
-    Cloudflare.Container("OutputTypes", {
-      schedulingPolicy: "durable_object",
-      images,
-    }),
-  );
+  Cloudflare.Container("OutputTypes", {
+    schedulingPolicy: "durable_object",
+    images,
+  });
 type _OutputImageNames = Assert<
   Equal<ImagesOf<ReturnType<typeof output>>, Readonly<Record<"shell", string>>>
 >;
 
 const dynamic = (images: Record<string, Cloudflare.Containers.ContainerImageProps>) =>
-  Cloudflare.Containers.bind(
-    Cloudflare.Container("DynamicTypes", {
-      schedulingPolicy: "durable_object",
-      images,
-    }),
-  );
+  Cloudflare.Container("DynamicTypes", {
+    schedulingPolicy: "durable_object",
+    images,
+  });
 type _DynamicImagesMayBeMissing = Assert<
   Equal<ImagesOf<ReturnType<typeof dynamic>>, Readonly<Record<string, string | undefined>>>
 >;
 
 const optional = (props: InputProps<Cloudflare.Containers.DurableObjectContainerProps>) =>
-  Cloudflare.Containers.bind(Cloudflare.Container("OptionalTypes", props));
+  Cloudflare.Container("OptionalTypes", props);
 type _OptionalImagesMayBeMissing = Assert<
   Equal<ImagesOf<ReturnType<typeof optional>>, Readonly<Record<string, string | undefined>>>
 >;
 
 const optionalKey = (images: { shell?: Cloudflare.Containers.ContainerImageProps }) =>
-  Cloudflare.Containers.bind(
-    Cloudflare.Container("OptionalKeyTypes", {
-      schedulingPolicy: "durable_object",
-      images,
-    }),
-  );
+  Cloudflare.Container("OptionalKeyTypes", {
+    schedulingPolicy: "durable_object",
+    images,
+  });
 type _OptionalImageKeyMayBeMissing = Assert<
   Equal<ImagesOf<ReturnType<typeof optionalKey>>, Readonly<Record<string, string | undefined>>>
 >;
 
-const noImages = Cloudflare.Containers.bind(
-  Cloudflare.Container("NoImageTypes", { schedulingPolicy: "durable_object" }),
-);
+const noImages = Cloudflare.Container("NoImageTypes", { schedulingPolicy: "durable_object" });
 type _OmittedImagesMayBeMissing = Assert<
   Equal<ImagesOf<typeof noImages>, Readonly<Record<string, string | undefined>>>
 >;
@@ -126,3 +117,19 @@ export const invalidInstanceType: Cloudflare.Containers.DurableObjectContainerPr
   // @ts-expect-error Instance sizes are selected by start(), not at deployment.
   instanceType: "lite",
 };
+
+type ClashingShape = { exec: (cmd: string) => Effect.Effect<string> };
+// @ts-expect-error `exec` is reserved by the container handle, so an RPC method cannot shadow it.
+export class Clash extends Cloudflare.Container<Clash, ClashingShape>()("ClashTypes") {}
+
+type DistinctShape = { shell: (cmd: string) => Effect.Effect<string> };
+export class Distinct extends Cloudflare.Container<Distinct, DistinctShape>()("DistinctTypes") {}
+
+export const handleTypes = Effect.gen(function* () {
+  const distinct = yield* Distinct;
+  // RPC methods and handle methods live side by side.
+  yield* distinct.start({ enableInternet: false });
+  const _shell: Effect.Effect<string> = distinct.shell("ls");
+  const port = yield* distinct.getTcpPort(8080);
+  void port;
+});

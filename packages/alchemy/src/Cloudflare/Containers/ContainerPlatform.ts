@@ -6,17 +6,9 @@ import { Platform } from "../../Platform.ts";
 import { serveRpc } from "../../Rpc.ts";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
-import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import {
-  ContainerError,
-  ContainerTypeId,
-  type Container,
-  type ContainerStartupOptions,
-} from "./Container.ts";
+import { ContainerTypeId, type Container } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
@@ -71,43 +63,6 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
 
   yield* worker.bind`${container.LogicalId}`({
     containers: [workerContainerBinding(namespace.name, container)],
-  });
-
-  // TODO(sam): register this in the Container Execution Context
-  // const _httpEffect = yield* init;
-  return Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    return {
-      id: container.LogicalId,
-      running: Effect.sync(() => state.container!.running ?? false),
-      destroy: (error?: any) => Effect.promise(() => state.container!.destroy(error)),
-      signal: (signo: number) => Effect.sync(() => state.container!.signal(signo)),
-      getTcpPort: (port: number) =>
-        Effect.sync(() => fromCloudflareFetcher(httpSchemePort(state.container!.getTcpPort(port)))),
-      setInactivityTimeout: (durationMs: number | bigint) =>
-        Effect.promise(() => state.container!.setInactivityTimeout(durationMs)),
-      // workerd routes intercepted requests to the binding over RPC, so it
-      // only accepts a native Fetcher (service binding, Durable Object
-      // stub, `ctx.exports` entrypoint) and rejects the returned promise
-      // for anything else.
-      interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-        Effect.promise(() => state.container!.interceptOutboundHttp(addr, binding.raw)),
-      interceptAllOutboundHttp: (binding: Fetcher) =>
-        Effect.promise(() => state.container!.interceptAllOutboundHttp(binding.raw)),
-      // A crashed or stopped container rejects monitor(); surface that as the
-      // declared ContainerError rather than a defect.
-      monitor: () =>
-        Effect.tryPromise({
-          try: () => state.container?.monitor() ?? Promise.resolve(),
-          catch: (cause) =>
-            new ContainerError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        }),
-      start: (options?: ContainerStartupOptions) =>
-        Effect.sync(() => state.container!.start(options)),
-    };
   });
 });
 

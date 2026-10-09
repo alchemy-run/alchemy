@@ -35,7 +35,7 @@ interface InterceptExports {
 export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
   "NativeObject",
   Effect.gen(function* () {
-    const container = yield* Cloudflare.Containers.bind(NativeImage);
+    const container = yield* NativeImage;
     const state = yield* DurableObjectState;
     /** Changes whenever the runtime re-creates this object. */
     let incarnation: string | undefined;
@@ -191,8 +191,8 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
           stored: yield* storedMarker,
         };
       }),
-      // The application's RPC can still be named exec; native exec lives on
-      // the separate client and does not overwrite the application's methods.
+      // The Durable Object's own RPC can be named exec; it is separate from
+      // the container handle's exec.
       exec: Effect.fn(function* (mode: "exec" | "stdin" | "snapshot" = "exec") {
         if (!(yield* container.running)) {
           const images = yield* container.images;

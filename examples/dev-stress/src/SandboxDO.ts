@@ -15,12 +15,15 @@ export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
     const container = yield* SandboxContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       return {
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
           const url = new URL(request.url, "http://container");
           // Forward the subpath: `/sandbox/host-fetch` → `/host-fetch`.
           const path = url.pathname.replace(/^\/sandbox/, "") || "/";
+          yield* start;
           const { fetch } = yield* container.getTcpPort(3000);
           const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return HttpServerResponse.text(yield* response.text, {
@@ -30,5 +33,5 @@ export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
         }),
       };
     });
-  }).pipe(Effect.provide(Cloudflare.Containers.layer(SandboxContainer, { enableInternet: true }))),
+  }),
 ) {}

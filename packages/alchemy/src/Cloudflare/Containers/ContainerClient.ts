@@ -1,14 +1,36 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type { HttpClientError } from "effect/http/HttpClientError";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type { HttpServerError } from "effect/http/HttpServerError";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Sink from "effect/Sink";
+import type * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import { makeFetchRpcStub } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
+import {
+  fromCloudflareFetcher,
+  type Fetcher,
+  type SocketAddress,
+  type SocketOptions,
+} from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { ContainerError, type ContainerStartupOptions } from "./Container.ts";
-import type { ContainerApplication } from "./ContainerApplication.ts";
-import { ContainerPlatform, httpSchemePort } from "./ContainerPlatform.ts";
+import {
+  ContainerCrashedError,
+  ContainerError,
+  ContainerNotRunningError,
+  ContainerRateLimitedError,
+  NoContainerInstanceError,
+  type ContainerStartupOptions,
+} from "./Container.ts";
+import { httpSchemePort } from "./ContainerPlatform.ts";
 
 export type ContainerExecOptions = cf.ContainerExecOptions;
 export type ContainerExecOutput = cf.ExecOutput;
@@ -19,6 +41,38 @@ export type ContainerSnapshotOptions = cf.ContainerSnapshotOptions;
 type PreparedImages<ImageName extends string> = string extends ImageName
   ? Readonly<Record<string, string | undefined>>
   : Readonly<Record<ImageName, string>>;
+
+/** Errors a container `start` can fail with. */
+export type ContainerStartError =
+  | ContainerError
+  | NoContainerInstanceError
+  | ContainerRateLimitedError;
+
+/** Errors a container port can fail with before the request reaches it. */
+export type ContainerPortError = ContainerError | ContainerNotRunningError | ContainerCrashedError;
+
+/**
+ * A port inside the container. Each request waits until the port accepts
+ * connections, then is sent exactly once. A port never starts the container:
+ * a stopped container fails with {@link ContainerNotRunningError}.
+ */
+export interface ContainerPort {
+  fetch(
+    request: HttpClientRequest.HttpClientRequest,
+  ): Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    ContainerPortError | HttpClientError,
+    RuntimeContext
+  >;
+  fetch(
+    request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    ContainerPortError | HttpServerError,
+    RuntimeContext
+  >;
+  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
+}
 
 /** A native process, owned by the scope that called {@link ContainerClient.exec}. */
 export interface ContainerProcess {
@@ -43,18 +97,34 @@ export interface ContainerProcess {
 }
 
 /**
- * Direct Effect access to the Durable Object Container API. Binding does not
- * start the container or create an application RPC proxy.
+ * The container bound to the current Durable Object — what `yield* Sandbox`
+ * returns. Binding never starts the container: call {@link start} before
+ * using it. `start` is idempotent and coordinated across every handle in the
+ * Durable Object, so calling it at the top of each operation is cheap.
  */
 export interface ContainerClient<ImageName extends string = string> {
   /** Prepared image references. Required names retain their declaration's keys. */
   readonly images: Effect.Effect<PreparedImages<ImageName>, ContainerError, RuntimeContext>;
-  /** Whether the process is running; this does not imply port readiness. */
+  /** Whether the container process is running; this does not imply port readiness. */
   readonly running: Effect.Effect<boolean, ContainerError, RuntimeContext>;
-  /** Start from an image or snapshot. Returns before ports are ready. */
-  start(options?: ContainerStartupOptions): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /**
+   * Start the container unless it is already running. Concurrent calls start
+   * it once. Returns before ports are ready; {@link getTcpPort} waits for them.
+   * Options apply only when this call actually starts the container.
+   */
+  start(
+    options?: ContainerStartupOptions,
+  ): Effect.Effect<void, ContainerStartError, RuntimeContext>;
+  /** Stop the container immediately. */
+  destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /** Signal the container's main process. */
+  signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /** Wait for the container to exit, preserving failures in the Effect error channel. */
+  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
   inspect(): Effect.Effect<ContainerInfo | null, ContainerError, RuntimeContext>;
+  /** A port inside the container whose requests wait until it accepts connections. */
+  getTcpPort(port: number): Effect.Effect<ContainerPort, never, RuntimeContext>;
   /**
    * Execute an argument vector without a shell. The container must already
    * be started. Scope closure kills this process with SIGKILL; descendants
@@ -71,14 +141,6 @@ export interface ContainerClient<ImageName extends string = string> {
   snapshotContainer(
     options?: ContainerSnapshotOptions,
   ): Effect.Effect<ContainerSnapshot, ContainerError, RuntimeContext>;
-  /** Wait for exit, preserving failures in the Effect error channel. */
-  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Stop the container. */
-  destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Signal the container's main process. */
-  signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Access a port. Check readiness before sending application requests. */
-  getTcpPort(port: number): Effect.Effect<Fetcher, ContainerError, RuntimeContext>;
   /** Set the idle timeout for this Durable Object instance, in milliseconds. */
   setInactivityTimeout(
     durationMs: number | bigint,
@@ -88,20 +150,80 @@ export interface ContainerClient<ImageName extends string = string> {
     addr: string,
     binding: Fetcher,
   ): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Intercept all outbound HTTP requests. */
+  /** Intercept all outbound HTTP requests. Re-register after each start. */
   interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Intercept matching outbound HTTPS requests. */
+  /** Intercept matching outbound HTTPS requests. Re-register after each start. */
   interceptOutboundHttps(
     addr: string,
     binding: Fetcher,
   ): Effect.Effect<void, ContainerError, RuntimeContext>;
 }
 
+/**
+ * Names the container handle reserves. A container's RPC shape cannot
+ * declare them: the handle's own method would shadow the RPC call.
+ */
+export type ReservedContainerKey = keyof ContainerClient | "~alchemy/Id";
+
 const containerError = (cause: unknown) =>
   new ContainerError({
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
   });
+
+// Every constant below is taken from Cloudflare's own `@cloudflare/containers`
+// runtime (`dist/lib/container.js`) so readiness matches `startAndWaitForPorts`:
+//   INSTANCE_POLL_INTERVAL_MS   = 300    → fixed poll interval
+//   PING_TIMEOUT_MS             = 5_000  → per-probe cap
+//   TIMEOUT_TO_GET_CONTAINER_MS = 8_000  → find + start an instance
+//   TIMEOUT_TO_GET_PORTS_MS     = 20_000 → wait for the port to listen
+const READINESS_POLL_INTERVAL = Duration.millis(300);
+const READINESS_PROBE_TIMEOUT = Duration.seconds(5);
+const GET_CONTAINER_RETRIES = Math.ceil(8_000 / 300);
+const PORT_READY_RETRIES = Math.ceil(20_000 / 300);
+// When rate limited, back off hard: hammering `start()` only prolongs it.
+const RATE_LIMIT_BACKOFF = Duration.seconds(2);
+const RATE_LIMIT_RETRIES = 5;
+// Covers the transient "Network connection lost" window on the real request.
+const REQUEST_RETRIES = 3;
+
+// Native classifies the same message phrases via `isErrorOfType`.
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).toLowerCase();
+const isNoInstanceError = (e: unknown) =>
+  errorText(e).includes(
+    "there is no container instance that can be provided to this durable object",
+  );
+const isRateLimitedError = (e: unknown) =>
+  errorText(e).includes("you are requesting too many containers per second");
+
+const classifyStartError = (cause: unknown): ContainerStartError =>
+  isRateLimitedError(cause)
+    ? new ContainerRateLimitedError({ message: "Rate limited starting container", cause })
+    : isNoInstanceError(cause)
+      ? new NoContainerInstanceError({ message: "No container instance available", cause })
+      : containerError(cause);
+
+/**
+ * Per-container coordination: a start mutex and the ports confirmed ready
+ * since the last start. Keyed on the native `ctx.container`, which is one
+ * object per Durable Object instance, so every handle in the object (several
+ * layers may each `yield*` the same container) shares it. Racing callers then
+ * never both call `container.start()` ("already running",
+ * cloudflare/containers#173).
+ */
+const coordination = new WeakMap<
+  object,
+  { readonly startMutex: Semaphore.Semaphore; readonly readyPorts: Set<number> }
+>();
+
+const coordinationFor = (container: cf.Container) => {
+  let entry = coordination.get(container);
+  if (!entry) {
+    entry = { startMutex: Semaphore.makeUnsafe(1), readyPorts: new Set<number>() };
+    coordination.set(container, entry);
+  }
+  return entry;
+};
 
 // workers-types and the DOM lib declare the same web stream / AbortSignal
 // classes in separate modules, so values crossing between them need a cast.
@@ -181,36 +303,164 @@ const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
 export const fromContainer = <ImageName extends string = string>(
   getContainer: () => cf.Container | undefined,
 ): ContainerClient<ImageName> => {
-  const attached = (): cf.Container => {
+  const attached = Effect.suspend(() => {
     const container = getContainer();
-    if (!container) {
-      throw new Error("No container is attached to this Durable Object.");
-    }
-    return container;
-  };
+    return container
+      ? Effect.succeed(container)
+      : Effect.fail(
+          new ContainerError({ message: "No container is attached to this Durable Object." }),
+        );
+  });
 
   const call = <A>(f: (container: cf.Container) => A) =>
-    Effect.try({ try: () => f(attached()), catch: containerError });
+    Effect.flatMap(attached, (container) =>
+      Effect.try({ try: () => f(container), catch: containerError }),
+    );
 
   const callAsync = <A>(f: (container: cf.Container) => Promise<A>) =>
-    Effect.tryPromise({ try: () => f(attached()), catch: containerError });
+    Effect.flatMap(attached, (container) =>
+      Effect.tryPromise({ try: () => f(container), catch: containerError }),
+    );
+
+  const running = call((container) => container.running ?? false);
+
+  const start = (options?: ContainerStartupOptions) =>
+    Effect.gen(function* () {
+      const container = yield* attached;
+      // Fast path: the steady state is one cheap `running` read, no lock.
+      if (container.running) return;
+      const { startMutex, readyPorts } = coordinationFor(container);
+      yield* Semaphore.withPermits(
+        startMutex,
+        1,
+      )(
+        Effect.gen(function* () {
+          // Re-check under the lock: a racing caller may have started it.
+          if (container.running) return;
+          // Nothing listens on a fresh start; re-probe every port.
+          readyPorts.clear();
+          yield* Effect.try({
+            try: () => container.start(options),
+            catch: classifyStartError,
+          }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ContainerRateLimitedError",
+              schedule: Schedule.spaced(RATE_LIMIT_BACKOFF),
+              times: RATE_LIMIT_RETRIES,
+            }),
+          );
+          // Once the process exits (stopped, crashed, slept) its ports stop
+          // listening: forget them so the next request re-probes.
+          yield* Effect.forkDetach(
+            Effect.tryPromise({ try: () => container.monitor(), catch: containerError }).pipe(
+              Effect.ignore,
+              Effect.ensuring(Effect.sync(() => readyPorts.clear())),
+            ),
+          );
+        }),
+      );
+    }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "NoContainerInstanceError",
+        schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+        times: GET_CONTAINER_RETRIES,
+      }),
+    );
+
+  // A single readiness probe: any response (even non-2xx) proves the port
+  // accepts connections. A process that has exited is a crash, not "not ready".
+  const probePort = (container: cf.Container, port: number) =>
+    Effect.tryPromise({
+      try: () =>
+        httpSchemePort(container.getTcpPort(port)).fetch("http://containerstarthealthcheck"),
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.timeout(READINESS_PROBE_TIMEOUT),
+      Effect.asVoid,
+      Effect.catch((cause) =>
+        Effect.fail(
+          container.running
+            ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
+            : new ContainerCrashedError({
+                message: `Container exited while waiting for port ${port}`,
+                cause,
+              }),
+        ),
+      ),
+    );
+
+  const waitForPort = (port: number) =>
+    Effect.gen(function* () {
+      const container = yield* attached;
+      const { readyPorts } = coordinationFor(container);
+      if (readyPorts.has(port)) return container;
+      if (!container.running) {
+        return yield* new ContainerNotRunningError({
+          message: `Container is not running; call start() before using port ${port}.`,
+        });
+      }
+      yield* probePort(container, port).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ContainerError",
+          schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+          times: PORT_READY_RETRIES,
+        }),
+      );
+      readyPorts.add(port);
+      return container;
+    });
+
+  // The container is resolved per request, so a port can be taken while the
+  // Durable Object is constructed, before the container starts.
+  const getTcpPort = (port: number) =>
+    Effect.succeed<ContainerPort>({
+      // Wait for readiness (bounded), then send the real request once. Only a
+      // not-yet-ready port or a transport blip is retried.
+      fetch: ((request: HttpClientRequest.HttpClientRequest) =>
+        waitForPort(port).pipe(
+          // `fetch` accepts client and server requests alike.
+          Effect.andThen((container) =>
+            fromCloudflareFetcher(httpSchemePort(container.getTcpPort(port))).fetch(request),
+          ),
+          Effect.retry({
+            while: (e: { _tag: string }) =>
+              e._tag === "ContainerError" || e._tag === "HttpClientError",
+            schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+            times: REQUEST_RETRIES,
+          }),
+        )) as unknown as ContainerPort["fetch"],
+      connect: (address, options) => {
+        const container = getContainer();
+        if (!container) throw new Error("No container is attached to this Durable Object.");
+        return fromCloudflareFetcher(httpSchemePort(container.getTcpPort(port))).connect(
+          address,
+          options,
+        );
+      },
+    });
 
   const startProcess = (cmd: string[], options?: ContainerExecOptions) =>
-    Effect.tryPromise({
-      try: (interrupt) =>
-        attached().exec(cmd, {
-          ...options,
-          signal: combineSignals(interrupt, options?.signal),
-        }),
-      catch: containerError,
-    }).pipe(Effect.map(fromProcess));
+    Effect.flatMap(attached, (container) =>
+      Effect.tryPromise({
+        try: (interrupt) =>
+          container.exec(cmd, {
+            ...options,
+            signal: combineSignals(interrupt, options?.signal),
+          }),
+        catch: containerError,
+      }),
+    ).pipe(Effect.map(fromProcess));
 
   return {
     // The binding publishes every declared image under its declared name.
     images: call((container) => container.images as PreparedImages<ImageName>),
-    running: call((container) => container.running),
-    start: (options) => call((container) => container.start(options)),
+    running,
+    start,
+    destroy: (error) => callAsync((container) => container.destroy(error)),
+    signal: (signo) => call((container) => container.signal(signo)),
+    monitor: () => callAsync((container) => container.monitor()),
     inspect: () => callAsync((container) => container.inspect()),
+    getTcpPort,
     exec: (cmd, options) =>
       Effect.acquireRelease(
         startProcess(cmd, options),
@@ -220,11 +470,6 @@ export const fromContainer = <ImageName extends string = string>(
       ),
     snapshotContainer: (options = {}) =>
       callAsync((container) => container.snapshotContainer(options)),
-    monitor: () => callAsync((container) => container.monitor()),
-    destroy: (error) => callAsync((container) => container.destroy(error)),
-    signal: (signo) => call((container) => container.signal(signo)),
-    getTcpPort: (port) =>
-      call((container) => fromCloudflareFetcher(httpSchemePort(container.getTcpPort(port)))),
     setInactivityTimeout: (durationMs) =>
       callAsync((container) => container.setInactivityTimeout(durationMs)),
     // workerd forwards intercepted requests over RPC and accepts only a
@@ -239,42 +484,29 @@ export const fromContainer = <ImageName extends string = string>(
 };
 
 /**
- * Attach a Container to the current Durable Object and return its native
- * Effect client. Start the container explicitly when a request needs it.
- * This handle is separate from the application's own fetch/RPC methods.
- *
- * ### Starting an Agent Workspace
- * **Example:** Start the managed image and execute a command
- * ```typescript
- * const sandbox = yield* Cloudflare.Containers.bind(Sandbox);
- * return Effect.succeed({
- *   run: Effect.gen(function* () {
- *     if (!(yield* sandbox.running)) {
- *       yield* sandbox.start({
- *         image: "cloudflare/debian-trixie",
- *         entrypoint: ["sleep", "infinity"],
- *         enableInternet: false,
- *       });
- *     }
- *     const process = yield* sandbox.exec(["uname", "-a"]);
- *     return yield* process.output();
- *   }),
- * });
- * ```
- *
- * @binding
- * @product Containers
- * @category Workers & Compute
+ * @internal What `yield* Container` runs inside a Durable Object: register the
+ * container's bindings, then return its handle. Methods declared on the
+ * container's RPC shape are sent to its port-3000 server; the handle's own
+ * methods take precedence.
  */
-export const bind = Effect.fn("Cloudflare.Containers.bind")(function* <
-  Shape,
-  Req,
-  ImageName extends string = string,
->(declaration: {
-  Application: Effect.Effect<ContainerApplication<Shape>, never, Req>;
-  readonly "~alchemy/Container/Images"?: ImageName;
-}) {
-  yield* ContainerPlatform.bind(declaration.Application);
+export const makeContainerHandle = Effect.fnUntraced(function* (
+  id: string,
+  binding: Effect.Effect<unknown, never, any>,
+) {
+  yield* binding;
   const state = yield* DurableObjectState;
-  return fromContainer<ImageName>(() => state.container);
+  const client = fromContainer(() => state.container);
+  const rpcPort = client.getTcpPort(3000);
+  return makeFetchRpcStub<ContainerClient>({
+    // RPC methods only run inside the Durable Object, where RuntimeContext is
+    // always present; the stub's fetch type cannot carry it.
+    fetch: (request) =>
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext; RPC calls only run at runtime
+      rpcPort.pipe(Effect.flatMap((port) => port.fetch(request))) as Effect.Effect<
+        HttpClientResponse.HttpClientResponse,
+        unknown
+      >,
+    baseUrl: "http://container",
+    base: { ...client, "~alchemy/Id": id },
+  });
 });

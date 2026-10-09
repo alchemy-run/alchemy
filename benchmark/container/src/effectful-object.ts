@@ -28,6 +28,7 @@ export class EffectfulObject extends Cloudflare.DurableObject<EffectfulObject>()
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
+            yield* container.start({ enableInternet: true });
             yield* container.ping().pipe(
               Effect.retry({
                 schedule: Schedule.min([
@@ -43,11 +44,5 @@ export class EffectfulObject extends Cloudflare.DurableObject<EffectfulObject>()
         shutdown: () => container.destroy().pipe(Effect.ignore),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(EffectfulContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}
