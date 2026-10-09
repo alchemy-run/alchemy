@@ -172,6 +172,9 @@ export const RuntimeLive = Layer.effect(
         ] = yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
           concurrency: "unbounded",
         });
+        // Everything slow (image builds/pulls) is done; let the caller retire
+        // whatever must be gone before this workerd boots.
+        if (worker.beforeServe) yield* worker.beforeServe;
         const sockets: Array<WorkerdConfig.Socket> = [
           {
             name: SOCKET_USER_ENTRY,
