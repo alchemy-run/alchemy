@@ -63,8 +63,9 @@ export type LeakedCredentialDetection = Resource<
  * Requires Leaked Credential Checks to be **enabled** on the zone (see
  * {@link LeakedCredentialCheck}) — every detection operation fails with the
  * typed `LeakedCredentialChecksDisabled` error otherwise. The number of
- * custom detections is plan-gated (the free plan allows none — creation
- * fails with the typed `DetectionQuotaExceeded` error).
+ * custom detections is plan-gated — a zone over its quota fails creation
+ * with the typed `DetectionQuotaExceeded` error. Each username/password
+ * expression pair may exist only once per zone (`DetectionAlreadyExists`).
  *
  * Safety: detections carry no ownership markers. When there is no prior
  * state, `read` scans the zone for an existing detection with the same
@@ -201,12 +202,28 @@ export const LeakedCredentialDetectionProvider = () =>
       // 3. Ensure — create when missing. Requires the zone's Leaked
       //    Credential Checks toggle to be on; otherwise this fails with
       //    the typed `LeakedCredentialChecksDisabled` error.
+      //    A concurrent create of the same expression pair races us to
+      //    the typed `DetectionAlreadyExists` — re-observe and continue.
       if (!observed) {
-        observed = yield* lcc.createDetection({
-          zoneId,
-          username: news.username,
-          password: news.password,
-        });
+        observed = yield* lcc
+          .createDetection({
+            zoneId,
+            username: news.username,
+            password: news.password,
+          })
+          .pipe(
+            Effect.map((d): ObservedDetection | undefined => d),
+            Effect.catchTag("DetectionAlreadyExists", () =>
+              findByExpressions(zoneId, news.username, news.password),
+            ),
+          );
+        if (!observed) {
+          return yield* Effect.fail(
+            new Error(
+              `Leaked credential detection reported as existing on zone ${zoneId} but was not found`,
+            ),
+          );
+        }
       }
 
       // 4. Sync — PUT only when the observed expressions differ.

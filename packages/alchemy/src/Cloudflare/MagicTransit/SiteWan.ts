@@ -90,7 +90,8 @@ export type MagicSiteWan = Resource<
  * automatically creates IPsec tunnels over each WAN.
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * `siteId` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
@@ -250,7 +251,7 @@ export const MagicSiteWanProvider = () =>
             (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
           ),
         ),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
           Effect.succeed([] as string[]),
         ),
       );
@@ -266,7 +267,7 @@ export const MagicSiteWanProvider = () =>
               ),
             ),
             // Site vanished or became inaccessible mid-enumeration — skip it.
-            Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+            Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
               Effect.succeed([] as MagicSiteWanAttributes[]),
             ),
           ),

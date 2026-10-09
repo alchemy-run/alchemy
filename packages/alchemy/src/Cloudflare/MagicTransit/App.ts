@@ -54,7 +54,8 @@ export type MagicApp = Resource<TypeId, MagicAppProps, MagicAppAttributes, never
  * managed app definitions.
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * All properties are mutable in place via PATCH.
  * ### Creating an app
@@ -178,7 +179,7 @@ export const MagicAppProvider = () =>
             (page.result ?? []).filter(isAccountApp).map((app) => toAttributes(app, accountId)),
           ),
         ),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
           Effect.succeed([] as MagicAppAttributes[]),
         ),
       );
