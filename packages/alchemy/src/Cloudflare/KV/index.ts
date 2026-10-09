@@ -1,3 +1,5 @@
+export * from "./InstantNamespaceTypes.ts";
+export * from "./InstantNamespace.ts";
 export * from "./Namespace.ts";
 export * from "./NamespaceTypes.ts";
 export * from "./ReadNamespace.ts";
