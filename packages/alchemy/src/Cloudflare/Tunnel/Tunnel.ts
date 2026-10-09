@@ -248,7 +248,7 @@ export const TunnelProvider = () =>
             accountId: acct,
             tunnelId: output.tunnelId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
       }
       if (!observed) {
         observed = yield* findTunnelByName(name);
@@ -268,10 +268,10 @@ export const TunnelProvider = () =>
           .pipe(
             Effect.catch((err) =>
               Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err);
+                if (!news.adopt) return yield* err;
                 const existing = yield* findTunnelByName(name);
                 if (!existing || !existing.id) {
-                  return yield* Effect.fail(err);
+                  return yield* err;
                 }
                 return existing;
               }),
@@ -357,7 +357,7 @@ export const TunnelProvider = () =>
                   })),
                 ),
             ),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
       const name = yield* createTunnelName(id, olds?.name);

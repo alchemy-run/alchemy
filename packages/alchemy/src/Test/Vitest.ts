@@ -132,7 +132,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     }
   };
   test.only = (name, eff, opts) => {
-    it.only(name, () => wrap(eff) as Effect.Effect<any>, timeoutOf(opts));
+    it.live.only(name, () => wrap(eff), timeoutOf(opts));
   };
   test.todo = (name, _eff, _opts) => {
     it.todo(name);

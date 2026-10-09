@@ -448,8 +448,10 @@ export const LakesAssetProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFound: () => Effect.succeed(undefined),
+            BadRequest: () => Effect.succeed(undefined),
+          }),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

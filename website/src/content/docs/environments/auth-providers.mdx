@@ -109,8 +109,8 @@ export class CloudflareEnvironment extends Context.Service<
 ```
 
 AWS is the same shape, and goes one level deeper — the resolved
-environment holds its credentials as an Effect too, so expiring SSO
-and assumed-role sessions re-resolve on each access:
+environment holds its credentials as an Effect too, so expiring SSO,
+console-login, and assumed-role sessions re-resolve on each access:
 
 ```typescript
 // alchemy/AWS/Environment

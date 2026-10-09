@@ -19,14 +19,15 @@ import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import { BucketProvider } from "@/AWS/S3/Bucket.ts";
-import { InstanceId } from "@/InstanceId.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { resourceContext } from "../../Utils/ResourceContext.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -1708,7 +1709,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     Layer.succeed(Region, Effect.succeed(TEST_REGION)),
     Layer.succeed(Stack, testStack),
     Layer.succeed(Stage, testStack.stage),
-    Layer.succeed(InstanceId, INSTANCE_ID),
+    Layer.succeed(ResourceContext, resourceContext(INSTANCE_ID)),
     Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
     Layer.sync(ArtifactStore, createArtifactStore),
     inMemoryState(),

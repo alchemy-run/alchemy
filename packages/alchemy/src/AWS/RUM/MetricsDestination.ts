@@ -303,13 +303,11 @@ export const MetricsDestinationProvider = () =>
               MetricDefinitions: toCreate.map(toWireDefinition),
             });
             if (Errors.length > 0) {
-              yield* Effect.fail(
-                new RumMetricDefinitionsError({
-                  message: `failed to create ${Errors.length} metric definition(s): ${Errors.map(
-                    (e) => `${e.MetricDefinition.Name}: ${e.ErrorMessage}`,
-                  ).join("; ")}`,
-                }),
-              );
+              return yield* new RumMetricDefinitionsError({
+                message: `failed to create ${Errors.length} metric definition(s): ${Errors.map(
+                  (e) => `${e.MetricDefinition.Name}: ${e.ErrorMessage}`,
+                ).join("; ")}`,
+              });
             }
           }
 
@@ -335,13 +333,11 @@ export const MetricsDestinationProvider = () =>
               MetricDefinitionIds: toDelete.map((d) => d.MetricDefinitionId),
             });
             if (Errors.length > 0) {
-              yield* Effect.fail(
-                new RumMetricDefinitionsError({
-                  message: `failed to delete ${Errors.length} metric definition(s): ${Errors.map(
-                    (e) => `${e.MetricDefinitionId}: ${e.ErrorMessage}`,
-                  ).join("; ")}`,
-                }),
-              );
+              return yield* new RumMetricDefinitionsError({
+                message: `failed to delete ${Errors.length} metric definition(s): ${Errors.map(
+                  (e) => `${e.MetricDefinitionId}: ${e.ErrorMessage}`,
+                ).join("; ")}`,
+              });
             }
           }
 

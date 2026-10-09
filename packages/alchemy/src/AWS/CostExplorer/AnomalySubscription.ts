@@ -228,7 +228,7 @@ export const AnomalySubscriptionProvider = () =>
                   const existing = yield* findByName(name);
                   const existingArn = existing?.SubscriptionArn;
                   if (existingArn === undefined) {
-                    return yield* Effect.fail(error);
+                    return yield* error;
                   }
                   return yield* pinCe(
                     ce.updateAnomalySubscription({

@@ -8,16 +8,35 @@ import {
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
-import {
-  connectPgClient,
-  stripSslQueryParams,
-  withPgClient as withConnectedPgClient,
-} from "../SQL/PostgresDriver.ts";
+import { importPg } from "../SQL/PostgresDriver.ts";
 
 export class PgError extends Data.TaggedError("PgError")<{
   message: string;
   cause?: unknown;
 }> {}
+
+/**
+ * Strip query-string SSL flags from a Neon connection URI. Neon's URIs
+ * include `sslmode=require` and `channel_binding=require`, which trigger
+ * a deprecation warning from `pg-connection-string`:
+ *
+ *   SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca'
+ *   are treated as aliases for 'verify-full'.
+ *
+ * We control SSL programmatically via the `ssl` option below, so removing
+ * the conflicting query params silences the warning without changing the
+ * effective behavior.
+ */
+const stripSslQueryParams = (uri: string): string => {
+  try {
+    const url = new URL(uri);
+    url.searchParams.delete("sslmode");
+    url.searchParams.delete("channel_binding");
+    return url.toString();
+  } catch {
+    return uri;
+  }
+};
 
 const toPgError = (cause: unknown) =>
   new PgError({
@@ -30,15 +49,21 @@ export const withPgClient = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
   use: (client: Client) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, PgError | E, R> =>
-  withConnectedPgClient(
-    connectPgClient(
-      {
-        connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
-        ssl: { rejectUnauthorized: false },
+  Effect.acquireUseRelease(
+    Effect.tryPromise({
+      try: async () => {
+        const { Client } = await importPg();
+        const client = new Client({
+          connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
+          ssl: { rejectUnauthorized: false },
+        });
+        await client.connect();
+        return client;
       },
-      toPgError,
-    ),
+      catch: toPgError,
+    }),
     use,
+    (client) => Effect.promise(() => client.end().catch(() => {})),
   );
 
 /**

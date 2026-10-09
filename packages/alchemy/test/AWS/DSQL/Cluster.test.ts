@@ -2,15 +2,17 @@ import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
-import { withDsqlAdminClient } from "@/AWS/DSQL/Migrations.ts";
-import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
+import { withDsqlClient } from "@/AWS/DSQL/Migrations.ts";
+import * as Drizzle from "@/Drizzle";
 import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Drizzle.providers()),
+});
 
 /** Docs-canonical policy: deny non-VPC connections. */
 const vpcOnlyPolicy = (exceptions?: string[]) =>
@@ -134,68 +136,61 @@ test.provider(
 );
 
 test.provider(
-  "applies migrations on create, then only pending ones on update",
+  "applies Drizzle migrations on deploy, applies new ones in place, and rejects edited history",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectoryScoped({
-        prefix: "alchemy-dsql-migrations-",
+      // Generate into a temp directory so the test never writes checked-in files.
+      const out = yield* fs.makeTempDirectoryScoped();
+      const schema = path.join(import.meta.dirname, "fixtures/migrations/schema.ts");
+      const deploy = Effect.gen(function* () {
+        const generated = yield* Drizzle.Schema("Schema", { schema, out, dialect: "postgres" });
+        return yield* Cluster("Database", { migrations: generated.out });
       });
+      const query = (endpoint: string, sql: string) =>
+        withDsqlClient(endpoint, (client) => Effect.tryPromise(() => client.query(sql)));
+
+      const created = yield* stack.deploy(deploy);
+      const history = yield* query(created.endpoint, "SELECT name, hash FROM __alchemy_migrations");
+      expect(history.rows).toHaveLength(1);
+      // CREATE INDEX ran as CREATE INDEX ASYNC and was awaited.
+      const indexes = yield* query(
+        created.endpoint,
+        "SELECT indisvalid FROM pg_index WHERE indexrelid = 'users_email_idx'::regclass",
+      );
+      expect(indexes.rows[0].indisvalid).toBe(true);
+      yield* query(
+        created.endpoint,
+        "INSERT INTO users(id, email) VALUES ('00000000-0000-0000-0000-000000000001', 'test@example.com')",
+      );
+
+      // A new migration file at the same path updates the cluster in place
+      // and keeps existing rows.
+      const [first] = (yield* fs.readDirectory(out)).sort();
+      const next = path.join(out, "20990101000000_evolve");
+      yield* fs.makeDirectory(next);
       yield* fs.writeFileString(
-        path.join(migrationsDir, "0001_users.sql"),
-        "CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL);",
+        path.join(next, "migration.sql"),
+        `ALTER TABLE users ADD COLUMN nickname text;
+ALTER TABLE users RENAME COLUMN email TO address;`,
       );
-      const deployCluster = stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cluster("MigrationsDb", { migrations: migrationsDir });
-        }),
-      );
+      const updated = yield* stack.deploy(deploy);
+      expect(updated.clusterId).toBe(created.clusterId);
+      const user = yield* query(updated.endpoint, "SELECT address, nickname FROM users");
+      expect(user.rows).toEqual([{ address: "test@example.com", nickname: null }]);
+      const after = yield* query(updated.endpoint, "SELECT name FROM __alchemy_migrations");
+      expect(after.rows).toHaveLength(2);
 
-      yield* stack.destroy();
-
-      const created = yield* deployCluster;
-      expect(created.migrationsTable).toEqual("__alchemy_migrations");
-      expect(Object.keys(created.migrationsHashes)).toEqual(["0001_users.sql"]);
-
-      // A new file is pending: only it runs (replaying 0001's bare CREATE
-      // TABLE would fail).
+      // Editing an applied migration fails the deploy instead of silently
+      // skipping it.
       yield* fs.writeFileString(
-        path.join(migrationsDir, "0002_posts.sql"),
-        "CREATE TABLE posts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), title text NOT NULL);",
+        path.join(out, first!, "migration.sql"),
+        "CREATE TABLE users (id uuid PRIMARY KEY);",
       );
-      const updated = yield* deployCluster;
-      expect(updated.clusterId).toEqual(created.clusterId);
-      expect(Object.keys(updated.migrationsHashes).sort()).toEqual([
-        "0001_users.sql",
-        "0002_posts.sql",
-      ]);
-
-      // Out-of-band: bookkeeping rows and the migrated tables.
-      const { applied, tables } = yield* withDsqlAdminClient(created.endpoint, (client) =>
-        Effect.gen(function* () {
-          const executor = makePgMigrationExecutor(client);
-          return {
-            applied: yield* executor.query("SELECT name FROM __alchemy_migrations ORDER BY id;"),
-            tables: yield* executor.query(
-              "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';",
-            ),
-          };
-        }),
-      );
-      expect(applied.map((row) => row.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
-      expect(tables.map((row) => row.table_name)).toEqual(
-        expect.arrayContaining(["users", "posts"]),
-      );
-
-      // Editing an applied migration is rejected rather than replayed.
-      yield* fs.writeFileString(
-        path.join(migrationsDir, "0001_users.sql"),
-        "CREATE TABLE users (id uuid PRIMARY KEY, email text NOT NULL);",
-      );
-      const rewritten = yield* Effect.result(deployCluster);
-      expect(Result.isFailure(rewritten)).toBe(true);
-      expect(String(Result.isFailure(rewritten) && rewritten.failure)).toContain("0001_users.sql");
+      const failure = yield* stack.deploy(deploy).pipe(Effect.flip);
+      expect(String(failure)).toMatch(/changed|does not match/i);
 
       yield* stack.destroy();
       const gone = yield* getCluster(created.clusterId);
@@ -203,5 +198,5 @@ test.provider(
         true,
       );
     }),
-  { tags: ["provider:aws", "provider:aws:dsql", "live"], timeout: 300_000 },
+  { timeout: 600_000 },
 );

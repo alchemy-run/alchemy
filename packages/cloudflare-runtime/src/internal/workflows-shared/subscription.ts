@@ -215,7 +215,7 @@ const WORKFLOW_SUBSCRIPTION_OPTIONS_SCHEMA = Schema.Struct({
   cursor: Schema.optional(
     Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   ),
-  filter: Schema.optional(Schema.mutable(Schema.Array(WorkflowSubscriptionEventTypeSchema))),
+  filter: WorkflowSubscriptionEventTypeSchema.pipe(Schema.Array, Schema.mutable, Schema.optional),
 });
 
 export function parseWorkflowSubscriptionOptions(options: unknown) {

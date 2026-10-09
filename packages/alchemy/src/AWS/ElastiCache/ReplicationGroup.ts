@@ -275,7 +275,7 @@ export const ReplicationGroupProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news!;
           const invalid = validateReplicationGroupProps(props);
-          if (invalid) return yield* Effect.fail(invalid);
+          if (invalid) return yield* invalid;
           const name = output?.replicationGroupId ?? (yield* toName(id, props));
           const desiredTags = {
             ...(yield* createInternalTags(id)),

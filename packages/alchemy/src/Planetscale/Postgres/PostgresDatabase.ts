@@ -205,14 +205,12 @@ export const PostgresDatabaseProvider = () =>
       if (!data) return undefined;
 
       if (data.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       const defaultBranch = data.default_branch ?? "main";
@@ -302,14 +300,12 @@ export const PostgresDatabaseProvider = () =>
       yield* waitForDatabaseReady(organization, observed.name, session);
 
       if (observed.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       // Sync — ensure a non-`main` default branch exists before

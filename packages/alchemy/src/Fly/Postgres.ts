@@ -28,7 +28,7 @@ import { createFlyAppName, matchesAlchemyPhysicalName, sanitizeFlyAppName } from
 import { runImports, runPgMigrations } from "./PostgresMigrations.ts";
 import type { Providers } from "./Providers.ts";
 
-export { stripSslQueryParams } from "../SQL/PostgresDriver.ts";
+export { stripSslQueryParams } from "./PostgresMigrations.ts";
 
 export const DEFAULT_POSTGRES_PLAN = "basic";
 export const DEFAULT_VOLUME_GB = 10;

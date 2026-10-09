@@ -34,6 +34,15 @@ export interface MigrationRecord {
  */
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
+  /** PostgreSQL targets without SERIAL can use UUID bookkeeping IDs. */
+  readonly migrationTableId?: "uuid";
+  /** False when DDL cannot commit atomically with history conversion. */
+  readonly transactionalDdl?: boolean;
+  /** Override atomic batches for targets requiring durable statement progress. */
+  readonly applyMigration?: (
+    record: MigrationRecord,
+    bookkeeping: string,
+  ) => Effect.Effect<void, MigrationError>;
   /**
    * Run a single query and return its rows as objects. `params` bind as
    * `?`/`$n` placeholders; adapters without native parameter support inline
@@ -44,10 +53,9 @@ export interface SqlExecutor {
     params?: ReadonlyArray<unknown>,
   ) => Effect.Effect<Array<Record<string, unknown>>, MigrationError>;
   /**
-   * Execute one or more statements as atomically as the target allows — a
-   * transaction on pg/mysql, a single batched query on D1 (which has no
-   * transactions over HTTP). Aurora DSQL commits each DDL statement in its
-   * own transaction, so a batch containing DDL is not atomic there.
+   * Execute one or more statements as a unit — a transaction where the
+   * target supports one (pg/mysql), a single batched query on D1 (which has
+   * no transactions over HTTP).
    */
   readonly batch: (statements: ReadonlyArray<string>) => Effect.Effect<void, MigrationError>;
 }

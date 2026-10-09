@@ -515,6 +515,7 @@ const wrapImpl = (impl: Effect.Effect<Effect.Effect<any>>, props: RpcDurableObje
       inner.pipe(
         Effect.flatMap((value) => {
           if (Layer.isLayer(value)) {
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl value; layer requirements are provided by the DO bridge
             return makeHandlers(props, value as Layer.Layer<any, never, any>);
           }
           return Effect.succeed({ fetch: value });

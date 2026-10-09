@@ -31,7 +31,7 @@ export const listenOnLoopback = Effect.fnUntraced(function* (server: NodeNet.Ser
       cleanup();
       resume(
         Effect.fail(
-          new SystemError({
+          SystemError.make({
             subtag: "DockerProxyListen",
             message: "Failed to start the Docker proxy.",
             cause,
@@ -50,7 +50,7 @@ export const listenOnLoopback = Effect.fnUntraced(function* (server: NodeNet.Ser
   });
   const address = server.address();
   if (address === null || typeof address === "string") {
-    return yield* new SystemError({
+    return yield* SystemError.make({
       subtag: "DockerProxyAddress",
       message: "Docker proxy has no TCP address.",
     });

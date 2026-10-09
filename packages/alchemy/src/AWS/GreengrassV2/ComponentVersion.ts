@@ -146,12 +146,10 @@ const parseRecipeIdentity = Effect.fn(function* (recipe: string) {
   const componentName = yamlValue("ComponentName");
   const componentVersion = yamlValue("ComponentVersion");
   if (componentName === undefined || componentVersion === undefined) {
-    return yield* Effect.fail(
-      new GreengrassInvalidRecipe({
-        message:
-          "the inline recipe must declare top-level ComponentName and ComponentVersion (JSON or YAML)",
-      }),
-    );
+    return yield* new GreengrassInvalidRecipe({
+      message:
+        "the inline recipe must declare top-level ComponentName and ComponentVersion (JSON or YAML)",
+    });
   }
   return { componentName, componentVersion };
 });
@@ -276,20 +274,16 @@ export const ComponentVersionProvider = () =>
               const observed = yield* observeComponent(identity.arn);
               const state = observed?.status?.componentState;
               if (state === "FAILED" || state === "DEPRECATED") {
-                return yield* Effect.fail(
-                  new GreengrassComponentFailed({
-                    message: `component ${identity.componentName}@${identity.componentVersion} entered state ${state}: ${
-                      observed?.status?.message ?? "no message"
-                    }`,
-                  }),
-                );
+                return yield* new GreengrassComponentFailed({
+                  message: `component ${identity.componentName}@${identity.componentVersion} entered state ${state}: ${
+                    observed?.status?.message ?? "no message"
+                  }`,
+                });
               }
               if (observed === undefined || state !== "DEPLOYABLE") {
-                return yield* Effect.fail(
-                  new GreengrassComponentNotReady({
-                    message: `component ${identity.componentName}@${identity.componentVersion} is ${state ?? "missing"}`,
-                  }),
-                );
+                return yield* new GreengrassComponentNotReady({
+                  message: `component ${identity.componentName}@${identity.componentVersion} is ${state ?? "missing"}`,
+                });
               }
               return observed;
             }).pipe(retryWhileNotReady);

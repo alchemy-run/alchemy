@@ -30,7 +30,7 @@ export const makeMicrovmRuntimeContext = (id: string): Server.ProcessContext => 
           );
           if (httpServer) {
             yield* httpServer.serve(finalHandler);
-            yield* Effect.never;
+            return yield* Effect.never;
           }
         }).pipe(Effect.orDie),
       );
