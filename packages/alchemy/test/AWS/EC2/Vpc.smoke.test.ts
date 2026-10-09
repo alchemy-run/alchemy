@@ -27,7 +27,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider.skip(
+test.provider.skipIf(!!process.env.FAST)(
   "VPC evolution: from simple to complex",
   (stack) =>
     Effect.gen(function* () {
@@ -1170,7 +1170,7 @@ test.provider.skip(
   { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 1_000_000 },
 );
 
-test.provider.skip(
+test.provider.skipIf(!!process.env.FAST)(
   "Comprehensive VPC with all components",
   (stack) =>
     Effect.gen(function* () {
@@ -1655,8 +1655,8 @@ test.provider.skip(
       expect(_stack.webSecurityGroup.groupId).toMatch(/^sg-/);
       expect(_stack.webSecurityGroup.vpcId).toEqual(_stack.myVpc.vpcId);
       expect(_stack.webSecurityGroup.ingressRules).toHaveLength(2);
-      // TODO(sam): why is it 2 when we only have 1? is it a default or egress only ingress?
-      expect(_stack.webSecurityGroup.egressRules).toHaveLength(2);
+      // The declared allow-all rule replaces AWS's default egress rule.
+      expect(_stack.webSecurityGroup.egressRules).toHaveLength(1);
 
       expect(_stack.appSecurityGroup.groupId).toMatch(/^sg-/);
       expect(_stack.appSecurityGroup.vpcId).toEqual(_stack.myVpc.vpcId);
