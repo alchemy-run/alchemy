@@ -14,7 +14,7 @@ export class Sandbox extends Cloudflare.Container<
     /**
      * Execute a command in a sandbox.
      */
-    exec: (command: string) => Effect.Effect<
+    shell: (command: string) => Effect.Effect<
       {
         exitCode: number;
         stdout: string;
@@ -42,7 +42,7 @@ export const SandboxLive = /* @__PURE__ */ Sandbox.make(
     let counter = 0;
 
     return Sandbox.of({
-      exec: (command) =>
+      shell: (command) =>
         cp
           .spawn(
             ChildProcess.make(command, {

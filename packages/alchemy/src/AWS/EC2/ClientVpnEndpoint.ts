@@ -1,6 +1,7 @@
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -508,15 +509,19 @@ export const ClientVpnEndpointProvider = () =>
                 },
               ],
             }).pipe(
-              // EC2 creates one Client VPN endpoint per account at a time, and
-              // a just-created VPC can take a moment to become visible to it.
-              // The ClientToken keeps the retried create idempotent.
+              // A just-created VPC can take a moment to become visible to Client
+              // VPN; a VPC that is really gone fails within a minute. EC2 also
+              // creates one endpoint per account at a time. The ClientToken
+              // keeps the retried create idempotent.
+              Effect.retry({
+                while: (error) => error._tag === "InvalidVpcID.NotFound",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 12,
+              }),
               (effect) =>
                 retryClientVpn(
                   effect,
-                  (error) =>
-                    error._tag === "ClientVpnEndpointCreationInProgress" ||
-                    error._tag === "InvalidVpcID.NotFound",
+                  (error) => error._tag === "ClientVpnEndpointCreationInProgress",
                 ),
             );
             const endpointId = created.ClientVpnEndpointId!;
@@ -594,9 +599,7 @@ export const ClientVpnEndpointProvider = () =>
           if (upsert.length) yield* EC2.createTags({ Resources: [endpointId], Tags: upsert });
           const final = yield* describe(endpointId);
           if (!final)
-            return yield* Effect.fail(
-              new ClientVpnEndpointNotReady({ endpointId, status: "missing" }),
-            );
+            return yield* new ClientVpnEndpointNotReady({ endpointId, status: "missing" });
           return yield* toAttrs(final);
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -604,6 +607,39 @@ export const ClientVpnEndpointProvider = () =>
           const endpoint = yield* describe(endpointId);
           if (!endpoint) return;
           if (endpoint.Status?.Code !== "deleting") {
+            // AWS refuses to delete an endpoint with live target networks. They
+            // can't outlive the endpoint, so release any the stack lost track of.
+            const associations = yield* EC2.describeClientVpnTargetNetworks
+              .items({ ClientVpnEndpointId: endpointId })
+              .pipe(
+                Stream.filter(
+                  (network) =>
+                    network.Status?.Code !== "disassociating" &&
+                    network.Status?.Code !== "disassociated",
+                ),
+                Stream.runCollect,
+                Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
+                  Effect.succeed([] as EC2.TargetNetwork[]),
+                ),
+              );
+            yield* Effect.forEach(
+              associations,
+              (network) =>
+                EC2.disassociateClientVpnTargetNetwork({
+                  ClientVpnEndpointId: endpointId,
+                  AssociationId: network.AssociationId!,
+                }).pipe(
+                  Effect.catchTag(
+                    [
+                      "InvalidClientVpnEndpointId.NotFound",
+                      "InvalidClientVpnAssociationIdNotFound",
+                    ],
+                    () => Effect.void,
+                  ),
+                  (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
+                ),
+              { concurrency: "unbounded", discard: true },
+            );
             yield* EC2.deleteClientVpnEndpoint({
               ClientVpnEndpointId: endpointId,
             }).pipe(Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.void));

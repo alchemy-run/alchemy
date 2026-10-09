@@ -19,6 +19,7 @@ import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Stream as K2Stream } from "../K2/Stream.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
 import type { Queue } from "../Queues/Queue.ts";
@@ -35,6 +36,7 @@ import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { AnyBindingEffect } from "./Binding.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
@@ -238,6 +240,8 @@ export type WorkerBindingResource =
   | WorkflowLike<any>
   | VpcService
   | VpcServiceLookup
+  // An account-level mTLS certificate becomes an `mtls_certificate` binding.
+  | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable
   // Object class (DO namespace binding + ContainerApplication in one).
   | Container.Decl.Any;
@@ -246,14 +250,39 @@ export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
 };
 
+/**
+ * Whether `target` names the Worker being constructed. A Worker class only
+ * carries its static `LogicalId` (one logical id is one resource within a
+ * stack); a resolved resource carries its full `FQN`, so a `Worker.ref` to
+ * the same logical id in another stack or stage is not the host.
+ */
+const isHostWorker = (target: unknown, host: Worker): boolean => {
+  if (typeof target !== "function" && (typeof target !== "object" || target === null)) {
+    return false;
+  }
+  if ("FQN" in target) return target.FQN === host.FQN;
+  return "LogicalId" in target && target.LogicalId === host.LogicalId;
+};
+
 export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   workerEff: (Worker & Rpc<Shape>) | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ) {
+  const self = yield* Worker;
+  if (isHostWorker(workerEff, self)) {
+    // A Worker binding itself. Yielding its own class here would wait on
+    // its own construction, and a service binding naming its own script is
+    // unnecessary: workerd's `ctx.exports.default` is a loopback to this
+    // Worker's default entrypoint, so nothing is deployed for the binding.
+    return makeRpcStub<Shape>(
+      cloudflare_workers.pipe(
+        Effect.map(({ exports }) => (exports as Record<string, unknown>).default),
+      ),
+    );
+  }
   // Worker classes and regular Effects are both yieldable here.
   const worker = isYieldableEffectLike(workerEff)
     ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
     : workerEff;
-  const self = yield* Worker;
   yield* self.bind`${worker}`({
     bindings: [
       {

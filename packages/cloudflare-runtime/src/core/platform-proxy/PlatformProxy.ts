@@ -125,7 +125,7 @@ const makeModules = Effect.fnUntraced(function* (options: PlatformProxyOptions) 
   );
   const userEntry = userModules[0]?.name;
   if (classNames.length > 0 && userEntry === undefined) {
-    return yield* new ConfigError({
+    return yield* ConfigError.make({
       subtag: "PlatformProxyMissingModules",
       message: "Durable Object namespaces were configured without any modules.",
       hint: "Pass `modules` whose first module exports every configured Durable Object class.",
@@ -154,7 +154,7 @@ const connectToInstance = <Env>(info: ConnectInfo) =>
   Effect.tryPromise({
     try: () => connect<Env>(info),
     catch: (cause) =>
-      new SystemError({
+      SystemError.make({
         subtag: "PlatformProxyEnvDescriptor",
         message: "Failed to read the environment descriptor from the platform-proxy worker.",
         cause,

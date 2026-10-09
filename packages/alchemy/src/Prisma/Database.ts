@@ -6,11 +6,13 @@ import {
   deleteDatabase,
   getDatabases,
   getDatabase,
+  getProject,
   getProjectBranches,
   getProjectDatabases,
   updateDatabase,
   createDatabase,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
@@ -136,7 +138,8 @@ export interface DatabaseProps {
    */
   name?: string;
   /**
-   * Region for the database.
+   * Region for the database. `"inherit"` uses the project's default region,
+   * or the default database's region when the project has none.
    *
    * @default "us-east-1"
    */
@@ -314,12 +317,10 @@ const listProjectDatabases = (projectId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -338,12 +339,10 @@ const listAllDatabases = (
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -392,7 +391,9 @@ const logicalIdTaken = (
     { cause },
   );
 
-class GeneratedDatabaseNotVisible extends Error {}
+class GeneratedDatabaseNotVisible extends Data.TaggedError("GeneratedDatabaseNotVisible")<{
+  readonly message: string;
+}> {}
 
 const generatedDatabaseRecoverySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -405,9 +406,9 @@ const recoverGeneratedDatabaseAfterConflict = (projectId: string, name: string) 
       database
         ? Effect.succeed(database)
         : Effect.fail(
-            new GeneratedDatabaseNotVisible(
-              `Generated Prisma database '${name}' already exists but is not visible yet.`,
-            ),
+            new GeneratedDatabaseNotVisible({
+              message: `Generated Prisma database '${name}' already exists but is not visible yet.`,
+            }),
           ),
     ),
     Effect.retry({
@@ -437,12 +438,16 @@ const resolveDatabaseRegion = Effect.fn(function* (
   if (region !== "inherit") {
     return (region ?? "us-east-1") as PrismaRegionId;
   }
+  const project = yield* getProject({ id: projectId });
+  if (project.data.defaultRegion !== null) {
+    return project.data.defaultRegion as PrismaRegionId;
+  }
   const database = yield* findDefaultDatabase(projectId);
   const inherited = database?.region?.id;
   if (inherited === undefined) {
     return yield* Effect.fail(
       new Error(
-        `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default database region. Create or promote a default database first, or specify an explicit region.`,
+        `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default region and no default database region. Create or promote a default database first, or specify an explicit region.`,
       ),
     );
   }

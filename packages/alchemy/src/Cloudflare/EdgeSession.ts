@@ -64,7 +64,7 @@ const createUploadToken = Effect.gen(function* () {
   const json = yield* http.get(exchangeUrl).pipe(
     Effect.flatMap((r) => r.json),
     Effect.timeout(30_000),
-    Effect.catch(() => Effect.succeed(null as unknown)),
+    Effect.orElseSucceed(() => null as unknown),
   );
   if (
     typeof json === "object" &&

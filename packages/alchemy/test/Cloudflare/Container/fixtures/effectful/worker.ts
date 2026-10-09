@@ -1,8 +1,15 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import { Object } from "./object.ts";
+
+// Report failures in the response body, so a test that times out waiting
+// for the container shows why instead of a bare 500.
+const reportFailure = Effect.catchCause((cause: Cause.Cause<unknown>) =>
+  Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+);
 
 export default Cloudflare.Worker(
   "Worker",
@@ -21,13 +28,13 @@ export default Cloudflare.Worker(
 
         // Plain RPC into the container (no bucket).
         if (url.pathname === "/ping") {
-          const pong = yield* object.ping();
+          const pong = yield* object.ping().pipe(Effect.orDie);
           return HttpServerResponse.text(pong);
         }
 
         // The env var a `Binding.Service` bound onto the container.
         if (url.pathname === "/bound-env") {
-          const value = yield* object.boundEnv();
+          const value = yield* object.boundEnv().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value: value ?? null });
         }
 
@@ -59,7 +66,7 @@ export default Cloudflare.Worker(
         }
 
         return HttpServerResponse.text("ok");
-      }),
+      }).pipe(reportFailure),
     };
   }),
 );

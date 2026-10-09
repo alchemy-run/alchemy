@@ -14,6 +14,7 @@ import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 
 const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
@@ -122,7 +123,12 @@ export declare namespace Container {
     permissions?: string;
   }
   interface Healthcheck {
-    /** Command to run for health checks. */
+    /**
+     * Command to run for health checks. A string runs in the container's
+     * shell. An array follows Docker's healthcheck `Test` form:
+     * `["CMD-SHELL", "pg_isready -U app"]`, `["CMD", "pg_isready", "-U", "app"]`,
+     * or `["NONE"]` to disable the image's healthcheck.
+     */
     cmd: string[] | string;
     /** Time between checks. */
     interval?: Duration.Input;
@@ -635,9 +641,10 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       rm: news.removeOnExit ?? false,
       ...(news.healthcheck
         ? {
-            "health-cmd": Array.isArray(news.healthcheck.cmd)
-              ? news.healthcheck.cmd.join(" ")
-              : news.healthcheck.cmd,
+            "health-cmd": healthcheckCommand(news.healthcheck.cmd),
+            // Only when set: an always-present key would change every
+            // container's config hash and recreate it on upgrade.
+            ...(isHealthcheckDisabled(news.healthcheck.cmd) ? { "no-healthcheck": true } : {}),
             "health-interval": normalizeDuration(news.healthcheck.interval),
             "health-timeout": normalizeDuration(news.healthcheck.timeout),
             "health-retries": news.healthcheck.retries ?? 0,

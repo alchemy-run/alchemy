@@ -3,7 +3,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
@@ -94,11 +93,11 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
           const validated = Output.all(Output.of(credential), Output.of(bucket)).pipe(
             Output.mapEffect(
               Effect.fn(function* ([credential, target]) {
-                yield* validateCredential(credential, target, scope).pipe(Effect.orDie);
+                yield* validateCredential(credential, target, scope);
                 if (scope === "storage:write")
-                  yield* validateCredential(credential, target, "storage:read").pipe(Effect.orDie);
+                  yield* validateCredential(credential, target, "storage:read");
                 return credential;
-              }),
+              }, Effect.orDie),
             ),
           );
           env[keys.accessKeyId] = validated.tokenId;
@@ -147,7 +146,7 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
       });
       const client = Effect.gen(function* () {
         return yield* makeStorageClient(yield* config, yield* required(bucketKey));
-      }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
+      }).pipe(Effect.provideService(HttpClient.HttpClient, http));
       return {
         get: (key: string) => client.pipe(Effect.flatMap((c) => c.get(key))),
         head: (key: string) => client.pipe(Effect.flatMap((c) => c.head(key))),

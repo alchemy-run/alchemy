@@ -233,7 +233,7 @@ export const GroupProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findGroupByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );
@@ -289,7 +289,7 @@ const findGroupByName = (acct: string, name: string) =>
     Stream.filter((g): g is ObservedGroup => g.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 type ObservedGroup = {

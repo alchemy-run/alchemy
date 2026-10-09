@@ -59,8 +59,8 @@ const makeNodeAdapterTarget = (config: NuxtNodeTargetConfig = {}): NuxtTarget =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         if (output.distDirectory === undefined || output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The Nuxt build produced no .output directories for the Node serve entry"),
+          return yield* fail(
+            "The Nuxt build produced no .output directories for the Node serve entry",
           );
         }
         const servePath = path.join(output.distDirectory, "server", NODE_SERVE_ENTRY_FILE_NAME);

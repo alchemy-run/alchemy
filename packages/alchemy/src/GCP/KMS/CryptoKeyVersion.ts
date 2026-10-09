@@ -492,9 +492,11 @@ const destroyVersion = (name: string) =>
       body: {},
     })
     .pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+      Effect.catchTags({
+        NotFound: () => Effect.succeed(undefined),
+        BadRequest: () => Effect.succeed(undefined),
+        Conflict: () => Effect.succeed(undefined),
+      }),
     );
 
 const restoreVersion = (name: string) =>
@@ -504,16 +506,20 @@ const restoreVersion = (name: string) =>
       body: {},
     })
     .pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+      Effect.catchTags({
+        NotFound: () => Effect.succeed(undefined),
+        BadRequest: () => Effect.succeed(undefined),
+        Conflict: () => Effect.succeed(undefined),
+      }),
     );
 
 const deleteVersion = (name: string) =>
   kms.deleteProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-    Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      NotFound: () => Effect.succeed(undefined),
+      BadRequest: () => Effect.succeed(undefined),
+      Conflict: () => Effect.succeed(undefined),
+    }),
     Effect.flatMap(
       (
         operation,

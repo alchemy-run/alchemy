@@ -69,7 +69,9 @@ export const D1 = <TRelations extends AnyRelations = EmptyRelations, E = never, 
         db as Effect.Effect<
           EffectSQLiteD1Database<TRelations> & {
             $client: D1Client.D1Client;
-          }
+          },
+          any,
+          any
         >,
       ),
   );

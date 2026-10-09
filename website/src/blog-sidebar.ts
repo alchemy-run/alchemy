@@ -13,18 +13,32 @@ const groupLabels: Record<BlogCategory, string> = {
 };
 const groupOrder: BlogCategory[] = ["post", "release"];
 
-let categoryById: Map<string, BlogCategory> | undefined;
+interface BlogMeta {
+  category: BlogCategory;
+  date: Date | undefined;
+}
 
-async function loadCategoryById(): Promise<Map<string, BlogCategory>> {
-  if (categoryById) return categoryById;
+let metaById: Map<string, BlogMeta> | undefined;
+
+async function loadMetaById(): Promise<Map<string, BlogMeta>> {
+  if (metaById) return metaById;
   const entries = await getCollection("docs", (entry) => entry.id.startsWith("blog/"));
-  const map = new Map<string, BlogCategory>();
+  const map = new Map<string, BlogMeta>();
   for (const entry of entries) {
-    const data = entry.data as { category?: BlogCategory };
-    map.set(entry.id, data.category ?? "post");
+    const data = entry.data as { category?: BlogCategory; date?: Date };
+    map.set(entry.id, { category: data.category ?? "post", date: data.date });
   }
-  categoryById = map;
+  metaById = map;
   return map;
+}
+
+// Release titles lead with the version ("2.0.0-beta.80 - GCP, …"), which
+// truncates the descriptive part in the narrow sidebar. Lead with the
+// release date instead; the page itself keeps the versioned title.
+function releaseLabel(label: string, date: Date | undefined): string {
+  if (!date) return label;
+  const title = label.replace(/^\S+\s+-\s+/, "");
+  return `${date.toISOString().slice(0, 10)} · ${title}`;
 }
 
 function extractBlogId(href: string): string | undefined {
@@ -45,7 +59,7 @@ export const onRequest = defineRouteMiddleware(async (context, next) => {
   if (recentIndex === -1) return;
 
   const recentGroup = starlightRoute.sidebar[recentIndex] as SidebarGroup;
-  const categories = await loadCategoryById();
+  const metas = await loadMetaById();
 
   const buckets = new Map<BlogCategory, SidebarItem[]>();
   for (const category of groupOrder) buckets.set(category, []);
@@ -53,8 +67,13 @@ export const onRequest = defineRouteMiddleware(async (context, next) => {
   for (const item of recentGroup.entries) {
     if (item.type !== "link") continue;
     const id = extractBlogId(item.href);
-    const category: BlogCategory = (id !== undefined ? categories.get(id) : undefined) ?? "post";
-    buckets.get(category)!.push(item);
+    const meta = id !== undefined ? metas.get(id) : undefined;
+    const category: BlogCategory = meta?.category ?? "post";
+    buckets
+      .get(category)!
+      .push(
+        category === "release" ? { ...item, label: releaseLabel(item.label, meta?.date) } : item,
+      );
   }
 
   const replacement: SidebarGroup[] = [];

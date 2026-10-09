@@ -109,8 +109,10 @@ export const ListenerCertificateProvider = () =>
                 ),
               ),
             ),
-            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
-            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTags({
+              LoadBalancerNotFoundException: () => Effect.succeed([]),
+              ListenerNotFoundException: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );

@@ -102,6 +102,8 @@ export const Service = <
 >(
   id: Self["key"],
 ): Self => {
+  // Tag key is the caller-supplied `id`, so it can't be a class declaration.
+  // oxlint-disable-next-line effecttsgo/service-not-as-class
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>

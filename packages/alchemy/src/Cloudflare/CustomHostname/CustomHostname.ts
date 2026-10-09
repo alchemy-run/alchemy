@@ -305,8 +305,10 @@ export const CustomHostnameProvider = () =>
                 ),
               ),
             ),
-            Effect.catchTag("SaasQuotaNotAllocated", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            Effect.catchTags({
+              SaasQuotaNotAllocated: () => Effect.succeed([]),
+              Forbidden: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -363,9 +365,9 @@ export const CustomHostnameProvider = () =>
             Effect.catch((originalError) =>
               Effect.gen(function* () {
                 const existing = yield* findByHostname(zoneId, news.hostname).pipe(
-                  Effect.catch(() => Effect.succeed(undefined)),
+                  Effect.orElseSucceed(() => undefined),
                 );
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return existing;
               }),
             ),

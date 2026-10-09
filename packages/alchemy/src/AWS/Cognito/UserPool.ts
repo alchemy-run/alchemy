@@ -701,12 +701,10 @@ export const UserPoolProvider = () =>
             if (arn === undefined) continue;
             const existing = merged[trigger];
             if (existing !== undefined && existing !== arn) {
-              return yield* Effect.fail(
-                new ConflictingUserPoolTrigger({
-                  trigger,
-                  functionArns: [existing, arn],
-                }),
-              );
+              return yield* new ConflictingUserPoolTrigger({
+                trigger,
+                functionArns: [existing, arn],
+              });
             }
             merged[trigger] = arn;
           }

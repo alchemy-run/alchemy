@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "@alchemy.run/sigil/react";
 import * as Cause from "effect/Cause";

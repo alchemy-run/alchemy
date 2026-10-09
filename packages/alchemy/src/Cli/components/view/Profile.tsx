@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import type { JSX } from "react";
 import { theme } from "../../CliKit/index.ts";

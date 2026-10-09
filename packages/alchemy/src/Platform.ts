@@ -303,6 +303,7 @@ export const Platform = <
     hooks.transformProps === undefined || props === undefined
       ? props
       : Effect.flatMap(
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props Effects are declarations resolved by the engine
           Effect.isEffect(props) ? (props as Effect.Effect<any>) : Effect.succeed(props ?? {}),
           (resolved) => hooks.transformProps!(id, resolved),
         );
@@ -441,7 +442,8 @@ export const Platform = <
               (() => {
                 const transformed = applyTransformProps(id, props);
                 return Effect.isEffect(transformed)
-                  ? (transformed as Effect.Effect<any>)
+                  ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props Effects are declarations resolved by the engine
+                    (transformed as Effect.Effect<any>)
                   : Effect.succeed(transformed ?? {});
               })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),

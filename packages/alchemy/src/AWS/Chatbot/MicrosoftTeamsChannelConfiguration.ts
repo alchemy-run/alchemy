@@ -9,7 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { fromChatbotTags, toChatbotTags } from "./internal.ts";
+import { fromChatbotTags, inChatbotRegion, toChatbotTags } from "./internal.ts";
 
 export interface MicrosoftTeamsChannelConfigurationProps {
   /**
@@ -177,6 +177,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
 
       const observeConfiguration = (arn: string) =>
         chatbot.getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => r.ChannelConfiguration),
           // Typed via the distilled chatbot patch — the wire error is a
           // ResourceNotFoundException outside the Smithy model's union.
@@ -185,6 +186,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
 
       const observedTags = (arn: string) =>
         chatbot.listTagsForResource({ ResourceARN: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => fromChatbotTags(r.Tags)),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
@@ -209,7 +211,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
           Effect.gen(function* () {
             const configurations = yield* chatbot.listMicrosoftTeamsChannelConfigurations
               .items({})
-              .pipe(Stream.runCollect);
+              .pipe(Stream.runCollect, inChatbotRegion);
             return Array.from(configurations).map((config) => {
               const arn = config.ChatConfigurationArn;
               return toAttributes(arn.slice(arn.lastIndexOf("/") + 1), config);
@@ -272,6 +274,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
                 Tags: toChatbotTags(desiredTags),
               })
               .pipe(
+                inChatbotRegion,
                 Effect.map((r) => r.ChannelConfiguration),
                 Effect.catchTag("ConflictException", () => observeConfiguration(arn)),
               );
@@ -301,7 +304,10 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
                 GuardrailPolicyArns: news.guardrailPolicyArns,
                 UserAuthorizationRequired: news.userAuthorizationRequired,
               })
-              .pipe(Effect.map((r) => r.ChannelConfiguration));
+              .pipe(
+                inChatbotRegion,
+                Effect.map((r) => r.ChannelConfiguration),
+              );
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -309,19 +315,23 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {
-            yield* chatbot.tagResource({
-              ResourceARN: arn,
-              Tags: upsert.map(({ Key, Value }) => ({
-                TagKey: Key,
-                TagValue: Value,
-              })),
-            });
+            yield* chatbot
+              .tagResource({
+                ResourceARN: arn,
+                Tags: upsert.map(({ Key, Value }) => ({
+                  TagKey: Key,
+                  TagValue: Value,
+                })),
+              })
+              .pipe(inChatbotRegion);
           }
           if (removed.length > 0) {
-            yield* chatbot.untagResource({
-              ResourceARN: arn,
-              TagKeys: removed,
-            });
+            yield* chatbot
+              .untagResource({
+                ResourceARN: arn,
+                TagKeys: removed,
+              })
+              .pipe(inChatbotRegion);
           }
 
           yield* session.note(configurationName);
@@ -342,6 +352,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
               ChatConfigurationArn: output.chatConfigurationArn,
             })
             .pipe(
+              inChatbotRegion,
               // Idempotent delete — a missing configuration is not an error.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );

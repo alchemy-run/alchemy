@@ -262,11 +262,9 @@ export const makeBuildOutputCollector = (
           }
         }
         if (serverEntry && !modules.has(serverEntry)) {
-          return yield* Effect.fail(
-            new CollectorError({
-              message: `Server entry "${serverEntry}" not found on disk`,
-            }),
-          );
+          return yield* new CollectorError({
+            message: `Server entry "${serverEntry}" not found on disk`,
+          });
         }
         return sortServerModules(Array.from(modules.values()), serverEntry);
       });

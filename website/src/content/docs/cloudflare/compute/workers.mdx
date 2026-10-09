@@ -186,6 +186,35 @@ covers the three declaration forms, and
 [Schemaless RPC](/apis/schemaless) the calling convention.
 :::
 
+## Call the Worker's own RPC methods
+
+A Worker can bind itself. Declare the class first so its implementation
+can reference it:
+
+```typescript
+export class Greeter extends Cloudflare.Worker<
+  Greeter,
+  { greet: (name: string) => Effect.Effect<string> }
+>()("Greeter") {}
+
+export default Greeter.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const self = yield* Cloudflare.Workers.bindWorker(Greeter);
+
+    return {
+      greet: (name: string) => Effect.succeed(`Hello ${name}`),
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* self.greet("world"));
+      }),
+    };
+  }),
+);
+```
+
+A self binding uses workerd's `ctx.exports` loopback, so nothing is added
+to the Worker's deployed bindings.
+
 ## Serve static assets
 
 Pass `assets` and Cloudflare serves matching requests from its asset
@@ -410,19 +439,29 @@ type (`Api`, not `typeof Api`):
 
 ```typescript
 // alchemy.run.ts
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 import type { Api } from "./src/target.ts";
 
-const target = yield* Cloudflare.Worker("Target", {
-  main: "./src/target.ts",
-});
+export default Alchemy.Stack(
+  "App",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.Worker("Target", {
+      main: "./src/target.ts",
+    });
 
-const caller = yield* Cloudflare.Worker("Caller", {
-  main: "./src/caller.ts",
-  env: {
-    API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
-  },
-});
+    const caller = yield* Cloudflare.Worker("Caller", {
+      main: "./src/caller.ts",
+      env: {
+        API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
+      },
+    });
+
+    return { url: caller.url };
+  }),
+);
 ```
 
 `InferEnv` maps the binding to Cloudflare's native `Service<Api>` type,

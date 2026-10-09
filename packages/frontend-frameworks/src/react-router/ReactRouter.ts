@@ -443,7 +443,7 @@ export const make: (
 
       const resolved = server.resolvedUrls?.local[0];
       if (resolved === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       // Vite reports its local URL with a trailing slash; hand back an origin
       // that concatenates correctly (`${url}/about`, not `//about`).
@@ -518,20 +518,16 @@ export const readReactRouterOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The React Router build produced no server modules in ${dirs.serverDir}`),
-      );
+      return yield* fail(`The React Router build produced no server modules in ${dirs.serverDir}`);
     }
     const entryName = selectServerEntryName(
       modules.map((module) => module.name),
       expected,
     );
     if (entryName === undefined) {
-      return yield* Effect.fail(
-        fail(
-          `The React Router build produced no "${expected}" entry in ${dirs.serverDir} — ` +
-            "React Server Components and multi-environment builds are not supported yet.",
-        ),
+      return yield* fail(
+        `The React Router build produced no "${expected}" entry in ${dirs.serverDir} — ` +
+          "React Server Components and multi-environment builds are not supported yet.",
       );
     }
     return {

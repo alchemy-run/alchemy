@@ -185,7 +185,7 @@ const redactSecret = (
   // SDK-wrapped Redacted is not readable via alchemy's WeakMap. Unwrap
   // with distilled first, then wrap with ours so state encoding works.
   try {
-    return Redacted.make(Redacted.value(secret));
+    return secret.pipe(Redacted.value, Redacted.make);
   } catch {
     const unwrapped = unwrapRedactedDeep(secret);
     return typeof unwrapped === "string" ? Redacted.make(unwrapped) : undefined;

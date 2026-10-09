@@ -19,6 +19,7 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
+import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -27,6 +28,7 @@ import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isStream as isK2Stream } from "../K2/Stream.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
@@ -370,13 +372,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [
-      {
-        className,
-        dev: application.dev,
-        hash: application.hash.pipe(Output.map((h) => h?.image)),
-      },
-    ],
+    containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
@@ -524,6 +520,13 @@ const toBinding = (
       type: "vpc_service",
       name: bindingName,
       serviceId: binding.serviceId,
+    };
+  } else if (isMtlsCertificate(binding)) {
+    // `env.NAME` is a Fetcher whose subrequests present the certificate.
+    return {
+      type: "mtls_certificate",
+      name: bindingName,
+      certificateId: binding.mtlsCertificateId,
     };
   } else if (isDatabase(binding)) {
     return {
