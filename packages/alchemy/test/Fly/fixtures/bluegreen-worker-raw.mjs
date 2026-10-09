@@ -40,10 +40,18 @@ const server = http.createServer(async (request, response) => {
     if (request.url === "/") return response.end(JSON.stringify({ machine, version }));
     await event("request-started");
     response.once("finish", () => requestFinalizers.push(event("request-finalized")));
-    if (request.url === "/stream") response.write("first\n".repeat(32768));
-    await stopping;
-    await sleep(afterSignal);
-    await event("response-finished");
+    // Fly's proxy may close a connection that moves no bytes for 60s; heartbeat with
+    // whitespace (JSON padding / blank stream lines) until the post-stop tail is ready.
+    const beat = request.url === "/stream" ? "\n" : " ";
+    response.write(request.url === "/stream" ? "first\n".repeat(32768) : beat);
+    const heartbeat = setInterval(() => response.write(beat), 10_000);
+    try {
+      await stopping;
+      await sleep(afterSignal);
+      await event("response-finished");
+    } finally {
+      clearInterval(heartbeat);
+    }
     response.end(
       request.url === "/stream" ? "last\n".repeat(32768) : JSON.stringify({ machine, version }),
     );
