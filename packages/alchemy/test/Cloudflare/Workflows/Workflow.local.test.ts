@@ -3,6 +3,7 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -10,6 +11,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as State from "@/State/State";
 import * as Test from "@/Test/Alchemy";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import ExplicitNameWorkflowWorker, {
   EXPLICIT_WORKFLOW_NAME,
 } from "./fixtures/explicit-name-worker.ts";
@@ -27,6 +29,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
+}> {}
+
+class WorkflowInstanceNotVisible extends Data.TaggedError("WorkflowInstanceNotVisible")<{
+  instanceId: string;
 }> {}
 
 class WorkflowLinkNotReady extends Data.TaggedError("WorkflowLinkNotReady")<{
@@ -79,27 +85,42 @@ const startInstance = (url: string, path = "/workflow/start/world") =>
     return instanceId;
   });
 
-/** Poll one instance without retrying failed workflow executions. */
+/**
+ * Poll one instance without retrying failed workflow executions.
+ *
+ * Cloudflare's `get(id).status()` can answer `(instance.not_found)` for an
+ * instance `create()` just returned: instance reads are eventually consistent,
+ * and on a freshly created live Workflow an early instance can stay invisible.
+ * That state is retried briefly and then surfaced as
+ * `WorkflowInstanceNotVisible`, which `runInstance` answers with a fresh
+ * instance. Every other status error fails.
+ */
 const waitForTerminal = (url: string, instanceId: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    return yield* client.get(`${url}/workflow/status/${instanceId}`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
-          : res.text.pipe(
-              Effect.flatMap((body) =>
-                Effect.fail(new Error(`Workflow status ${res.status}: ${body}`)),
+  requestWorker(HttpClientRequest.get(`${url}/workflow/status/${instanceId}`)).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
+        : res.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(
+                res.status === 500 && body.includes("(instance.not_found)")
+                  ? new WorkflowInstanceNotVisible({ instanceId })
+                  : new Error(`Workflow status ${res.status}: ${body}`),
               ),
             ),
-      ),
-      Effect.repeat({
-        schedule: Schedule.spaced("3 seconds"),
-        until: isTerminal,
-        times: 10,
-      }),
-    );
-  });
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error instanceof WorkflowInstanceNotVisible,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 5,
+    }),
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: isTerminal,
+      times: 10,
+    }),
+  );
 
 const runInstance = (url: string, path: string, live = false) =>
   Effect.gen(function* () {
@@ -112,16 +133,21 @@ const runInstance = (url: string, path: string, live = false) =>
     return { instanceId, status };
   }).pipe(
     Effect.retry({
-      while: (error) => error instanceof WorkflowLinkNotReady,
+      while: (error) =>
+        error instanceof WorkflowLinkNotReady ||
+        (live && error instanceof WorkflowInstanceNotVisible),
       schedule: Schedule.spaced("3 seconds"),
-      times: 2,
+      times: 3,
     }),
   );
 
 const probeWorkflow = Effect.fn(function* (url: string) {
   const ready = yield* Effect.gen(function* () {
     const id = yield* startInstance(url, "/workflow/probe");
-    const status = yield* waitForTerminal(url, id);
+    const status = yield* waitForTerminal(url, id).pipe(
+      Effect.catchTag("WorkflowInstanceNotVisible", () => Effect.succeed(undefined)),
+    );
+    if (status === undefined) return false;
     yield* Effect.logInfo(`Workflow readiness probe ${id}: ${JSON.stringify(status)}`);
     if (
       status.status === "errored" &&
