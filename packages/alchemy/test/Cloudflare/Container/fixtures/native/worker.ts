@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -75,7 +76,12 @@ export const NativeWorker = Cloudflare.Worker(
             return yield* HttpServerResponse.json(result);
           }
         }
-      }),
+      }).pipe(
+        // Report failures in the body, so a failing test shows why.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }),
 );

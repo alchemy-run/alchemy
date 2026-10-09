@@ -55,11 +55,18 @@ const getText = (baseUrl: string, path: string) =>
 const getJson = <A>(baseUrl: string, path: string) =>
   Effect.map(getText(baseUrl, path), (body) => JSON.parse(body) as A);
 
+/** Fail with the route that hung, so a timeout says which step stalled. */
+const within = (path: string, duration: `${number} seconds`) =>
+  Effect.timeoutOrElse({
+    duration,
+    orElse: () => Effect.fail(new Error(`GET ${path} timed out after ${duration}`)),
+  });
+
 /** A fresh workers.dev URL needs a few seconds before it routes requests. */
 const waitUntilReady = (url: string) =>
   getText(url, "/ready").pipe(
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-    Effect.timeout("25 seconds"),
+    within("/ready", "25 seconds"),
   );
 
 /**
@@ -68,10 +75,10 @@ const waitUntilReady = (url: string) =>
  * the running container first, `image=<name>` picks the image to start.
  */
 const probe = (url: string, query = "") =>
-  getJson<Probe>(url, `/probe${query}`).pipe(Effect.timeout("25 seconds"));
+  getJson<Probe>(url, `/probe${query}`).pipe(within(`/probe${query}`, "25 seconds"));
 
 const readMetadata = (url: string, query = "") =>
-  getJson<Metadata>(url, `/metadata${query}`).pipe(Effect.timeout("10 seconds"));
+  getJson<Metadata>(url, `/metadata${query}`).pipe(within(`/metadata${query}`, "10 seconds"));
 
 /** The `containers` metadata of a Worker's most recently uploaded version. */
 const uploadedContainers = Effect.fn(function* (accountId: string, scriptName: string) {
@@ -378,11 +385,14 @@ for (const dev of [true, false]) {
               /** Exec routes are safe to retry while a new Worker comes up. */
               const exec = (url: string, path: string) =>
                 getJson<ExecResult>(url, path).pipe(
+                  Effect.tapError((error) =>
+                    Effect.logWarning(`${url}${path} attempt failed`, error),
+                  ),
                   Effect.retry({
                     schedule: Schedule.spaced("1 second"),
                     times: 8,
                   }),
-                  Effect.timeout("25 seconds"),
+                  within(`${url}${path}`, "25 seconds"),
                 );
 
               const applications = yield* Effect.gen(function* () {
@@ -415,7 +425,7 @@ for (const dev of [true, false]) {
                     getJson<Record<string, unknown>>(
                       deployed.worker.url!,
                       `/lifecycle/${mode}`,
-                    ).pipe(Effect.timeout("25 seconds"));
+                    ).pipe(within(`/lifecycle/${mode}`, "25 seconds"));
                   expect(yield* lifecycle("interrupt")).toEqual({ remaining: "" });
                   expect(yield* lifecycle("stream")).toEqual({ stdout: "ab" });
                   expect(yield* lifecycle("monitor")).toEqual({
