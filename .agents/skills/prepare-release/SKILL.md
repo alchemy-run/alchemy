@@ -27,6 +27,12 @@ pnpm install
 bun --version                                # must be 1.3.13 — 1.4 fails every file at collection
 # if not: mkdir -p /tmp/bun1313 && (cd /tmp/bun1313 && npm i --no-save bun@1.3.13)
 #         export PATH=/tmp/bun1313/node_modules/.bin:$PATH   (prefix every pnpm test with this)
+node -v                                      # alchemy CLI needs >= 24.11.1 and pnpm wants 24.x — node 25
+# makes pnpm print a [WARN] that breaks scripts/ensure-built.ts. If not 24.11+:
+#   mkdir -p /tmp/node24 && (cd /tmp/node24 && npm i --no-save node@24)
+#   export PATH=/tmp/node24/node_modules/.bin:$PATH
+# Put these PATH exports + `set -a; source .env; set +a` in /tmp/release/env.sh and
+# source it before every command — env doesn't persist between shell calls.
 set -a; source .env; set +a                  # Cloudflare creds (pnpm download:env if missing)
 aws sso login                                # AWS live + nuke ride the SSO session
 mkdir -p /tmp/release
@@ -40,7 +46,7 @@ expired — re-run `aws sso login`.
 
 ```sh
 pnpm nuke --yes --profile testing            # scripts/nuke.sh requires --profile; no --yes hangs
-pnpm clear:state --profile testing
+pnpm clear:state --profile testing --yes --no-input   # prompts without --yes, fails in a non-TTY
 pnpm nuke --dry-run --profile testing > /tmp/release/census-0.txt   # baseline; should be residue only
 ```
 
@@ -97,12 +103,18 @@ before the real run.
 
 ## 3. Run it
 
-Run in the background so you can triage while it streams:
+A full round can outlast a 2-hour background-task limit, so detach it and
+watch the output file with a monitor that filters to failed results
+(`grep -E "\] ✗ |failed to run|^Tests:"` — a bare `✗` also matches the
+`[n/N ✓ ✗]` progress counter on every line):
 
 ```sh
-pnpm test --profile testing --plan "$(cat /tmp/release/plan.json)" \
-  > /tmp/release/round-1.out 2>&1
+nohup pnpm test --profile testing --plan "$(cat /tmp/release/plan.json)" \
+  > /tmp/release/round-1.out 2>&1 & disown
 ```
+
+Keep running notes in `/tmp/release/STATE.md` (round, blockers, worklist,
+residue) so the loop survives context compaction.
 
 Note the `Full log: .alchemy/log/test/…` path at the end. Failures print
 inline with their error as soon as they happen, so start triage at the first
