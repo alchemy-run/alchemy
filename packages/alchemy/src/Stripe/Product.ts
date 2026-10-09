@@ -237,7 +237,10 @@ export const ProductProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const products = yield* listAllProducts();
+      // Stripe cannot hard-delete a product that has prices; delete archives
+      // it (active: false). Archived rows are effectively deleted and must
+      // not re-enter nuke, so enumerate active products only.
+      const products = yield* listByActive(true);
       return products
         .filter((product) => {
           const metadata = tagRecord(product.metadata);

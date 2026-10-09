@@ -765,9 +765,14 @@ export const BillingPortalConfigurationProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const configurations = yield* listAllConfigurations();
+      // Portal configurations cannot be deleted; delete deactivates them.
+      // Inactive rows are effectively deleted and must not re-enter nuke.
+      // The account default is an account singleton Stripe refuses to
+      // deactivate, so it is never enumerated (even if alchemy created it).
+      const configurations = yield* listByActive(true);
       return configurations
         .filter((configuration) => {
+          if (configuration.is_default) return false;
           const metadata = tagRecord(configuration.metadata);
           return metadata[alchemyMetadataKeys.stack] !== undefined;
         })
@@ -867,6 +872,11 @@ export const BillingPortalConfigurationProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
+      // Stripe rejects `active: false` on the account default
+      // ("You cannot set active: false on your default PortalConfiguration")
+      // and the API cannot move the default elsewhere. The default is an
+      // account singleton: releasing it leaves it in place.
+      if (existing.is_default) return;
       yield* UpdateBillingPortalConfiguration({
         configuration: existing.id,
         active: false,

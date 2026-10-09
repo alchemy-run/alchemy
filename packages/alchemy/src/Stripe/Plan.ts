@@ -357,7 +357,10 @@ export const PlanProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const plans = yield* listAllPlans();
+      // The plans API also enumerates recurring prices, which Price's delete
+      // archives (active: false). Archived rows are effectively deleted and
+      // must not re-enter nuke, so enumerate active plans only.
+      const plans = yield* listByActive(true);
       return plans
         .filter((plan) => {
           const metadata = tagRecord(plan.metadata);
