@@ -41,6 +41,7 @@ function providersSidebarEntry() {
       { label: "Railway", link: "/railway" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
+      { label: "Turso", link: "/turso" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1213,6 +1214,36 @@ export default defineConfig({
           ],
         },
         {
+          label: "Turso",
+          items: [
+            { label: "Overview", link: "/turso" },
+            { label: "Setup", link: "/turso/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "turso/tutorial" } }],
+            },
+            {
+              label: "Databases",
+              items: [
+                { label: "Groups", link: "/turso/groups" },
+                { label: "Create & configure", link: "/turso/databases" },
+                { label: "Migrations", link: "/turso/migrations" },
+                { label: "Connections", link: "/turso/connections" },
+                { label: "Database per tenant", link: "/turso/database-per-tenant" },
+                { label: "Preview databases", link: "/turso/preview-databases" },
+              ],
+            },
+            {
+              label: "Access",
+              items: [
+                { label: "Tokens", link: "/turso/tokens" },
+                { label: "Team & organization", link: "/turso/organization" },
+              ],
+            },
+            providerResourcesEntry("Turso"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1624,6 +1655,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },
                 { label: "MySQL", link: "/sql/effect-sql/mysql" },
                 { label: "D1", link: "/sql/effect-sql/d1" },
+                { label: "libSQL", link: "/sql/effect-sql/libsql" },
                 { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
                   label: "Connection lifecycle",
@@ -1637,6 +1669,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/drizzle/postgres" },
                 { label: "MySQL", link: "/sql/drizzle/mysql" },
                 { label: "D1", link: "/sql/drizzle/d1" },
+                { label: "libSQL", link: "/sql/drizzle/libsql" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },

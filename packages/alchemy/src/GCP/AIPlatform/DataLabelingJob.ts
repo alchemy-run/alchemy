@@ -252,8 +252,10 @@ const cancelAndDelete = (name: string) =>
         times: 8,
         schedule: Schedule.spaced("3 seconds"),
       }),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+      Effect.catchTags({
+        NotFound: () => Effect.succeed(undefined),
+        Conflict: () => Effect.succeed(undefined),
+      }),
     );
     if (operation !== undefined) {
       yield* waitForOperation(operation, { notFoundOk: true });

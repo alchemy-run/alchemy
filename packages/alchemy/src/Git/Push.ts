@@ -56,6 +56,6 @@ export const preparedStates = new WeakMap<
 
 /** A transaction/input was already consumed, escaped its scope, or belongs to another engine. */
 export const invalidPush = () =>
-  new StoreError({
+  StoreError.make({
     reason: "push is no longer active or belongs to another engine",
   });

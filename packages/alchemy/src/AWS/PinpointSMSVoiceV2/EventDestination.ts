@@ -293,11 +293,9 @@ export const EventDestinationProvider = () =>
             (ed) => ed.EventDestinationName === eventDestinationName,
           );
           if (finalSet === undefined || observed === undefined) {
-            return yield* Effect.fail(
-              new SmsVoiceEventDestinationMissing({
-                message: `event destination '${eventDestinationName}' on configuration set '${configurationSetName}' not observable after create`,
-              }),
-            );
+            return yield* new SmsVoiceEventDestinationMissing({
+              message: `event destination '${eventDestinationName}' on configuration set '${configurationSetName}' not observable after create`,
+            });
           }
 
           // 3. Sync — apply a single update when any mutable aspect

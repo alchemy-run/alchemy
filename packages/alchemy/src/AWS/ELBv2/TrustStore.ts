@@ -252,8 +252,10 @@ export const TrustStoreProvider = () =>
               while: (e) => e._tag === "TrustStoreInUseException",
               schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
             }),
-            Effect.catchTag("TrustStoreNotFoundException", () => Effect.void),
-            Effect.catchTag("TrustStoreInUseException", () => Effect.void),
+            Effect.catchTags({
+              TrustStoreNotFoundException: () => Effect.void,
+              TrustStoreInUseException: () => Effect.void,
+            }),
           );
         }),
       };

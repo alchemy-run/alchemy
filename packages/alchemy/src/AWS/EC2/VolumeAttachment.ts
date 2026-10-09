@@ -248,8 +248,10 @@ export const VolumeAttachmentProvider = () =>
                           DryRun: false,
                         })
                         .pipe(
-                          Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
-                          Effect.catchTag("IncorrectState", () => Effect.void),
+                          Effect.catchTags({
+                            "InvalidVolume.NotFound": () => Effect.void,
+                            IncorrectState: () => Effect.void,
+                          }),
                         )
                     : Effect.fail(e),
               ),

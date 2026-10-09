@@ -220,11 +220,13 @@ export const ZoneTransferOutgoingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* dns.deleteZoneTransferOutgoing({ zoneId: output.zoneId }).pipe(
-        Effect.catchTag("OutgoingZoneTransferNotFound", () => Effect.void),
-        // Cloudflare answers DELETE on a zone without the outgoing
-        // entitlement (or with no configuration) with a 401 — if we
-        // could never have created it, there is nothing to delete.
-        Effect.catchTag("OutgoingZoneTransfersNotAllowed", () => Effect.void),
+        Effect.catchTags({
+          OutgoingZoneTransferNotFound: () => Effect.void,
+          // Cloudflare answers DELETE on a zone without the outgoing
+          // entitlement (or with no configuration) with a 401 — if we
+          // could never have created it, there is nothing to delete.
+          OutgoingZoneTransfersNotAllowed: () => Effect.void,
+        }),
       );
     }),
   });

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import * as SecretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -134,7 +135,7 @@ export const state = () =>
               return yield* upgrade;
             } else if (isCI) {
               return yield* Effect.die(
-                new AuthError({
+                AuthError.make({
                   message:
                     `Cloudflare State store is out of date ` +
                     `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
@@ -167,7 +168,7 @@ export const state = () =>
               const credentials = yield* loginWithCloudflare(profileName, true);
               if (!(yield* checkHttpStateStoreAuth(credentials))) {
                 return yield* Effect.die(
-                  new AuthError({
+                  AuthError.make({
                     message: `Cloudflare State store authentication failed, after refreshing credentials.`,
                   }),
                 );
@@ -208,7 +209,7 @@ export const state = () =>
           return yield* bootstrap();
         } else if (isCI) {
           return yield* Effect.die(
-            new AuthError({
+            AuthError.make({
               message: `Cloudflare State store not found. Run 'alchemy provider cloudflare bootstrap --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
@@ -704,8 +705,13 @@ const hoistBootstrapStack = Effect.fn(function* ({
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
-export const loginWithCloudflare = (profileName: string, force: boolean) =>
-  Effect.gen(function* () {
+export const loginWithCloudflare = Effect.fn("state_store.login", {
+  attributes: {
+    "alchemy.state_store.op": "login",
+    "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
+  },
+})(
+  function* (profileName: string, force: boolean) {
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
@@ -734,11 +740,9 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           .items({ accountId })
           .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
         if (!store) {
-          return yield* Effect.fail(
-            new AuthError({
-              message: "No Secrets Store found on this account. Deploy the state store first.",
-            }),
-          );
+          return yield* AuthError.make({
+            message: "No Secrets Store found on this account. Deploy the state store first.",
+          });
         }
 
         // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker.
@@ -773,12 +777,11 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           yield* credStore
             .write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, credentials)
             .pipe(
-              Effect.mapError(
-                (e) =>
-                  new AuthError({
-                    message: "Failed to write credentials",
-                    cause: e,
-                  }),
+              Effect.mapError((e) =>
+                AuthError.make({
+                  message: "Failed to write credentials",
+                  cause: e,
+                }),
               ),
             );
         }
@@ -788,22 +791,16 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     );
     if (!isCI) yield* interaction.output.info(`  url:     ${credentials.url}`);
     return credentials;
-  }).pipe(
-    Effect.catchTag("EdgeSessionError", (e) =>
-      Effect.fail(
-        new AuthError({
-          message: `Edge-preview secret read failed: ${e.message}`,
-          cause: e.cause,
-        }),
-      ),
+  },
+  Effect.catchTag("EdgeSessionError", (e) =>
+    Effect.fail(
+      AuthError.make({
+        message: `Edge-preview secret read failed: ${e.message}`,
+        cause: e.cause,
+      }),
     ),
-    Effect.withSpan("state_store.login", {
-      attributes: {
-        "alchemy.state_store.op": "login",
-        "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
-      },
-    }),
-  );
+  ),
+);
 
 const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
   Effect.gen(function* () {
@@ -811,12 +808,14 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
-      Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
-      Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
-      // A worker that exists but has no versions (a previous deploy was
-      // interrupted before any content upload) can't serve — treat it
-      // as absent so bootstrap redeploys it.
-      Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(false)),
+      Effect.catchTags({
+        WorkerNotFound: () => Effect.succeed(false),
+        InvalidRoute: () => Effect.succeed(false),
+        // A worker that exists but has no versions (a previous deploy was
+        // interrupted before any content upload) can't serve — treat it
+        // as absent so bootstrap redeploys it.
+        WorkerHasNoVersions: () => Effect.succeed(false),
+      }),
     );
   });
 
@@ -831,7 +830,7 @@ const isStateStoreServing = (accountId: string) =>
       Effect.map(({ subdomain }) =>
         subdomain ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev` : undefined,
       ),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (url === undefined) return false;
     const { observed } = yield* checkStateStoreVersion(url);
@@ -855,15 +854,12 @@ const makeCloudflareStateStore = Effect.fn(function* ({
   });
 });
 
-class StateStoreVersionNotReady extends Error {
-  readonly _tag = "StateStoreVersionNotReady";
-  constructor(
-    readonly expected: number,
-    readonly observed: number | undefined,
-  ) {
-    super(
-      `Cloudflare State Store version not ready (expected v${expected}, observed v${observed ?? "unknown"}).`,
-    );
+export class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersionNotReady")<{
+  readonly expected: number;
+  readonly observed: number | undefined;
+}> {
+  override get message() {
+    return `Cloudflare State Store version not ready (expected v${this.expected}, observed v${this.observed ?? "unknown"}).`;
   }
 }
 
@@ -871,7 +867,7 @@ const waitForStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const { matches, expected, observed } = yield* checkStateStoreVersion(url);
     if (!matches) {
-      return yield* Effect.fail(new StateStoreVersionNotReady(expected, observed));
+      return yield* new StateStoreVersionNotReady({ expected, observed });
     }
   }).pipe(
     Effect.retry({
@@ -890,51 +886,48 @@ const waitForStateStoreVersion = (url: string) =>
     }),
   );
 
-const checkStateStoreVersion = (url: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-    const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
-    // The /version route may 404 transiently after a fresh deploy
-    // while Cloudflare propagates the new script to the edge, and may
-    // also surface transport-level blips on cold workers.dev hosts.
-    // Retry the probe itself for ~10s before giving up — only after
-    // exhausting that budget do we collapse to `undefined` and let
-    // the caller treat it as a version mismatch.
-    const result = yield* client.version.getVersion().pipe(
-      Effect.catchTag("HttpClientError", (e) =>
-        // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
-        // we should do a check to see if it does
-        e.response?.status === 404
-          ? isAvailable.pipe(
-              Effect.flatMap((isAvailable) =>
-                // if the worker is available, then we should assume it was recently created and retry by propagating the error
-                // otherwise, return undefined (we don't know the version, there is no worker)
-                isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
-              ),
-            )
-          : Effect.fail(e),
-      ),
-      Effect.retry({
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
-      }),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
-    const matches = result?.version === STATE_STORE_VERSION;
-    yield* Effect.annotateCurrentSpan({
-      "alchemy.state_store.expected_version": STATE_STORE_VERSION,
-      "alchemy.state_store.observed_version": result?.version ?? -1,
-      "alchemy.state_store.version_match": matches,
-    });
-    return {
-      matches,
-      expected: STATE_STORE_VERSION,
-      observed: result?.version,
-    };
-  }).pipe(
-    Effect.withSpan("state_store.check_version", {
-      attributes: { "alchemy.state_store.op": "check_version" },
+const checkStateStoreVersion = Effect.fn("state_store.check_version", {
+  attributes: { "alchemy.state_store.op": "check_version" },
+})(function* (url: string) {
+  const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+  const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
+  // The /version route may 404 transiently after a fresh deploy
+  // while Cloudflare propagates the new script to the edge, and may
+  // also surface transport-level blips on cold workers.dev hosts.
+  // Retry the probe itself for ~10s before giving up — only after
+  // exhausting that budget do we collapse to `undefined` and let
+  // the caller treat it as a version mismatch.
+  const result = yield* client.version.getVersion().pipe(
+    Effect.catchTag("HttpClientError", (e) =>
+      // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
+      // we should do a check to see if it does
+      e.response?.status === 404
+        ? isAvailable.pipe(
+            Effect.flatMap((isAvailable) =>
+              // if the worker is available, then we should assume it was recently created and retry by propagating the error
+              // otherwise, return undefined (we don't know the version, there is no worker)
+              isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+            ),
+          )
+        : Effect.fail(e),
+    ),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
     }),
+    Effect.orElseSucceed(() => undefined),
   );
+  const matches = result?.version === STATE_STORE_VERSION;
+  yield* Effect.annotateCurrentSpan({
+    "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+    "alchemy.state_store.observed_version": result?.version ?? -1,
+    "alchemy.state_store.version_match": matches,
+  });
+  return {
+    matches,
+    expected: STATE_STORE_VERSION,
+    observed: result?.version,
+  };
+});
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
@@ -982,7 +975,7 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
       headers: session.headers,
     });
     if (response.status !== 200) {
-      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+      const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
       // TEMP(sam): dump the full body so we can capture the exact
       // Cloudflare error page when the probe fails in the wild. Drop
       // this once we've confirmed the routing fix covers all the
@@ -990,11 +983,9 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
       yield* Effect.logWarning(
         `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
-      return yield* Effect.fail(
-        new EdgeSessionError({
-          message: `Secret probe returned ${response.status}: ${body.slice(0, 200)}`,
-        }),
-      );
+      return yield* new EdgeSessionError({
+        message: `Secret probe returned ${response.status}: ${body.slice(0, 200)}`,
+      });
     }
     return yield* response.text;
   }).pipe(
@@ -1090,4 +1081,4 @@ const annotateAccountHash = (noTrack?: boolean) =>
     if (env._tag !== "Some") return;
     const hash = yield* hashAccountId((yield* env.value).accountId);
     yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
-  }).pipe(Effect.catch(() => Effect.void));
+  }).pipe(Effect.ignore);

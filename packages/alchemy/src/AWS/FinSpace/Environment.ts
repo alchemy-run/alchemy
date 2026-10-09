@@ -244,13 +244,13 @@ const waitForEnvironmentStatus = (environmentId: string, target: "CREATED" | "DE
       const status = response?.environment?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;
-        return yield* Effect.fail(new EnvironmentNotReady({ environmentId, status }));
+        return yield* new EnvironmentNotReady({ environmentId, status });
       }
       if (status === "CREATED") return;
       if (status === "FAILED_CREATION" || status === "SUSPENDED") {
-        return yield* Effect.fail(new EnvironmentProvisioningFailed({ environmentId, status }));
+        return yield* new EnvironmentProvisioningFailed({ environmentId, status });
       }
-      return yield* Effect.fail(new EnvironmentNotReady({ environmentId, status }));
+      return yield* new EnvironmentNotReady({ environmentId, status });
     }),
   );
 

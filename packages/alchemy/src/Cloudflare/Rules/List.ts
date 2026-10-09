@@ -370,7 +370,7 @@ export const ListProvider = () =>
                 if (match.kind === news.kind) return Effect.succeed(match);
                 return rules.deleteList({ accountId: acct, listId: match.id }).pipe(
                   Effect.catchTag("ListNotFound", () => Effect.void),
-                  Effect.flatMap(() => create),
+                  Effect.andThen(create),
                 );
               }),
             ),
@@ -531,13 +531,11 @@ const awaitBulkOperation = (accountId: string, operationId: string) =>
       }),
     );
     if (operation.status !== "completed") {
-      return yield* Effect.fail(
-        new ListBulkOperationError({
-          operationId,
-          status: operation.status,
-          message: "error" in operation ? operation.error : undefined,
-        }),
-      );
+      return yield* new ListBulkOperationError({
+        operationId,
+        status: operation.status,
+        message: "error" in operation ? operation.error : undefined,
+      });
     }
   });
 

@@ -10,7 +10,6 @@
 import { connect, type Connection } from "alchemy/Redis";
 import type { Arg, Reply } from "alchemy/Redis";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
@@ -38,9 +37,7 @@ const open = (url: string): Promise<Connection> => {
   const existing = connections.get(url);
   if (existing) return existing;
   const scope = Scope.makeUnsafe();
-  const created = Effect.runPromise(
-    connect(url).pipe(Effect.provide(Layer.succeed(Scope.Scope, scope))),
-  );
+  const created = Effect.runPromise(connect(url).pipe(Effect.provideService(Scope.Scope, scope)));
   connections.set(url, created);
   created.catch(() => connections.delete(url));
   return created;

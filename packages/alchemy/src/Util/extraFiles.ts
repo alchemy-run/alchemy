@@ -158,7 +158,7 @@ export const copyTree = Effect.fn(function* (from: string, to: string) {
   const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
   if (isPathWithin(dotAlchemy, from, runtimeBase)) return;
-  const stat = yield* fs.stat(from).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const stat = yield* fs.stat(from).pipe(Effect.orElseSucceed(() => undefined));
   if (stat === undefined) return;
   if (stat.type !== "Directory") {
     if (stat.type !== "File") return;
@@ -179,7 +179,7 @@ export const copyTree = Effect.fn(function* (from: string, to: string) {
       return [
         Effect.gen(function* () {
           const src = path.join(from, name);
-          const item = yield* fs.stat(src).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          const item = yield* fs.stat(src).pipe(Effect.orElseSucceed(() => undefined));
           if (item === undefined || item.type !== "File") return;
           const dst = path.join(to, name);
           yield* fs.makeDirectory(path.dirname(dst), { recursive: true });

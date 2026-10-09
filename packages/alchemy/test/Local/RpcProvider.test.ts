@@ -4,10 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import * as Artifacts from "@/Artifacts.ts";
-import { InstanceId } from "@/InstanceId.ts";
 import * as RpcProvider from "@/Local/RpcProvider.ts";
 import type { ProviderService } from "@/Provider.ts";
 import { Resource } from "@/Resource.ts";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 
@@ -23,7 +23,7 @@ type StackShape = Omit<StackSpec, "output">;
 interface Capture {
   stack?: StackShape;
   stage?: string;
-  instanceId?: string;
+  resource?: ResourceContext["Service"];
   artifact?: string;
 }
 
@@ -36,7 +36,7 @@ const defaultStack: StackShape = {
 };
 
 describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
-  it.effect("provides default Stack, Stage, and InstanceId to lifecycle effects", () =>
+  it.effect("provides default Stack, Stage, and ResourceContext to lifecycle effects", () =>
     Effect.gen(function* () {
       const [capture, result] = yield* useProvider((provider) =>
         provider.reconcile({
@@ -53,11 +53,16 @@ describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
       expect(result).toMatchObject({ ok: true });
       expect(capture.stack).toBe(defaultStack);
       expect(capture.stage).toBe(defaultStack.stage);
-      expect(capture.instanceId).toBe("inst-from-arg");
+      expect(capture.resource).toEqual({
+        logicalId: "r",
+        fqn: "r",
+        instanceId: "inst-from-arg",
+        type: "Local.RpcProvider.Test",
+      });
     }),
   );
 
-  it.effect("does not override Stack, Stage, or InstanceId when already provided", () =>
+  it.effect("does not override Stack, Stage, or ResourceContext when already provided", () =>
     Effect.gen(function* () {
       const overrideStack: StackShape = {
         name: "override-stack",
@@ -65,6 +70,12 @@ describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
         resources: {},
         bindings: {},
         actions: {},
+      };
+      const overrideResource: ResourceContext["Service"] = {
+        logicalId: "override",
+        fqn: "Override/override",
+        instanceId: "override-instance-id",
+        type: "Override.Type",
       };
       const [capture] = yield* useProvider((provider) =>
         provider
@@ -79,14 +90,16 @@ describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
             bindings: [],
           })
           .pipe(
-            Effect.provideService(Stack, overrideStack),
-            Effect.provideService(Stage, "override-stage"),
-            Effect.provideService(InstanceId, "override-instance-id"),
+            Effect.provide([
+              Layer.succeed(Stack, overrideStack),
+              Layer.succeed(Stage, "override-stage"),
+              Layer.succeed(ResourceContext, overrideResource),
+            ]),
           ),
       );
       expect(capture.stack).toBe(overrideStack);
       expect(capture.stage).toBe("override-stage");
-      expect(capture.instanceId).toBe("override-instance-id");
+      expect(capture.resource).toBe(overrideResource);
     }),
   );
 
@@ -104,11 +117,16 @@ describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
       expect(items.length).toBe(1);
       expect(capture.stack).toBe(defaultStack);
       expect(capture.stage).toBe(defaultStack.stage);
-      expect(capture.instanceId).toBe("inst-from-arg");
+      expect(capture.resource).toEqual({
+        logicalId: "r",
+        fqn: "r",
+        instanceId: "inst-from-arg",
+        type: "Local.RpcProvider.Test",
+      });
     }),
   );
 
-  it.effect("omits InstanceId fallback when input has no instanceId", () =>
+  it.effect("omits ResourceContext fallback when input has no instanceId", () =>
     Effect.gen(function* () {
       const [capture, exit] = yield* useProvider((provider) =>
         provider
@@ -127,7 +145,7 @@ describe("Local.RpcProvider.effect", { tags: ["unit", "local"] }, () => {
       expect(exit._tag).toBe("Failure");
       expect(capture.stack).toBe(defaultStack);
       expect(capture.stage).toBe(defaultStack.stage);
-      expect(capture.instanceId).toBeUndefined();
+      expect(capture.resource).toBeUndefined();
     }),
   );
 
@@ -192,7 +210,7 @@ const TestResourceProvider = (capture: Capture) =>
       reconcile: Effect.fn(function* (_input: any) {
         capture.stack = yield* Stack;
         capture.stage = yield* Stage;
-        capture.instanceId = yield* InstanceId;
+        capture.resource = yield* ResourceContext;
         return { ok: true, artifact: yield* artifact };
       }),
       tail: (_input: any) =>
@@ -200,7 +218,7 @@ const TestResourceProvider = (capture: Capture) =>
           Effect.gen(function* () {
             capture.stack = yield* Stack;
             capture.stage = yield* Stage;
-            capture.instanceId = yield* InstanceId;
+            capture.resource = yield* ResourceContext;
             return { timestamp: new Date(0), message: "ok" };
           }),
         ),

@@ -476,8 +476,10 @@ export const JobProvider = () =>
             location: output.location,
           })
           .pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.catchTag("BadRequest", () => Effect.void),
+            Effect.catchTags({
+              NotFound: () => Effect.void,
+              BadRequest: () => Effect.void,
+            }),
           );
         yield* waitUntilDone(output.project, output.jobId, output.location).pipe(
           Effect.catchTag("GCP.BigQuery.JobNotDone", () => Effect.void),

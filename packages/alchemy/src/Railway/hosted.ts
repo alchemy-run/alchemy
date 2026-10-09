@@ -229,7 +229,7 @@ await Effect.runPromise(
 /** Flatten a binding/env leaf into an env string. Unwraps Redacted. */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
-  if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, plainEnvValue);
   if (typeof value === "string") {
     if (value.startsWith("{")) {
       try {

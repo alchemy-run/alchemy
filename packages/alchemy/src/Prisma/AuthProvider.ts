@@ -38,7 +38,7 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
     const apiToken = yield* getEnvRedacted("PRISMA_API_TOKEN");
     const token = serviceToken ?? apiToken;
     if (token === undefined || Redacted.value(token).trim().length === 0) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: "Prisma CI credentials not found. Set PRISMA_SERVICE_TOKEN or PRISMA_API_TOKEN.",
       });
     }

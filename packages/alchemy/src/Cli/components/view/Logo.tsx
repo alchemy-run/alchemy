@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * The yantra logo, rasterized at runtime. Geometry mirrors

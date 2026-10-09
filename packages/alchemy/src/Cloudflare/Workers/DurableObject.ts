@@ -1299,7 +1299,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // resolves the tag to a concrete namespace value.
       const self = yield* binding(undefined, classProps?.transferredFrom, classProps?.errors);
       const phase = yield* ALCHEMY_PHASE;
-      const constructor = impl.pipe(Effect.provide(Layer.succeed(DurableObjectScope, self as any)));
+      const constructor = impl.pipe(Effect.provideService(DurableObjectScope, self as any));
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState
         // to trigger discovery of bindings
@@ -1311,6 +1311,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               fromDurableObjectState({ storage: {} } as any),
             ),
           ),
+          Effect.asVoid,
         );
       }
       yield* (yield* Worker).export(namespace, {

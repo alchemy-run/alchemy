@@ -1,9 +1,11 @@
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
@@ -90,6 +92,61 @@ test(
     const res = yield* client.get(`${effectCallerUrl}/?name=bob`).pipe(coldStartRetry);
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello bob");
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "effect worker calls its own RPC method via bindWorker(Self)",
+  Effect.gen(function* () {
+    const { selfWorkerUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${selfWorkerUrl}/?name=carol`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("hello carol from self");
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "an effect worker's self binding is not deployed as a service binding",
+  () =>
+    Effect.gen(function* () {
+      const { selfWorkerName } = yield* stack;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // `bindWorker(Self)` resolves through workerd's `ctx.exports.default`
+      // loopback, so the upload carries no service binding naming the
+      // Worker's own script.
+      const settings = yield* workers.getScriptScriptAndVersionSetting({
+        accountId,
+        scriptName: selfWorkerName,
+      });
+      const selfServiceBindings = (settings.bindings ?? []).filter(
+        (binding) => binding.type === "service" && binding.service === selfWorkerName,
+      );
+      expect(selfServiceBindings).toEqual([]);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "async worker re-enters its default export through Workers.Self",
+  Effect.gen(function* () {
+    const { asyncCallerUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${asyncCallerUrl}/self?name=dave`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("via self: inner dave");
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],

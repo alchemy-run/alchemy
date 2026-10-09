@@ -9,9 +9,7 @@ import type { NormalizedAssetConfig } from "../types.ts";
 
 // As the answer says, there's no downside to escaping these extra characters, so better safe than sorry
 const ESCAPE_REGEX_CHARACTERS = /[-/\\^$*+?.()|[\]{}]/g;
-const escapeRegex = (str: string) => {
-  return str.replace(ESCAPE_REGEX_CHARACTERS, "\\$&");
-};
+const escapeRegex = (str: string) => str.replace(ESCAPE_REGEX_CHARACTERS, "\\$&");
 
 // Placeholder names must begin with a colon then a letter, be alphanumeric and optionally contain underscores.
 // e.g. :place_123_holder

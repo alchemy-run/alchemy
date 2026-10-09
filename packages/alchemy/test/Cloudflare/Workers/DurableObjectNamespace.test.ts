@@ -12,6 +12,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
+import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -392,6 +393,47 @@ const consumerWorkerScript = `export default {
 };
 `;
 
+// Calls `get()` (RPC) or `fetch()` on a cross-script `Counter` and reports
+// the outcome as JSON, so a failing Durable Object call is observable.
+const placeholderProbeScript = `export default {
+  async fetch(request, env) {
+    const stub = env.Counter.getByName("placeholder-probe");
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === "/rpc") {
+        return Response.json({ ok: true, value: await stub.get() });
+      }
+      if (url.pathname === "/fetch") {
+        const res = await stub.fetch("https://counter/");
+        return Response.json({ ok: true, value: await res.text() });
+      }
+    } catch (error) {
+      return Response.json({ ok: false, error: String(error?.message ?? error) });
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+};
+`;
+
+interface ProbeResult {
+  ok: boolean;
+  value?: unknown;
+  error?: string;
+}
+
+// Until the freshly pre-created host script reaches the consumer's edge, a
+// cross-script call fails with "Worker not found." (fetch) or an opaque
+// "internal error; reference = ..." (RPC) — retry past that propagation.
+const probePlaceholder = (url: string) =>
+  fetchJsonReady<ProbeResult>(url).pipe(
+    Effect.flatMap((result) =>
+      result.error?.startsWith("internal error") || result.error === "Worker not found."
+        ? Effect.fail(new Error(`host not propagated yet: ${result.error}`))
+        : Effect.succeed(result),
+    ),
+    Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+  );
+
 // Every `test.provider` test below owns an isolated scratch stack (private
 // in-memory state, physical names derived from the unique test name), so
 // none of them can observe another's cloud resources. Run them concurrently:
@@ -618,6 +660,96 @@ export default { async fetch() { return new Response("v4"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 120_000 },
+    );
+
+    // A Durable Object instance created on the precreate placeholder must reset
+    // itself on any call instead of serving the empty placeholder class. Before
+    // the fix, an instance that landed on the placeholder (an edge that hadn't
+    // seen the real version yet) failed every RPC call with "The RPC receiver
+    // does not implement the method" for as long as callers kept it busy.
+    //
+    // The placeholder is held live deterministically: the host's real script
+    // throws at startup, so its reconcile upload is rejected after precreate
+    // has already uploaded the placeholder, while the consumer (a cycle peer
+    // that rendezvoused on the host's precreate stub) deploys fully and
+    // reaches the placeholder's `Counter` through a cross-script binding.
+    test.provider(
+      "durable objects on the precreate placeholder reset onto the real version",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+
+          const program = (hostScript: string) =>
+            Effect.gen(function* () {
+              const host = yield* Cloudflare.Worker("host-worker", {
+                script: hostScript,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+              const consumer = yield* Cloudflare.Worker("consumer-worker", {
+                script: placeholderProbeScript,
+                env: {
+                  Counter: Cloudflare.DurableObject("Counter", { scriptName: host.workerName }),
+                },
+              });
+              // host -> consumer closes the cycle, so the host is pre-created.
+              yield* host.bind("consumer-name", {
+                bindings: [
+                  { type: "plain_text", name: "CONSUMER_NAME", text: consumer.workerName },
+                ],
+              });
+              return { host, consumer };
+            });
+
+          const failed = yield* scratch
+            .deploy(
+              program(
+                `${hostWorkerScript}\nthrow new Error("placeholder probe: host fails at startup");\n`,
+              ),
+            )
+            .pipe(Effect.exit);
+          expect(failed._tag).toBe("Failure");
+
+          // The deploy failed, so read the consumer's URL from the scratch state.
+          const consumerUrl = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            const fqns = yield* state.list({ stack: scratch.name, stage: scratch.stage });
+            const fqn = fqns.find((fqn) => fqn.endsWith("consumer-worker"));
+            expect(fqn).toBeDefined();
+            const row = yield* state.get({ stack: scratch.name, stage: scratch.stage, fqn: fqn! });
+            const attr = row && "attr" in row ? row.attr : undefined;
+            return (attr as { url?: string } | undefined)?.url;
+          }).pipe(Effect.provide(scratch.state));
+          expect(consumerUrl).toBeDefined();
+
+          // Every call into the placeholder resets the object rather than
+          // reporting a missing method — RPC and fetch alike.
+          const rpc = yield* probePlaceholder(`${consumerUrl}/rpc`);
+          expect(rpc).toMatchObject({ ok: false });
+          expect(rpc.error).toContain("Alchemy worker is being deployed");
+          expect(rpc.error).not.toContain("does not implement the method");
+
+          const fetched = yield* probePlaceholder(`${consumerUrl}/fetch`);
+          expect(fetched).toMatchObject({ ok: false });
+          expect(fetched.error).toContain("Alchemy worker is being deployed");
+
+          // Deploy the real host. The same named object now answers the real
+          // method — the placeholder instance reset instead of pinning it.
+          const deployed = yield* scratch.deploy(program(hostWorkerScript));
+          expect(deployed.consumer.url).toBe(consumerUrl);
+
+          const value = yield* fetchJsonReady<ProbeResult>(`${consumerUrl}/rpc`).pipe(
+            Effect.flatMap((result) =>
+              result.ok
+                ? Effect.succeed(result.value)
+                : Effect.fail(new Error(`still on the placeholder: ${result.error}`)),
+            ),
+            Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+          );
+          expect(value).toBe(0);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     // Adopt a Durable Object class that already exists on a worker created

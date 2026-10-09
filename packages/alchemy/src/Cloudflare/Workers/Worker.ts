@@ -1736,6 +1736,31 @@ export const isSelf = (value: unknown): value is Self =>
  * ) {}
  * ```
  *
+ * **Example:** Binding a Worker to itself
+ *
+ * Declare the class before `.make()` so the implementation can reference it.
+ * The self binding uses workerd's `ctx.exports` loopback, so nothing is
+ * added to the Worker's deployed bindings.
+ * ```typescript
+ * export class Greeter extends Cloudflare.Worker<
+ *   Greeter,
+ *   { greet: (name: string) => Effect.Effect<string> }
+ * >()("Greeter") {}
+ *
+ * export default Greeter.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const self = yield* Cloudflare.Workers.bindWorker(Greeter);
+ *     return {
+ *       greet: (name: string) => Effect.succeed(`Hello ${name}`),
+ *       fetch: Effect.gen(function* () {
+ *         return HttpServerResponse.text(yield* self.greet("world"));
+ *       }),
+ *     };
+ *   }),
+ * );
+ * ```
+ *
  * ### Configuration
  * The props object controls compatibility flags, static assets, and
  * build options. These are evaluated at deploy time.
