@@ -44,7 +44,6 @@ export interface ListResolverRuleAssociations extends Binding.Service<
   >
 > {}
 
-export const ListResolverRuleAssociations =
-  Binding.Service<ListResolverRuleAssociations>(
-    "AWS.Route53Resolver.ListResolverRuleAssociations",
-  );
+export const ListResolverRuleAssociations = Binding.Service<ListResolverRuleAssociations>(
+  "AWS.Route53Resolver.ListResolverRuleAssociations",
+);

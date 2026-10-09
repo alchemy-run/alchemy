@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -28,12 +27,8 @@ export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
  * raw wire shape there — so these props use the SDK's own unions rather
  * than reusing {@link PolicyRule}.
  */
-export type PolicyExcludeRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["exclude"]
->[number];
-export type PolicyRequireRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["require"]
->[number];
+export type PolicyExcludeRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["exclude"]>[number];
+export type PolicyRequireRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["require"]>[number];
 
 /**
  * Scalar shorthand for rule kinds with a single parameter (and bare names
@@ -99,9 +94,7 @@ const SCALAR_RULE_PARAMS: Record<string, string> = {
  * Expand the scalar shorthand to Cloudflare's wire shape; wire-shaped rules
  * pass through untouched.
  */
-export const normalizePolicyRule = <Rule>(
-  rule: Rule | PolicyRuleShorthand,
-): Rule => {
+export const normalizePolicyRule = <Rule>(rule: Rule | PolicyRuleShorthand): Rule => {
   if (typeof rule === "string") {
     // "everyone" -> { everyone: {} }
     return { [rule]: {} } as Rule;
@@ -127,9 +120,7 @@ export function normalizePolicyRules<Rule>(
 export function normalizePolicyRules<Rule>(
   rules: ReadonlyArray<Rule | PolicyRuleShorthand> | undefined,
 ): Rule[] | undefined {
-  return rules === undefined
-    ? undefined
-    : rules.map((r) => normalizePolicyRule(r));
+  return rules === undefined ? undefined : rules.map((r) => normalizePolicyRule(r));
 }
 
 /**
@@ -321,9 +312,7 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
+            Effect.orElseSucceed((): ObservedPolicy | undefined => undefined),
           );
       }
       if (!observed) {
@@ -352,7 +341,7 @@ export const PolicyProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findPolicyByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );
@@ -384,9 +373,7 @@ export const PolicyProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(
-          new Error("Policy: ensured policy missing id"),
-        );
+        return yield* Effect.fail(new Error("Policy: ensured policy missing id"));
       }
       return {
         policyId: ensured.id,
@@ -442,11 +429,7 @@ export const PolicyProvider = () =>
             accountId: acct,
             policyId: output.policyId,
           })
-          .pipe(
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.orElseSucceed((): ObservedPolicy | undefined => undefined));
         if (direct && direct.id) {
           return {
             policyId: direct.id,
@@ -483,7 +466,7 @@ const findPolicyByName = (acct: string, name: string) =>
     Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 type ObservedPolicy = {

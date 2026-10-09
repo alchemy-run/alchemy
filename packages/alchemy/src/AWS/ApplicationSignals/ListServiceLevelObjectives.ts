@@ -37,7 +37,6 @@ export interface ListServiceLevelObjectives extends Binding.Service<
   >
 > {}
 
-export const ListServiceLevelObjectives =
-  Binding.Service<ListServiceLevelObjectives>(
-    "AWS.ApplicationSignals.ListServiceLevelObjectives",
-  );
+export const ListServiceLevelObjectives = Binding.Service<ListServiceLevelObjectives>(
+  "AWS.ApplicationSignals.ListServiceLevelObjectives",
+);

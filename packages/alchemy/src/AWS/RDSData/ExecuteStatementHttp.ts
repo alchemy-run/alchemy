@@ -1,10 +1,7 @@
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Layer from "effect/Layer";
 import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
-import {
-  ExecuteStatement,
-  type ExecuteStatementRequest,
-} from "./ExecuteStatement.ts";
+import { ExecuteStatement, type ExecuteStatementRequest } from "./ExecuteStatement.ts";
 
 export const ExecuteStatementHttp = Layer.effect(
   ExecuteStatement,

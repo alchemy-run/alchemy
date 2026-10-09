@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListComplianceStatus}.
  */
-export interface ListComplianceStatusRequest
-  extends fms.ListComplianceStatusRequest {}
+export interface ListComplianceStatusRequest extends fms.ListComplianceStatusRequest {}
 
 /**
  * Runtime binding for `fms:ListComplianceStatus`.
@@ -32,10 +31,7 @@ export interface ListComplianceStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListComplianceStatusRequest,
-    ) => Effect.Effect<
-      fms.ListComplianceStatusResponse,
-      fms.ListComplianceStatusError
-    >
+    ) => Effect.Effect<fms.ListComplianceStatusResponse, fms.ListComplianceStatusError>
   >
 > {}
 

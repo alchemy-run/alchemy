@@ -36,10 +36,7 @@ export interface ListStreamConsumers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListStreamConsumersRequest,
-    ) => Effect.Effect<
-      Kinesis.ListStreamConsumersOutput,
-      Kinesis.ListStreamConsumersError
-    >
+    ) => Effect.Effect<Kinesis.ListStreamConsumersOutput, Kinesis.ListStreamConsumersError>
   >
 > {}
 

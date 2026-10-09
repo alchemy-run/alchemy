@@ -51,7 +51,6 @@ export interface DescribeAlarmContributors extends Binding.Service<
   >
 > {}
 
-export const DescribeAlarmContributors =
-  Binding.Service<DescribeAlarmContributors>(
-    "AWS.CloudWatch.DescribeAlarmContributors",
-  );
+export const DescribeAlarmContributors = Binding.Service<DescribeAlarmContributors>(
+  "AWS.CloudWatch.DescribeAlarmContributors",
+);

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { EventSourcesConfig } from "@/AWS/DevOpsGuru/EventSourcesConfig.ts";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { EventSourcesConfig } from "@/AWS/DevOpsGuru/EventSourcesConfig.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,18 +11,18 @@ const { test } = Test.make({ providers: AWS.providers() });
 const observedProfilerStatus = devopsguru
   .describeEventSourcesConfig({})
   .pipe(
-    Effect.map(
-      ({ EventSources }) =>
-        EventSources?.AmazonCodeGuruProfiler?.Status ?? "DISABLED",
-    ),
+    Effect.map(({ EventSources }) => EventSources?.AmazonCodeGuruProfiler?.Status ?? "DISABLED"),
   );
 
 // Ungated typed probe: the describe call always answers with the config.
-test.provider("describeEventSourcesConfig returns the configuration", () =>
-  Effect.gen(function* () {
-    const status = yield* observedProfilerStatus;
-    expect(["ENABLED", "DISABLED"]).toContain(status);
-  }),
+test.provider(
+  "describeEventSourcesConfig returns the configuration",
+  () =>
+    Effect.gen(function* () {
+      const status = yield* observedProfilerStatus;
+      expect(["ENABLED", "DISABLED"]).toContain(status);
+    }),
+  { tags: ["provider:aws", "provider:aws:devopsguru", "live"] },
 );
 
 // The configuration is an account/region singleton. Only run the destructive
@@ -75,5 +75,8 @@ test.provider(
       yield* stack.destroy();
       expect(yield* observedProfilerStatus).toBe("DISABLED");
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:devopsguru", "live"],
+    timeout: 180_000,
+  },
 );

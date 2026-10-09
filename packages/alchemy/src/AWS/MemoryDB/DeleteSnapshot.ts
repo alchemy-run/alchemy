@@ -28,12 +28,7 @@ export interface DeleteSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: memorydb.DeleteSnapshotRequest,
-    ) => Effect.Effect<
-      memorydb.DeleteSnapshotResponse,
-      memorydb.DeleteSnapshotError
-    >
+    ) => Effect.Effect<memorydb.DeleteSnapshotResponse, memorydb.DeleteSnapshotError>
   >
 > {}
-export const DeleteSnapshot = Binding.Service<DeleteSnapshot>(
-  "AWS.MemoryDB.DeleteSnapshot",
-);
+export const DeleteSnapshot = Binding.Service<DeleteSnapshot>("AWS.MemoryDB.DeleteSnapshot");

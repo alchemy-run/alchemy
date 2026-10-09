@@ -1,10 +1,7 @@
 import * as TSW from "@distilled.cloud/aws/timestream-write";
 import * as Layer from "effect/Layer";
 import { makeWriteTableHttpBinding } from "./BindingHttp.ts";
-import {
-  CreateBatchLoadTask,
-  type CreateBatchLoadTaskRequest,
-} from "./CreateBatchLoadTask.ts";
+import { CreateBatchLoadTask, type CreateBatchLoadTaskRequest } from "./CreateBatchLoadTask.ts";
 
 export const CreateBatchLoadTaskHttp = Layer.effect(
   CreateBatchLoadTask,

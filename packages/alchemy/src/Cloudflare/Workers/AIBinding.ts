@@ -41,17 +41,12 @@ export const AIBinding = makeBindingLayer<AI, Ai, AIClient>(AI, (raw) => {
   return self;
 });
 
-const tryPromise = <T>(
-  fn: () => Promise<T>,
-): Effect.Effect<T, WorkersAIError> =>
+const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, WorkersAIError> =>
   Effect.tryPromise({
     try: fn,
     catch: (error) =>
       new WorkersAIError({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unknown Workers AI runtime error",
+        message: error instanceof Error ? error.message : "Unknown Workers AI runtime error",
         cause: error,
       }),
   });

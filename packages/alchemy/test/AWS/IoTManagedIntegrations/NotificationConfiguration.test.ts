@@ -1,18 +1,15 @@
-import * as AWS from "@/AWS";
-import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import {
-  Destination,
-  NotificationConfiguration,
-} from "@/AWS/IoTManagedIntegrations";
-import { Stream } from "@/AWS/Kinesis";
-import { Region } from "@/AWS/Region.ts";
-import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Destination, NotificationConfiguration } from "@/AWS/IoTManagedIntegrations";
+import { Stream } from "@/AWS/Kinesis";
+import { Region } from "@/AWS/Region.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,17 +37,16 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
 );
 
-class ConfigurationStillExists extends Data.TaggedError(
-  "ConfigurationStillExists",
-)<{ readonly eventType: string }> {}
+class ConfigurationStillExists extends Data.TaggedError("ConfigurationStillExists")<{
+  readonly eventType: string;
+}> {}
 
 const assertConfigurationGone = (eventType: string) =>
   mi.getNotificationConfiguration({ EventType: eventType }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ConfigurationStillExists({ eventType })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ConfigurationStillExists({ eventType }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ConfigurationStillExists",
@@ -107,9 +103,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
           const routing = yield* NotificationConfiguration("Routing", {
             eventType: "DEVICE_LIFE_CYCLE",
             destinationName:
-              target === "A"
-                ? destinationA.destinationName
-                : destinationB.destinationName,
+              target === "A" ? destinationA.destinationName : destinationB.destinationName,
             tags: { fixture: "iot-mi-notification-configuration" },
           });
           return { routing, destinationA, destinationB };
@@ -130,9 +124,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
 
       // Retarget the configuration at destination B in place (no replace —
       // the event type is unchanged).
-      const { routing: updated, destinationB } = yield* stack.deploy(
-        makeStack("B"),
-      );
+      const { routing: updated, destinationB } = yield* stack.deploy(makeStack("B"));
       expect(updated.eventType).toBe("DEVICE_LIFE_CYCLE");
       expect(updated.destinationName).toBe(destinationB.destinationName);
       const retargeted = yield* mi.getNotificationConfiguration({
@@ -143,5 +135,14 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       yield* stack.destroy();
       yield* assertConfigurationGone("DEVICE_LIFE_CYCLE");
     }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:iotmanagedintegrations",
+      "provider:aws:kinesis",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

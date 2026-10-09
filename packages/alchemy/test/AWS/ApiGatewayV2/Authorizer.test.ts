@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,18 +23,15 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const api = yield* AWS.ApiGatewayV2.Api("AuthApi", {});
-            const authorizer = yield* AWS.ApiGatewayV2.Authorizer(
-              "JwtAuthorizer",
-              {
-                api,
-                authorizerType: "JWT",
-                identitySource: ["$request.header.Authorization"],
-                jwtConfiguration: {
-                  Issuer: ISSUER,
-                  Audience: audience,
-                },
+            const authorizer = yield* AWS.ApiGatewayV2.Authorizer("JwtAuthorizer", {
+              api,
+              authorizerType: "JWT",
+              identitySource: ["$request.header.Authorization"],
+              jwtConfiguration: {
+                Issuer: ISSUER,
+                Audience: audience,
               },
-            );
+            });
             return {
               apiId: api.apiId,
               authorizerId: authorizer.authorizerId,
@@ -63,10 +60,7 @@ test.provider(
         ApiId: out.apiId,
         AuthorizerId: out.authorizerId,
       });
-      expect(afterUpdate.JwtConfiguration?.Audience).toEqual([
-        "aud-1",
-        "aud-2",
-      ]);
+      expect(afterUpdate.JwtConfiguration?.Audience).toEqual(["aud-1", "aud-2"]);
 
       yield* stack.destroy();
 
@@ -77,11 +71,12 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "still-exists" as const),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed("deleted" as const),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed("deleted" as const)),
         );
       expect(gone).toBe("deleted");
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "live"],
+    timeout: 240_000,
+  },
 );

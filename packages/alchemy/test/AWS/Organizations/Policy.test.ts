@@ -1,14 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  normalizePolicyDocument,
-  type ServiceControlPolicyDocument,
-} from "@/AWS/IAM/Policy.ts";
-import { Policy } from "@/AWS/Organizations";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { normalizePolicyDocument, type ServiceControlPolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { Policy } from "@/AWS/Organizations";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,25 +15,28 @@ const { test } = Test.make({ providers: AWS.providers() });
 // account, AWS-managed SCPs like `FullAWSAccess` appear; otherwise `list()`
 // degrades to `[]` via the typed `AWSOrganizationsNotInUseException` /
 // `AccessDeniedException` catches, so the assertions hold without deploying.
-test.provider("list enumerates organization policies", (stack) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Policy);
-    const all = yield* provider.list();
+test.provider(
+  "list enumerates organization policies",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Policy);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    for (const policy of all) {
-      expect(typeof policy.policyId).toBe("string");
-      expect(policy.policyId.length).toBeGreaterThan(0);
-      expect(typeof policy.policyArn).toBe("string");
-      expect(policy.policyArn.startsWith("arn:aws")).toBe(true);
-      expect(typeof policy.name).toBe("string");
-      expect(policy.document).toBeDefined();
-      expect(policy.tags).toBeDefined();
-    }
+      for (const policy of all) {
+        expect(typeof policy.policyId).toBe("string");
+        expect(policy.policyId.length).toBeGreaterThan(0);
+        expect(typeof policy.policyArn).toBe("string");
+        expect(policy.policyArn.startsWith("arn:aws")).toBe(true);
+        expect(typeof policy.name).toBe("string");
+        expect(policy.document).toBeDefined();
+        expect(policy.tags).toBeDefined();
+      }
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
 );
 
 // PolicyDocument adoption: a typed `ServiceControlPolicyDocument` deploys, the
@@ -95,9 +95,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       expect(created.policyId).toBeTruthy();
       expect(created.type).toBe("SERVICE_CONTROL_POLICY");
       // The typed attribute round-trips the typed document.
-      expect(normalizePolicyDocument(created.document)).toBe(
-        normalizePolicyDocument(document),
-      );
+      expect(normalizePolicyDocument(created.document)).toBe(normalizePolicyDocument(document));
 
       // Out-of-band verification via distilled: the stored content is
       // equivalent to the typed document.
@@ -114,22 +112,19 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const redeployed = yield* deployPolicy;
       expect(redeployed.policyId).toBe(created.policyId);
       expect(redeployed.policyArn).toBe(created.policyArn);
-      expect(normalizePolicyDocument(redeployed.document)).toBe(
-        normalizePolicyDocument(document),
-      );
+      expect(normalizePolicyDocument(redeployed.document)).toBe(normalizePolicyDocument(document));
 
       yield* stack.destroy();
 
       // Typed wait-until-gone: the policy is deleted after destroy.
-      const gone = yield* organizations
-        .describePolicy({ PolicyId: created.policyId })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("PolicyNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-        );
+      const gone = yield* organizations.describePolicy({ PolicyId: created.policyId }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:organizations", "live"],
+    timeout: 240_000,
+  },
 );

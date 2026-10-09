@@ -29,10 +29,7 @@ export interface DescribeReplicationInstanceTaskLogs extends Binding.Service<
     instance: ReplicationInstance,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        dms.DescribeReplicationInstanceTaskLogsMessage,
-        "ReplicationInstanceArn"
-      >,
+      request?: Omit<dms.DescribeReplicationInstanceTaskLogsMessage, "ReplicationInstanceArn">,
     ) => Effect.Effect<
       dms.DescribeReplicationInstanceTaskLogsResponse,
       dms.DescribeReplicationInstanceTaskLogsError

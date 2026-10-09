@@ -2,7 +2,6 @@ import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -125,33 +124,30 @@ export const OperationSettingProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          schemaValidation.listSettingOperations
-            .pages({ zoneId: zone.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    // An operation with no override reports a nullish action;
-                    // skip it so the result mirrors what `read` returns.
-                    .filter((op) => op.mitigationAction != null)
-                    .map((op) =>
-                      toAttributes(zone.id, {
-                        operationId: op.operationId,
-                        // Distilled widens the generated enum to an open union.
-                        mitigationAction:
-                          op.mitigationAction as OperationMitigationAction,
-                      }),
-                    ),
-                ),
+          schemaValidation.listSettingOperations.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  // An operation with no override reports a nullish action;
+                  // skip it so the result mirrors what `read` returns.
+                  .filter((op) => op.mitigationAction != null)
+                  .map((op) =>
+                    toAttributes(zone.id, {
+                      operationId: op.operationId,
+                      // Distilled widens the generated enum to an open union.
+                      mitigationAction: op.mitigationAction as OperationMitigationAction,
+                    }),
+                  ),
               ),
-              // A zone with no API Shield / schema-validation entitlement
-              // rejects the route — skip it, keep the rest. (Transient
-              // code-10000 "Authentication error" blips under concurrency are
-              // retried globally by the Cloudflare retry policy, so they never
-              // reach here as a real failure.)
-              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
             ),
+            // A zone with no API Shield / schema-validation entitlement
+            // rejects the route — skip it, keep the rest. (Transient
+            // code-10000 "Authentication error" blips under concurrency are
+            // retried globally by the Cloudflare retry policy, so they never
+            // reach here as a real failure.)
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -178,9 +174,7 @@ export const OperationSettingProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const operationId =
         output?.operationId ??
         (typeof olds?.operationId === "string" ? olds.operationId : undefined);
@@ -248,8 +242,7 @@ const getOperationSetting = (zoneId: string, operationId: string) =>
         : {
             operationId: setting.operationId,
             // Distilled widens the generated enum to an open union.
-            mitigationAction:
-              setting.mitigationAction as OperationMitigationAction,
+            mitigationAction: setting.mitigationAction as OperationMitigationAction,
           },
     ),
     Effect.catchTag("OperationNotFound", () => Effect.succeed(undefined)),

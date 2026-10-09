@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import { toWireDays, toWireHours } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -173,10 +168,7 @@ export interface Table extends Resource<
  */
 export const Table = Resource<Table>("AWS.Timestream.Table");
 
-const createTableName = (
-  id: string,
-  props: { tableName?: string | undefined },
-) =>
+const createTableName = (id: string, props: { tableName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.tableName) {
       return props.tableName;
@@ -186,8 +178,7 @@ const createTableName = (
 
 const toTagRecord = (
   tags: Array<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 /**
  * Convert the alchemy-shaped {@link TableRetentionProperties} (Duration
@@ -199,36 +190,21 @@ const toWireRetention = (
   retention === undefined
     ? undefined
     : {
-        MemoryStoreRetentionPeriodInHours: toWireHours(
-          retention.memoryStoreRetention,
-        )!,
-        MagneticStoreRetentionPeriodInDays: toWireDays(
-          retention.magneticStoreRetention,
-        )!,
+        MemoryStoreRetentionPeriodInHours: toWireHours(retention.memoryStoreRetention)!,
+        MagneticStoreRetentionPeriodInDays: toWireDays(retention.magneticStoreRetention)!,
       };
 
-const readTable = Effect.fn(function* (
-  databaseName: string,
-  tableName: string,
-) {
+const readTable = Effect.fn(function* (databaseName: string, tableName: string) {
   const response = yield* withWriteEndpoint(
     TSW.describeTable({ DatabaseName: databaseName, TableName: tableName }),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!response?.Table) {
     return undefined;
   }
   const table = response.Table;
   const tagsResponse = yield* withWriteEndpoint(
     TSW.listTagsForResource({ ResourceARN: table.Arn! }),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!tagsResponse) {
     return undefined;
   }
@@ -278,20 +254,15 @@ export const TableProvider = () =>
               (ref) => readTable(ref.databaseName, ref.tableName),
               { concurrency: 10 },
             );
-            return hydrated.filter(
-              (attrs): attrs is Table["Attributes"] => attrs !== undefined,
-            );
+            return hydrated.filter((attrs): attrs is Table["Attributes"] => attrs !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const databaseName = output?.databaseName ?? olds?.databaseName;
           if (!databaseName) return undefined;
-          const tableName =
-            output?.tableName ?? (yield* createTableName(id, olds ?? {}));
+          const tableName = output?.tableName ?? (yield* createTableName(id, olds ?? {}));
           const state = yield* readTable(databaseName, tableName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds = {} }) {
           if (!isResolved(news)) return;
@@ -305,14 +276,11 @@ export const TableProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news?.databaseName) {
-            return yield* Effect.fail(
-              new Error("Timestream Table requires a databaseName"),
-            );
+            return yield* Effect.fail(new Error("Timestream Table requires a databaseName"));
           }
           const { accountId, region } = yield* AWSEnvironment.current;
           const databaseName = news.databaseName;
-          const tableName =
-            output?.tableName ?? (yield* createTableName(id, news));
+          const tableName = output?.tableName ?? (yield* createTableName(id, news));
           const tableArn =
             `arn:aws:timestream:${region}:${accountId}:database/${databaseName}/table/${tableName}` as TableArn;
           const internalTags = yield* createInternalTags(id);
@@ -340,9 +308,7 @@ export const TableProvider = () =>
             yield* session.note(`Creating table ${tableName}...`);
             state = yield* readTable(databaseName, tableName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created table ${tableName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created table ${tableName}`));
             }
           }
 
@@ -355,10 +321,7 @@ export const TableProvider = () =>
               desiredRetention.MemoryStoreRetentionPeriodInHours ||
               state.retentionProperties?.MagneticStoreRetentionPeriodInDays !==
                 desiredRetention.MagneticStoreRetentionPeriodInDays);
-          if (
-            retentionDrifted ||
-            news.magneticStoreWriteProperties !== undefined
-          ) {
+          if (retentionDrifted || news.magneticStoreWriteProperties !== undefined) {
             yield* withWriteEndpoint(
               TSW.updateTable({
                 DatabaseName: databaseName,
@@ -391,9 +354,7 @@ export const TableProvider = () =>
 
           const final = yield* readTable(databaseName, tableName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled table ${tableName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled table ${tableName}`));
           }
           return final;
         }),
@@ -403,9 +364,7 @@ export const TableProvider = () =>
               DatabaseName: output.databaseName,
               TableName: output.tableName,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

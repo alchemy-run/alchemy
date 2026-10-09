@@ -30,12 +30,7 @@ export interface DescribeQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudtrail.DescribeQueryRequest, "EventDataStore">,
-    ) => Effect.Effect<
-      cloudtrail.DescribeQueryResponse,
-      cloudtrail.DescribeQueryError
-    >
+    ) => Effect.Effect<cloudtrail.DescribeQueryResponse, cloudtrail.DescribeQueryError>
   >
 > {}
-export const DescribeQuery = Binding.Service<DescribeQuery>(
-  "AWS.CloudTrail.DescribeQuery",
-);
+export const DescribeQuery = Binding.Service<DescribeQuery>("AWS.CloudTrail.DescribeQuery");

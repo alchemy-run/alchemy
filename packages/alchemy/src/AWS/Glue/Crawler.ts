@@ -129,10 +129,7 @@ export interface CrawlerProps {
     /**
      * `CRAWL_EVERYTHING`, `CRAWL_NEW_FOLDERS_ONLY`, or `CRAWL_EVENT_MODE`.
      */
-    recrawlBehavior?:
-      | "CRAWL_EVERYTHING"
-      | "CRAWL_NEW_FOLDERS_ONLY"
-      | "CRAWL_EVENT_MODE";
+    recrawlBehavior?: "CRAWL_EVERYTHING" | "CRAWL_NEW_FOLDERS_ONLY" | "CRAWL_EVENT_MODE";
   };
   /**
    * Crawler configuration JSON string (grouping/partitions behavior).
@@ -239,18 +236,13 @@ export const CrawlerProvider = () =>
         id: string,
         props: { crawlerName?: string | undefined },
       ) {
-        return (
-          props.crawlerName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.crawlerName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getCrawler({ Name: name }).pipe(
           Effect.map((r) => r.Crawler),
-          Effect.catchTag("EntityNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -260,9 +252,7 @@ export const CrawlerProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* glue.getCrawlers
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* glue.getCrawlers.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Crawlers ?? [])
               .filter((c) => c.Name !== undefined)
@@ -277,8 +267,7 @@ export const CrawlerProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.crawlerName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.crawlerName ?? (yield* createName(id, olds ?? {}));
           const crawler = yield* observe(name);
           if (crawler?.Name === undefined) return undefined;
           const arn = crawlerArn(region, accountId, crawler.Name);
@@ -333,27 +322,27 @@ export const CrawlerProvider = () =>
 
           // 2. ENSURE / 3. SYNC
           if (crawler === undefined) {
-            yield* retryWhileCrawlerTargetNotReady(
-              retryWhileRoleNotAssumable(
-                glue.createCrawler({
-                  Name: name,
-                  ...common,
-                  Tags: desiredTags,
-                }),
-              ),
-            ).pipe(
-              Effect.catchTag("AlreadyExistsException", () => Effect.void),
-            );
+            yield* glue
+              .createCrawler({
+                Name: name,
+                ...common,
+                Tags: desiredTags,
+              })
+              .pipe(
+                retryWhileRoleNotAssumable,
+                retryWhileCrawlerTargetNotReady,
+                Effect.catchTag("AlreadyExistsException", () => Effect.void),
+              );
           } else {
             // updateCrawler fails with CrawlerRunningException mid-crawl and
             // with GlueRoleNotAssumable during IAM propagation.
-            yield* retryWhileCrawlerRunning(
-              retryWhileCrawlerTargetNotReady(
-                retryWhileRoleNotAssumable(
-                  glue.updateCrawler({ Name: name, ...common }),
-                ),
-              ),
-            );
+            yield* glue
+              .updateCrawler({ Name: name, ...common })
+              .pipe(
+                retryWhileRoleNotAssumable,
+                retryWhileCrawlerTargetNotReady,
+                retryWhileCrawlerRunning,
+              );
           }
 
           // 3b. SYNC TAGS
@@ -396,8 +385,7 @@ export const CrawlerProvider = () =>
           // interrupted deletes can resume from RUNNING/STOPPING safely.
           crawler = yield* Effect.repeat(observe(name), {
             schedule: Schedule.fixed("2 seconds"),
-            until: (current) =>
-              current === undefined || current.State === "READY",
+            until: (current) => current === undefined || current.State === "READY",
             times: 15,
           });
           if (crawler === undefined) return;
@@ -412,11 +400,9 @@ export const CrawlerProvider = () =>
             times: 15,
           });
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new glue.OperationTimeoutException({
-                message: `crawler ${name} remained visible after delete for 30 seconds`,
-              }),
-            );
+            return yield* glue.OperationTimeoutException.make({
+              message: `crawler ${name} remained visible after delete for 30 seconds`,
+            });
           }
         }),
       });

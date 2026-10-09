@@ -1,22 +1,22 @@
+import * as Effect from "effect/Effect";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as Layer from "effect/Layer";
 /**
  * The Git host with its pack hasher on dynamically loaded Workers (DESIGN
  * §22.12): the same building-block assembly as `stack.ts`, with
  * `HasherWorkerLoader` in place of the in-process hasher.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  Handlers,
+  ApiHandlersLive,
   ReposDurableObject,
   RegistryDurableObject,
-  Server,
 } from "@/Git/index.ts";
-import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
-
+import * as Alchemy from "@/index.ts";
+import { TestRoutes } from "./http.ts";
 import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 
@@ -24,9 +24,8 @@ const GitObjects = Cloudflare.R2.Bucket("GitLoaderObjects", {
   forceDestroy: true,
 });
 
-const GitLive = Server.layer(TestApi).pipe(
-  Layer.provide(Handlers),
-  Layer.provide(TestAuthLive),
+const GitLive = TestRoutes.pipe(
+  Layer.provide(ApiHandlersLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherWorkerLoader()),
@@ -41,9 +40,9 @@ export default class LoaderGitHost extends Cloudflare.Worker<LoaderGitHost>()(
     observability: { enabled: true },
   },
   Effect.gen(function* () {
-    const git = yield* Server;
-    return { fetch: git.fetch };
-  }).pipe(Effect.provide(GitLive)),
+    const fetch = yield* HttpRouter.toHttpEffect(GitLive);
+    return { fetch };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 
 export const makeLoaderTestStack = (name: string) =>

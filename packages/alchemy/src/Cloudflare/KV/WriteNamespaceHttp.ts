@@ -22,8 +22,7 @@ export const WriteNamespaceHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpKVNamespaceBinding({
       permissionGroups: ["Workers KV Storage Write"],
-      makeClient: (token, namespaceId) =>
-        makeWriteKVHttpClient(makeKVAuth(token), namespaceId),
+      makeClient: (token, namespaceId) => makeWriteKVHttpClient(makeKVAuth(token), namespaceId),
     }),
   ),
 );
@@ -65,9 +64,7 @@ export const makeWriteKVHttpClient = (
     delete: ((key: string) =>
       scope.pipe(
         Effect.flatMap(({ accountId, namespaceId }) =>
-          authorize(
-            kv.deleteNamespaceValue({ accountId, namespaceId, keyName: key }),
-          ),
+          authorize(kv.deleteNamespaceValue({ accountId, namespaceId, keyName: key })),
         ),
         Effect.mapError(toKVNamespaceError),
         Effect.asVoid,
@@ -92,12 +89,6 @@ const toKVBody = (
     }
     const view = value as ArrayBufferView;
     const bytes = new Uint8Array(view.byteLength);
-    bytes.set(
-      new Uint8Array(
-        view.buffer as ArrayBuffer,
-        view.byteOffset,
-        view.byteLength,
-      ),
-    );
+    bytes.set(new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength));
     return new Blob([bytes]);
   });

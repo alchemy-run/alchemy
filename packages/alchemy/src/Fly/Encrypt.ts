@@ -45,6 +45,7 @@ export interface EncryptResult {
  * ```
  *
  * @binding
+ * @product Secret Key
  */
 export interface Encrypt extends Binding.Service<
   Encrypt,
@@ -52,9 +53,7 @@ export interface Encrypt extends Binding.Service<
   (
     key: SecretKey,
   ) => Effect.Effect<
-    (
-      request: EncryptRequest,
-    ) => Effect.Effect<EncryptResult, EncryptSecretKeyError, RuntimeContext>
+    (request: EncryptRequest) => Effect.Effect<EncryptResult, EncryptSecretKeyError, RuntimeContext>
   >
 > {}
 

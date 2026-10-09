@@ -39,10 +39,7 @@ export interface AbortMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: AbortMultipartUploadRequest,
-    ) => Effect.Effect<
-      glacier.AbortMultipartUploadResponse,
-      glacier.AbortMultipartUploadError
-    >
+    ) => Effect.Effect<glacier.AbortMultipartUploadResponse, glacier.AbortMultipartUploadError>
   >
 > {}
 export const AbortMultipartUpload = Binding.Service<AbortMultipartUpload>(

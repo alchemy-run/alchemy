@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import {
-  hostAwsAccess,
-  withRuntimeCredentials,
-} from "../Lambda/BindingHttp.ts";
+import { hostAwsAccess, withRuntimeCredentials } from "../Lambda/BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 /**
@@ -26,12 +23,7 @@ import type { Bucket } from "./Bucket.ts";
  * Genuinely-different bindings stay bespoke: `PresignGetObject` /
  * `PresignPutObject` (SigV4 presigners, not API operations).
  */
-export const makeBucketHttpBinding = <
-  I extends { Bucket?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.S3.GetObject`. */
   tag: string;
   /**
@@ -55,7 +47,8 @@ export const makeBucketHttpBinding = <
    * Additionally grant `s3:ListBucket` on the bucket ARN. Required by
    * object-read actions so a missing key surfaces as `NoSuchKey`/`NotFound`
    * (404) instead of `AccessDenied` (403).
-   * @see https://repost.aws/articles/ARe3OTZ3SCTWWqGtiJ6aHn8Q/why-does-s-3-return-403-instead-of-404-when-the-object-doesnt-exist
+   * @see https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html
+   * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html
    */
   listBucket?: boolean;
 }) =>

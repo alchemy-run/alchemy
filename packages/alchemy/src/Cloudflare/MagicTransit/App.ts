@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -47,13 +46,7 @@ export interface MagicAppAttributes {
   ipSubnets: string[] | undefined;
 }
 
-export type MagicApp = Resource<
-  TypeId,
-  MagicAppProps,
-  MagicAppAttributes,
-  never,
-  Providers
->;
+export type MagicApp = Resource<TypeId, MagicAppProps, MagicAppAttributes, never, Providers>;
 
 /**
  * A custom Magic WAN app — a named set of hostnames and/or IP subnets used
@@ -124,9 +117,7 @@ export const MagicAppProvider = () =>
 
       // Observe — there is no getApp endpoint; scan the list by cached id
       // first, then by name.
-      let observed = output?.appId
-        ? yield* getApp(accountId, output.appId)
-        : undefined;
+      let observed = output?.appId ? yield* getApp(accountId, output.appId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
@@ -148,10 +139,8 @@ export const MagicAppProvider = () =>
       const dirty =
         (observed.name ?? undefined) !== news.name ||
         (observed.type ?? undefined) !== news.type ||
-        (news.hostnames !== undefined &&
-          !sameList(observed.hostnames, news.hostnames)) ||
-        (news.ipSubnets !== undefined &&
-          !sameList(observed.ipSubnets, news.ipSubnets));
+        (news.hostnames !== undefined && !sameList(observed.hostnames, news.hostnames)) ||
+        (news.ipSubnets !== undefined && !sameList(observed.ipSubnets, news.ipSubnets));
       if (dirty) {
         const updated = yield* magicTransit.patchApp({
           accountId,
@@ -186,9 +175,7 @@ export const MagicAppProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? [])
-              .filter(isAccountApp)
-              .map((app) => toAttributes(app, accountId)),
+            (page.result ?? []).filter(isAccountApp).map((app) => toAttributes(app, accountId)),
           ),
         ),
         Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
@@ -206,9 +193,8 @@ interface ObservedApp {
   ipSubnets?: string[] | null;
 }
 
-const isAccountApp = (
-  app: magicTransit.ListAppsResponse["result"][number],
-): app is ObservedApp => "accountAppId" in app;
+const isAccountApp = (app: magicTransit.ListAppsResponse["result"][number]): app is ObservedApp =>
+  "accountAppId" in app;
 
 /**
  * Read an account app by id via the list endpoint (there is no getApp).
@@ -240,13 +226,9 @@ const findByName = (accountId: string, name: string) =>
 const sameList = (
   a: readonly string[] | null | undefined,
   b: readonly string[] | undefined,
-): boolean =>
-  [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
+): boolean => [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
 
-const toAttributes = (
-  app: ObservedApp,
-  accountId: string,
-): MagicAppAttributes => ({
+const toAttributes = (app: ObservedApp, accountId: string): MagicAppAttributes => ({
   appId: app.accountAppId,
   accountId,
   name: app.name ?? "",

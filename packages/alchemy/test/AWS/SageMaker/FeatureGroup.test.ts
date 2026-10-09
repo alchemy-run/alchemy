@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { FeatureGroup } from "@/AWS/SageMaker";
-import * as Test from "@/Test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { FeatureGroup } from "@/AWS/SageMaker";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,6 +20,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"] },
 );
 
 const findFeatureGroup = (name: string) =>
@@ -71,9 +72,7 @@ test.provider(
 
       // delete waits until the group is fully gone
       yield* stack.destroy();
-      expect(
-        yield* findFeatureGroup(featureGroup.featureGroupName),
-      ).toBeUndefined();
+      expect(yield* findFeatureGroup(featureGroup.featureGroupName)).toBeUndefined();
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"], timeout: 240_000 },
 );

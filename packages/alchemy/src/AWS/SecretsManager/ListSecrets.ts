@@ -30,13 +30,8 @@ export interface ListSecrets extends Binding.Service<
   () => Effect.Effect<
     (
       request?: secretsmanager.ListSecretsRequest,
-    ) => Effect.Effect<
-      secretsmanager.ListSecretsResponse,
-      secretsmanager.ListSecretsError
-    >
+    ) => Effect.Effect<secretsmanager.ListSecretsResponse, secretsmanager.ListSecretsError>
   >
 > {}
 
-export const ListSecrets = Binding.Service<ListSecrets>(
-  "AWS.SecretsManager.ListSecrets",
-);
+export const ListSecrets = Binding.Service<ListSecrets>("AWS.SecretsManager.ListSecrets");

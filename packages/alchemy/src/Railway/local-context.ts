@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import {
-  hashDockerBuildInputs,
-  selectDockerBuildContext,
-} from "../Docker/BuildHash.ts";
+import { hashDockerBuildInputs, selectDockerBuildContext } from "../Docker/BuildHash.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { tarGzipDirectory } from "../Util/tarGzip.ts";
@@ -26,9 +23,9 @@ export class ServiceImageOrMainRequired extends Data.TaggedError(
   "Railway.ServiceImageOrMainRequired",
 )<{ message: string }> {}
 
-export class ServiceSourceInvalid extends Data.TaggedError(
-  "Railway.ServiceSourceInvalid",
-)<{ message: string }> {}
+export class ServiceSourceInvalid extends Data.TaggedError("Railway.ServiceSourceInvalid")<{
+  message: string;
+}> {}
 
 export class ServiceDockerfilePathInvalid extends Data.TaggedError(
   "Railway.ServiceDockerfilePathInvalid",
@@ -54,9 +51,10 @@ export class ServiceContextPathUnsupported extends Data.TaggedError(
   "Railway.ServiceContextPathUnsupported",
 )<{ path: string }> {}
 
-export class ServiceContextTooLarge extends Data.TaggedError(
-  "Railway.ServiceContextTooLarge",
-)<{ limit: number; size: number }> {}
+export class ServiceContextTooLarge extends Data.TaggedError("Railway.ServiceContextTooLarge")<{
+  limit: number;
+  size: number;
+}> {}
 
 export type RailwayServiceSource =
   | { readonly mode: "main"; readonly main: string }
@@ -91,8 +89,7 @@ export const resolveRailwayServiceSource = Effect.fn(function* (props: {
 
   if (modes.length === 0) {
     return yield* new ServiceImageOrMainRequired({
-      message:
-        "Railway.Service requires `image`, `main`, `context`, or `repo`.",
+      message: "Railway.Service requires `image`, `main`, `context`, or `repo`.",
     });
   }
   if (modes.length !== 1) {
@@ -129,8 +126,7 @@ const resolveBuild = Effect.fn(function* (source: RailwayLocalContextSource) {
   if (dockerfilePath.length === 0 || path.isAbsolute(dockerfilePath)) {
     return yield* new ServiceDockerfilePathInvalid({
       dockerfilePath,
-      message:
-        "Railway.Service `dockerfilePath` must be a non-empty path relative to `context`",
+      message: "Railway.Service `dockerfilePath` must be a non-empty path relative to `context`",
     });
   }
   if (!(yield* fs.exists(context))) {
@@ -188,8 +184,7 @@ const resolveBuild = Effect.fn(function* (source: RailwayLocalContextSource) {
   };
 });
 
-const paddedTarBytes = (size: number) =>
-  Math.ceil(size / TAR_BLOCK_BYTES) * TAR_BLOCK_BYTES;
+const paddedTarBytes = (size: number) => Math.ceil(size / TAR_BLOCK_BYTES) * TAR_BLOCK_BYTES;
 
 const fitsUstarPath = (relativePath: string) => {
   if (relativePath.length <= 100) return true;
@@ -201,20 +196,12 @@ const fitsUstarPath = (relativePath: string) => {
   return false;
 };
 
-const tarEntryBytes = (
-  relativePath: string,
-  type: "Directory" | "File",
-  size: number,
-) => {
+const tarEntryBytes = (relativePath: string, type: "Directory" | "File", size: number) => {
   const tarPath = type === "Directory" ? `${relativePath}/` : relativePath;
   const longNameBytes = fitsUstarPath(tarPath)
     ? 0
     : TAR_BLOCK_BYTES + paddedTarBytes(tarPath.length + 1);
-  return (
-    longNameBytes +
-    TAR_BLOCK_BYTES +
-    (type === "File" ? paddedTarBytes(size) : 0)
-  );
+  return longNameBytes + TAR_BLOCK_BYTES + (type === "File" ? paddedTarBytes(size) : 0);
 };
 
 const checkContextLimit = (size: number, entries: number) =>
@@ -268,10 +255,7 @@ const selectedEntries = Effect.fn(function* (selected: {
   return entries;
 });
 
-const codeHash = Effect.fn(function* (input: {
-  context: string;
-  dockerfilePath: string;
-}) {
+const codeHash = Effect.fn(function* (input: { context: string; dockerfilePath: string }) {
   const contextHash = yield* hashDockerBuildInputs(
     {
       context: input.context,
@@ -286,9 +270,7 @@ const codeHash = Effect.fn(function* (input: {
   })).slice(0, 16);
 });
 
-export const hashRailwayLocalContext = Effect.fn(function* (
-  source: RailwayLocalContextSource,
-) {
+export const hashRailwayLocalContext = Effect.fn(function* (source: RailwayLocalContextSource) {
   const { build, selected } = yield* resolveBuild(source);
   yield* selectedEntries(selected);
   return yield* codeHash({
@@ -297,9 +279,7 @@ export const hashRailwayLocalContext = Effect.fn(function* (
   });
 });
 
-export const prepareRailwayLocalContext = Effect.fn(function* (
-  source: RailwayLocalContextSource,
-) {
+export const prepareRailwayLocalContext = Effect.fn(function* (source: RailwayLocalContextSource) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const { selected } = yield* resolveBuild(source);

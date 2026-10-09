@@ -27,10 +27,7 @@ export interface GetAdministratorAccount extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetAdministratorAccountRequest,
-    ) => Effect.Effect<
-      macie2.GetAdministratorAccountResponse,
-      macie2.GetAdministratorAccountError
-    >
+    ) => Effect.Effect<macie2.GetAdministratorAccountResponse, macie2.GetAdministratorAccountError>
   >
 > {}
 export const GetAdministratorAccount = Binding.Service<GetAdministratorAccount>(

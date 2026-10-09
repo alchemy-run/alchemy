@@ -28,10 +28,7 @@ export interface ListArchiveExports extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.ListArchiveExportsRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.ListArchiveExportsResponse,
-      mm.ListArchiveExportsError
-    >
+    ) => Effect.Effect<mm.ListArchiveExportsResponse, mm.ListArchiveExportsError>
   >
 > {}
 export const ListArchiveExports = Binding.Service<ListArchiveExports>(

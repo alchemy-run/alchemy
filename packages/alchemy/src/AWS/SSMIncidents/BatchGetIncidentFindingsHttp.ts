@@ -1,7 +1,7 @@
 import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Layer from "effect/Layer";
-import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 import { BatchGetIncidentFindings } from "./BatchGetIncidentFindings.ts";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 export const BatchGetIncidentFindingsHttp = Layer.effect(
   BatchGetIncidentFindings,

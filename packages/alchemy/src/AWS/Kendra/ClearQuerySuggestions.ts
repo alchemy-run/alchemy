@@ -28,10 +28,7 @@ export interface ClearQuerySuggestions extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kendra.ClearQuerySuggestionsResponse,
-      kendra.ClearQuerySuggestionsError
-    >
+    () => Effect.Effect<kendra.ClearQuerySuggestionsResponse, kendra.ClearQuerySuggestionsError>
   >
 > {}
 export const ClearQuerySuggestions = Binding.Service<ClearQuerySuggestions>(

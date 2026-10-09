@@ -99,9 +99,7 @@ export interface ContactInformation extends Resource<
  *
  * @resource
  */
-export const ContactInformation = Resource<ContactInformation>(
-  "AWS.Account.ContactInformation",
-);
+export const ContactInformation = Resource<ContactInformation>("AWS.Account.ContactInformation");
 
 export const ContactInformationProvider = () =>
   Provider.effect(
@@ -125,13 +123,9 @@ export const ContactInformationProvider = () =>
       const observe = (accountId: string | undefined) =>
         account.getContactInformation({ AccountId: accountId }).pipe(
           Effect.map((r) =>
-            r.ContactInformation
-              ? toAttributes(r.ContactInformation)
-              : undefined,
+            r.ContactInformation ? toAttributes(r.ContactInformation) : undefined,
           ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -188,10 +182,7 @@ export const ContactInformationProvider = () =>
           };
         }),
         // Account-global singleton: return the one contact if it exists.
-        list: () =>
-          observe(undefined).pipe(
-            Effect.map((contact) => (contact ? [contact] : [])),
-          ),
+        list: () => observe(undefined).pipe(Effect.map((contact) => (contact ? [contact] : []))),
         // AWS does not allow deleting the primary contact of an account —
         // destroy just stops managing it and leaves the last value in place.
         delete: Effect.fn(function* () {}),

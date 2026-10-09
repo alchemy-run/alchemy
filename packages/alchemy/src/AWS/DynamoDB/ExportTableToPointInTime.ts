@@ -48,7 +48,6 @@ export interface ExportTableToPointInTime extends Binding.Service<
     >
   >
 > {}
-export const ExportTableToPointInTime =
-  Binding.Service<ExportTableToPointInTime>(
-    "AWS.DynamoDB.ExportTableToPointInTime",
-  );
+export const ExportTableToPointInTime = Binding.Service<ExportTableToPointInTime>(
+  "AWS.DynamoDB.ExportTableToPointInTime",
+);

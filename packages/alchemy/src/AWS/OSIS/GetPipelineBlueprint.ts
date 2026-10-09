@@ -31,10 +31,7 @@ export interface GetPipelineBlueprint extends Binding.Service<
   () => Effect.Effect<
     (
       request: osis.GetPipelineBlueprintRequest,
-    ) => Effect.Effect<
-      osis.GetPipelineBlueprintResponse,
-      osis.GetPipelineBlueprintError
-    >
+    ) => Effect.Effect<osis.GetPipelineBlueprintResponse, osis.GetPipelineBlueprintError>
   >
 > {}
 export const GetPipelineBlueprint = Binding.Service<GetPipelineBlueprint>(

@@ -78,9 +78,7 @@ export interface ResourcePolicy extends Resource<
  *
  * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.XRay.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.XRay.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -110,10 +108,7 @@ export const ResourcePolicyProvider = () =>
         props: Pick<ResourcePolicyProps, "policyName">,
       ) {
         // X-Ray policy names are limited to 128 characters.
-        return (
-          props.policyName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.policyName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       // X-Ray has no GetResourcePolicy — observe by enumerating the (at
@@ -129,9 +124,7 @@ export const ResourcePolicyProvider = () =>
         stables: ["policyName"],
         list: () =>
           Effect.gen(function* () {
-            const policies = yield* xray.listResourcePolicies
-              .items({})
-              .pipe(Stream.runCollect);
+            const policies = yield* xray.listResourcePolicies.items({}).pipe(Stream.runCollect);
             return Array.from(policies).flatMap((policy) =>
               policy.PolicyName
                 ? [
@@ -144,8 +137,7 @@ export const ResourcePolicyProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const policyName =
-            output?.policyName ?? (yield* createPolicyName(id, olds ?? {}));
+          const policyName = output?.policyName ?? (yield* createPolicyName(id, olds ?? {}));
           const found = yield* observePolicy(policyName);
           if (found === undefined) return undefined;
           // Resource policies are not taggable — ownership is keyed by the
@@ -162,8 +154,7 @@ export const ResourcePolicyProvider = () =>
           // fall through: engine default update logic for the document
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const policyName =
-            output?.policyName ?? (yield* createPolicyName(id, news));
+          const policyName = output?.policyName ?? (yield* createPolicyName(id, news));
 
           // 1. OBSERVE — the live policy list is authoritative.
           const existing = yield* observePolicy(policyName);
@@ -185,15 +176,12 @@ export const ResourcePolicyProvider = () =>
 
           const policy =
             existing?.PolicyDocument !== undefined &&
-            canonicalJson(existing.PolicyDocument) ===
-              canonicalJson(news.policyDocument)
+            canonicalJson(existing.PolicyDocument) === canonicalJson(news.policyDocument)
               ? existing
               : yield* putPolicy(existing?.PolicyRevisionId).pipe(
                   Effect.catchTag("InvalidPolicyRevisionIdException", () =>
                     observePolicy(policyName).pipe(
-                      Effect.flatMap((observed) =>
-                        putPolicy(observed?.PolicyRevisionId),
-                      ),
+                      Effect.flatMap((observed) => putPolicy(observed?.PolicyRevisionId)),
                     ),
                   ),
                 );

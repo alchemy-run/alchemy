@@ -1,24 +1,17 @@
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "@/Artifacts.ts";
-import {
-  makeSourceContext,
-  type SourceHash,
-  type SourceServices,
-} from "@/Cloudflare/Workers/Source.ts";
-import {
-  hashViteInput,
-  makeViteSource,
-} from "@/Cloudflare/Workers/Sources/Vite.ts";
-import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "@/Artifacts.ts";
+import {
+  makeSourceContext,
+  type SourceHash,
+  type SourceServices,
+} from "@/Cloudflare/Workers/Source.ts";
+import { hashViteInput, makeViteSource } from "@/Cloudflare/Workers/Sources/Vite.ts";
+import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -41,10 +34,7 @@ import { cloneFixture } from "../Utils/Fixture.ts";
 // Vite.test.ts.
 // ─────────────────────────────────────────────────────────────────────
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/monorepo-workspace",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/monorepo-workspace");
 
 // Explicit include globs, same discipline as the live Vite tests: the
 // hash stays pinned to fixture sources. The lib workspace is hashed with
@@ -54,10 +44,7 @@ const memoInclude = ["src/**", "vite.config.ts", "package.json"];
 
 const provide = <A, E>(effect: Effect.Effect<A, E, SourceServices>) =>
   effect.pipe(
-    Effect.provideService(
-      Artifacts,
-      makeScopedArtifacts(createArtifactStore(), "test"),
-    ),
+    Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), "test")),
     Effect.provide(NodeServices.layer),
     Effect.scoped,
   );
@@ -87,10 +74,19 @@ const editLib = (libGreeting: string, marker: string) =>
     );
   });
 
-describe("workspace-aware input-hash memo", () => {
-  it.effect(
-    "cross-workspace edits bust the memo; untouched recomputes stay memoized",
-    () =>
+describe(
+  "workspace-aware input-hash memo",
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:website",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+  },
+  () => {
+    it.effect("cross-workspace edits bust the memo; untouched recomputes stay memoized", () =>
       provide(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
@@ -101,11 +97,7 @@ describe("workspace-aware input-hash memo", () => {
           // (see the live test's "../shared") — feed it back the same way
           // the WorkerProvider does from `output.hash.additionalWorkspaces`.
           const hash = () =>
-            hashViteInput(
-              appDir,
-              { include: memoInclude },
-              Effect.succeed(["../lib"]),
-            );
+            hashViteInput(appDir, { include: memoInclude }, Effect.succeed(["../lib"]));
 
           const h1 = yield* hash();
           expect(h1.hash).toBeDefined();
@@ -144,72 +136,63 @@ describe("workspace-aware input-hash memo", () => {
           // Root edits keep busting the memo too, independently of the
           // workspace slot.
           const server = yield* fs.readFileString(appServer);
-          yield* fs.writeFileString(
-            appServer,
-            server.replace("/api/greeting", "/api/greeting-v2"),
-          );
+          yield* fs.writeFileString(appServer, server.replace("/api/greeting", "/api/greeting-v2"));
           const h5 = yield* hash();
           expect(h5.hash).not.toEqual(h1.hash);
         }),
       ),
-  );
+    );
 
-  it.effect(
-    "without the workspace in the hash set, cross-boundary edits are invisible (control)",
-    () =>
-      provide(
-        Effect.gen(function* () {
-          const { appDir, libGreeting } = yield* setup;
+    it.effect(
+      "without the workspace in the hash set, cross-boundary edits are invisible (control)",
+      () =>
+        provide(
+          Effect.gen(function* () {
+            const { appDir, libGreeting } = yield* setup;
 
-          const hash = () =>
-            hashViteInput(appDir, { include: memoInclude }, Effect.succeed([]));
+            const hash = () => hashViteInput(appDir, { include: memoInclude }, Effect.succeed([]));
 
-          const before = yield* hash();
-          yield* editLib(libGreeting, "ws-memo-control-edit");
-          const after = yield* hash();
+            const before = yield* hash();
+            yield* editLib(libGreeting, "ws-memo-control-edit");
+            const after = yield* hash();
 
-          // The control proves the signal in the test above comes from
-          // folding `../lib` into the hash — not from anything under the
-          // Vite root.
-          expect(after.hash).toEqual(before.hash);
-          expect(after.workspaces).toEqual([]);
-        }),
-      ),
-  );
+            // The control proves the signal in the test above comes from
+            // folding `../lib` into the hash — not from anything under the
+            // Vite root.
+            expect(after.hash).toEqual(before.hash);
+            expect(after.workspaces).toEqual([]);
+          }),
+        ),
+    );
 
-  it.effect(
-    "an explicit memo.workspaces array pins the workspace set and still busts on edits",
-    () =>
-      provide(
-        Effect.gen(function* () {
-          const { appDir, libGreeting } = yield* setup;
+    it.effect(
+      "an explicit memo.workspaces array pins the workspace set and still busts on edits",
+      () =>
+        provide(
+          Effect.gen(function* () {
+            const { appDir, libGreeting } = yield* setup;
 
-          const hash = () =>
-            hashViteInput(
-              appDir,
-              {
-                include: memoInclude,
-                workspaces: [{ cwd: "../lib" }],
-              },
-              // With an explicit workspace list the auto-discovered set is
-              // ignored entirely.
-              Effect.succeed(["../does-not-exist"]),
-            );
+            const hash = () =>
+              hashViteInput(
+                appDir,
+                { include: memoInclude, workspaces: [{ cwd: "../lib" }] },
+                // With an explicit workspace list the auto-discovered set is
+                // ignored entirely.
+                Effect.succeed(["../does-not-exist"]),
+              );
 
-          const before = yield* hash();
-          // Pinned workspaces don't persist an auto-discovery list.
-          expect(before.workspaces).toBeUndefined();
+            const before = yield* hash();
+            // Pinned workspaces don't persist an auto-discovery list.
+            expect(before.workspaces).toBeUndefined();
 
-          yield* editLib(libGreeting, "ws-memo-pinned-edit");
-          const after = yield* hash();
-          expect(after.hash).not.toEqual(before.hash);
-        }),
-      ),
-  );
+            yield* editLib(libGreeting, "ws-memo-pinned-edit");
+            const after = yield* hash();
+            expect(after.hash).not.toEqual(before.hash);
+          }),
+        ),
+    );
 
-  it.effect(
-    "the vite source's hash() slots carry the persisted workspaces through diff",
-    () =>
+    it.effect("the vite source's hash() slots carry the persisted workspaces through diff", () =>
       provide(
         Effect.gen(function* () {
           const { appDir, libGreeting } = yield* setup;
@@ -240,11 +223,7 @@ describe("workspace-aware input-hash memo", () => {
           expect(slots1.additionalWorkspaces).toEqual(["../lib"]);
 
           // Same recipe as calling the machinery directly.
-          const direct = yield* hashViteInput(
-            appDir,
-            vite.memo,
-            Effect.succeed(["../lib"]),
-          );
+          const direct = yield* hashViteInput(appDir, vite.memo, Effect.succeed(["../lib"]));
           expect(slots1.input).toEqual(direct.hash);
 
           // A cross-boundary edit changes the recomputed input slot — the
@@ -261,5 +240,6 @@ describe("workspace-aware input-hash memo", () => {
           expect(slotsNoWs.input).not.toEqual(slots2.input);
         }),
       ),
-  );
-});
+    );
+  },
+);

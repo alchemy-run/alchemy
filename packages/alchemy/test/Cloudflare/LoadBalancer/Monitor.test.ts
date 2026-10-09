@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Load Balancing is a paid add-on subscription. The testing account does
 // not have it: monitor creation is rejected with the degenerate plan limit
@@ -47,10 +44,7 @@ const expectGone = (accountId: string, monitorId: string) =>
     Effect.catchTag("MonitorNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MonitorNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -86,6 +80,7 @@ test.provider.skipIf(lbEnabled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"] },
 );
 
 test.provider.skipIf(!lbEnabled)(
@@ -151,7 +146,10 @@ test.provider.skipIf(!lbEnabled)(
 
       yield* expectGone(accountId, initial.monitorId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Ungated: the account-scoped listMonitors enumeration works regardless of
@@ -163,9 +161,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Monitor,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Monitor);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       for (const monitor of all) {
@@ -175,7 +171,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"],
+    timeout: 60_000,
+  },
 );
 
 // Full presence check — requires the LB subscription to deploy a real
@@ -198,14 +197,15 @@ test.provider.skipIf(!lbEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Monitor,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Monitor);
       const all = yield* provider.list();
 
       expect(all.some((m) => m.monitorId === deployed.monitorId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"],
+    timeout: 120_000,
+  },
 );

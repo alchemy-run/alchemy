@@ -30,11 +30,7 @@ export interface DescribeInstance extends Binding.Service<
   "AWS.EC2.DescribeInstance",
   (
     instance: Instance,
-  ) => Effect.Effect<
-    () => Effect.Effect<ec2.Instance | undefined, ec2.DescribeInstancesError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ec2.Instance | undefined, ec2.DescribeInstancesError>>
 > {}
 
-export const DescribeInstance = Binding.Service<DescribeInstance>(
-  "AWS.EC2.DescribeInstance",
-);
+export const DescribeInstance = Binding.Service<DescribeInstance>("AWS.EC2.DescribeInstance");

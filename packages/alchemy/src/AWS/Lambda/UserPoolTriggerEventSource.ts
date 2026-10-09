@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
+import type { UserPool, UserPoolTriggerName } from "../Cognito/UserPool.ts";
 import {
   UserPoolTriggerEventSource as CognitoUserPoolTriggerEventSource,
   type UserPoolTriggerEvent,
@@ -9,7 +10,6 @@ import {
   type UserPoolTriggerProps,
   userPoolTriggerSourcePrefixes,
 } from "../Cognito/UserPoolTriggerEventSource.ts";
-import type { UserPool, UserPoolTriggerName } from "../Cognito/UserPool.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -34,9 +34,7 @@ export interface UserPoolTriggerEnvelope {
  * `version`/`triggerSource`/`userPoolId`/`request`/`response` envelope
  * shared by every user pool Lambda trigger.
  */
-export const isUserPoolTriggerEvent = (
-  event: any,
-): event is UserPoolTriggerEnvelope =>
+export const isUserPoolTriggerEvent = (event: any): event is UserPoolTriggerEnvelope =>
   typeof event?.version === "string" &&
   typeof event?.triggerSource === "string" &&
   typeof event?.userPoolId === "string" &&
@@ -95,15 +93,12 @@ export const UserPoolTriggerEventSource = Layer.effect(
               },
             );
 
-            yield* Permission(
-              `${userPool.LogicalId}-${props.trigger}-Permission`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionName,
-                principal: "cognito-idp.amazonaws.com",
-                sourceArn: userPool.userPoolArn,
-              },
-            );
+            yield* Permission(`${userPool.LogicalId}-${props.trigger}-Permission`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionName,
+              principal: "cognito-idp.amazonaws.com",
+              sourceArn: userPool.userPoolArn,
+            });
           }),
         );
       }

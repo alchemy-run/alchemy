@@ -26,10 +26,7 @@ export interface DeleteLanguageModel extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.DeleteLanguageModelRequest,
-    ) => Effect.Effect<
-      transcribe.DeleteLanguageModelResponse,
-      transcribe.DeleteLanguageModelError
-    >
+    ) => Effect.Effect<transcribe.DeleteLanguageModelResponse, transcribe.DeleteLanguageModelError>
   >
 > {}
 export const DeleteLanguageModel = Binding.Service<DeleteLanguageModel>(

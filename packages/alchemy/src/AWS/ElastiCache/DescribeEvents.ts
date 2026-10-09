@@ -32,12 +32,7 @@ export interface DescribeEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request?: elasticache.DescribeEventsMessage,
-    ) => Effect.Effect<
-      elasticache.EventsMessage,
-      elasticache.DescribeEventsError
-    >
+    ) => Effect.Effect<elasticache.EventsMessage, elasticache.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.ElastiCache.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.ElastiCache.DescribeEvents");

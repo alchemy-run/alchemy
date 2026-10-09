@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Record } from "@/AWS/Route53";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { HostedZone, Record, Records } from "@/AWS/Route53";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,9 +23,7 @@ const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
 const listZoneIdsByName = route53.listHostedZones.pages({}).pipe(
   Stream.runCollect,
-  Effect.map((chunk) =>
-    Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
-  ),
+  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.HostedZones ?? [])),
   Effect.map((zones) =>
     zones
       .filter((zone) => zone.Name === zoneName)
@@ -41,8 +39,7 @@ const findZoneIdByName = listZoneIdsByName.pipe(Effect.map((ids) => ids[0]));
 // account clean. A short retry absorbs the brief list eventual-consistency
 // right after a first-time create, when a create can race ahead of the zone
 // appearing in `listHostedZones`.
-const zoneNotYetListable =
-  "hosted zone not found after HostedZoneAlreadyExists";
+const zoneNotYetListable = "hosted zone not found after HostedZoneAlreadyExists";
 
 // List first, create only on a genuine miss. The previous create-first design
 // got permanently poisoned whenever the zone was deleted (as the `teardownZone`
@@ -149,9 +146,7 @@ const purgeAndDeleteZone = (zoneId: string) =>
     // Verify the delete actually landed (authoritative read, not the
     // eventually-consistent list) — a silent no-op here would orphan the zone.
     yield* route53.getHostedZone({ Id: zoneId }).pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new Error(`teardown: zone ${zoneId} still exists`)),
-      ),
+      Effect.flatMap(() => Effect.fail(new Error(`teardown: zone ${zoneId} still exists`))),
       Effect.catchTag("NoSuchHostedZone", () => Effect.void),
       Effect.retry({
         while: (e): boolean => e instanceof Error,
@@ -172,10 +167,7 @@ const teardownZone = Effect.gen(function* () {
   const listed = yield* listZoneIdsByName;
   const candidates = [
     ...new Set(
-      [
-        ...(standingZoneId !== undefined ? [standingZoneId] : []),
-        ...listed,
-      ].map(normalizeId),
+      [...(standingZoneId !== undefined ? [standingZoneId] : []), ...listed].map(normalizeId),
     ),
   ];
   yield* Effect.forEach(candidates, purgeAndDeleteZone);
@@ -234,15 +226,10 @@ test.provider(
           ),
         ),
         Effect.flatMap((present) =>
-          present
-            ? Effect.succeed(true)
-            : Effect.fail(new Error("record not yet listable")),
+          present ? Effect.succeed(true) : Effect.fail(new Error("record not yet listable")),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
         }),
         Effect.catch(() => Effect.succeed(false)),
       );
@@ -254,7 +241,7 @@ test.provider(
 
       expect(found).toBe(true);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );
 
 const inferredRecordName = `inferred-record.${zoneName}`;
@@ -282,9 +269,7 @@ test.provider(
         }),
       );
       // Attributes carry the RESOLVED zone id.
-      expect(normalizeId(deployed.hostedZoneId as string)).toBe(
-        normalizeId(hostedZoneId),
-      );
+      expect(normalizeId(deployed.hostedZoneId as string)).toBe(normalizeId(hostedZoneId));
 
       // Out-of-band: the record actually landed in the standing zone.
       const live = yield* route53.listResourceRecordSets({
@@ -318,7 +303,7 @@ test.provider(
         );
       expect(gone).toBe(true);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -398,18 +383,14 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "AWS.Route53.Record",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no AWS.Route53.Record state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.Route53.Record state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -430,9 +411,7 @@ test.provider(
       // Before the fix this crashed in plan with
       // `TypeError: undefined is not an object (evaluating 'hostedZoneId.replace')`.
       const recovered = yield* deployRecord();
-      expect(normalizeId(recovered.hostedZoneId)).toBe(
-        normalizeId(hostedZoneId),
-      );
+      expect(normalizeId(recovered.hostedZoneId)).toBe(normalizeId(hostedZoneId));
       expect(recovered.name).toBe(recoveryRecordName);
       expect(recovered.type).toBe("TXT");
 
@@ -458,5 +437,69 @@ test.provider(
       // Route53-clean.
       Effect.ensuring(teardownZone),
     ),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
+);
+
+// Route 53 lists record names with special characters as `\ddd` octal
+// escapes, so a wildcard `*.zone.` comes back as `\052.zone.`. Both `Record`
+// and `Records` must still find the records they wrote: `Record` verifies its
+// upsert, and `Records` observes values and deletes by lookup. The zone has no
+// `forceDestroy`, so a wildcard record `Records` failed to find (and delete)
+// makes the zone delete fail.
+test.provider(
+  "manages wildcard records returned as octal escapes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneName = `wildcard-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.alchemy-route53-test.com`;
+
+      const deployWildcards = (value: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* HostedZone("WildcardZone", { name: zoneName });
+            const record = yield* Record("WildcardRecord", {
+              hostedZoneId: zone.id,
+              name: `*.${zoneName}`,
+              type: "TXT",
+              ttl: "60 seconds",
+              records: [value],
+            });
+            const records = yield* Records("WildcardRecords", {
+              hostedZoneId: zone.id,
+              type: "TXT",
+              names: [`*.set.${zoneName}`],
+              ttl: "60 seconds",
+              records: [value],
+            });
+            return { zone, record, records };
+          }),
+        );
+
+      const created = yield* deployWildcards('"v1"');
+      expect(created.records.records).toEqual(['"v1"']);
+
+      const updated = yield* deployWildcards('"v2"');
+      expect(updated.records.records).toEqual(['"v2"']);
+
+      const live = yield* route53.listResourceRecordSets({
+        HostedZoneId: normalizeId(updated.zone.id),
+      });
+      const txt = (live.ResourceRecordSets ?? [])
+        .filter((set) => set.Type === "TXT")
+        .map((set) => [set.Name, set.ResourceRecords?.map((r) => r.Value)]);
+      expect(txt).toEqual(
+        expect.arrayContaining([
+          [`\\052.${zoneName}.`, ['"v2"']],
+          [`\\052.set.${zoneName}.`, ['"v2"']],
+        ]),
+      );
+      expect(txt).toHaveLength(2);
+
+      yield* stack.destroy();
+      const zoneGone = yield* route53
+        .getHostedZone({ Id: normalizeId(updated.zone.id) })
+        .pipe(Effect.flip);
+      expect(zoneGone._tag).toBe("NoSuchHostedZone");
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );

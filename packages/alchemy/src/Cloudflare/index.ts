@@ -18,6 +18,7 @@ export * as ApiShield from "./ApiShield/index.ts";
 export * as ApiToken from "./ApiToken/index.ts";
 export * as Argo from "./Argo/index.ts";
 export * as Artifacts from "./Artifacts/index.ts";
+export * as Basin from "./Basin/index.ts";
 export * as BotManagement from "./BotManagement/index.ts";
 export * as Cache from "./Cache/index.ts";
 export * as Calls from "./Calls/index.ts";
@@ -49,6 +50,7 @@ export * as Hyperdrive from "./Hyperdrive/index.ts";
 export * as Iam from "./Iam/index.ts";
 export * as Images from "./Images/index.ts";
 export * as Intel from "./Intel/index.ts";
+export * as K2 from "./K2/index.ts";
 export * as KeylessCertificate from "./KeylessCertificate/index.ts";
 export * as KV from "./KV/index.ts";
 export * as LeakedCredentialCheck from "./LeakedCredentialCheck/index.ts";
@@ -111,6 +113,8 @@ export * from "./Workers/index.ts";
 export * from "./Workflows/index.ts";
 
 // runtime bridge factories — the generated Worker entry imports these from
-// "alchemy/Cloudflare" (see Workers/Sources/Rolldown.ts), so they must stay top-level.
+// the runtime-only "alchemy/Cloudflare/Bridge" entry (see Bridge.ts and
+// Workers/Sources/Rolldown.ts); they stay top-level here for hand-written
+// entries that import them from "alchemy/Cloudflare".
 export { makeDurableObjectBridge, makeWorkerBridge } from "./Workers/index.ts";
 export { makeWorkflowBridge } from "./Workflows/index.ts";

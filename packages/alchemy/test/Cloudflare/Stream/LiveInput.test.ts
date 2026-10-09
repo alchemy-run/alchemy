@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -36,10 +33,7 @@ const expectGone = (accountId: string, liveInputId: string) =>
     Effect.catchTag("LiveInputNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LiveInputNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -99,7 +93,10 @@ test.provider(
 
       yield* expectGone(accountId, input.liveInputId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:stream", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -119,15 +116,13 @@ test.provider(
       // Delete the live input out-of-band. A redeploy with identical props
       // is a planner no-op, so change a prop to force reconcile — it must
       // observe the input as missing and recreate it instead of failing.
-      yield* stream
-        .deleteLiveInput({ accountId, liveInputIdentifier: input.liveInputId })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
-          }),
-        );
+      yield* stream.deleteLiveInput({ accountId, liveInputIdentifier: input.liveInputId }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
 
       const healed = yield* stack.deploy(
         Cloudflare.Stream.LiveInput("HealInput", {
@@ -143,7 +138,10 @@ test.provider(
 
       yield* expectGone(accountId, healed.liveInputId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:stream", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Canonical `list()` test (account collection): deploy a live input, then
@@ -181,14 +179,15 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Stream.LiveInput,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Stream.LiveInput);
       const all = yield* provider.list();
 
       expect(all.some((x) => x.liveInputId === input.liveInputId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:stream", "live"],
+    timeout: 120_000,
+  },
 );

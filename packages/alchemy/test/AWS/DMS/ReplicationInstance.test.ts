@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { ReplicationInstance, ReplicationSubnetGroup } from "@/AWS/DMS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ReplicationInstance, ReplicationSubnetGroup } from "@/AWS/DMS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
 import { reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -26,6 +26,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:dms", "live"] },
 );
 
 const findInstance = (identifier: string) =>
@@ -76,8 +77,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const instance = yield* ReplicationInstance("Instance", {
             replicationInstanceClass: "dms.t3.micro",
             allocatedStorage: 20,
-            replicationSubnetGroupIdentifier:
-              subnetGroup.replicationSubnetGroupIdentifier,
+            replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
             publiclyAccessible: false,
             multiAZ: false,
           });
@@ -89,25 +89,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(instance.replicationInstanceClass).toBe("dms.t3.micro");
       expect(instance.status).toBe("available");
 
-      const observed = yield* findInstance(
-        instance.replicationInstanceIdentifier,
-      );
-      expect(observed?.ReplicationInstanceArn).toBe(
-        instance.replicationInstanceArn,
-      );
+      const observed = yield* findInstance(instance.replicationInstanceIdentifier);
+      expect(observed?.ReplicationInstanceArn).toBe(instance.replicationInstanceArn);
 
       // Destroy immediately — the instance bills hourly — and verify deletion
       // has at least initiated (full disappearance takes several more minutes).
       yield* stack.destroy();
-      const status = yield* findInstance(
-        instance.replicationInstanceIdentifier,
-      ).pipe(
+      const status = yield* findInstance(instance.replicationInstanceIdentifier).pipe(
         Effect.map((i) => i?.ReplicationInstanceStatus ?? "gone"),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("10 seconds"),
-            Schedule.recurs(12),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(12)]),
         }),
       );
       expect(["gone", "deleting"]).toContain(status);
@@ -118,5 +109,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // calls. `orDie` — a finalizer must not swallow its own failure.
       Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
     ),
-  { timeout: 1_500_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dms", "provider:aws:ec2", "live"],
+    timeout: 1_500_000,
+  },
 );

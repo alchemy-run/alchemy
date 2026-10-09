@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Datastore } from "@/AWS/MedicalImaging";
-import * as Test from "@/Test/Alchemy";
 import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Datastore } from "@/AWS/MedicalImaging";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,12 +17,11 @@ test.provider(
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         // well-formed (32 hex chars) but nonexistent datastore id
-        medicalimaging.getDatastore({
-          datastoreId: "00000000000000000000000000000000",
-        }),
+        medicalimaging.getDatastore({ datastoreId: "00000000000000000000000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:medicalimaging", "live"] },
 );
 
 // Deletion is async (DELETING → gone); poll bounded until the store no
@@ -30,27 +29,16 @@ test.provider(
 const assertDatastoreGone = (datastoreId: string) =>
   Effect.gen(function* () {
     const status = yield* medicalimaging.getDatastore({ datastoreId }).pipe(
-      Effect.map(
-        (r) => r.datastoreProperties.datastoreStatus as string | "gone",
-      ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.map((r) => r.datastoreProperties.datastoreStatus as string | "gone"),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETED") {
       return yield* Effect.fail(
-        new Error(
-          `datastore '${datastoreId}' still exists (status: ${status})`,
-        ),
+        new Error(`datastore '${datastoreId}' still exists (status: ${status})`),
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]) }),
   );
 
 // A HealthImaging data store provisions asynchronously (CREATING → ACTIVE,
@@ -65,9 +53,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
 
       const { datastore } = yield* stack.deploy(
         Effect.gen(function* () {
-          const datastore = yield* Datastore("Store", {
-            tags: { fixture: "medical-imaging" },
-          });
+          const datastore = yield* Datastore("Store", { tags: { fixture: "medical-imaging" } });
           return { datastore };
         }),
       );
@@ -78,13 +64,9 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
       expect(datastore.tags.fixture).toBe("medical-imaging");
 
       // Out-of-band verification via distilled.
-      const observed = yield* medicalimaging.getDatastore({
-        datastoreId: datastore.datastoreId,
-      });
+      const observed = yield* medicalimaging.getDatastore({ datastoreId: datastore.datastoreId });
       expect(observed.datastoreProperties.datastoreStatus).toBe("ACTIVE");
-      expect(observed.datastoreProperties.datastoreName).toBe(
-        datastore.datastoreName,
-      );
+      expect(observed.datastoreProperties.datastoreName).toBe(datastore.datastoreName);
 
       // Update path: tags are the only mutable aspect (HealthImaging has no
       // UpdateDatastore); the same physical store must be reused.
@@ -109,5 +91,5 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
       yield* assertDatastoreGone(datastore.datastoreId);
     }),
   // async create (a few minutes) + tag update + async delete, one test.
-  { timeout: 1_200_000 },
+  { tags: ["provider:aws", "provider:aws:medicalimaging", "live"], timeout: 1_200_000 },
 );

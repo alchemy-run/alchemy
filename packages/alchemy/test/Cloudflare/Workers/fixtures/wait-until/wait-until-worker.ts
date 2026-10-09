@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * Durable Object journal for `WaitUntil.test.ts`.
@@ -16,16 +16,33 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const append = Effect.fn(function* (entry: string) {
-        const entries = (yield* state.storage.get<string[]>("entries")) ?? [];
-        yield* state.storage.put("entries", [...entries, entry]);
-      });
+      const append = (entry: string) =>
+        state.storage
+          .transaction(
+            Effect.gen(function* () {
+              const entries = (yield* state.storage.get<string[]>("entries")) ?? [];
+              yield* state.storage.put("entries", [...entries, entry]);
+            }),
+          )
+          .pipe(Effect.orDie);
       return {
         record: append,
-        recordLater: Effect.fn(function* (entry: string) {
+        recordManyLater: Effect.fn(function* () {
           yield* state.waitUntil(
-            Effect.sleep("100 millis").pipe(Effect.andThen(append(entry))),
+            Effect.sleep("100 millis").pipe(
+              Effect.andThen(
+                Effect.forEach(
+                  Array.from({ length: 40 }, (_, i) => `parallel-${i}`),
+                  append,
+                  { concurrency: "unbounded" },
+                ),
+              ),
+            ),
           );
+          return "scheduled" as const;
+        }),
+        recordLater: Effect.fn(function* (entry: string) {
+          yield* state.waitUntil(Effect.sleep("100 millis").pipe(Effect.andThen(append(entry))));
           return "scheduled" as const;
         }),
         // Scope finalizers added inside a DO method run after the method
@@ -33,10 +50,7 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         // close promise with `state.waitUntil`.
         recordOnClose: Effect.fn(function* (entry: string) {
           yield* Effect.addFinalizer(() =>
-            Effect.sleep("100 millis").pipe(
-              Effect.andThen(append(entry)),
-              Effect.ignore,
-            ),
+            Effect.sleep("100 millis").pipe(Effect.andThen(append(entry)), Effect.ignore),
           );
           return "scheduled" as const;
         }),
@@ -72,8 +86,7 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
     // finalizer added in the init closure runs. Counted on globalThis and
     // exposed via /init-runs and /init-finalizer-runs.
     yield* Effect.sync(() => {
-      (globalThis as any).__initRuns =
-        ((globalThis as any).__initRuns ?? 0) + 1;
+      (globalThis as any).__initRuns = ((globalThis as any).__initRuns ?? 0) + 1;
     });
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
@@ -88,6 +101,13 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         const url = new URL(request.url, "http://x");
         const journal = journals.getByName("default");
 
+        if (url.pathname === "/bg-many") {
+          const journal = journals.getByName("parallel");
+          return HttpServerResponse.text(`bg-many-${yield* journal.recordManyLater()}`);
+        }
+        if (url.pathname === "/entries-many") {
+          return yield* HttpServerResponse.json(yield* journals.getByName("parallel").snapshot());
+        }
         if (url.pathname === "/bg") {
           yield* exec.waitUntil(
             Effect.sleep("100 millis").pipe(
@@ -127,15 +147,11 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         }
 
         if (url.pathname === "/init-finalizer-runs") {
-          return HttpServerResponse.text(
-            String((globalThis as any).__initFinalizerRuns ?? 0),
-          );
+          return HttpServerResponse.text(String((globalThis as any).__initFinalizerRuns ?? 0));
         }
 
         if (url.pathname === "/init-runs") {
-          return HttpServerResponse.text(
-            String((globalThis as any).__initRuns ?? 0),
-          );
+          return HttpServerResponse.text(String((globalThis as any).__initRuns ?? 0));
         }
 
         if (url.pathname === "/raw") {

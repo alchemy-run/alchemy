@@ -1,3 +1,8 @@
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { InstanceProfile } from "@/AWS/IAM/InstanceProfile.ts";
@@ -10,11 +15,6 @@ import {
   InfrastructureConfiguration,
 } from "@/AWS/ImageBuilder";
 import * as Test from "@/Test/Alchemy";
-import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,6 +33,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:imagebuilder", "live"] },
 );
 
 // Ungated typed-error probe: the Smithy model omits ResourceNotFoundException
@@ -45,15 +46,14 @@ test.provider(
     Effect.gen(function* () {
       const { accountId, region } = yield* AWSEnvironment.current;
       const arn = `arn:aws:imagebuilder:${region}:${accountId}:image/alchemy-nonexistent-probe/1.0.0/1`;
-      const getError = yield* Effect.flip(
-        imagebuilder.getImage({ imageBuildVersionArn: arn }),
-      );
+      const getError = yield* Effect.flip(imagebuilder.getImage({ imageBuildVersionArn: arn }));
       expect(getError._tag).toBe("ResourceNotFoundException");
       const deleteError = yield* Effect.flip(
         imagebuilder.deleteImage({ imageBuildVersionArn: arn }),
       );
       expect(deleteError._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:imagebuilder", "live"] },
 );
 
 const componentData = (marker: string) =>
@@ -72,26 +72,17 @@ const componentData = (marker: string) =>
   ].join("\n");
 
 /** Poll until an Image Builder resource is gone (typed NotFound). */
-const untilGone = <A, E extends { readonly _tag: string }, R>(
-  get: Effect.Effect<A, E, R>,
-) =>
+const untilGone = <A, E extends { readonly _tag: string }, R>(get: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const result = yield* Effect.result(get);
     if (Result.isSuccess(result)) {
       return yield* Effect.fail(new Error("resource still exists"));
     }
     if (result.failure._tag !== "ResourceNotFoundException") {
-      return yield* Effect.fail(
-        new Error(`unexpected error: ${result.failure._tag}`),
-      );
+      return yield* Effect.fail(new Error(`unexpected error: ${result.failure._tag}`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -125,9 +116,7 @@ test.provider(
               "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
             ],
           });
-          const profile = yield* InstanceProfile("BuilderProfile", {
-            roleName: role.roleName,
-          });
+          const profile = yield* InstanceProfile("BuilderProfile", { roleName: role.roleName });
           const component = yield* Component("Setup", {
             platform: "Linux",
             semanticVersion: options.componentVersion,
@@ -161,17 +150,12 @@ test.provider(
           });
           const pipeline = yield* ImagePipeline("Pipeline", {
             imageRecipeArn: recipe.imageRecipeArn,
-            infrastructureConfigurationArn:
-              infra.infrastructureConfigurationArn,
-            distributionConfigurationArn:
-              distribution.distributionConfigurationArn,
+            infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
+            distributionConfigurationArn: distribution.distributionConfigurationArn,
             description: options.pipelineDescription,
             status: "DISABLED",
             // Duration-typed test timeout — converted to wire minutes.
-            imageTestsConfiguration: {
-              imageTestsEnabled: false,
-              timeout: "2 hours",
-            },
+            imageTestsConfiguration: { imageTestsEnabled: false, timeout: "2 hours" },
             tags: { fixture: "imagebuilder" },
           });
           return { component, recipe, infra, distribution, pipeline };
@@ -186,9 +170,7 @@ test.provider(
         }),
       );
 
-      expect(created.component.componentBuildVersionArn).toContain(
-        ":component/",
-      );
+      expect(created.component.componentBuildVersionArn).toContain(":component/");
       expect(created.component.componentBuildVersionArn).toContain("/1.0.0/1");
       expect(created.component.platform).toBe("Linux");
       expect(created.recipe.imageRecipeArn).toContain(":image-recipe/");
@@ -205,20 +187,14 @@ test.provider(
       const observedPipeline = yield* imagebuilder.getImagePipeline({
         imagePipelineArn: created.pipeline.imagePipelineArn,
       });
-      expect(observedPipeline.imagePipeline?.imageRecipeArn).toBe(
-        created.recipe.imageRecipeArn,
+      expect(observedPipeline.imagePipeline?.imageRecipeArn).toBe(created.recipe.imageRecipeArn);
+      expect(observedPipeline.imagePipeline?.infrastructureConfigurationArn).toBe(
+        created.infra.infrastructureConfigurationArn,
       );
-      expect(
-        observedPipeline.imagePipeline?.infrastructureConfigurationArn,
-      ).toBe(created.infra.infrastructureConfigurationArn);
       expect(observedPipeline.imagePipeline?.status).toBe("DISABLED");
       // The Duration-typed test timeout landed as wire minutes.
-      expect(
-        observedPipeline.imagePipeline?.imageTestsConfiguration?.timeoutMinutes,
-      ).toBe(120);
-      expect(observedPipeline.imagePipeline?.tags?.["alchemy::id"]).toBe(
-        "Pipeline",
-      );
+      expect(observedPipeline.imagePipeline?.imageTestsConfiguration?.timeoutMinutes).toBe(120);
+      expect(observedPipeline.imagePipeline?.tags?.["alchemy::id"]).toBe("Pipeline");
 
       const observedRecipe = yield* imagebuilder.getImageRecipe({
         imageRecipeArn: created.recipe.imageRecipeArn,
@@ -229,15 +205,12 @@ test.provider(
       expect(observedRecipe.imageRecipe?.parentImage).toBe(parentImage);
 
       const observedInfra = yield* imagebuilder.getInfrastructureConfiguration({
-        infrastructureConfigurationArn:
-          created.infra.infrastructureConfigurationArn,
+        infrastructureConfigurationArn: created.infra.infrastructureConfigurationArn,
       });
-      expect(
-        observedInfra.infrastructureConfiguration?.instanceProfileName,
-      ).toBe(created.infra.instanceProfileName);
-      expect(observedInfra.infrastructureConfiguration?.instanceTypes).toEqual([
-        "t3.micro",
-      ]);
+      expect(observedInfra.infrastructureConfiguration?.instanceProfileName).toBe(
+        created.infra.instanceProfileName,
+      );
+      expect(observedInfra.infrastructureConfiguration?.instanceTypes).toEqual(["t3.micro"]);
 
       // 2. Update mutable configs in place (same ARNs).
       const updated = yield* stack.deploy(
@@ -250,14 +223,10 @@ test.provider(
       expect(updated.distribution.distributionConfigurationArn).toBe(
         created.distribution.distributionConfigurationArn,
       );
-      expect(updated.pipeline.imagePipelineArn).toBe(
-        created.pipeline.imagePipelineArn,
-      );
-      const updatedDistribution =
-        yield* imagebuilder.getDistributionConfiguration({
-          distributionConfigurationArn:
-            updated.distribution.distributionConfigurationArn,
-        });
+      expect(updated.pipeline.imagePipelineArn).toBe(created.pipeline.imagePipelineArn);
+      const updatedDistribution = yield* imagebuilder.getDistributionConfiguration({
+        distributionConfigurationArn: updated.distribution.distributionConfigurationArn,
+      });
       expect(updatedDistribution.distributionConfiguration?.description).toBe(
         "alchemy imagebuilder test (updated)",
       );
@@ -282,30 +251,20 @@ test.provider(
         created.component.componentBuildVersionArn,
       );
       expect(replaced.component.componentBuildVersionArn).toContain("/1.0.1/1");
-      expect(replaced.recipe.imageRecipeArn).not.toBe(
-        created.recipe.imageRecipeArn,
-      );
-      expect(replaced.pipeline.imagePipelineArn).toBe(
-        created.pipeline.imagePipelineArn,
-      );
+      expect(replaced.recipe.imageRecipeArn).not.toBe(created.recipe.imageRecipeArn);
+      expect(replaced.pipeline.imagePipelineArn).toBe(created.pipeline.imagePipelineArn);
       const replacedPipeline = yield* imagebuilder.getImagePipeline({
         imagePipelineArn: replaced.pipeline.imagePipelineArn,
       });
-      expect(replacedPipeline.imagePipeline?.imageRecipeArn).toBe(
-        replaced.recipe.imageRecipeArn,
-      );
+      expect(replacedPipeline.imagePipeline?.imageRecipeArn).toBe(replaced.recipe.imageRecipeArn);
 
       // 4. Destroy and verify everything is gone out-of-band.
       yield* stack.destroy();
       yield* untilGone(
-        imagebuilder.getImagePipeline({
-          imagePipelineArn: replaced.pipeline.imagePipelineArn,
-        }),
+        imagebuilder.getImagePipeline({ imagePipelineArn: replaced.pipeline.imagePipelineArn }),
       );
       yield* untilGone(
-        imagebuilder.getImageRecipe({
-          imageRecipeArn: replaced.recipe.imageRecipeArn,
-        }),
+        imagebuilder.getImageRecipe({ imageRecipeArn: replaced.recipe.imageRecipeArn }),
       );
       yield* untilGone(
         imagebuilder.getComponent({
@@ -314,16 +273,17 @@ test.provider(
       );
       yield* untilGone(
         imagebuilder.getInfrastructureConfiguration({
-          infrastructureConfigurationArn:
-            replaced.infra.infrastructureConfigurationArn,
+          infrastructureConfigurationArn: replaced.infra.infrastructureConfigurationArn,
         }),
       );
       yield* untilGone(
         imagebuilder.getDistributionConfiguration({
-          distributionConfigurationArn:
-            replaced.distribution.distributionConfigurationArn,
+          distributionConfigurationArn: replaced.distribution.distributionConfigurationArn,
         }),
       );
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:imagebuilder", "live"],
+    timeout: 180_000,
+  },
 );

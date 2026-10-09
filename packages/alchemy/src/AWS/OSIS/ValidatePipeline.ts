@@ -34,12 +34,7 @@ export interface ValidatePipeline extends Binding.Service<
   () => Effect.Effect<
     (
       request: osis.ValidatePipelineRequest,
-    ) => Effect.Effect<
-      osis.ValidatePipelineResponse,
-      osis.ValidatePipelineError
-    >
+    ) => Effect.Effect<osis.ValidatePipelineResponse, osis.ValidatePipelineError>
   >
 > {}
-export const ValidatePipeline = Binding.Service<ValidatePipeline>(
-  "AWS.OSIS.ValidatePipeline",
-);
+export const ValidatePipeline = Binding.Service<ValidatePipeline>("AWS.OSIS.ValidatePipeline");

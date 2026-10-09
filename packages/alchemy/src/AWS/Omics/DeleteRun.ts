@@ -24,9 +24,7 @@ export interface DeleteRun extends Binding.Service<
   DeleteRun,
   "AWS.Omics.DeleteRun",
   () => Effect.Effect<
-    (
-      request?: DeleteRunRequest,
-    ) => Effect.Effect<omics.DeleteRunResponse, omics.DeleteRunError>
+    (request?: DeleteRunRequest) => Effect.Effect<omics.DeleteRunResponse, omics.DeleteRunError>
   >
 > {}
 

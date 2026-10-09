@@ -32,6 +32,7 @@ export interface VerifyResult {
  * ```
  *
  * @binding
+ * @product Secret Key
  */
 export interface Verify extends Binding.Service<
   Verify,
@@ -39,9 +40,7 @@ export interface Verify extends Binding.Service<
   (
     key: SecretKey,
   ) => Effect.Effect<
-    (
-      request: VerifyRequest,
-    ) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
+    (request: VerifyRequest) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
   >
 > {}
 

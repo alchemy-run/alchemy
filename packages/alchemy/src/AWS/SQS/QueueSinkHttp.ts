@@ -25,9 +25,7 @@ const selectFailed = (
     return [];
   }
   const indices = new Set(
-    failed
-      .filter((entry) => entry.SenderFault === senderFault)
-      .map((entry) => Number(entry.Id)),
+    failed.filter((entry) => entry.SenderFault === senderFault).map((entry) => Number(entry.Id)),
   );
   return batch.filter((_, index) => indices.has(index));
 };
@@ -53,27 +51,25 @@ export const QueueSinkHttp = Layer.effect(
         }
       }
       const sendBatch = yield* sendMessageBatch(queue);
-      return makeBatchedSink<
-        QueueSinkEntry,
-        sqs.SendMessageBatchResult,
-        sqs.SendMessageBatchError
-      >({
-        maxRecords: 10,
-        maxBytes: 262_144,
-        sizeOf: (entry) => encoder.encode(entry.MessageBody).length,
-        send: (batch) =>
-          sendBatch({
-            Entries: batch.map((entry, index) => ({
-              ...entry,
-              Id: `${index}`,
-            })),
-          }),
-        // SenderFault=false failures (throttling, internal errors) are
-        // transient — re-submit them on the bounded schedule.
-        unprocessed: (out, batch) => selectFailed(out.Failed, batch, false),
-        // SenderFault=true failures are permanent — drop and surface.
-        rejected: (out, batch) => selectFailed(out.Failed, batch, true),
-      });
+      return makeBatchedSink<QueueSinkEntry, sqs.SendMessageBatchResult, sqs.SendMessageBatchError>(
+        {
+          maxRecords: 10,
+          maxBytes: 262_144,
+          sizeOf: (entry) => encoder.encode(entry.MessageBody).length,
+          send: (batch) =>
+            sendBatch({
+              Entries: batch.map((entry, index) => ({
+                ...entry,
+                Id: `${index}`,
+              })),
+            }),
+          // SenderFault=false failures (throttling, internal errors) are
+          // transient — re-submit them on the bounded schedule.
+          unprocessed: (out, batch) => selectFailed(out.Failed, batch, false),
+          // SenderFault=true failures are permanent — drop and surface.
+          rejected: (out, batch) => selectFailed(out.Failed, batch, true),
+        },
+      );
     });
   }),
 );

@@ -90,29 +90,20 @@ export interface EventTracker extends Resource<
  *
  * @resource
  */
-export const EventTracker = Resource<EventTracker>(
-  "AWS.Personalize.EventTracker",
-);
+export const EventTracker = Resource<EventTracker>("AWS.Personalize.EventTracker");
 
 export const EventTrackerProvider = () =>
   Provider.effect(
     EventTracker,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: EventTrackerProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: EventTrackerProps) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 63 }));
       });
 
       const describe = Effect.fn(function* (eventTrackerArn: string) {
         const response = yield* personalize
           .describeEventTracker({ eventTrackerArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.eventTracker;
       });
 
@@ -120,12 +111,8 @@ export const EventTrackerProvider = () =>
       const waitActive = Effect.fn(function* (eventTrackerArn: string) {
         const tracker = yield* describe(eventTrackerArn).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(40),
-            ]),
-            until: (t) =>
-              t?.status === "ACTIVE" || (t?.status ?? "").includes("FAILED"),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(40)]),
+            until: (t) => t?.status === "ACTIVE" || (t?.status ?? "").includes("FAILED"),
           }),
         );
         if (tracker?.status !== "ACTIVE") {
@@ -139,10 +126,7 @@ export const EventTrackerProvider = () =>
       });
 
       /** Find an existing tracker's ARN by name within its dataset group. */
-      const findArnByName = Effect.fn(function* (
-        name: string,
-        datasetGroupArn: string,
-      ) {
+      const findArnByName = Effect.fn(function* (name: string, datasetGroupArn: string) {
         const pages = yield* personalize.listEventTrackers
           .pages({ datasetGroupArn })
           .pipe(Stream.runCollect);
@@ -168,8 +152,7 @@ export const EventTrackerProvider = () =>
           const newName = yield* createName(id, news);
           if (
             oldName !== newName ||
-            (olds.datasetGroupArn ?? undefined) !==
-              (news.datasetGroupArn ?? undefined)
+            (olds.datasetGroupArn ?? undefined) !== (news.datasetGroupArn ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
@@ -213,9 +196,7 @@ export const EventTrackerProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsException", (error) =>
                   findArnByName(name, news.datasetGroupArn).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -232,26 +213,18 @@ export const EventTrackerProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* personalize
-            .deleteEventTracker({ eventTrackerArn: output.eventTrackerArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* personalize.deleteEventTracker({ eventTrackerArn: output.eventTrackerArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
           // Deletion is asynchronous — wait until the tracker is actually gone
           // so its dataset group can delete without ResourceInUse churn.
           const remaining = yield* describe(output.eventTrackerArn).pipe(
             Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
               until: (tracker): boolean => tracker === undefined,
             }),
           );
@@ -267,9 +240,7 @@ export const EventTrackerProvider = () =>
         list: () =>
           personalize.listEventTrackers.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.eventTrackers ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.eventTrackers ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

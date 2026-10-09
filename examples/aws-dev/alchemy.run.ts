@@ -31,8 +31,7 @@ export default Alchemy.Stack(
           yield* putObject({ Key: input.key, Body: input.body });
           const object = yield* getObject({ Key: input.key });
           const text = yield* (
-            object.Body?.pipe(Stream.decodeText, Stream.mkString) ??
-              Effect.succeed("")
+            object.Body?.pipe(Stream.decodeText, Stream.mkString) ?? Effect.succeed("")
           );
           return { accountId: environment.accountId, text };
         });

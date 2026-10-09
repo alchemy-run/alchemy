@@ -5,28 +5,24 @@
  * and thin-pack bases from the store are exercised in-process.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { BlobStore } from "@/Git/BlobStore.ts";
 import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher/Hasher.ts";
-import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
-import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
-import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import { sliceRandomAccess } from "@/Git/Store/PackSource.ts";
-import {
-  hashObject,
-  encodeTypeSize,
-  makeSha1,
-} from "@/Git/Protocol/ObjectCodec.ts";
+import { hashObject, encodeTypeSize, makeSha1 } from "@/Git/Protocol/ObjectCodec.ts";
+import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import * as Fiber from "effect/Fiber";
-import { concat } from "./harness/pack.ts";
-import { describe, expect, test } from "alchemy-test";
-import { BlobStore } from "@/Git/BlobStore.ts";
-import * as Effect from "effect/Effect";
+import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
+import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
+import { sliceRandomAccess } from "@/Git/Store/PackSource.ts";
+import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Layer from "effect/Layer";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
 const fixture = (name: string) =>
@@ -35,25 +31,19 @@ const fixture = (name: string) =>
     const path = yield* Path.Path;
     const dir = path.join(import.meta.dirname, "fixtures", "packs");
     const pack = yield* fs.readFile(path.join(dir, name));
-    const manifest = JSON.parse(
-      yield* fs.readFileString(path.join(dir, "manifest.json")),
-    ) as {
+    const manifest = JSON.parse(yield* fs.readFileString(path.join(dir, "manifest.json"))) as {
       packs: Record<string, { oids: ReadonlyArray<string> }>;
     };
     return { pack, manifest };
   });
 
-describe("ingestPackFrom through the hasher", () => {
+describe("ingestPackFrom through the hasher", { tags: ["unit", "local"] }, () => {
   test("ofs-delta fixture in 64-byte parts: every object staged, cross-part deltas resolved after the end", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { pack, manifest } = yield* fixture("ofs-delta.pack");
         const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: "R",
-        });
+        const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: "R" });
         const hasher = yield* Hasher;
         const outcome = yield* Effect.result(
           ingestPackFrom(bufferRandomAccess(pack), {
@@ -74,9 +64,7 @@ describe("ingestPackFrom through the hasher", () => {
         expect(staged.map((r) => r.oid)).toEqual([...expected].sort());
       }).pipe(
         Effect.provide(
-          HasherInline.pipe(
-            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
-          ),
+          HasherInline.pipe(Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore()))),
         ),
         Effect.provide(BunServices.layer),
       ),
@@ -104,13 +92,10 @@ describe("ingestPackFrom through the hasher", () => {
           }),
         );
         expect(r._tag).toBe("Failure");
-        if (r._tag === "Failure")
-          expect(r.failure.reason).toContain("checksum");
+        if (r._tag === "Failure") expect(r.failure.reason).toContain("checksum");
       }).pipe(
         Effect.provide(
-          HasherInline.pipe(
-            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
-          ),
+          HasherInline.pipe(Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore()))),
         ),
         Effect.provide(BunServices.layer),
       ),
@@ -118,125 +103,117 @@ describe("ingestPackFrom through the hasher", () => {
   });
 });
 
-describe("hasher pipeline over a streaming source with eviction", () => {
-  test(
-    "a multi-part pack whose retained window is smaller than a part stages every inline row and completes (no fallback)",
-    async () => {
+describe(
+  "hasher pipeline over a streaming source with eviction",
+  { tags: ["unit", "local"] },
+  () => {
+    test(
+      "a multi-part pack whose retained window is smaller than a part stages every inline row and completes (no fallback)",
+      async () => {
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const n = 1500;
+            const pieces: Array<Uint8Array> = [packHeader(n)];
+            for (let i = 0; i < n; i++) {
+              const c = new Uint8Array(1000 + (i % 700));
+              crypto.getRandomValues(c);
+              yield* hashObject(3, c);
+              pieces.push(encodeTypeSize(3, c.length), yield* Zlib.deflate(c));
+            }
+            const body = concat(pieces);
+            const sha = makeSha1();
+            sha.update(body);
+            const pack = concat([body, sha.digest()]);
+            // Parts of 64 KiB, retention of 128 KiB, no spill/fallback: every
+            // inline row must be read back before its bytes are dropped.
+            const feeder = makeStreamingSource({
+              slabBytes: 32 * 1024,
+              retainBytes: 128 * 1024,
+              backpressureBytes: 1 << 20,
+            });
+            const sql = makeTestSqlClient();
+            const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: "R" });
+            const hasher = yield* Hasher;
+            const ingest = yield* Effect.forkChild(
+              Effect.result(
+                ingestPackFrom(feeder.source, {
+                  store: ingestStoreOf(store),
+                  pushId: "p",
+                  hasher,
+                  partBytes: 64 * 1024,
+                }),
+              ),
+            );
+            for (let at = 0; at < pack.length; at += 50_000)
+              yield* feeder.push(pack.subarray(at, at + 50_000));
+            feeder.end();
+            const r = yield* Fiber.join(ingest).pipe(Effect.timeout("20 seconds"));
+            expect(r._tag).toBe("Success");
+            const staged = yield* sql.first<{ n: number; withBytes: number }>(
+              `SELECT COUNT(*) AS n, SUM(LENGTH(zdata) > 0) AS withBytes FROM objects WHERE staged_push = 'p'`,
+            );
+            expect(staged?.n).toBe(n);
+            expect(staged?.withBytes).toBe(n);
+          }).pipe(
+            Effect.provide(
+              HasherInline.pipe(Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore()))),
+            ),
+          ),
+        );
+      },
+      { timeout: 30_000 },
+    );
+  },
+);
+
+describe(
+  "raw-chunk dispatch with resync and stitching (DESIGN §22.9)",
+  { tags: ["unit", "local"] },
+  () => {
+    test("the ofs-delta fixture in 64-byte chunks: every straddler stitched, every delta resolved", async () => {
       await Effect.runPromise(
         Effect.gen(function* () {
-          const n = 1500;
-          const pieces: Array<Uint8Array> = [packHeader(n)];
-          for (let i = 0; i < n; i++) {
-            const c = new Uint8Array(1000 + (i % 700));
-            crypto.getRandomValues(c);
-            yield* hashObject(3, c);
-            pieces.push(encodeTypeSize(3, c.length), yield* Zlib.deflate(c));
-          }
-          const body = concat(pieces);
-          const sha = makeSha1();
-          sha.update(body);
-          const pack = concat([body, sha.digest()]);
-          // Parts of 64 KiB, retention of 128 KiB, no spill/fallback: every
-          // inline row must be read back before its bytes are dropped.
-          const feeder = makeStreamingSource({
-            slabBytes: 32 * 1024,
-            retainBytes: 128 * 1024,
-            backpressureBytes: 1 << 20,
-          });
+          const { pack, manifest } = yield* fixture("ofs-delta.pack");
           const sql = makeTestSqlClient();
-          const store = makeObjectStore({
-            sql,
-            blobs: makeMemoryBlobStore(),
-            repoId: "R",
-          });
+          const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: "R" });
           const hasher = yield* Hasher;
-          const ingest = yield* Effect.forkChild(
-            Effect.result(
-              ingestPackFrom(feeder.source, {
+          for (const partBytes of [64, 200, 1000, 1 << 20]) {
+            yield* sql.run(`DELETE FROM objects`);
+            const outcome = yield* Effect.result(
+              ingestPackFrom(bufferRandomAccess(pack), {
                 store: ingestStoreOf(store),
                 pushId: "p",
                 hasher,
-                partBytes: 64 * 1024,
+                partBytes,
               }),
-            ),
-          );
-          for (let at = 0; at < pack.length; at += 50_000)
-            yield* feeder.push(pack.subarray(at, at + 50_000));
-          feeder.end();
-          const r = yield* Fiber.join(ingest).pipe(
-            Effect.timeout("20 seconds"),
-          );
-          expect(r._tag).toBe("Success");
-          const staged = yield* sql.first<{ n: number; withBytes: number }>(
-            `SELECT COUNT(*) AS n, SUM(LENGTH(zdata) > 0) AS withBytes FROM objects WHERE staged_push = 'p'`,
-          );
-          expect(staged?.n).toBe(n);
-          expect(staged?.withBytes).toBe(n);
+            );
+            if (outcome._tag === "Failure")
+              throw new Error(
+                `parts of ${partBytes}: ${outcome.failure._tag}: ${outcome.failure.reason}`,
+              );
+            const result = outcome.success;
+            const expected = manifest.packs["ofs-delta"]!.oids;
+            expect(result.objectCount, `parts of ${partBytes}`).toBe(expected.length);
+            const staged = yield* sql.all<{ oid: string }>(
+              `SELECT oid FROM objects WHERE staged_push = 'p' ORDER BY oid`,
+            );
+            expect(
+              staged.map((r) => r.oid),
+              `parts of ${partBytes}`,
+            ).toEqual([...expected].sort());
+          }
         }).pipe(
           Effect.provide(
-            HasherInline.pipe(
-              Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
-            ),
+            HasherInline.pipe(Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore()))),
           ),
+          Effect.provide(BunServices.layer),
         ),
       );
-    },
-    { timeout: 30_000 },
-  );
-});
+    });
+  },
+);
 
-describe("raw-chunk dispatch with resync and stitching (DESIGN §22.9)", () => {
-  test("the ofs-delta fixture in 64-byte chunks: every straddler stitched, every delta resolved", async () => {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const { pack, manifest } = yield* fixture("ofs-delta.pack");
-        const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: "R",
-        });
-        const hasher = yield* Hasher;
-        for (const partBytes of [64, 200, 1000, 1 << 20]) {
-          yield* sql.run(`DELETE FROM objects`);
-          const outcome = yield* Effect.result(
-            ingestPackFrom(bufferRandomAccess(pack), {
-              store: ingestStoreOf(store),
-              pushId: "p",
-              hasher,
-              partBytes,
-            }),
-          );
-          if (outcome._tag === "Failure")
-            throw new Error(
-              `parts of ${partBytes}: ${outcome.failure._tag}: ${outcome.failure.reason}`,
-            );
-          const result = outcome.success;
-          const expected = manifest.packs["ofs-delta"]!.oids;
-          expect(result.objectCount, `parts of ${partBytes}`).toBe(
-            expected.length,
-          );
-          const staged = yield* sql.all<{ oid: string }>(
-            `SELECT oid FROM objects WHERE staged_push = 'p' ORDER BY oid`,
-          );
-          expect(
-            staged.map((r) => r.oid),
-            `parts of ${partBytes}`,
-          ).toEqual([...expected].sort());
-        }
-      }).pipe(
-        Effect.provide(
-          HasherInline.pipe(
-            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
-          ),
-        ),
-        Effect.provide(BunServices.layer),
-      ),
-    );
-  });
-});
-
-describe("spill by the hasher (DESIGN §22.10)", () => {
+describe("spill by the hasher (DESIGN §22.10)", { tags: ["unit", "local"] }, () => {
   /** A pack of `n` random blobs plus a fake command section in front. */
   const makeBody = (n: number, blobBytes: number, headBytes: number) =>
     Effect.gen(function* () {
@@ -267,11 +244,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
     hasherOverride?: HasherShape,
   ) =>
     Effect.gen(function* () {
-      const { body, packStart } = yield* makeBody(
-        opts.n,
-        opts.blobBytes,
-        opts.headBytes,
-      );
+      const { body, packStart } = yield* makeBody(opts.n, opts.blobBytes, opts.headBytes);
       // ONE blob store: the hasher writes the parts the pump's upload
       // collects — in production both are the same BlobStore layer.
       const blobs = yield* BlobStore;
@@ -316,10 +289,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
       return { result: r.success, rows, spilled, body, blobs };
     }).pipe(
       Effect.provide(
-        Layer.provideMerge(
-          HasherInline,
-          Layer.succeed(BlobStore, makeMemoryBlobStore()),
-        ),
+        Layer.provideMerge(HasherInline, Layer.succeed(BlobStore, makeMemoryBlobStore())),
       ),
       Effect.provide(RuntimeContext.phantom),
     );
@@ -365,9 +335,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
             chunkBytes: 8 * 1024,
             hashPart: (payload, opts) => {
               if (opts.spill !== undefined) {
-                throw new Error(
-                  "spill must not be requested from a non-spilling hasher",
-                );
+                throw new Error("spill must not be requested from a non-spilling hasher");
               }
               return inline.hashPart(payload, opts);
             },
@@ -387,10 +355,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
           );
         }).pipe(
           Effect.provide(
-            Layer.provideMerge(
-              HasherInline,
-              Layer.succeed(BlobStore, makeMemoryBlobStore()),
-            ),
+            Layer.provideMerge(HasherInline, Layer.succeed(BlobStore, makeMemoryBlobStore())),
           ),
           Effect.provide(RuntimeContext.phantom),
         ),

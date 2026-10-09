@@ -10,8 +10,7 @@ export const ResetEnabledBaselineHttp = Layer.effect(
     capability: "ResetEnabledBaseline",
     iamActions: ["controltower:ResetEnabledBaseline"],
     requestKey: "enabledBaselineIdentifier",
-    identifier: (enabledBaseline: EnabledBaseline) =>
-      enabledBaseline.enabledBaselineArn,
+    identifier: (enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn,
     operation: controltower.resetEnabledBaseline,
   }),
 );

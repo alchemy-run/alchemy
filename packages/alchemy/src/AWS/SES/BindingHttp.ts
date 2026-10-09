@@ -123,8 +123,7 @@ export interface EmailIdentityRef {
 // is an Output proxy, so every property "exists".
 const isEmailIdentityRef = (
   identity: EmailIdentity | EmailIdentityRef,
-): identity is EmailIdentityRef =>
-  typeof (identity as EmailIdentityRef).emailIdentity === "string";
+): identity is EmailIdentityRef => typeof (identity as EmailIdentityRef).emailIdentity === "string";
 
 /**
  * Build the impl Effect for `SendCustomVerificationEmail`, scoped to the
@@ -170,9 +169,7 @@ export const makeVerificationScopedHttpBinding = <
       const ConfigurationSetName = configurationSet
         ? yield* configurationSet.configurationSetName
         : undefined;
-      const label = isEmailIdentityRef(identity)
-        ? identity.emailIdentity
-        : identity.LogicalId;
+      const label = isEmailIdentityRef(identity) ? identity.emailIdentity : identity.LogicalId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -192,9 +189,7 @@ export const makeVerificationScopedHttpBinding = <
             resources.push(
               `${base}:identity/${name}`,
               // A domain reference also authorizes addresses at that domain.
-              name.includes("@")
-                ? `${base}:identity/${name}`
-                : `${base}:identity/*@${name}`,
+              name.includes("@") ? `${base}:identity/${name}` : `${base}:identity/*@${name}`,
               `${base}:custom-verification-email-template/*`,
             );
           } else {
@@ -209,10 +204,7 @@ export const makeVerificationScopedHttpBinding = <
               ),
               Output.all(identity.identityArn).pipe(
                 Output.map(([identityArn]) =>
-                  identityArn.replace(
-                    /:identity\/.*$/,
-                    ":custom-verification-email-template/*",
-                  ),
+                  identityArn.replace(/:identity\/.*$/, ":custom-verification-email-template/*"),
                 ),
               ),
             );
@@ -236,9 +228,7 @@ export const makeVerificationScopedHttpBinding = <
       return Effect.fn(`${options.tag}(${label})`)(function* (
         request: Omit<I, "ConfigurationSetName">,
       ) {
-        const configurationSetName = ConfigurationSetName
-          ? yield* ConfigurationSetName
-          : undefined;
+        const configurationSetName = ConfigurationSetName ? yield* ConfigurationSetName : undefined;
         return yield* op({
           ...request,
           ConfigurationSetName: configurationSetName,
@@ -290,9 +280,7 @@ export const makeSendScopedHttpBinding = <
           // Templated sends are authorized against the template resource, so
           // grant the account's templates alongside the bound identity.
           const templateArns = Output.all(identity.identityArn).pipe(
-            Output.map(([identityArn]) =>
-              identityArn.replace(/:identity\/.*$/, ":template/*"),
-            ),
+            Output.map(([identityArn]) => identityArn.replace(/:identity\/.*$/, ":template/*")),
           );
           // For a domain identity, SES authorizes the send against the
           // identity ARN of the FROM address (identity/user@domain), not the
@@ -314,9 +302,7 @@ export const makeSendScopedHttpBinding = <
                     identity.identityArn,
                     addressArns,
                     templateArns,
-                    ...(configurationSet
-                      ? [configurationSet.configurationSetArn]
-                      : []),
+                    ...(configurationSet ? [configurationSet.configurationSetArn] : []),
                   ],
                 },
               ],
@@ -328,9 +314,7 @@ export const makeSendScopedHttpBinding = <
         request: Omit<I, "ConfigurationSetName">,
       ) {
         const fromIdentity = yield* FromIdentity;
-        const configurationSetName = ConfigurationSetName
-          ? yield* ConfigurationSetName
-          : undefined;
+        const configurationSetName = ConfigurationSetName ? yield* ConfigurationSetName : undefined;
         return yield* op({
           ...request,
           FromEmailAddress: (request as I).FromEmailAddress ?? fromIdentity,

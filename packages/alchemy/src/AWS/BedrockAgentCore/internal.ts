@@ -10,9 +10,9 @@ import { diffTags } from "../../Tags.ts";
  * Raised when an AgentCore resource lands in a terminal failure state
  * (`FAILED`, `CREATE_FAILED`, `UPDATE_FAILED`) during reconciliation.
  */
-export class AgentCoreProvisioningFailed extends Data.TaggedError(
-  "AgentCoreProvisioningFailed",
-)<{ message: string }> {}
+export class AgentCoreProvisioningFailed extends Data.TaggedError("AgentCoreProvisioningFailed")<{
+  message: string;
+}> {}
 
 /**
  * Unwrap an AgentCore `SensitiveString` (decoded as `Redacted`) to its plain
@@ -21,11 +21,7 @@ export class AgentCoreProvisioningFailed extends Data.TaggedError(
 export const unredact = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * AgentCore Memory / Runtime / CodeInterpreter / Browser names must match
@@ -57,7 +53,7 @@ export const createGatewayName = Effect.fn(function* (id: string) {
 export const readAgentCoreTags = Effect.fn(function* (resourceArn: string) {
   const response = yield* control
     .listTagsForResource({ resourceArn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;

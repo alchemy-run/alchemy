@@ -105,8 +105,7 @@ const untilAssociationSettled = <E, R>(
   self.pipe(
     Effect.repeat({
       schedule: Schedule.fixed("3 seconds"),
-      until: (association) =>
-        association === undefined || association.Status !== "CREATING",
+      until: (association) => association === undefined || association.Status !== "CREATING",
       times: 10,
     }),
   );
@@ -165,9 +164,7 @@ export const ResolverRuleAssociationProvider = () =>
         listAssociations(resolverRuleId, vpcId).pipe(
           Effect.map((associations) =>
             associations.find(
-              (association) =>
-                association.Status !== "DELETING" &&
-                association.Status !== "FAILED",
+              (association) => association.Status !== "DELETING" && association.Status !== "FAILED",
             ),
           ),
         );
@@ -175,9 +172,7 @@ export const ResolverRuleAssociationProvider = () =>
       // Any association record at all — used by delete to wait until the
       // (rule, VPC) pair has fully drained, DELETING entries included.
       const observeAny = (resolverRuleId: string, vpcId: string) =>
-        listAssociations(resolverRuleId, vpcId).pipe(
-          Effect.map((associations) => associations[0]),
-        );
+        listAssociations(resolverRuleId, vpcId).pipe(Effect.map((associations) => associations[0]));
 
       return ResolverRuleAssociation.Provider.of({
         stables: ["resolverRuleAssociationId", "resolverRuleId", "vpcId"],
@@ -251,9 +246,7 @@ export const ResolverRuleAssociationProvider = () =>
           }
           // Association setup is asynchronous but quick; wait (bounded) so
           // the rule is actually in effect when the deploy completes.
-          const settled = yield* untilAssociationSettled(
-            observe(news.resolverRuleId, news.vpcId),
-          );
+          const settled = yield* untilAssociationSettled(observe(news.resolverRuleId, news.vpcId));
           association = settled ?? association;
 
           yield* session.note(`${news.resolverRuleId}/${news.vpcId}`);
@@ -276,9 +269,7 @@ export const ResolverRuleAssociationProvider = () =>
           // Disassociation is asynchronous and the parent rule cannot be
           // deleted until the association has fully drained — wait
           // (bounded ~2 min) for it to disappear.
-          yield* untilAssociationGone(
-            observeAny(output.resolverRuleId, output.vpcId),
-          );
+          yield* untilAssociationGone(observeAny(output.resolverRuleId, output.vpcId));
         }),
       });
     }),

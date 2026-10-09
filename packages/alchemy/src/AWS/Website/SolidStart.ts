@@ -3,12 +3,10 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SolidStart build. */
-export const SOLIDSTART_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/solidstart";
+export const SOLIDSTART_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart";
 
 /** The AWS Lambda deploy target for the SolidStart build. */
-export const SOLIDSTART_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/solidstart/aws";
+export const SOLIDSTART_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/aws";
 
 export interface SolidStartProps extends FrameworkSiteProps {
   /**
@@ -88,10 +86,7 @@ export interface SolidStartProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SolidStart = (
-  id: string,
-  props: InputProps<SolidStartProps> = {},
-) => {
+export const SolidStart = (id: string, props: InputProps<SolidStartProps> = {}) => {
   const p = props as SolidStartProps;
   return makeFrameworkSite(id, props, {
     name: "SolidStart",

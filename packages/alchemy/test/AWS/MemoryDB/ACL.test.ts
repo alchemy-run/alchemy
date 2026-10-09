@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ACL, User } from "@/AWS/MemoryDB";
-import * as Test from "@/Test/Alchemy";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ACL, User } from "@/AWS/MemoryDB";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,18 +22,14 @@ test.provider(
       );
       expect(error._tag).toBe("ACLNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:memorydb", "live"] },
 );
 
 const assertGone = (name: string) =>
   memorydb.describeACLs({ ACLName: name }).pipe(
     Effect.flatMap(() => Effect.fail(new Error(`acl '${name}' still exists`))),
     Effect.catchTag("ACLNotFoundFault", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]) }),
   );
 
 // Single-deploy lifecycle: create an ACL with a custom user, verify, destroy.
@@ -55,10 +51,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const { acl, user } = yield* stack.deploy(
         Effect.gen(function* () {
           const user = yield* User("AclUser", {
-            authenticationMode: {
-              type: "password",
-              passwords: [TEST_PASSWORD],
-            },
+            authenticationMode: { type: "password", passwords: [TEST_PASSWORD] },
             accessString: "on ~* +@all",
           });
           const acl = yield* ACL("AppAcl", {
@@ -81,5 +74,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertGone(acl.aclName);
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:memorydb", "live"], timeout: 300_000 },
 );

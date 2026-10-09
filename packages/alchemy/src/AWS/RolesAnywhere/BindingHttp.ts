@@ -47,16 +47,12 @@ export const makeRolesAnywhereHttpBinding = <I, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.RolesAnywhere.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.RolesAnywhere.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.RolesAnywhere.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.RolesAnywhere.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

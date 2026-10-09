@@ -21,9 +21,7 @@ export default {
         // so the async runtime sees a string here. Parse it back so the
         // test can compare the structured value.
         SECRET_JSON:
-          typeof env.SECRET_JSON === "string"
-            ? JSON.parse(env.SECRET_JSON)
-            : env.SECRET_JSON,
+          typeof env.SECRET_JSON === "string" ? JSON.parse(env.SECRET_JSON) : env.SECRET_JSON,
         CONFIG_STR: env.CONFIG_STR,
         CONFIG_NUM: env.CONFIG_NUM,
         CONFIG_REDACTED: env.CONFIG_REDACTED,

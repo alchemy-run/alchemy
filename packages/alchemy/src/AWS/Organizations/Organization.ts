@@ -70,9 +70,7 @@ export interface Organization extends Resource<
  *
  * @resource
  */
-export const Organization = Resource<Organization>(
-  "AWS.Organizations.Organization",
-);
+export const Organization = Resource<Organization>("AWS.Organizations.Organization");
 
 export const OrganizationProvider = () =>
   Provider.effect(
@@ -112,16 +110,12 @@ export const OrganizationProvider = () =>
               }),
             ).pipe(
               Effect.map((response) => response.Organization),
-              Effect.catchTag("AlreadyInOrganizationException", () =>
-                readOrganization(),
-              ),
+              Effect.catchTag("AlreadyInOrganizationException", () => readOrganization()),
             );
           }
 
           if (!org?.Id || !org.Arn) {
-            return yield* Effect.fail(
-              new Error("failed to resolve organization after reconcile"),
-            );
+            return yield* Effect.fail(new Error("failed to resolve organization after reconcile"));
           }
 
           const orgArn = org.Arn;
@@ -141,21 +135,14 @@ export const OrganizationProvider = () =>
           yield* retryOrganizations(
             organizations
               .deleteOrganization({})
-              .pipe(
-                Effect.catchTag(
-                  "AWSOrganizationsNotInUseException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.void)),
           );
         }),
       };
     }),
   );
 
-const toAttrs = (
-  org: organizations.Organization,
-): Organization["Attributes"] => ({
+const toAttrs = (org: organizations.Organization): Organization["Attributes"] => ({
   organizationId: org.Id ?? "",
   organizationArn: org.Arn ?? "",
   featureSet: org.FeatureSet,
@@ -169,9 +156,7 @@ const readOrganization = () =>
   retryOrganizations(
     organizations.describeOrganization({}).pipe(
       Effect.map((response) => response.Organization),
-      Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -187,10 +172,7 @@ const ensureFeatureSet = Effect.fn(function* ({
     return current;
   }
 
-  if (
-    desiredFeatureSet === "ALL" &&
-    current.FeatureSet === "CONSOLIDATED_BILLING"
-  ) {
+  if (desiredFeatureSet === "ALL" && current.FeatureSet === "CONSOLIDATED_BILLING") {
     yield* retryOrganizations(organizations.enableAllFeatures({}));
 
     const updated = yield* readOrganization();

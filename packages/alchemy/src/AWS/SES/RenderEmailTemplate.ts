@@ -42,10 +42,7 @@ export interface RenderEmailTemplate extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RenderEmailTemplateRequest,
-    ) => Effect.Effect<
-      sesv2.TestRenderEmailTemplateResponse,
-      sesv2.TestRenderEmailTemplateError
-    >
+    ) => Effect.Effect<sesv2.TestRenderEmailTemplateResponse, sesv2.TestRenderEmailTemplateError>
   >
 > {}
 export const RenderEmailTemplate = Binding.Service<RenderEmailTemplate>(

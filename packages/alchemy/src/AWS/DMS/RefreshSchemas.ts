@@ -31,11 +31,7 @@ export interface RefreshSchemas extends Binding.Service<
   (
     instance: ReplicationInstance,
     endpoint: Endpoint,
-  ) => Effect.Effect<
-    () => Effect.Effect<dms.RefreshSchemasResponse, dms.RefreshSchemasError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<dms.RefreshSchemasResponse, dms.RefreshSchemasError>>
 > {}
 
-export const RefreshSchemas = Binding.Service<RefreshSchemas>(
-  "AWS.DMS.RefreshSchemas",
-);
+export const RefreshSchemas = Binding.Service<RefreshSchemas>("AWS.DMS.RefreshSchemas");

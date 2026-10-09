@@ -14,9 +14,7 @@ import {
 
 const VOCS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";
 
-export interface VocsProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface VocsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -45,6 +43,10 @@ export interface VocsProps<
    */
   assets?: AssetsConfig;
 }
+
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type VocsInput<Bindings extends WorkerBindingProps> = InputProps<VocsProps<Bindings>, "assets">;
 
 /**
  * A Cloudflare Worker deployed from a [Vocs](https://vocs.dev) documentation project.
@@ -136,56 +138,57 @@ export const Vocs: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | InputProps<VocsProps<Bindings>>
-        | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
+      propsEff?: VocsInput<Bindings> | Effect.Effect<VocsInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | InputProps<VocsProps<Bindings>>
-      | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
+    propsEff?: VocsInput<Bindings> | Effect.Effect<VocsInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?: VocsInput<Bindings> | Effect.Effect<VocsInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vocs(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?: VocsInput<Bindings> | Effect.Effect<VocsInput<Bindings>, never, Req>,
+      ) => effectClass(Vocs(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // The Worker compatibility resolver enables Node.js APIs from
-            // the date (or adds the flag when a caller pins an older date).
-            assets: {
-              htmlHandling: "drop-trailing-slash" as const,
-              ...props?.assets,
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // The Worker compatibility resolver enables Node.js APIs from
+          // the date (or adds the flag when a caller pins an older date).
+          assets: {
+            htmlHandling: "drop-trailing-slash" as const,
+            ...props?.assets,
+          },
+          main: undefined!,
+          source: {
+            provider: VOCS_SOURCE_PROVIDER,
+            devMode: "server",
+            options: {
+              rootDir: props?.rootDir,
+              outDir: props?.outDir,
+              memo: props?.memo,
             },
-            main: undefined!,
-            source: {
-              provider: VOCS_SOURCE_PROVIDER,
-              devMode: "server",
-              options: {
-                rootDir: props?.rootDir,
-                outDir: props?.outDir,
-                memo: props?.memo,
-              },
-            },
-          }),
-        ),
+          },
+        })),
       )) as any;

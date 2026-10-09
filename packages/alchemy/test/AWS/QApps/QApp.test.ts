@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { QApp } from "@/AWS/QApps";
-import * as Test from "@/Test/Alchemy";
 import * as qapps from "@distilled.cloud/aws/qapps";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { QApp } from "@/AWS/QApps";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,7 +15,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // read/observe paths depend on; the full lifecycle is gated behind
 // AWS_TEST_QAPPS=1 (an account with a Q Business application, passed as
 // QAPPS_INSTANCE_ID).
-describe("AWS.QApps.QApp", () => {
+describe("AWS.QApps.QApp", { tags: ["provider:aws", "provider:aws:qapps", "live"] }, () => {
   // Without a Q Business instance, the API rejects at the door with a typed
   // UnauthorizedException ("Unauthorized") — the caller isn't an Identity
   // Center user of any instance. An entitled account with bogus ids surfaces
@@ -67,9 +67,7 @@ describe("AWS.QApps.QApp", () => {
 
         const instanceId = process.env.QAPPS_INSTANCE_ID;
         if (!instanceId) {
-          return yield* Effect.die(
-            new Error("AWS_TEST_QAPPS runs require QAPPS_INSTANCE_ID"),
-          );
+          return yield* Effect.die(new Error("AWS_TEST_QAPPS runs require QAPPS_INSTANCE_ID"));
         }
 
         const textCardId = "11111111-1111-4111-8111-111111111111";
@@ -83,13 +81,7 @@ describe("AWS.QApps.QApp", () => {
                 description: props.description,
                 appDefinition: {
                   cards: [
-                    {
-                      textInput: {
-                        id: textCardId,
-                        title: "Source Text",
-                        type: "text-input",
-                      },
-                    },
+                    { textInput: { id: textCardId, title: "Source Text", type: "text-input" } },
                     {
                       qQuery: {
                         id: queryCardId,
@@ -107,18 +99,13 @@ describe("AWS.QApps.QApp", () => {
           );
 
         // Create.
-        const { app } = yield* deploy({
-          prompt: "Summarize the following text: @Source Text",
-        });
+        const { app } = yield* deploy({ prompt: "Summarize the following text: @Source Text" });
         expect(app.appId).toBeDefined();
         expect(app.appArn).toContain(":qapps:");
         expect(app.status).toBeDefined();
 
         // Out-of-band verification via distilled.
-        const observed = yield* qapps.getQApp({
-          instanceId,
-          appId: app.appId,
-        });
+        const observed = yield* qapps.getQApp({ instanceId, appId: app.appId });
         expect(observed.appId).toBe(app.appId);
         expect(observed.appDefinition.cards).toHaveLength(2);
 
@@ -128,10 +115,7 @@ describe("AWS.QApps.QApp", () => {
           prompt: "Summarize the following text in one sentence: @Source Text",
         });
         expect(updated.app.appId).toBe(app.appId);
-        const reobserved = yield* qapps.getQApp({
-          instanceId,
-          appId: app.appId,
-        });
+        const reobserved = yield* qapps.getQApp({ instanceId, appId: app.appId });
         expect(reobserved.description).toBe("updated by test");
         expect(reobserved.appVersion).toBeGreaterThan(observed.appVersion);
 
@@ -139,24 +123,17 @@ describe("AWS.QApps.QApp", () => {
 
         // Typed wait-until-gone.
         yield* Effect.gen(function* () {
-          const gone = yield* qapps
-            .getQApp({ instanceId, appId: app.appId })
-            .pipe(
-              Effect.map((d) => d.status === "DELETED"),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-            );
+          const gone = yield* qapps.getQApp({ instanceId, appId: app.appId }).pipe(
+            Effect.map((d) => d.status === "DELETED"),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          );
           if (!gone) {
             return yield* Effect.fail({ _tag: "StillExists" as const });
           }
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
           }),
         );
       }),

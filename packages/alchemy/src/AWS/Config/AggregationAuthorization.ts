@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AggregationAuthorizationProps {
@@ -79,15 +74,10 @@ export const AggregationAuthorizationProvider = () =>
     Effect.gen(function* () {
       // There is no Get API — enumerate and match on the (account, region)
       // identity pair.
-      const observeAuthorization = Effect.fn(function* (
-        accountId: string,
-        region: string,
-      ) {
+      const observeAuthorization = Effect.fn(function* (accountId: string, region: string) {
         return yield* config.describeAggregationAuthorizations.items({}).pipe(
           Stream.filter(
-            (auth) =>
-              auth.AuthorizedAccountId === accountId &&
-              auth.AuthorizedAwsRegion === region,
+            (auth) => auth.AuthorizedAccountId === accountId && auth.AuthorizedAwsRegion === region,
           ),
           Stream.runHead,
           Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
@@ -98,9 +88,7 @@ export const AggregationAuthorizationProvider = () =>
         config.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) =>
             Object.fromEntries(
-              (r.Tags ?? []).flatMap((t) =>
-                t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [],
-              ),
+              (r.Tags ?? []).flatMap((t) => (t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [])),
             ),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
@@ -115,11 +103,7 @@ export const AggregationAuthorizationProvider = () =>
       });
 
       return AggregationAuthorization.Provider.of({
-        stables: [
-          "aggregationAuthorizationArn",
-          "authorizedAccountId",
-          "authorizedAwsRegion",
-        ],
+        stables: ["aggregationAuthorizationArn", "authorizedAccountId", "authorizedAwsRegion"],
         list: () =>
           config.describeAggregationAuthorizations.items({}).pipe(
             Stream.runCollect,
@@ -134,10 +118,8 @@ export const AggregationAuthorizationProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const accountId =
-            output?.authorizedAccountId ?? olds?.authorizedAccountId;
-          const region =
-            output?.authorizedAwsRegion ?? olds?.authorizedAwsRegion;
+          const accountId = output?.authorizedAccountId ?? olds?.authorizedAccountId;
+          const region = output?.authorizedAwsRegion ?? olds?.authorizedAwsRegion;
           if (accountId === undefined || region === undefined) {
             return undefined;
           }
@@ -188,10 +170,7 @@ export const AggregationAuthorizationProvider = () =>
           if (arn === undefined) {
             // Extremely unlikely (Put returns the authorization) — fall back
             // to a fresh observation so the attrs are never fabricated.
-            live = yield* observeAuthorization(
-              news.authorizedAccountId,
-              news.authorizedAwsRegion,
-            );
+            live = yield* observeAuthorization(news.authorizedAccountId, news.authorizedAwsRegion);
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -214,9 +193,7 @@ export const AggregationAuthorizationProvider = () =>
             }
           }
 
-          yield* session.note(
-            `${news.authorizedAccountId}/${news.authorizedAwsRegion}`,
-          );
+          yield* session.note(`${news.authorizedAccountId}/${news.authorizedAwsRegion}`);
           return {
             aggregationAuthorizationArn: finalArn!,
             authorizedAccountId: news.authorizedAccountId,

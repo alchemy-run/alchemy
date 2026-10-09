@@ -27,10 +27,7 @@ export interface ListGraphSnapshots extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptunegraph.ListGraphSnapshotsInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ListGraphSnapshotsOutput,
-      neptunegraph.ListGraphSnapshotsError
-    >
+    ) => Effect.Effect<neptunegraph.ListGraphSnapshotsOutput, neptunegraph.ListGraphSnapshotsError>
   >
 > {}
 export const ListGraphSnapshots = Binding.Service<ListGraphSnapshots>(

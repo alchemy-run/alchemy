@@ -6,10 +6,7 @@ import type { Index } from "./SearchIndex.ts";
 /**
  * `GetSnapshots` request with `IndexId` injected from the bound index.
  */
-export interface GetSnapshotsRequest extends Omit<
-  kendra.GetSnapshotsRequest,
-  "IndexId"
-> {}
+export interface GetSnapshotsRequest extends Omit<kendra.GetSnapshotsRequest, "IndexId"> {}
 
 /**
  * Runtime binding for the `GetSnapshots` operation (IAM action
@@ -44,6 +41,4 @@ export interface GetSnapshots extends Binding.Service<
     ) => Effect.Effect<kendra.GetSnapshotsResponse, kendra.GetSnapshotsError>
   >
 > {}
-export const GetSnapshots = Binding.Service<GetSnapshots>(
-  "AWS.Kendra.GetSnapshots",
-);
+export const GetSnapshots = Binding.Service<GetSnapshots>("AWS.Kendra.GetSnapshots");

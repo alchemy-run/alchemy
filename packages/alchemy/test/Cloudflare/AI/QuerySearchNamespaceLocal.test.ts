@@ -1,19 +1,16 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Exercise `QuerySearchNamespaceLocal` — the current-credentials HTTP
 // implementation of the `QuerySearchNamespace` binding — from inside an Action.
@@ -47,10 +44,7 @@ test.provider(
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const target = yield* AiSearchCrawlTargetWorker;
-          const namespace = yield* Cloudflare.AI.SearchNamespace(
-            "SearchNs",
-            {},
-          );
+          const namespace = yield* Cloudflare.AI.SearchNamespace("SearchNs", {});
           const instance = yield* Cloudflare.AI.SearchInstance("Search", {
             type: "web-crawler",
             source: target.url.as<string>(),
@@ -110,5 +104,8 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );

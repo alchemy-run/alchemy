@@ -28,12 +28,7 @@ export interface AnalyzeExpense extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.AnalyzeExpenseRequest,
-    ) => Effect.Effect<
-      textract.AnalyzeExpenseResponse,
-      textract.AnalyzeExpenseError
-    >
+    ) => Effect.Effect<textract.AnalyzeExpenseResponse, textract.AnalyzeExpenseError>
   >
 > {}
-export const AnalyzeExpense = Binding.Service<AnalyzeExpense>(
-  "AWS.Textract.AnalyzeExpense",
-);
+export const AnalyzeExpense = Binding.Service<AnalyzeExpense>("AWS.Textract.AnalyzeExpense");

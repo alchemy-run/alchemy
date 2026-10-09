@@ -1,3 +1,15 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * The pack hasher on AWS Lambda, end to end (DESIGN §22.11): the Git host
  * Worker binds `InvokeFunction` cross-cloud, pushes stream through Lambda
@@ -8,28 +20,13 @@ import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { makeLambdaTestStack, TEST_SECRET } from "./fixtures/lambda-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeLambdaTestStack("GitHasherLambdaStack");
 
@@ -125,9 +122,7 @@ test(
       Effect.catchTag("RepoNotFound", () => Effect.void),
       edgeRetry,
     );
-    const created = yield* admin.repos
-      .create({ payload: { owner, name } })
-      .pipe(edgeRetry);
+    const created = yield* admin.repos.create({ payload: { owner, name } }).pipe(edgeRetry);
     const parsed = new URL(url);
     const remote = `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`;
     const fs = yield* FileSystem.FileSystem;
@@ -151,14 +146,22 @@ test(
     );
     const head = yield* sh(dir, "cd src && git rev-parse HEAD");
     expect(back.stdout.trim().split("\n").pop()).toBe(head.stdout.trim());
-    const repo = yield* admin.repos
-      .get({ params: { owner, repo: name } })
-      .pipe(edgeRetry);
+    const repo = yield* admin.repos.get({ params: { owner, repo: name } }).pipe(edgeRetry);
     const push = repo.lastPush;
     expect(push).not.toBeNull();
     // Four 4 MiB chunks were dispatched to Lambda; nothing fell back.
     expect(push?.phases?.chunks ?? 0).toBeGreaterThanOrEqual(4);
     yield* Effect.logInfo(`lastPush: ${JSON.stringify(push)}`);
   }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

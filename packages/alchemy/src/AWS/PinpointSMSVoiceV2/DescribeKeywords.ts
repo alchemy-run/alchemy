@@ -42,10 +42,7 @@ export interface DescribeKeywords extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeKeywordsRequest,
-    ) => Effect.Effect<
-      smsvoice.DescribeKeywordsResult,
-      smsvoice.DescribeKeywordsError
-    >
+    ) => Effect.Effect<smsvoice.DescribeKeywordsResult, smsvoice.DescribeKeywordsError>
   >
 > {}
 export const DescribeKeywords = Binding.Service<DescribeKeywords>(

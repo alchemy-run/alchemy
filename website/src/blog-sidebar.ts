@@ -17,9 +17,7 @@ let categoryById: Map<string, BlogCategory> | undefined;
 
 async function loadCategoryById(): Promise<Map<string, BlogCategory>> {
   if (categoryById) return categoryById;
-  const entries = await getCollection("docs", (entry) =>
-    entry.id.startsWith("blog/"),
-  );
+  const entries = await getCollection("docs", (entry) => entry.id.startsWith("blog/"));
   const map = new Map<string, BlogCategory>();
   for (const entry of entries) {
     const data = entry.data as { category?: BlogCategory };
@@ -37,12 +35,12 @@ function extractBlogId(href: string): string | undefined {
 export const onRequest = defineRouteMiddleware(async (context, next) => {
   await next();
 
-  const { starlightRoute, t } = context.locals;
+  // TODO: fix types
+  const { starlightRoute, t } = context.locals as Record<string, any>;
   const recentLabel = t("starlightBlog.sidebar.recent");
 
   const recentIndex = starlightRoute.sidebar.findIndex(
-    (item): item is SidebarGroup =>
-      item.type === "group" && item.label === recentLabel,
+    (item: any): item is SidebarGroup => item.type === "group" && item.label === recentLabel,
   );
   if (recentIndex === -1) return;
 
@@ -55,8 +53,7 @@ export const onRequest = defineRouteMiddleware(async (context, next) => {
   for (const item of recentGroup.entries) {
     if (item.type !== "link") continue;
     const id = extractBlogId(item.href);
-    const category: BlogCategory =
-      (id !== undefined ? categories.get(id) : undefined) ?? "post";
+    const category: BlogCategory = (id !== undefined ? categories.get(id) : undefined) ?? "post";
     buckets.get(category)!.push(item);
   }
 

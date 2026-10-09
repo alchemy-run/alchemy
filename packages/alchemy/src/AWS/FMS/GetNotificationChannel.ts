@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetNotificationChannel}.
  */
-export interface GetNotificationChannelRequest
-  extends fms.GetNotificationChannelRequest {}
+export interface GetNotificationChannelRequest extends fms.GetNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:GetNotificationChannel`.
@@ -32,10 +31,7 @@ export interface GetNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.GetNotificationChannelResponse,
-      fms.GetNotificationChannelError
-    >
+    ) => Effect.Effect<fms.GetNotificationChannelResponse, fms.GetNotificationChannelError>
   >
 > {}
 

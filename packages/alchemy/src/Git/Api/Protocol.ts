@@ -1,33 +1,32 @@
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 /**
  * The `protocol` group: git smart HTTP v0 at the repository's root path.
  * The routes are streaming binary (pkt-lines in, sideband packs out),
- * answer with the response they build, and declare no schemas.
+ * decode repository path parameters and return the binary response they build.
+ * Use handleRaw to keep request bodies streaming through API middleware.
  *
  * `:repo` may carry a `.git` suffix; the handlers strip it.
  */
-import * as Http from "../../Http/index.ts";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { RepoPath, RepoNotFound, PushDenied } from "./Schema.ts";
 
 /** `GET /:owner/:repo/info/refs?service=…`: the ref advertisement. */
-export class InfoRefs extends Http.get<InfoRefs>()(
-  "infoRefs",
-  "/:owner/:repo/info/refs",
-  {},
-) {}
+export const InfoRefs = HttpApiEndpoint.get("infoRefs", "/:owner/:repo/info/refs", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** `POST /:owner/:repo/git-upload-pack`: clone and fetch. */
-export class UploadPack extends Http.post<UploadPack>()(
-  "uploadPack",
-  "/:owner/:repo/git-upload-pack",
-  {},
-) {}
+export const UploadPack = HttpApiEndpoint.post("uploadPack", "/:owner/:repo/git-upload-pack", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** `POST /:owner/:repo/git-receive-pack`: push. */
-export class ReceivePack extends Http.post<ReceivePack>()(
-  "receivePack",
-  "/:owner/:repo/git-receive-pack",
-  {},
-) {}
+export const ReceivePack = HttpApiEndpoint.post("receivePack", "/:owner/:repo/git-receive-pack", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** The git wire protocol, mounted at the root. */
 export class Protocol extends HttpApiGroup.make("protocol", {

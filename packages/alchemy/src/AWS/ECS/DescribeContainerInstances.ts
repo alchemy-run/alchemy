@@ -38,13 +38,9 @@ export interface DescribeContainerInstances extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeContainerInstancesRequest,
-    ) => Effect.Effect<
-      ECS.DescribeContainerInstancesResponse,
-      ECS.DescribeContainerInstancesError
-    >
+    ) => Effect.Effect<ECS.DescribeContainerInstancesResponse, ECS.DescribeContainerInstancesError>
   >
 > {}
-export const DescribeContainerInstances =
-  Binding.Service<DescribeContainerInstances>(
-    "AWS.ECS.DescribeContainerInstances",
-  );
+export const DescribeContainerInstances = Binding.Service<DescribeContainerInstances>(
+  "AWS.ECS.DescribeContainerInstances",
+);

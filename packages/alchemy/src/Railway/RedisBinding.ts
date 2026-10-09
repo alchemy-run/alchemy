@@ -26,11 +26,11 @@ export const REDIS_URL_ENV = "REDIS_URL";
 
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
-  if (Redacted.isRedacted(value)) return asPlain(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, asPlain);
   return undefined;
 };
 
-const resolveName = (redis: Redis) =>
+const _resolveName = (redis: Redis) =>
   Effect.gen(function* () {
     const value = redis.name as unknown;
     const direct = asPlain(value);
@@ -40,6 +40,7 @@ const resolveName = (redis: Redis) =>
       return asPlain(yield* accessor) ?? "";
     }
     if (Effect.isEffect(value)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource attribute Effects resolve without requirements
       return asPlain(yield* value as Effect.Effect<unknown>) ?? "";
     }
     return redis.LogicalId;
@@ -49,9 +50,7 @@ const redisUrlFromEnv = Config.Redacted(REDIS_URL_ENV).pipe(
   Effect.map((value) => Redacted.value(value)),
 );
 
-export const makeRedisBinding = <Client>(options: {
-  makeClient: (url: Url) => Client;
-}) =>
+export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Client }) =>
   Effect.succeed(
     Effect.fn(function* (redis: Redis) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {

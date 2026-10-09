@@ -4,22 +4,19 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
 import * as Fiber from "effect/Fiber";
+import type { HttpBodyError } from "effect/http/HttpBody";
+import { causeResponse, ClientAbort, type HttpServerError } from "effect/http/HttpServerError";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import type { Scope } from "effect/Scope";
-import type { HttpBodyError } from "effect/unstable/http/HttpBody";
-import {
-  causeResponse,
-  ClientAbort,
-  type HttpServerError,
-} from "effect/unstable/http/HttpServerError";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Scope from "effect/Scope";
+import { ManagedHttpShutdown } from "./Runtime/Bootstrap/ManagedHttpShutdown.ts";
 
 export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   HttpServerError | HttpBodyError,
-  HttpServerRequest | Scope | Req
+  HttpServerRequest | Scope.Scope | Req
 >;
 
 /**
@@ -31,13 +28,13 @@ export type HttpEffect<Req = never> = Effect.Effect<
  */
 const scopeEjected = Symbol.for("effect/http/HttpEffect/scopeEjected");
 
-export const isScopeEjected = (scope: Scope) => scopeEjected in scope;
+export const isScopeEjected = (scope: Scope.Scope) => scopeEjected in scope;
 
 export const serve = <Req = never>(
   handler: Effect.Effect<
     HttpServerResponse.HttpServerResponse,
     HttpServerError | HttpBodyError,
-    HttpServerRequest | Scope | Req
+    HttpServerRequest | Scope.Scope | Req
   >,
 ) =>
   Effect.serviceOption(HttpServer).pipe(
@@ -65,10 +62,8 @@ export class HttpServer extends Context.Service<
         HttpServerError | HttpBodyError,
         Req
       >,
-      options?: {
-        port?: number;
-      },
-    ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest> | Scope>;
+      options?: { port?: number },
+    ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest> | Scope.Scope>;
   }
 >()("HttpServer") {}
 
@@ -84,16 +79,14 @@ export const safeHttpEffect = <Req = never>(
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   never,
-  Req | HttpServerRequest | Scope
+  Req | HttpServerRequest | Scope.Scope
 > =>
   Effect.catchCause(
     interruptOnClientAbort(
       handler.pipe(
         // @ts-expect-error
         Effect.flatMap((response) =>
-          HttpServerResponse.isHttpServerResponse(response)
-            ? Effect.succeed(response)
-            : response,
+          HttpServerResponse.isHttpServerResponse(response) ? Effect.succeed(response) : response,
         ),
       ) as any as HttpEffect<Req>,
       options?.signal,
@@ -141,19 +134,14 @@ export const interruptOnClientAbort = <A, E, R>(
         const fiber = yield* Effect.forkChild(handler, {
           startImmediately: true,
         });
-        const abort = () =>
-          fiber.interruptUnsafe(undefined, ClientAbort.annotation);
+        const abort = () => fiber.interruptUnsafe(undefined, ClientAbort.annotation);
         signal.addEventListener("abort", abort, { once: true });
         return yield* Fiber.join(fiber).pipe(
-          Effect.ensuring(
-            Effect.sync(() => signal.removeEventListener("abort", abort)),
-          ),
+          Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abort))),
         );
       });
 
-const clientAborted = Effect.failCause(
-  Cause.annotate(Cause.interrupt(), ClientAbort.annotation),
-);
+const clientAborted = Effect.failCause(Cause.annotate(Cause.interrupt(), ClientAbort.annotation));
 
 /**
  * No `ErrorReporter` is registered by default, so without a fallback a defect
@@ -168,9 +156,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
   const failures = cause.reasons.filter(
     (reason) =>
       reason._tag !== "Interrupt" &&
-      !ErrorReporter.isIgnored(
-        reason._tag === "Fail" ? reason.error : reason.defect,
-      ),
+      !ErrorReporter.isIgnored(reason._tag === "Fail" ? reason.error : reason.defect),
   );
   return failures.length === 0
     ? Effect.void
@@ -238,14 +224,40 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* NodeHttpServerPlatform.make(
-              NodeHttp.createServer,
-              {
-                port,
-                host: serverOptions?.hostname ?? "0.0.0.0",
-              },
-            );
-            yield* server.serve(safeHttpEffect(handler));
+            const shutdown = yield* Effect.serviceOption(ManagedHttpShutdown);
+            const managed = Option.getOrUndefined(shutdown);
+            if (managed?.isStopping()) return yield* Effect.interrupt;
+            const serve = Effect.gen(function* () {
+              const server = yield* NodeHttpServerPlatform.make(
+                () => {
+                  const server = NodeHttp.createServer();
+                  managed?.servers.add(server);
+                  server.once("close", () => managed?.servers.delete(server));
+                  return server;
+                },
+                {
+                  port,
+                  host: serverOptions?.hostname ?? "0.0.0.0",
+                  gracefulShutdownTimeout: managed?.drainTimeoutMs,
+                },
+              );
+              // The Node bridge masks interruption, including streaming writes.
+              yield* managed
+                ? server.serve(safeHttpEffect(handler), (handled) =>
+                    Effect.withFiber((fiber) => {
+                      // Observe outside the adapter's request-scope finalization.
+                      managed.observeRequest(fiber);
+                      return Effect.interruptible(handled);
+                    }),
+                  )
+                : server.serve(safeHttpEffect(handler));
+            });
+            if (managed) {
+              const scope = yield* Scope.fork(managed.scope);
+              yield* serve.pipe(Scope.provide(scope));
+            } else {
+              yield* serve;
+            }
           }).pipe(Effect.orDie),
       };
     }),

@@ -19,11 +19,13 @@
  * ### Providing the store
  * **Example:** Packs on S3, compute on Cloudflare
  * ```typescript
- * const GitLive = Git.ServerLive.pipe(
+ * const GitObjects = AWS.S3.Bucket("GitObjects");
+ *
+ * const GitLive = Git.ApiLive.pipe(
+ *   Layer.provide(Git.ApiHandlersLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
- *   Layer.provide(Git.BlobStoreS3()),
- *   // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
+ *   Layer.provide(Git.BlobStoreS3(GitObjects)),
  * );
  * ```
  */
@@ -33,7 +35,6 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AbortMultipartUpload } from "../AWS/S3/AbortMultipartUpload.ts";
 import { AbortMultipartUploadHttp } from "../AWS/S3/AbortMultipartUploadHttp.ts";
-import { Bucket } from "../AWS/S3/Bucket.ts";
 import { CompleteMultipartUpload } from "../AWS/S3/CompleteMultipartUpload.ts";
 import { CompleteMultipartUploadHttp } from "../AWS/S3/CompleteMultipartUploadHttp.ts";
 import { CreateMultipartUpload } from "../AWS/S3/CreateMultipartUpload.ts";
@@ -60,26 +61,10 @@ import {
   type BlobStoreShape,
 } from "./BlobStore.ts";
 
-/** The id of the `AWS.S3.Bucket` {@link BlobStoreS3} declares when none is passed. */
-export const S3_BUCKET_ID = "GitObjects" as const;
-
-export interface BlobStoreS3Options {
-  /**
-   * The `AWS.S3.Bucket` holding the bytes. Declared for you as
-   * {@link S3_BUCKET_ID}, with an engine-generated name in the deploying
-   * profile's region, when omitted.
-   */
-  readonly bucket?: Effect.Effect<Bucket, never, any> | undefined;
-}
-
-const s3Error =
-  (what: string) =>
-  (error: { readonly _tag?: string; readonly message?: string }) =>
-    new BlobStoreError({
-      reason: `${what}: ${error._tag ?? "S3Error"}${
-        error.message ? `: ${error.message}` : ""
-      }`,
-    });
+const s3Error = (what: string) => (error: { readonly _tag?: string; readonly message?: string }) =>
+  new BlobStoreError({
+    reason: `${what}: ${error._tag ?? "S3Error"}${error.message ? `: ${error.message}` : ""}`,
+  });
 
 const collectBytes = (
   stream: Stream.Stream<Uint8Array, Error>,
@@ -100,26 +85,17 @@ const collectBytes = (
   );
 
 /**
- * S3-backed {@link BlobStore}. See the module doc for identity and
- * latency semantics.
+ * S3-backed {@link BlobStore} using the given bucket. Accepts an
+ * `AWS.S3.Bucket` resource or its declaration Effect, like {@link BlobStoreR2}.
+ * See the module doc for identity and latency semantics.
  *
  * @layer
  * @provides Git.BlobStore
  */
-export const BlobStoreS3 = (
-  options?: BlobStoreS3Options,
-): Layer.Layer<BlobStore> =>
+export const BlobStoreS3 = (bucket: Parameters<typeof GetObject>[0]): Layer.Layer<BlobStore> =>
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
-      // Yielding the resource class gives a constructor whose providers are
-      // the host stack's, so declaring the bucket here needs nothing from
-      // the caller. A user-declared bucket is the same resource, yielded.
-      const bucket =
-        options?.bucket === undefined
-          ? yield* (yield* Bucket)(S3_BUCKET_ID)
-          : yield* options.bucket as Effect.Effect<Bucket>;
-
       const getObject = yield* GetObject(bucket);
       const putObject = yield* PutObject(bucket);
       const headObject = yield* HeadObject(bucket);
@@ -145,9 +121,7 @@ export const BlobStoreS3 = (
                 size: output.ContentLength ?? 0,
                 bytes: collectBytes(body, `get ${key}`),
                 stream: body.pipe(
-                  Stream.mapError((error) =>
-                    s3Error(`stream ${key}`)({ message: String(error) }),
-                  ),
+                  Stream.mapError((error) => s3Error(`stream ${key}`)({ message: String(error) })),
                 ),
               };
             }),
@@ -159,8 +133,7 @@ export const BlobStoreS3 = (
           putObject({
             Key: key,
             Body: body,
-            ContentLength:
-              body instanceof Uint8Array ? body.length : opts?.contentLength,
+            ContentLength: body instanceof Uint8Array ? body.length : opts?.contentLength,
           }).pipe(Effect.mapError(s3Error(`put ${key}`)), Effect.asVoid),
 
         head: (key) =>
@@ -204,10 +177,7 @@ export const BlobStoreS3 = (
                         ETag: p.etag,
                       })),
                     },
-                  }).pipe(
-                    Effect.mapError(s3Error(`complete ${key}`)),
-                    Effect.asVoid,
-                  ),
+                  }).pipe(Effect.mapError(s3Error(`complete ${key}`)), Effect.asVoid),
                 abort: abortMultipart({ Key: key, UploadId }).pipe(
                   Effect.mapError(s3Error(`abort ${key}`)),
                   Effect.asVoid,
@@ -241,30 +211,25 @@ export const BlobStoreS3 = (
         },
 
         list: (prefix) =>
-          Stream.paginate(
-            undefined as string | undefined,
-            (ContinuationToken) =>
-              listObjectsV2({
-                Prefix: prefix,
-                ContinuationToken,
-                MaxKeys: 1000,
-              }).pipe(
-                Effect.mapError(s3Error(`list ${prefix}`)),
-                Effect.map((page) => {
-                  const metas = (page.Contents ?? []).flatMap(
-                    (object): Array<BlobMeta> =>
-                      object.Key === undefined
-                        ? []
-                        : [{ key: object.Key, size: object.Size ?? 0 }],
-                  );
-                  return [
-                    metas,
-                    page.IsTruncated && page.NextContinuationToken
-                      ? Option.some(page.NextContinuationToken)
-                      : Option.none<string>(),
-                  ] as const;
-                }),
-              ),
+          Stream.paginate(undefined as string | undefined, (ContinuationToken) =>
+            listObjectsV2({
+              Prefix: prefix,
+              ContinuationToken,
+              MaxKeys: 1000,
+            }).pipe(
+              Effect.mapError(s3Error(`list ${prefix}`)),
+              Effect.map((page) => {
+                const metas = (page.Contents ?? []).flatMap((object): Array<BlobMeta> =>
+                  object.Key === undefined ? [] : [{ key: object.Key, size: object.Size ?? 0 }],
+                );
+                return [
+                  metas,
+                  page.IsTruncated && page.NextContinuationToken
+                    ? Option.some(page.NextContinuationToken)
+                    : Option.none<string>(),
+                ] as const;
+              }),
+            ),
           ),
       } satisfies BlobStoreShape;
     }),

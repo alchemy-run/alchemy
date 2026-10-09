@@ -105,20 +105,16 @@ export interface GroupEventSourceProps extends EventRouteProps {
  */
 export const consumeGroupEvents = <StreamReq = never, Req = never>(
   props: GroupEventSourceProps,
-  process: (
-    events: Stream.Stream<GroupEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<GroupEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "ResourceGroupsGroupEvents",
     {
       source: ["aws.resource-groups"],
-      "detail-type": (
-        props.kinds ?? (["state-change", "membership-change"] as const)
-      ).map((kind) => DETAIL_TYPES[kind]),
-      ...(props.groupArns !== undefined
-        ? { resources: [...props.groupArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["state-change", "membership-change"] as const)).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
+      ...(props.groupArns !== undefined ? { resources: [...props.groupArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

@@ -28,12 +28,7 @@ export interface AcceptDataGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.AcceptDataGrantRequest,
-    ) => Effect.Effect<
-      dataexchange.AcceptDataGrantResponse,
-      dataexchange.AcceptDataGrantError
-    >
+    ) => Effect.Effect<dataexchange.AcceptDataGrantResponse, dataexchange.AcceptDataGrantError>
   >
 > {}
-export const AcceptDataGrant = Binding.Service<AcceptDataGrant>(
-  "AWS.DataExchange.AcceptDataGrant",
-);
+export const AcceptDataGrant = Binding.Service<AcceptDataGrant>("AWS.DataExchange.AcceptDataGrant");

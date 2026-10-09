@@ -2,7 +2,6 @@ import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -159,13 +158,8 @@ export const CatalogSyncProvider = () =>
       if (!isResolved(news)) return undefined;
       const oldDestination =
         output?.destinationType ??
-        (olds !== undefined && isResolved(olds)
-          ? olds.destinationType
-          : undefined);
-      if (
-        oldDestination !== undefined &&
-        oldDestination !== news.destinationType
-      ) {
+        (olds !== undefined && isResolved(olds) ? olds.destinationType : undefined);
+      if (oldDestination !== undefined && oldDestination !== news.destinationType) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -174,8 +168,7 @@ export const CatalogSyncProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const deleteDestination =
-        output?.deleteDestination ?? olds?.deleteDestination ?? true;
+      const deleteDestination = output?.deleteDestination ?? olds?.deleteDestination ?? true;
 
       // Owned path: refresh by our persisted sync id.
       if (output?.syncId) {
@@ -189,9 +182,7 @@ export const CatalogSyncProvider = () =>
       // as Unowned and let the engine gate adoption.
       const name = yield* syncName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match
-        ? Unowned(toAttributes(match, acct, deleteDestination))
-        : undefined;
+      return match ? Unowned(toAttributes(match, acct, deleteDestination)) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -237,10 +228,7 @@ export const CatalogSyncProvider = () =>
         patch.updateMode = news.updateMode;
         dirty = true;
       }
-      if (
-        news.description !== undefined &&
-        observed.description !== news.description
-      ) {
+      if (news.description !== undefined && observed.description !== news.description) {
         patch.description = news.description;
         dirty = true;
       }
@@ -276,9 +264,7 @@ export const CatalogSyncProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((sync) =>
-              toAttributes(sync, accountId, true),
-            ),
+            (page.result ?? []).map((sync) => toAttributes(sync, accountId, true)),
           ),
         ),
         Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),

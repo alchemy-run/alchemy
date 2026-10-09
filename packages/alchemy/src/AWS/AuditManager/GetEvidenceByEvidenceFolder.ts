@@ -39,7 +39,6 @@ export interface GetEvidenceByEvidenceFolder extends Binding.Service<
   >
 > {}
 
-export const GetEvidenceByEvidenceFolder =
-  Binding.Service<GetEvidenceByEvidenceFolder>(
-    "AWS.AuditManager.GetEvidenceByEvidenceFolder",
-  );
+export const GetEvidenceByEvidenceFolder = Binding.Service<GetEvidenceByEvidenceFolder>(
+  "AWS.AuditManager.GetEvidenceByEvidenceFolder",
+);

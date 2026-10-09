@@ -44,10 +44,7 @@ export interface ListIngestionJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListIngestionJobsRequest,
-    ) => Effect.Effect<
-      bedrock.ListIngestionJobsResponse,
-      bedrock.ListIngestionJobsError
-    >
+    ) => Effect.Effect<bedrock.ListIngestionJobsResponse, bedrock.ListIngestionJobsError>
   >
 > {}
 export const ListIngestionJobs = Binding.Service<ListIngestionJobs>(

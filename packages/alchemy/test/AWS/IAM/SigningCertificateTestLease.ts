@@ -8,9 +8,7 @@ import * as Semaphore from "effect/Semaphore";
 // AWS tests concurrent.
 const signingCertificateFixtureLock = Semaphore.makeUnsafe(1);
 
-export const withSigningCertificateFixture = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const withSigningCertificateFixture = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     signingCertificateFixtureLock.take(1),
     () => effect,

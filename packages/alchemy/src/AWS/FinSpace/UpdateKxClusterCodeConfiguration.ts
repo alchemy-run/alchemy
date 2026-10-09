@@ -29,17 +29,13 @@ export interface UpdateKxClusterCodeConfiguration extends Binding.Service<
     environment: K,
   ) => Effect.Effect<
     (
-      request: Omit<
-        SVC.UpdateKxClusterCodeConfigurationRequest,
-        "environmentId"
-      >,
+      request: Omit<SVC.UpdateKxClusterCodeConfigurationRequest, "environmentId">,
     ) => Effect.Effect<
       SVC.UpdateKxClusterCodeConfigurationResponse,
       SVC.UpdateKxClusterCodeConfigurationError
     >
   >
 > {}
-export const UpdateKxClusterCodeConfiguration =
-  Binding.Service<UpdateKxClusterCodeConfiguration>(
-    "AWS.FinSpace.UpdateKxClusterCodeConfiguration",
-  );
+export const UpdateKxClusterCodeConfiguration = Binding.Service<UpdateKxClusterCodeConfiguration>(
+  "AWS.FinSpace.UpdateKxClusterCodeConfiguration",
+);

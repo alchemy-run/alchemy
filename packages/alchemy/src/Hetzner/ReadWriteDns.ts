@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
-import type { Zone } from "./Zone.ts";
 import { type ReadDnsClient } from "./ReadDns.ts";
 import { type WriteDnsClient } from "./WriteDns.ts";
+import type { Zone } from "./Zone.ts";
 
 /**
  * Binding that lets runtime code perform the full Hetzner Cloud DNS RRSet
@@ -43,6 +43,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * ```
  *
  * @binding
+ * @product DNS
  */
 export interface ReadWriteDns extends Binding.Service<
   ReadWriteDns,
@@ -50,9 +51,7 @@ export interface ReadWriteDns extends Binding.Service<
   (zone: Zone) => Effect.Effect<ReadWriteDnsClient>
 > {}
 
-export const ReadWriteDns = Binding.Service<ReadWriteDns>(
-  "Hetzner.DNS.ReadWriteDns",
-);
+export const ReadWriteDns = Binding.Service<ReadWriteDns>("Hetzner.DNS.ReadWriteDns");
 
 /** Combined read + write DNS RRSet operations. */
 export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}

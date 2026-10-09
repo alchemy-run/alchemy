@@ -25,12 +25,7 @@ export interface CancelJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.CancelJobRequest,
-    ) => Effect.Effect<
-      dataexchange.CancelJobResponse,
-      dataexchange.CancelJobError
-    >
+    ) => Effect.Effect<dataexchange.CancelJobResponse, dataexchange.CancelJobError>
   >
 > {}
-export const CancelJob = Binding.Service<CancelJob>(
-  "AWS.DataExchange.CancelJob",
-);
+export const CancelJob = Binding.Service<CancelJob>("AWS.DataExchange.CancelJob");

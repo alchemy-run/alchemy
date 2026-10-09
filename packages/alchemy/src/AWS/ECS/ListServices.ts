@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface ListServicesRequest extends Omit<
-  ECS.ListServicesRequest,
-  "cluster"
-> {}
+export interface ListServicesRequest extends Omit<ECS.ListServicesRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:ListServices`.
@@ -31,11 +28,7 @@ export interface ListServices extends Binding.Service<
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    (
-      request: ListServicesRequest,
-    ) => Effect.Effect<ECS.ListServicesResponse, ECS.ListServicesError>
+    (request: ListServicesRequest) => Effect.Effect<ECS.ListServicesResponse, ECS.ListServicesError>
   >
 > {}
-export const ListServices = Binding.Service<ListServices>(
-  "AWS.ECS.ListServices",
-);
+export const ListServices = Binding.Service<ListServices>("AWS.ECS.ListServices");

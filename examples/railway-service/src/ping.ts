@@ -1,7 +1,7 @@
 import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Railway from "alchemy/Railway";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db, Site } from "./shared.ts";
 
 /**
@@ -25,10 +25,7 @@ export default class Ping extends Railway.Service<Ping>()(
       fetch: db.execute("select 1 as ok").pipe(
         Effect.flatMap(HttpServerResponse.json),
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

@@ -44,6 +44,4 @@ export interface ExportSchema extends Binding.Service<
     }) => Effect.Effect<schemas.ExportSchemaResponse, schemas.ExportSchemaError>
   >
 > {}
-export const ExportSchema = Binding.Service<ExportSchema>(
-  "AWS.Schemas.ExportSchema",
-);
+export const ExportSchema = Binding.Service<ExportSchema>("AWS.Schemas.ExportSchema");

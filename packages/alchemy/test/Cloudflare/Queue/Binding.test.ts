@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import WriteBindingWorker from "./fixtures/write-binding.ts";
 import WriteHttpWorker from "./fixtures/write-http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -27,16 +24,13 @@ const ready = Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]);
 /** POST and retry until the producer route accepts the message (202). */
 const post = (base: string, path: string, body?: string) => {
   const base$ = HttpClientRequest.post(`${base}${path}`);
-  const req =
-    body !== undefined ? HttpClientRequest.bodyText(base$, body) : base$;
+  const req = body !== undefined ? HttpClientRequest.bodyText(base$, body) : base$;
   return HttpClient.execute(req).pipe(
     Effect.flatMap((res) =>
       res.status === 202
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((b) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body: b })),
-            ),
+            Effect.flatMap((b) => Effect.fail(new WorkerNotReady({ status: res.status, body: b }))),
           ),
     ),
     Effect.retry({
@@ -87,12 +81,8 @@ test.provider(
       // against one base url.
       const exercise = (base: string, label: string) =>
         Effect.gen(function* () {
-          expect((yield* post(base, "/send", `${label}-json`)).status).toBe(
-            202,
-          );
-          expect(
-            (yield* post(base, "/send-text", `${label}-text`)).status,
-          ).toBe(202);
+          expect((yield* post(base, "/send", `${label}-json`)).status).toBe(202);
+          expect((yield* post(base, "/send-text", `${label}-text`)).status).toBe(202);
           expect((yield* post(base, "/sendBatch")).status).toBe(202);
           expect((yield* post(base, "/sendBatch-text")).status).toBe(202);
         });
@@ -104,5 +94,13 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

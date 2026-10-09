@@ -37,7 +37,6 @@ export interface GetAccessPointPolicyStatus extends Binding.Service<
     >
   >
 > {}
-export const GetAccessPointPolicyStatus =
-  Binding.Service<GetAccessPointPolicyStatus>(
-    "AWS.S3Control.GetAccessPointPolicyStatus",
-  );
+export const GetAccessPointPolicyStatus = Binding.Service<GetAccessPointPolicyStatus>(
+  "AWS.S3Control.GetAccessPointPolicyStatus",
+);

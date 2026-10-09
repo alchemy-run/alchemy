@@ -112,14 +112,8 @@ export interface SecretKeyPayload {
   keyJwk?: SecretKeyJwk;
 }
 
-const unwrap = <A>(
-  value: A | Redacted.Redacted<A> | undefined,
-): A | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * A Cloudflare Workers Secret Key binding — key material uploaded once and
@@ -217,11 +211,7 @@ const unwrap = <A>(
  * @product Workers
  * @category Workers & Compute
  */
-export interface SecretKey extends Binding.Service<
-  SecretKey,
-  TypeId,
-  SecretKeyAccessor
-> {
+export interface SecretKey extends Binding.Service<SecretKey, TypeId, SecretKeyAccessor> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @param props Key format, algorithm, usages, and the key material.

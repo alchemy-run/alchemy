@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AccountPasswordPolicy } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,19 +14,22 @@ const { test } = Test.make({ providers: AWS.providers() });
 // exercises `list()` and asserts the result is well-formed: the singleton get
 // returns either the one configured policy or `[]` (typed `NoSuchEntityException`
 // when no policy is set on the account).
-test.provider("list returns the account password policy singleton", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(AccountPasswordPolicy);
-    const all = yield* provider.list();
+test.provider(
+  "list returns the account password policy singleton",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(AccountPasswordPolicy);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    // Account singleton: 0 (no policy set) or 1 (policy configured).
-    expect(all.length).toBeLessThanOrEqual(1);
-    for (const policy of all) {
-      expect(typeof policy).toBe("object");
-      expect(policy).not.toBeNull();
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      // Account singleton: 0 (no policy set) or 1 (policy configured).
+      expect(all.length).toBeLessThanOrEqual(1);
+      for (const policy of all) {
+        expect(typeof policy).toBe("object");
+        expect(policy).not.toBeNull();
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:iam", "live"] },
 );
 
 // Full lifecycle against the dedicated testing account. The policy values are
@@ -58,9 +61,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(
-        Effect.option,
-      );
+      const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(Effect.option);
       expect(afterDestroy._tag).toBe("None");
     }),
+  { tags: ["provider:aws", "provider:aws:iam", "live"] },
 );

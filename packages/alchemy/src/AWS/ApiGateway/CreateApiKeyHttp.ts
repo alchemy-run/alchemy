@@ -20,9 +20,7 @@ export const CreateApiKeyHttp = Layer.effect(
         verb: "POST",
         paths: (region) => [`arn:aws:apigateway:${region}::/apikeys`],
       });
-      return Effect.fn("AWS.ApiGateway.CreateApiKey")(function* (
-        request?: CreateApiKeyRequest,
-      ) {
+      return Effect.fn("AWS.ApiGateway.CreateApiKey")(function* (request?: CreateApiKeyRequest) {
         return yield* createApiKey(request ?? {});
       });
     });

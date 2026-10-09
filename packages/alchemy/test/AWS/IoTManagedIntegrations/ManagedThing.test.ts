@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { CredentialLocker, ManagedThing } from "@/AWS/IoTManagedIntegrations";
-import { Region } from "@/AWS/Region.ts";
-import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CredentialLocker, ManagedThing } from "@/AWS/IoTManagedIntegrations";
+import { Region } from "@/AWS/Region.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -32,6 +32,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
 );
 
 class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
@@ -41,8 +42,7 @@ class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
 const assertThingGone = (managedThingId: string) =>
   mi.getManagedThing({ Identifier: managedThingId }).pipe(
     Effect.flatMap((thing) =>
-      thing.ProvisioningStatus === "DELETED" ||
-      thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
+      thing.ProvisioningStatus === "DELETED" || thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
         ? Effect.void
         : Effect.fail(new ThingStillExists({ managedThingId })),
     ),
@@ -91,9 +91,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       expect(thing.tags.fixture).toBe("iot-mi-managed-thing");
 
       // Out-of-band verification via distilled.
-      const observed = yield* mi.getManagedThing({
-        Identifier: thing.managedThingId,
-      });
+      const observed = yield* mi.getManagedThing({ Identifier: thing.managedThingId });
       expect(observed.Arn).toBe(thing.managedThingArn);
 
       // Update a mutable field in place.
@@ -103,5 +101,5 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       yield* stack.destroy();
       yield* assertThingGone(thing.managedThingId);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"], timeout: 240_000 },
 );

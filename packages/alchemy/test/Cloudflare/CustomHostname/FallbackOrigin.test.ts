@@ -1,14 +1,14 @@
+import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -24,13 +24,9 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 const saasEnabled = !!process.env.CLOUDFLARE_SAAS_ENABLED;
 const testSaas = test.provider.skipIf(!saasEnabled);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic record names for the origin DNS records the fallback origin
 // points at (the API requires the origin to be a DNS record in the zone).
@@ -41,9 +37,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -58,15 +52,8 @@ const forbiddenBlips = Schedule.exponential("500 millis");
 // configured (`FallbackOriginNotFound`) or is mid-deletion.
 const observeFallbackOrigin = (zoneId: string) =>
   customHostnames.getFallbackOrigin({ zoneId }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenBlips,
-      times: 8,
-    }),
-    Effect.map((r) => ({
-      origin: r.origin ?? undefined,
-      status: r.status ?? undefined,
-    })),
+    Effect.retry({ while: (e) => e._tag === "Forbidden", schedule: forbiddenBlips, times: 8 }),
+    Effect.map((r) => ({ origin: r.origin ?? undefined, status: r.status ?? undefined })),
     Effect.catchTag("FallbackOriginNotFound", () => Effect.succeed(undefined)),
   );
 
@@ -77,11 +64,7 @@ const observeFallbackOrigin = (zoneId: string) =>
 const probeSaasEntitlement = (zoneId: string) =>
   customHostnames.getFallbackOrigin({ zoneId }).pipe(
     Effect.asVoid,
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenBlips,
-      times: 8,
-    }),
+    Effect.retry({ while: (e) => e._tag === "Forbidden", schedule: forbiddenBlips, times: 8 }),
     Effect.catchTag("FallbackOriginNotFound", () => Effect.void),
     Effect.catchTag("SaasAccessNotGranted", (e) =>
       Effect.die(
@@ -94,9 +77,7 @@ const probeSaasEntitlement = (zoneId: string) =>
   );
 
 const isGone = (
-  observed:
-    | { origin: string | undefined; status: string | undefined }
-    | undefined,
+  observed: { origin: string | undefined; status: string | undefined } | undefined,
 ): boolean =>
   observed === undefined ||
   observed.origin === undefined ||
@@ -109,25 +90,26 @@ const isGone = (
 // Cloudflare for SaaS (`SaasAccessNotGranted` / `Forbidden`). This read-only
 // assertion ALWAYS runs — on an unentitled account every zone is skipped and
 // the result is a well-typed empty `FallbackOriginAttributes[]`.
-test.provider("list enumerates fallback origins across all zones", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates fallback origins across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.CustomHostname.FallbackOrigin,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.FallbackOrigin);
+      const all = yield* provider.list();
 
-    // Well-typed `FallbackOriginAttributes[]`: each element matches the
-    // shape `read` produces.
-    expect(Array.isArray(all)).toBe(true);
-    for (const item of all) {
-      expect(typeof item.zoneId).toBe("string");
-      expect(typeof item.origin).toBe("string");
-    }
+      // Well-typed `FallbackOriginAttributes[]`: each element matches the
+      // shape `read` produces.
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.zoneId).toBe("string");
+        expect(typeof item.origin).toBe("string");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"] },
 );
 
 // Entitlement-gated: when Cloudflare for SaaS is provisioned, deploy a
@@ -159,17 +141,13 @@ testSaas(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomHostname.FallbackOrigin,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.FallbackOrigin);
       const all = yield* provider.list();
-      expect(
-        all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A),
-      ).toBe(true);
+      expect(all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 300_000 },
 );
 
 testSaas(
@@ -191,13 +169,10 @@ testSaas(
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -219,13 +194,10 @@ testSaas(
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -242,13 +214,10 @@ testSaas(
             content: "203.0.113.51",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -263,13 +232,9 @@ testSaas(
       // Deletion is asynchronous — poll (bounded) until the fallback origin
       // is gone or mid-deletion.
       const gone = yield* observeFallbackOrigin(zoneId).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("3 seconds"),
-          until: isGone,
-          times: 20,
-        }),
+        Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: isGone, times: 20 }),
       );
       expect(isGone(gone)).toBe(true);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:customhostname", "live"], timeout: 300_000 },
 );

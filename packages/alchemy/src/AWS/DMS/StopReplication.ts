@@ -34,6 +34,4 @@ export interface StopReplication extends Binding.Service<
   >
 > {}
 
-export const StopReplication = Binding.Service<StopReplication>(
-  "AWS.DMS.StopReplication",
-);
+export const StopReplication = Binding.Service<StopReplication>("AWS.DMS.StopReplication");

@@ -3,7 +3,8 @@ title: Hyperdrive
 description: Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pgDeps = `pg`;
 export const pgDevDeps = `@types/pg`;
@@ -405,60 +406,21 @@ the binding. Pick the one that matches your engine:
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (Postgres)">
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (MySQL)">
 
 [`mysql2`](https://github.com/sidorares/node-mysql2):
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={mysqlDeps} />
 
   </TabItem>
 </Tabs>
@@ -478,7 +440,7 @@ underlying `Hyperdrive` object:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -524,7 +486,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -570,7 +532,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { createConnection } from "mysql2/promise";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -617,8 +579,8 @@ Two things to notice (regardless of engine):
 - The fetch handler opens a fresh connection per request and ends
   it on the way out. This is intentional — Hyperdrive does the
   pooling on Cloudflare's side, so the Worker doesn't need its
-  own. (The [Drizzle guide](/cloudflare/data/drizzle) revisits
-  this when we want long-lived clients.)
+  own. [Effect SQL](#use-effect-sql) and [Drizzle](/cloudflare/data/drizzle)
+  manage a client per execution scope rather than retaining sockets across requests.
 
 ## Wire the resources into the stack
 
@@ -660,6 +622,59 @@ URL and you should see something like:
 
 You're now talking to your database from the edge through
 Hyperdrive.
+
+## Use Effect SQL
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as SQL from "alchemy/SQL/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Hyperdrive } from "./Db.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const sql = yield* SQL.Postgres({ url: connection.connectionString });
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* sql`SELECT NOW() AS now`;
+        return yield* HttpServerResponse.json({ ok: true, rows });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
+```
+
+Install `@effect/sql-pg` and `pg` for this Postgres variant. The binding and stack
+stay the same; Effect SQL opens and closes a pool for each execution scope.
+
+For a MySQL origin, install `@effect/sql-mysql2` and `mysql2`, import
+`alchemy/SQL/MySQL`, and construct `SQL.MySQL({ url: connection.connectionString })`.
+The [Postgres](/sql/effect-sql/postgres) and [MySQL](/sql/effect-sql/mysql) client
+guides cover queries, typed errors, and transactions.
+
+## Workers defaults
+
+`SQL.MySQL` and `Drizzle.MySQL` disable prepared statements and mysql2's eval-based
+row parsers when running in workerd. Hyperdrive's MySQL proxy uses the text
+protocol, and Workers prohibit runtime JavaScript compilation.
+
+```typescript
+const sql = yield* SQL.MySQL({
+  url: connection.connectionString,
+  disablePreparedStatements: true,
+  poolConfig: { disableEval: true },
+});
+```
+
+These are detected defaults, not required boilerplate. Explicit configuration
+wins; direct connections outside workerd retain prepared statements and normal
+parsers by default. The adapter parses URL fields and query parameters into the
+driver configuration so `poolConfig` options reach mysql2.
 
 ## Where next
 

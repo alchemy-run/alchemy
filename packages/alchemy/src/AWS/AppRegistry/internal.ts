@@ -12,11 +12,5 @@ export const clientToken = (instanceId: string): string =>
  * including them in the diff baseline makes untagResource fail with
  * "Customers cannot remove tag keys starting with aws:".
  */
-export const stripAwsSystemTags = (
-  tags: Record<string, string>,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).filter(
-      ([key]) => !key.toLowerCase().startsWith("aws:"),
-    ),
-  );
+export const stripAwsSystemTags = (tags: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(tags).filter(([key]) => !key.toLowerCase().startsWith("aws:")));

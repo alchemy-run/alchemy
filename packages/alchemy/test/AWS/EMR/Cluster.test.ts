@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/EMR/Cluster.ts";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/EMR/Cluster.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -22,22 +22,20 @@ test.provider(
   "describeCluster on a nonexistent id fails with ClusterNotFound",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.describeCluster({ ClusterId: "j-1K48XAOQ4XHCB" }),
-      );
+      const error = yield* Effect.flip(emr.describeCluster({ ClusterId: "j-1K48XAOQ4XHCB" }));
       expect(error._tag).toBe("ClusterNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:emr", "live"] },
 );
 
 test.provider(
   "terminateJobFlows on a nonexistent id fails with JobFlowNotFound",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.terminateJobFlows({ JobFlowIds: ["j-1K48XAOQ4XHCB"] }),
-      );
+      const error = yield* Effect.flip(emr.terminateJobFlows({ JobFlowIds: ["j-1K48XAOQ4XHCB"] }));
       expect(error._tag).toBe("JobFlowNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:emr", "live"] },
 );
 
 // Resolve a subnet of the account's default VPC (public subnet — EMR
@@ -50,9 +48,7 @@ const resolveSubnet = Effect.gen(function* () {
       { Name: "default-for-az", Values: ["true"] },
     ],
   });
-  const subnetId = (subnets.Subnets ?? []).flatMap((s) =>
-    s.SubnetId ? [s.SubnetId] : [],
-  )[0];
+  const subnetId = (subnets.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))[0];
   return { subnetId };
 });
 
@@ -69,15 +65,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const { subnetId } = yield* resolveSubnet;
       expect(subnetId).toBeDefined();
 
-      const deploy = (props: {
-        stepConcurrencyLevel?: number;
-        idleTimeoutSeconds?: number;
-      }) =>
+      const deploy = (props: { stepConcurrencyLevel?: number; idleTimeoutSeconds?: number }) =>
         stack.deploy(
           Effect.gen(function* () {
-            const logs = yield* AWS.S3.Bucket("EmrLogs", {
-              forceDestroy: true,
-            });
+            const logs = yield* AWS.S3.Bucket("EmrLogs", { forceDestroy: true });
             // EMR service role (legacy managed policy — the v2 policy
             // requires tag-scoped resources).
             const serviceRole = yield* AWS.IAM.Role("EmrServiceRole", {
@@ -111,10 +102,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role",
               ],
             });
-            const instanceProfile = yield* AWS.IAM.InstanceProfile(
-              "EmrEc2Profile",
-              { roleName: ec2Role.roleName },
-            );
+            const instanceProfile = yield* AWS.IAM.InstanceProfile("EmrEc2Profile", {
+              roleName: ec2Role.roleName,
+            });
             const cluster = yield* Cluster("Spark", {
               releaseLabel: "emr-7.5.0",
               applications: ["Spark", "Hadoop"],
@@ -130,9 +120,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               },
               stepConcurrencyLevel: props.stepConcurrencyLevel,
               autoTerminationPolicy: props.idleTimeoutSeconds
-                ? {
-                    idleTimeout: Duration.seconds(props.idleTimeoutSeconds),
-                  }
+                ? { idleTimeout: Duration.seconds(props.idleTimeoutSeconds) }
                 : undefined,
               tags: { fixture: "emr-cluster" },
             });
@@ -147,20 +135,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(["WAITING", "RUNNING"]).toContain(cluster.state);
 
       // Out-of-band verification via distilled.
-      const created = yield* emr.describeCluster({
-        ClusterId: cluster.clusterId,
-      });
+      const created = yield* emr.describeCluster({ ClusterId: cluster.clusterId });
       expect(created.Cluster?.ReleaseLabel).toBe("emr-7.5.0");
-      expect(
-        (created.Cluster?.Applications ?? []).map((a) => a.Name).sort(),
-      ).toEqual(["Hadoop", "Spark"]);
-      const tags = Object.fromEntries(
-        (created.Cluster?.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect((created.Cluster?.Applications ?? []).map((a) => a.Name).sort()).toEqual([
+        "Hadoop",
+        "Spark",
+      ]);
+      const tags = Object.fromEntries((created.Cluster?.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.fixture).toBe("emr-cluster");
-      const policy = yield* emr.getAutoTerminationPolicy({
-        ClusterId: cluster.clusterId,
-      });
+      const policy = yield* emr.getAutoTerminationPolicy({ ClusterId: cluster.clusterId });
       expect(policy.AutoTerminationPolicy?.IdleTimeout).toBe(3600);
 
       // Update in place — step concurrency and auto-termination policy sync
@@ -170,13 +153,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         idleTimeoutSeconds: 7200,
       });
       expect(updated.clusterId).toBe(cluster.clusterId);
-      const afterUpdate = yield* emr.describeCluster({
-        ClusterId: cluster.clusterId,
-      });
+      const afterUpdate = yield* emr.describeCluster({ ClusterId: cluster.clusterId });
       expect(afterUpdate.Cluster?.StepConcurrencyLevel).toBe(4);
-      const updatedPolicy = yield* emr.getAutoTerminationPolicy({
-        ClusterId: cluster.clusterId,
-      });
+      const updatedPolicy = yield* emr.getAutoTerminationPolicy({ ClusterId: cluster.clusterId });
       expect(updatedPolicy.AutoTerminationPolicy?.IdleTimeout).toBe(7200);
 
       // Destroy — the provider initiates termination (irreversible) and
@@ -185,7 +164,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertClusterTerminating(cluster.clusterId);
     }),
   // create (~10-15 min) + update + termination initiation, one test.
-  { timeout: 2_700_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:emr",
+      "provider:aws:iam",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 2_700_000,
+  },
 );
 
 // Termination is verified as INITIATED (TERMINATING, irreversible) or fully
@@ -207,10 +196,5 @@ const assertClusterTerminating = (clusterId: string) =>
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(20),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(20)]) }),
   );

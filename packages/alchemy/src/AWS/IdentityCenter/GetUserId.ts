@@ -37,12 +37,7 @@ export interface GetUserId extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.GetUserIdRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.GetUserIdResponse,
-      identitystore.GetUserIdError
-    >
+    ) => Effect.Effect<identitystore.GetUserIdResponse, identitystore.GetUserIdError>
   >
 > {}
-export const GetUserId = Binding.Service<GetUserId>(
-  "AWS.IdentityCenter.GetUserId",
-);
+export const GetUserId = Binding.Service<GetUserId>("AWS.IdentityCenter.GetUserId");

@@ -1,8 +1,8 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { SandboxContainer } from "./SandboxContainer.ts";
 
 /**
@@ -22,9 +22,7 @@ export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
           // Forward the subpath: `/sandbox/host-fetch` → `/host-fetch`.
           const path = url.pathname.replace(/^\/sandbox/, "") || "/";
           const { fetch } = yield* container.getTcpPort(3000);
-          const response = yield* fetch(
-            HttpClientRequest.get(`http://container${path}`),
-          );
+          const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return HttpServerResponse.text(yield* response.text, {
             status: response.status,
             headers: response.headers,
@@ -32,9 +30,5 @@ export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(SandboxContainer, { enableInternet: true }),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Containers.layer(SandboxContainer, { enableInternet: true }))),
 ) {}

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
-export interface RollbackStageRequest extends Omit<
-  SVC.RollbackStageInput,
-  "pipelineName"
-> {}
+export interface RollbackStageRequest extends Omit<SVC.RollbackStageInput, "pipelineName"> {}
 
 /**
  * Runtime binding for `codepipeline:RollbackStage` — rolls a stage back to
@@ -35,6 +32,4 @@ export interface RollbackStage extends Binding.Service<
     ) => Effect.Effect<SVC.RollbackStageOutput, SVC.RollbackStageError>
   >
 > {}
-export const RollbackStage = Binding.Service<RollbackStage>(
-  "AWS.CodePipeline.RollbackStage",
-);
+export const RollbackStage = Binding.Service<RollbackStage>("AWS.CodePipeline.RollbackStage");

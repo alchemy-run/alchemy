@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Parameter } from "./Parameter.ts";
 
-export interface GetParameterRequest extends Omit<
-  SSM.GetParameterRequest,
-  "Name"
-> {}
+export interface GetParameterRequest extends Omit<SSM.GetParameterRequest, "Name"> {}
 
 /**
  * Runtime binding for `ssm:GetParameter`.
@@ -39,11 +36,7 @@ export interface GetParameter extends Binding.Service<
   <P extends Parameter>(
     parameter: P,
   ) => Effect.Effect<
-    (
-      request?: GetParameterRequest,
-    ) => Effect.Effect<SSM.GetParameterResult, SSM.GetParameterError>
+    (request?: GetParameterRequest) => Effect.Effect<SSM.GetParameterResult, SSM.GetParameterError>
   >
 > {}
-export const GetParameter = Binding.Service<GetParameter>(
-  "AWS.SSM.GetParameter",
-);
+export const GetParameter = Binding.Service<GetParameter>("AWS.SSM.GetParameter");

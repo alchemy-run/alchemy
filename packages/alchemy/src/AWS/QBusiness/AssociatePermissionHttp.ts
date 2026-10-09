@@ -1,7 +1,7 @@
 import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Layer from "effect/Layer";
-import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 import { AssociatePermission } from "./AssociatePermission.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 export const AssociatePermissionHttp = Layer.effect(
   AssociatePermission,

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ServiceQuotaIncreaseRequest } from "@/AWS/ServiceQuotas";
-import * as Test from "@/Test/Alchemy";
 import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ServiceQuotaIncreaseRequest } from "@/AWS/ServiceQuotas";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,13 +21,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        servicequotas.getServiceQuota({
-          ServiceCode: "vpc",
-          QuotaCode: "L-00000000",
-        }),
+        servicequotas.getServiceQuota({ ServiceCode: "vpc", QuotaCode: "L-00000000" }),
       );
       expect(error._tag).toBe("NoSuchResourceException");
     }),
+  { tags: ["provider:aws", "provider:aws:servicequotas", "live"] },
 );
 
 // Full engine lifecycle on the SAFE path: a desired value at or below the
@@ -78,7 +76,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:servicequotas", "live"], timeout: 120_000 },
 );
 
 // Submitting a REAL quota increase request may open an AWS Support case and
@@ -92,18 +90,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SERVICE_QUOTAS)(
       // Observe the current applied value out-of-band so the requested
       // value is always strictly above it (AWS rejects <= applied).
       const current = yield* servicequotas
-        .getServiceQuota({
-          ServiceCode: "vpc",
-          QuotaCode: VPCS_PER_REGION,
-        })
+        .getServiceQuota({ ServiceCode: "vpc", QuotaCode: VPCS_PER_REGION })
         .pipe(
           Effect.map((r) => r.Quota?.Value),
           Effect.catchTag("NoSuchResourceException", () =>
             servicequotas
-              .getAWSDefaultServiceQuota({
-                ServiceCode: "vpc",
-                QuotaCode: VPCS_PER_REGION,
-              })
+              .getAWSDefaultServiceQuota({ ServiceCode: "vpc", QuotaCode: VPCS_PER_REGION })
               .pipe(Effect.map((r) => r.Quota?.Value)),
           ),
         );
@@ -140,5 +132,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SERVICE_QUOTAS)(
       // Destroy only forgets the request — Service Quotas has no cancel API.
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:servicequotas", "live"], timeout: 180_000 },
 );

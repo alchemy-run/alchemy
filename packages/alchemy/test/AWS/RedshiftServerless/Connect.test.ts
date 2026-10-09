@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ServerlessConnectFunctionLive, {
   ServerlessConnectFunction,
 } from "./fixtures/connect-handler";
@@ -22,12 +22,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        serverless.getCredentials({
-          workgroupName: "alchemy-nonexistent-rsconn-probe",
-        }),
+        serverless.getCredentials({ workgroupName: "alchemy-nonexistent-rsconn-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:redshiftserverless", "live"] },
 );
 
 let baseUrl: string;
@@ -38,17 +37,14 @@ let baseUrl: string;
 // afterAll.
 describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
   "RedshiftServerless.Connect",
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:redshiftserverless", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "RedshiftServerless.Connect setup: destroying previous run",
-        );
+        yield* Effect.logInfo("RedshiftServerless.Connect setup: destroying previous run");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "RedshiftServerless.Connect setup: deploying fixture",
-        );
+        yield* Effect.logInfo("RedshiftServerless.Connect setup: deploying fixture");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* ServerlessConnectFunction;
@@ -79,10 +75,7 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
                   : Effect.fail(new Error(`info returned ${res.status}`)),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("1 second"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
               }),
               Effect.flatMap((res) => res.json),
             );

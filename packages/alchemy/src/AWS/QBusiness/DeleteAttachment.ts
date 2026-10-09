@@ -37,12 +37,7 @@ export interface DeleteAttachment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteAttachmentRequest,
-    ) => Effect.Effect<
-      qbusiness.DeleteAttachmentResponse,
-      qbusiness.DeleteAttachmentError
-    >
+    ) => Effect.Effect<qbusiness.DeleteAttachmentResponse, qbusiness.DeleteAttachmentError>
   >
 > {}
-export const DeleteAttachment = Binding.Service<DeleteAttachment>(
-  "AWS.QBusiness.DeleteAttachment",
-);
+export const DeleteAttachment = Binding.Service<DeleteAttachment>("AWS.QBusiness.DeleteAttachment");

@@ -4,8 +4,7 @@ import { frameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * The Next.js-on-Node framework module (`next build` + a custom
  * `next({ dev: false })` server). Not OpenNext.
  */
-export const NEXTJS_NODE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nextjs/node";
+export const NEXTJS_NODE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/node";
 
 export interface NextjsProps extends FrameworkSiteProps {}
 

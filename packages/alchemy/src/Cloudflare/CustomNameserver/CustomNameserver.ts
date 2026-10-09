@@ -2,7 +2,6 @@ import * as customNameservers from "@distilled.cloud/cloudflare/custom-nameserve
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -81,13 +80,7 @@ export interface Attributes {
   zoneTag: string;
 }
 
-export type CustomNameserver = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type CustomNameserver = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * An account-level custom (vanity) nameserver — e.g. `ns1.yourbrand.com` —
@@ -152,22 +145,16 @@ export const CustomNameserverProvider = () =>
       // Account collection: `getCustomNameserver` is a paginated list
       // endpoint despite its name. Enumerate every page and hydrate each
       // nameserver into the exact `read` Attributes shape.
-      return yield* customNameservers.getCustomNameserver
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.result.map((ns) => toAttributes(ns, accountId)),
-            ),
-          ),
-          // Unentitled accounts have no custom nameservers at all — the
-          // collection endpoint rejects with a typed entitlement error.
-          // Treat that as an empty collection rather than failing `list`.
-          Effect.catchTag("CustomNameserversNotEnabled", () =>
-            Effect.succeed([] as Attributes[]),
-          ),
-        );
+      return yield* customNameservers.getCustomNameserver.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.result.map((ns) => toAttributes(ns, accountId))),
+        ),
+        // Unentitled accounts have no custom nameservers at all — the
+        // collection endpoint rejects with a typed entitlement error.
+        // Treat that as an empty collection rather than failing `list`.
+        Effect.catchTag("CustomNameserversNotEnabled", () => Effect.succeed([] as Attributes[])),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds, news }) {
@@ -210,10 +197,7 @@ export const CustomNameserverProvider = () =>
       // 1. Observe — `nsName` is the nameserver's identity within the
       //    account; the cached `output` is at most a hint. The list is
       //    authoritative: a missing nameserver falls through to create.
-      const observed = yield* findByName(
-        output?.accountId ?? accountId,
-        news.nsName,
-      );
+      const observed = yield* findByName(output?.accountId ?? accountId, news.nsName);
       if (observed) {
         // 2. Sync — nothing is mutable (no update API); `diff` already
         //    replaces on nsName/nsSet changes, so observed state is final.
@@ -256,8 +240,7 @@ export const CustomNameserverProvider = () =>
     }),
   });
 
-type ObservedNameserver =
-  customNameservers.GetCustomNameserverResponse["result"][number];
+type ObservedNameserver = customNameservers.GetCustomNameserverResponse["result"][number];
 
 /**
  * Find a custom nameserver by exact FQDN on the account. The FQDN is the
@@ -269,9 +252,7 @@ const findByName = (accountId: string, nsName: string) =>
     .getCustomNameserver({ accountId })
     .pipe(
       Effect.map((page) =>
-        page.result.find(
-          (ns): ns is ObservedNameserver => ns.nsName === nsName,
-        ),
+        page.result.find((ns): ns is ObservedNameserver => ns.nsName === nsName),
       ),
     );
 

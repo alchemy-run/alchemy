@@ -49,7 +49,6 @@ export interface RestoreTableToPointInTime extends Binding.Service<
   >
 > {}
 
-export const RestoreTableToPointInTime =
-  Binding.Service<RestoreTableToPointInTime>(
-    "AWS.DynamoDB.RestoreTableToPointInTime",
-  );
+export const RestoreTableToPointInTime = Binding.Service<RestoreTableToPointInTime>(
+  "AWS.DynamoDB.RestoreTableToPointInTime",
+);

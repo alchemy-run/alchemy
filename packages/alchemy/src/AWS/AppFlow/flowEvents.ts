@@ -56,11 +56,7 @@ export interface FlowEventsOptions {
  * ).toQueue(alerts);
  * ```
  */
-export const flowEvents = ({
-  flowNames,
-  detailTypes,
-  statuses,
-}: FlowEventsOptions = {}) => ({
+export const flowEvents = ({ flowNames, detailTypes, statuses }: FlowEventsOptions = {}) => ({
   source: ["aws.appflow"],
   ...(detailTypes ? { "detail-type": detailTypes } : {}),
   ...(flowNames || statuses

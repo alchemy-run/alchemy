@@ -1,7 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { Region } from "@distilled.cloud/aws/Region";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
-
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { Platform } from "../../Platform.ts";
@@ -11,10 +10,7 @@ import type * as Server from "../../Server/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  makeMicrovmRuntimeContext,
-  MicrovmImageTypeId,
-} from "./MicrovmRuntimeContext.ts";
+import { makeMicrovmRuntimeContext, MicrovmImageTypeId } from "./MicrovmRuntimeContext.ts";
 
 /**
  * The IAM permissions a build role needs: read the code artifact from the
@@ -29,11 +25,7 @@ const buildRolePolicyStatements: PolicyStatement[] = [
   },
   {
     Effect: "Allow",
-    Action: [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ],
+    Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
     Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
   },
 ];
@@ -590,8 +582,7 @@ export const MicrovmImage: Platform<
   // binding so the user doesn't have to author the inline policy.
   onCreate: (_resource, props: MicrovmImageProps) =>
     props.buildRole && typeof props.buildRole !== "string"
-      ? props.buildRole
-          .bind`Allow(${_resource}, AWS.Lambda.MicrovmImage.build)`({
+      ? props.buildRole.bind`Allow(${_resource}, AWS.Lambda.MicrovmImage.build)`({
           // Grant the build permissions...
           policyStatements: buildRolePolicyStatements,
           // ...and the trust statement, so a build role passed as a bare

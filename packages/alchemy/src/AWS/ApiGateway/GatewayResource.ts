@@ -4,10 +4,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
-import {
-  Resource as ResourceFactory,
-  type Resource as ResourceType,
-} from "../../Resource.ts";
+import { Resource as ResourceFactory, type Resource as ResourceType } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { RestApi } from "./RestApi.ts";
 
@@ -82,9 +79,7 @@ export interface ApiGatewayResource extends ResourceType<
  *
  * @resource
  */
-export const GatewayResource = ResourceFactory<ApiGatewayResource>(
-  "AWS.ApiGateway.Resource",
-);
+export const GatewayResource = ResourceFactory<ApiGatewayResource>("AWS.ApiGateway.Resource");
 
 interface ApiGatewayResourceInputProps {
   restApi?: RestApi;
@@ -103,8 +98,7 @@ const ResourceImpl = (id: string, props: ApiGatewayResourceInputProps) =>
     const restApiId = rest.restApiId ?? restApi?.restApiId;
     if (!restApiId) {
       return yield* Effect.die(
-        "ApiGateway.Resource requires either `restApi` (preferred) or " +
-          "explicit `restApiId`.",
+        "ApiGateway.Resource requires either `restApi` (preferred) or " + "explicit `restApiId`.",
       );
     }
     const resource = yield* GatewayResource(id, {
@@ -148,9 +142,7 @@ export const ResourceProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .filter((api) => api.id != null)
-                    .map((api) => api.id!),
+                  (page.items ?? []).filter((api) => api.id != null).map((api) => api.id!),
                 ),
               ),
             );
@@ -164,12 +156,7 @@ export const ResourceProvider = () =>
                       (page.items ?? [])
                         // The API root resource ("/") has no parentId/pathPart;
                         // it isn't a managed `Resource`, so skip it.
-                        .filter(
-                          (r) =>
-                            r.id != null &&
-                            r.parentId != null &&
-                            r.pathPart != null,
-                        )
+                        .filter((r) => r.id != null && r.parentId != null && r.pathPart != null)
                         .map((r) => ({
                           resourceId: r.id!,
                           restApiId,
@@ -179,9 +166,7 @@ export const ResourceProvider = () =>
                     ),
                   ),
                   // A RestApi can vanish mid-enumeration; skip it.
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -194,11 +179,7 @@ export const ResourceProvider = () =>
               restApiId: output.restApiId,
               resourceId: output.resourceId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!r?.id) return undefined;
           return {
             resourceId: r.id,
@@ -223,11 +204,7 @@ export const ResourceProvider = () =>
                   restApiId,
                   resourceId: output.resourceId,
                 })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           // Ensure — create the resource if missing.
@@ -240,9 +217,7 @@ export const ResourceProvider = () =>
             if (!created.id) {
               return yield* Effect.die("createResource missing id");
             }
-            yield* session.note(
-              `Created API Gateway resource ${created.id} (${news.pathPart})`,
-            );
+            yield* session.note(`Created API Gateway resource ${created.id} (${news.pathPart})`);
             observed = yield* ag.getResource({
               restApiId: news.restApiId as string,
               resourceId: created.id,
@@ -257,9 +232,7 @@ export const ResourceProvider = () =>
             yield* ag.updateResource({
               restApiId,
               resourceId,
-              patchOperations: [
-                { op: "replace", path: "/pathPart", value: news.pathPart },
-              ],
+              patchOperations: [{ op: "replace", path: "/pathPart", value: news.pathPart }],
             });
             yield* session.note(`Updated resource ${resourceId}`);
           }

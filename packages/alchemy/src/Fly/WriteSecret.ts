@@ -56,6 +56,7 @@ import type { Secret } from "./Secret.ts";
  * ```
  *
  * @binding
+ * @product Secret
  */
 export interface WriteSecret extends Binding.Service<
   WriteSecret,
@@ -81,7 +82,5 @@ export interface WriteSecretClient {
     value: Redacted.Redacted<string> | string,
   ): Effect.Effect<AppSecretsUpdateResp, UpdateSecretsError, RuntimeContext>;
   /** Delete a secret by name. */
-  delete(
-    name: string,
-  ): Effect.Effect<DeleteAppSecretResponse, DeleteSecretError, RuntimeContext>;
+  delete(name: string): Effect.Effect<DeleteAppSecretResponse, DeleteSecretError, RuntimeContext>;
 }

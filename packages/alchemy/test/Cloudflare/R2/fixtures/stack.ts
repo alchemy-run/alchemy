@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 import ReadBindingWorker from "./read-binding.ts";
 import ReadHttpWorker from "./read-http.ts";
 import ReadWriteBindingWorker from "./readwrite-binding.ts";

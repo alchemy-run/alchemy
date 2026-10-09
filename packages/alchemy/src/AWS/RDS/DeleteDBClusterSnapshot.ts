@@ -27,10 +27,7 @@ export interface DeleteDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: rds.DeleteDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      rds.DeleteDBClusterSnapshotResult,
-      rds.DeleteDBClusterSnapshotError
-    >
+    ) => Effect.Effect<rds.DeleteDBClusterSnapshotResult, rds.DeleteDBClusterSnapshotError>
   >
 > {}
 export const DeleteDBClusterSnapshot = Binding.Service<DeleteDBClusterSnapshot>(

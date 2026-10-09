@@ -121,9 +121,7 @@ export const SubscriptionProvider = () =>
     list: Effect.fn(function* () {
       const subscriptions = yield* sns.listSubscriptions.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.Subscriptions ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Subscriptions ?? [])),
       );
 
       const concrete = subscriptions.filter(
@@ -148,9 +146,7 @@ export const SubscriptionProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is NonNullable<typeof row> => row !== undefined,
-      );
+      return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
     }),
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
@@ -185,21 +181,16 @@ export const SubscriptionProvider = () =>
       // confirmed it out of band. Cached ARN is preferred when concrete;
       // otherwise we list-and-match by (topicArn, protocol, endpoint).
       let subscriptionArn: string | undefined;
-      if (
-        output?.subscriptionArn &&
-        !isPendingConfirmation(output.subscriptionArn)
-      ) {
+      if (output?.subscriptionArn && !isPendingConfirmation(output.subscriptionArn)) {
         const observed = yield* sns
           .getSubscriptionAttributes({
             SubscriptionArn: output.subscriptionArn,
           })
           .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidParameterException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTags({
+              NotFoundException: () => Effect.succeed(undefined),
+              InvalidParameterException: () => Effect.succeed(undefined),
+            }),
           );
         if (observed) {
           subscriptionArn = output.subscriptionArn;
@@ -244,10 +235,10 @@ export const SubscriptionProvider = () =>
       const attrsResponse = yield* sns
         .getSubscriptionAttributes({ SubscriptionArn: subscriptionArn })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidParameterException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTags({
+            NotFoundException: () => Effect.succeed(undefined),
+            InvalidParameterException: () => Effect.succeed(undefined),
+          }),
         );
       const observedAttributes = toAttributeMap(attrsResponse?.Attributes);
 
@@ -265,9 +256,7 @@ export const SubscriptionProvider = () =>
       // user-specified keys (those present in `news.attributes`/`olds`),
       // not all observed keys, because SNS exposes many read-only system
       // attributes we should not touch.
-      const previousKeys = new Set(
-        Object.keys(toAttributeMap(output?.attributes)),
-      );
+      const previousKeys = new Set(Object.keys(toAttributeMap(output?.attributes)));
       for (const name of previousKeys) {
         if (!(name in desiredAttributes)) {
           yield* sns.setSubscriptionAttributes({
@@ -298,9 +287,7 @@ export const SubscriptionProvider = () =>
           }).pipe(
             // The topic is already gone — SNS drops its subscriptions with
             // it, so there is nothing left to unsubscribe.
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
           )
         : output.subscriptionArn;
 
@@ -313,15 +300,16 @@ export const SubscriptionProvider = () =>
           SubscriptionArn: subscriptionArn,
         })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.void),
-          Effect.catchTag("InvalidParameterException", () => Effect.void),
+          Effect.catchTags({
+            NotFoundException: () => Effect.void,
+            InvalidParameterException: () => Effect.void,
+          }),
         );
     }),
   });
 
 const isPendingConfirmation = (subscriptionArn: string | undefined) =>
-  subscriptionArn === undefined ||
-  subscriptionArn.toLowerCase() === "pending confirmation";
+  subscriptionArn === undefined || subscriptionArn.toLowerCase() === "pending confirmation";
 
 const toAttributeMap = (
   attributes: Record<string, string | undefined> | undefined,
@@ -345,18 +333,16 @@ const findSubscription = Effect.fn(function* ({
     return undefined;
   }
 
-  const match = yield* sns.listSubscriptionsByTopic
-    .items({ TopicArn: topicArn })
-    .pipe(
-      Stream.filter(
-        (subscription) =>
-          subscription.Protocol === protocol &&
-          subscription.Endpoint === endpoint &&
-          !!subscription.SubscriptionArn,
-      ),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+  const match = yield* sns.listSubscriptionsByTopic.items({ TopicArn: topicArn }).pipe(
+    Stream.filter(
+      (subscription) =>
+        subscription.Protocol === protocol &&
+        subscription.Endpoint === endpoint &&
+        !!subscription.SubscriptionArn,
+    ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
   return match?.SubscriptionArn;
 });
@@ -416,10 +402,10 @@ const readSubscription = Effect.fn(function* ({
       SubscriptionArn: resolvedSubscriptionArn,
     })
     .pipe(
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      Effect.catchTag("InvalidParameterException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTags({
+        NotFoundException: () => Effect.succeed(undefined),
+        InvalidParameterException: () => Effect.succeed(undefined),
+      }),
     );
 
   if (!response) {
@@ -441,8 +427,7 @@ const readSubscription = Effect.fn(function* ({
     endpoint: attributes.Endpoint ?? endpoint,
     owner: attributes.Owner,
     pendingConfirmation:
-      attributes.PendingConfirmation === "true" ||
-      isPendingConfirmation(resolvedSubscriptionArn),
+      attributes.PendingConfirmation === "true" || isPendingConfirmation(resolvedSubscriptionArn),
     attributes,
   };
 });

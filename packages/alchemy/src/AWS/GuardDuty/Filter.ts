@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -118,12 +113,7 @@ const FilterResource = Resource<Filter>("AWS.GuardDuty.Filter");
 
 export { FilterResource as Filter };
 
-const filterArn = (
-  region: string,
-  accountId: string,
-  detectorId: string,
-  name: string,
-) =>
+const filterArn = (region: string, accountId: string, detectorId: string, name: string) =>
   `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}/filter/${name}`;
 
 export const FilterProvider = () =>
@@ -132,18 +122,12 @@ export const FilterProvider = () =>
     Effect.gen(function* () {
       // Filter names: [a-zA-Z0-9.\-_]{3,64}. The engine name is compatible.
       const toName = (id: string, props: { name?: string }) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       const getFilter = (detectorId: string, name: string) =>
         guardduty
           .getFilter({ DetectorId: detectorId, FilterName: name })
-          .pipe(
-            Effect.catchTag("BadRequestException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
 
       const buildAttrs = Effect.fn(function* (
         detectorId: string,
@@ -190,9 +174,7 @@ export const FilterProvider = () =>
               const pages = yield* guardduty.listFilters
                 .pages({ DetectorId: detectorId })
                 .pipe(Stream.runCollect);
-              const names = Array.from(pages).flatMap(
-                (page) => page.FilterNames ?? [],
-              );
+              const names = Array.from(pages).flatMap((page) => page.FilterNames ?? []);
               for (const name of names) {
                 const f = yield* getFilter(detectorId, name);
                 if (f) out.push(yield* buildAttrs(detectorId, name, f));
@@ -225,11 +207,9 @@ export const FilterProvider = () =>
             const desiredAction = news.action ?? "NOOP";
             const drift =
               live.Action !== desiredAction ||
-              (news.description !== undefined &&
-                live.Description !== news.description) ||
+              (news.description !== undefined && live.Description !== news.description) ||
               (news.rank !== undefined && live.Rank !== news.rank) ||
-              JSON.stringify(live.FindingCriteria) !==
-                JSON.stringify(news.findingCriteria);
+              JSON.stringify(live.FindingCriteria) !== JSON.stringify(news.findingCriteria);
             if (drift) {
               yield* guardduty.updateFilter({
                 DetectorId: detectorId,
@@ -244,10 +224,7 @@ export const FilterProvider = () =>
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
             const { accountId, region } = yield* AWSEnvironment.current;
             const arn = filterArn(region, accountId, detectorId, name);
-            const { upsert, removed } = diffTags(
-              tagRecord(live.Tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
             if (upsert.length > 0) {
               yield* guardduty.tagResource({
                 ResourceArn: arn,

@@ -29,10 +29,7 @@ export interface DeleteTimelineEvent extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.DeleteTimelineEventInput,
-    ) => Effect.Effect<
-      incidents.DeleteTimelineEventOutput,
-      incidents.DeleteTimelineEventError
-    >
+    ) => Effect.Effect<incidents.DeleteTimelineEventOutput, incidents.DeleteTimelineEventError>
   >
 > {}
 export const DeleteTimelineEvent = Binding.Service<DeleteTimelineEvent>(

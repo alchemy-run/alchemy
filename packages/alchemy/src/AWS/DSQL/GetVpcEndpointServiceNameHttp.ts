@@ -22,22 +22,18 @@ export const GetVpcEndpointServiceNameHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DSQL.GetVpcEndpointServiceName(${cluster}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["dsql:GetVpcEndpointServiceName"],
-                  Resource: [cluster.clusterArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.DSQL.GetVpcEndpointServiceName(${cluster}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["dsql:GetVpcEndpointServiceName"],
+                Resource: [cluster.clusterArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.DSQL.GetVpcEndpointServiceName(${cluster.LogicalId})`,
-      )(function* () {
+      return Effect.fn(`AWS.DSQL.GetVpcEndpointServiceName(${cluster.LogicalId})`)(function* () {
         return yield* op({ identifier: yield* Identifier });
       });
     });

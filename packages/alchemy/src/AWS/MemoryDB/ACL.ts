@@ -88,11 +88,7 @@ export const ACLProvider = () =>
       const readAcl = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeACLs({ ACLName: name })
-          .pipe(
-            Effect.catchTag("ACLNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ACLNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ACLs?.[0];
       });
 
@@ -101,31 +97,20 @@ export const ACLProvider = () =>
       const waitUntilActive = Effect.fn(function* (name: string) {
         return yield* readAcl(name).pipe(
           Effect.flatMap((acl) => {
-            if (
-              acl !== undefined &&
-              acl.Status !== "active" &&
-              acl.Status !== undefined
-            ) {
-              return Effect.fail(
-                new Error(`ACL '${name}' not active (${acl.Status})`),
-              );
+            if (acl !== undefined && acl.Status !== "active" && acl.Status !== undefined) {
+              return Effect.fail(new Error(`ACL '${name}' not active (${acl.Status})`));
             }
             return Effect.succeed(acl);
           }),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(24),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
           }),
         );
       });
 
       const toAttrs = Effect.fn(function* (acl: memorydb.ACL) {
         if (!acl.Name || !acl.ARN) {
-          return yield* Effect.fail(
-            new Error(`ACL '${acl.Name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`ACL '${acl.Name}' is missing its ARN`));
         }
         return {
           aclName: acl.Name,
@@ -142,9 +127,7 @@ export const ACLProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -154,9 +137,7 @@ export const ACLProvider = () =>
           const acl = yield* readAcl(name);
           if (!acl?.ARN) return undefined;
           const attrs = yield* toAttrs(acl);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -180,15 +161,11 @@ export const ACLProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ACLAlreadyExistsFault", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ACLAlreadyExistsFault", () => Effect.void));
             observed = yield* waitUntilActive(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`ACL '${name}' not found after create`),
-            );
+            return yield* Effect.fail(new Error(`ACL '${name}' not found after create`));
           }
 
           // 3. Sync — compute the user membership delta from OBSERVED state.
@@ -235,10 +212,7 @@ export const ACLProvider = () =>
             Effect.catchTag("ACLNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidACLStateFault",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(12),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
             }),
           );
         }),
@@ -259,9 +233,7 @@ export const ACLProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((acl) => toAttrs(acl), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((acl) => toAttrs(acl), { concurrency: 4 })),
           ),
       };
     }),

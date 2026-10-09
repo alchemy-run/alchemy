@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Environment } from "@/AWS/FinSpace";
-import * as Test from "@/Test/Alchemy";
 import * as finspace from "@distilled.cloud/aws/finspace";
 import * as finspaceData from "@distilled.cloud/aws/finspace-data";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Environment } from "@/AWS/FinSpace";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,6 +24,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 // Ungated typed-error probe for the finspace-data (data-plane) SDK. The data
@@ -40,6 +41,7 @@ test.provider(
       );
       expect(error._tag).toBe("AccessDeniedException");
     }),
+  { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
 // Deletion is verified as INITIATED (irreversible) or fully gone — full
@@ -48,9 +50,7 @@ const assertEnvironmentDeleting = (environmentId: string) =>
   Effect.gen(function* () {
     const status = yield* finspace.getEnvironment({ environmentId }).pipe(
       Effect.map((r) => r.environment?.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (
       status !== "gone" &&
@@ -64,10 +64,7 @@ const assertEnvironmentDeleting = (environmentId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -121,5 +118,8 @@ test.provider.skipIf(!process.env.AWS_TEST_FINSPACE)(
       yield* assertEnvironmentDeleting(env.environmentId);
     }),
   // environment create (~20 min) + update + delete, one test.
-  { timeout: 3_000_000 },
+  {
+    tags: ["provider:aws", "provider:aws:finspace", "live"],
+    timeout: 3_000_000,
+  },
 );

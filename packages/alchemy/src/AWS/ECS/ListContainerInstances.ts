@@ -35,10 +35,7 @@ export interface ListContainerInstances extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListContainerInstancesRequest,
-    ) => Effect.Effect<
-      ECS.ListContainerInstancesResponse,
-      ECS.ListContainerInstancesError
-    >
+    ) => Effect.Effect<ECS.ListContainerInstancesResponse, ECS.ListContainerInstancesError>
   >
 > {}
 export const ListContainerInstances = Binding.Service<ListContainerInstances>(

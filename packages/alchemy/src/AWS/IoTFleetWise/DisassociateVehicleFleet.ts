@@ -45,7 +45,6 @@ export interface DisassociateVehicleFleet extends Binding.Service<
     >
   >
 > {}
-export const DisassociateVehicleFleet =
-  Binding.Service<DisassociateVehicleFleet>(
-    "AWS.IoTFleetWise.DisassociateVehicleFleet",
-  );
+export const DisassociateVehicleFleet = Binding.Service<DisassociateVehicleFleet>(
+  "AWS.IoTFleetWise.DisassociateVehicleFleet",
+);

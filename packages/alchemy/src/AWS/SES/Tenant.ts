@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { SuppressionListReason } from "./ConfigurationSet.ts";
 
@@ -158,16 +153,14 @@ export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const sameReasons = (
   a: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
   b: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
 ): boolean => {
-  const key = (
-    reasons: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
-  ) => JSON.stringify([...(reasons ?? [])].sort());
+  const key = (reasons: ReadonlyArray<sesv2.SuppressionListReason> | undefined) =>
+    JSON.stringify([...(reasons ?? [])].sort());
   return key(a) === key(b);
 };
 
@@ -175,13 +168,8 @@ export const TenantProvider = () =>
   Provider.effect(
     Tenant,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<TenantProps, "tenantName">,
-      ) {
-        return (
-          props.tenantName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<TenantProps, "tenantName">) {
+        return props.tenantName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getTenant = Effect.fn(function* (name: string) {
@@ -197,9 +185,7 @@ export const TenantProvider = () =>
         // Account-scoped: enumerate every tenant so leaked test resources are
         // cleaned by nuke.
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listTenants
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listTenants.pages({}).pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.Tenants ?? [])
             .flatMap((entry) =>
@@ -216,8 +202,7 @@ export const TenantProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.tenantName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.tenantName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTenant(name);
           if (!found || !found.TenantId || !found.TenantArn) return undefined;
           const attrs = {
@@ -260,11 +245,7 @@ export const TenantProvider = () =>
                     }
                   : undefined,
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
             // Not always readable the instant create returns, and on the
             // AlreadyExists race another writer may still be mid-create.
             observed = yield* getTenant(name).pipe(
@@ -276,14 +257,8 @@ export const TenantProvider = () =>
             );
           }
 
-          if (
-            observed === undefined ||
-            !observed.TenantId ||
-            !observed.TenantArn
-          ) {
-            return yield* Effect.fail(
-              new Error(`SES tenant ${name} was not found after create`),
-            );
+          if (observed === undefined || !observed.TenantId || !observed.TenantArn) {
+            return yield* Effect.fail(new Error(`SES tenant ${name} was not found after create`));
           }
           const tenantArn = observed.TenantArn;
 
@@ -295,10 +270,8 @@ export const TenantProvider = () =>
           //    specified without SuppressionScope", and the mirror image). The
           //    prop nests them so that invalid state is unrepresentable and
           //    the put below always carries both.
-          const observedReasons =
-            observed.SuppressionAttributes?.SuppressedReasons;
-          const observedScope =
-            observed.SuppressionAttributes?.SuppressionScope;
+          const observedReasons = observed.SuppressionAttributes?.SuppressedReasons;
+          const observedScope = observed.SuppressionAttributes?.SuppressionScope;
           if (
             news.suppression !== undefined &&
             (!sameReasons(observedReasons, news.suppression.reasons) ||

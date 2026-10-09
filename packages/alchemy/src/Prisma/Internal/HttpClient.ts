@@ -1,8 +1,8 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as EffectContext from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 
 /** Node transport preserves explicit Content-Length on file-backed uploads. */
 export const PrismaHttpClientLive = NodeHttpClient.layerNodeHttp;
@@ -22,9 +22,6 @@ export class PrismaUploadClient extends EffectContext.Service<
   HttpClient.HttpClient
 >()("alchemy/Prisma/UploadClient") {}
 
-export const PrismaUploadClientLive = Layer.effect(
-  PrismaUploadClient,
-  Effect.gen(function* () {
-    return yield* HttpClient.HttpClient;
-  }),
-).pipe(Layer.provide(PrismaHttpClientLive));
+export const PrismaUploadClientLive = Layer.effect(PrismaUploadClient, HttpClient.HttpClient).pipe(
+  Layer.provide(PrismaHttpClientLive),
+);

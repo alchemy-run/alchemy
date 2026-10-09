@@ -1,3 +1,7 @@
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 /**
  * Cloudflare dev transport — HOST half.
  *
@@ -12,10 +16,6 @@
  * (`platform-proxy/connect`) with live-shared binding state.
  */
 import { DeployTargetError } from "../../core/index.ts";
-import * as Effect from "effect/Effect";
-import type * as Scope from "effect/Scope";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 import type { NuxtDevPlatform, NuxtDevPlatformContext } from "../Nuxt.ts";
 import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "./shared.ts";
 
@@ -34,13 +34,7 @@ export const resolveDevPluginPath = (): string => {
   const packageJson = fileURLToPath(
     import.meta.resolve("@alchemy.run/frontend-frameworks/package.json"),
   );
-  return NodePath.join(
-    NodePath.dirname(packageJson),
-    "dist",
-    "nuxt",
-    "dev",
-    "plugin.js",
-  );
+  return NodePath.join(NodePath.dirname(packageJson), "dist", "nuxt", "dev", "plugin.js");
 };
 
 /** Resolve {@link CLIENT_MODULE_SPECIFIER} to an absolute file path. */
@@ -72,9 +66,7 @@ export interface OpenDevProxyOptions {
 }
 
 /** How the platform proxy is opened. A test seam; the default is {@link openPlatformProxy}. */
-export type OpenDevProxy = (
-  options: OpenDevProxyOptions,
-) => Promise<DevProxyHandle>;
+export type OpenDevProxy = (options: OpenDevProxyOptions) => Promise<DevProxyHandle>;
 
 /**
  * The default opener: `cloudflare-runtime`'s `getPlatformProxy` (imported
@@ -82,8 +74,7 @@ export type OpenDevProxy = (
  * instance's `connectInfo` carries everything the dev plugin needs.
  */
 export const openPlatformProxy: OpenDevProxy = async (options) => {
-  const { getPlatformProxy } =
-    await import("@alchemy.run/cloudflare-runtime/core/platform-proxy");
+  const { getPlatformProxy } = await import("@alchemy.run/cloudflare-runtime/core/platform-proxy");
   const proxy = await getPlatformProxy({
     name: options.name,
     ...(options.compatibilityDate !== undefined
@@ -92,14 +83,10 @@ export const openPlatformProxy: OpenDevProxy = async (options) => {
     ...(options.compatibilityFlags !== undefined
       ? { compatibilityFlags: [...options.compatibilityFlags] }
       : undefined),
-    bindings: options.bindings as Parameters<
-      typeof getPlatformProxy
-    >[0]["bindings"],
+    bindings: options.bindings as Parameters<typeof getPlatformProxy>[0]["bindings"],
     ...(options.services !== undefined
       ? {
-          services: options.services as Parameters<
-            typeof getPlatformProxy
-          >[0]["services"],
+          services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
         }
       : undefined),
   });

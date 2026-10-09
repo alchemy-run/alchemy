@@ -59,9 +59,7 @@ export interface ScheduleProps {
 }
 
 const toScheduleExpression = (value: string) =>
-  value.startsWith("rate(") || value.startsWith("cron(")
-    ? value
-    : `rate(${value})`;
+  value.startsWith("rate(") || value.startsWith("cron(") ? value : `rate(${value})`;
 
 /**
  * Creates a scheduled EventBridge rule that runs an ECS Fargate task.

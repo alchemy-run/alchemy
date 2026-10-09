@@ -30,10 +30,7 @@ export interface GetCodeSecurityScan extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetCodeSecurityScanRequest,
-    ) => Effect.Effect<
-      inspector2.GetCodeSecurityScanResponse,
-      inspector2.GetCodeSecurityScanError
-    >
+    ) => Effect.Effect<inspector2.GetCodeSecurityScanResponse, inspector2.GetCodeSecurityScanError>
   >
 > {}
 export const GetCodeSecurityScan = Binding.Service<GetCodeSecurityScan>(

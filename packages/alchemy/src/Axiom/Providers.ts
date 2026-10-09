@@ -1,5 +1,5 @@
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
@@ -16,9 +16,7 @@ import { VirtualField, VirtualFieldProvider } from "./VirtualField.ts";
 
 export { Credentials } from "@distilled.cloud/axiom/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Axiom",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Axiom") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

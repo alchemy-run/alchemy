@@ -10,12 +10,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -192,14 +187,8 @@ export interface Parameter extends Resource<
 export const Parameter = Resource<Parameter>("AWS.SSM.Parameter");
 
 /** Normalize a plain or redacted parameter value to its plain string. */
-const toPlainValue = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const toPlainValue = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
@@ -220,10 +209,7 @@ export const ParameterProvider = () =>
   Provider.effect(
     Parameter,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<ParameterProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<ParameterProps, "name">) {
         if (props.name) return props.name;
         const generated = yield* createPhysicalName({ id, maxLength: 128 });
         // SSM rejects parameter names prefixed with "aws" or "ssm"
@@ -239,9 +225,7 @@ export const ParameterProvider = () =>
       const describeByName = Effect.fn(function* (name: string) {
         return yield* ssm.describeParameters
           .pages({
-            ParameterFilters: [
-              { Key: "Name", Option: "Equals", Values: [name] },
-            ],
+            ParameterFilters: [{ Key: "Name", Option: "Equals", Values: [name] }],
           })
           .pipe(
             Stream.map((page) => page.Parameters ?? []),
@@ -262,16 +246,12 @@ export const ParameterProvider = () =>
       });
 
       const fetchObservedTags = Effect.fn(function* (name: string) {
-        return yield* ssm
-          .listTagsForResource({ ResourceType: "Parameter", ResourceId: name })
-          .pipe(
-            Effect.map((r) => toTagRecord(r.TagList)),
-            // A just-created (or just-deleted) parameter can transiently
-            // surface InvalidResourceId; treat as "no tags observed".
-            Effect.catchTag("InvalidResourceId", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-          );
+        return yield* ssm.listTagsForResource({ ResourceType: "Parameter", ResourceId: name }).pipe(
+          Effect.map((r) => toTagRecord(r.TagList)),
+          // A just-created (or just-deleted) parameter can transiently
+          // surface InvalidResourceId; treat as "no tags observed".
+          Effect.catchTag("InvalidResourceId", () => Effect.succeed({} as Record<string, string>)),
+        );
       });
 
       return Parameter.Provider.of({
@@ -280,29 +260,20 @@ export const ParameterProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* ssm.describeParameters
-              .pages({})
-              .pipe(Stream.runCollect);
-            const metas = Array.from(pages).flatMap(
-              (page) => page.Parameters ?? [],
-            );
+            const pages = yield* ssm.describeParameters.pages({}).pipe(Stream.runCollect);
+            const metas = Array.from(pages).flatMap((page) => page.Parameters ?? []);
             return yield* Effect.forEach(
-              metas.filter(
-                (m): m is typeof m & { Name: string } => m.Name != null,
-              ),
+              metas.filter((m): m is typeof m & { Name: string } => m.Name != null),
               (m) =>
                 Effect.gen(function* () {
                   const type = (m.Type ?? "String") as ParameterType;
                   const keyArn =
                     type === "SecureString"
-                      ? yield* resolveKeyArn(m.KeyId).pipe(
-                          Effect.catch(() => Effect.succeed(undefined)),
-                        )
+                      ? yield* resolveKeyArn(m.KeyId).pipe(Effect.orElseSucceed(() => undefined))
                       : undefined;
                   return {
                     parameterName: m.Name,
-                    parameterArn:
-                      m.ARN ?? parameterArnOf(region, accountId, m.Name),
+                    parameterArn: m.ARN ?? parameterArnOf(region, accountId, m.Name),
                     type,
                     version: m.Version ?? 1,
                     keyArn,
@@ -314,24 +285,17 @@ export const ParameterProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.parameterName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.parameterName ?? (yield* createName(id, olds ?? {}));
           const found = yield* ssm.getParameter({ Name: name }).pipe(
             Effect.map((r) => r.Parameter),
-            Effect.catchTag("ParameterNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
           );
           if (!found) return undefined;
           const type = (found.Type ?? "String") as ParameterType;
-          const meta = yield* describeByName(name).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          const meta = yield* describeByName(name).pipe(Effect.orElseSucceed(() => undefined));
           const keyArn =
             type === "SecureString"
-              ? yield* resolveKeyArn(meta?.KeyId).pipe(
-                  Effect.catch(() => Effect.succeed(undefined)),
-                )
+              ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
               : undefined;
           const attrs = {
             parameterName: name,
@@ -341,7 +305,7 @@ export const ParameterProvider = () =>
             keyArn,
           };
           const tags = yield* fetchObservedTags(name).pipe(
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
           );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
@@ -376,14 +340,10 @@ export const ParameterProvider = () =>
           // 1. OBSERVE — cloud state is authoritative. `output` is only a
           //    cache of the physical name; if the parameter was deleted
           //    out-of-band we fall through to create.
-          const observed = yield* ssm
-            .getParameter({ Name: name, WithDecryption: true })
-            .pipe(
-              Effect.map((r) => r.Parameter),
-              Effect.catchTag("ParameterNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          const observed = yield* ssm.getParameter({ Name: name, WithDecryption: true }).pipe(
+            Effect.map((r) => r.Parameter),
+            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
+          );
 
           let version: number | undefined;
 
@@ -429,19 +389,14 @@ export const ParameterProvider = () =>
             //    (tier, description, allowedPattern, KMS key id); it is
             //    eventually consistent so an absent record just means "can't
             //    prove a no-op" and we overwrite.
-            const meta = yield* describeByName(name).pipe(
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
+            const meta = yield* describeByName(name).pipe(Effect.orElseSucceed(() => undefined));
             const drift =
               toPlainValue(observed.Value) !== desiredValue ||
               (observed.Type ?? "String") !== desiredType ||
-              (news.description !== undefined &&
-                meta?.Description !== news.description) ||
-              (news.allowedPattern !== undefined &&
-                meta?.AllowedPattern !== news.allowedPattern) ||
+              (news.description !== undefined && meta?.Description !== news.description) ||
+              (news.allowedPattern !== undefined && meta?.AllowedPattern !== news.allowedPattern) ||
               (news.tier !== undefined && meta?.Tier !== news.tier) ||
-              (news.dataType !== undefined &&
-                (meta?.DataType ?? "text") !== news.dataType) ||
+              (news.dataType !== undefined && (meta?.DataType ?? "text") !== news.dataType) ||
               (desiredType === "SecureString" &&
                 news.keyId !== undefined &&
                 meta?.KeyId !== news.keyId);
@@ -478,13 +433,8 @@ export const ParameterProvider = () =>
               })
               .pipe(
                 Effect.retry({
-                  while: (e) =>
-                    e._tag === "TooManyUpdates" ||
-                    e._tag === "InvalidResourceId",
-                  schedule: Schedule.max([
-                    Schedule.fixed(1000),
-                    Schedule.recurs(5),
-                  ]),
+                  while: (e) => e._tag === "TooManyUpdates" || e._tag === "InvalidResourceId",
+                  schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(5)]),
                 }),
               );
           }
@@ -498,10 +448,7 @@ export const ParameterProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "TooManyUpdates",
-                  schedule: Schedule.max([
-                    Schedule.fixed(1000),
-                    Schedule.recurs(5),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(5)]),
                 }),
               );
           }
@@ -510,9 +457,7 @@ export const ParameterProvider = () =>
           //    first SecureString write has already materialized the
           //    AWS-managed alias/aws/ssm key.
           const keyArn =
-            desiredType === "SecureString"
-              ? yield* resolveKeyArn(news.keyId)
-              : undefined;
+            desiredType === "SecureString" ? yield* resolveKeyArn(news.keyId) : undefined;
 
           yield* session.note(parameterArn);
           return {

@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN sites (and their WANs) are entitlement-gated. On the standard
 // testing account every site call fails with the typed `MagicWanUnauthorized`
@@ -28,9 +25,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteWan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteWan);
       const all = yield* provider.list();
 
       // Unentitled accounts surface MagicWanUnauthorized/Forbidden, which list()
@@ -44,7 +39,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!entitled)(
@@ -79,14 +77,15 @@ test.provider.skipIf(!entitled)(
       });
       expect(live.result.some((w) => w.id === wan.wanId)).toBe(true);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteWan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteWan);
       const all = yield* provider.list();
 
       expect(all.some((w) => w.wanId === wan.wanId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"],
+    timeout: 180_000,
+  },
 );

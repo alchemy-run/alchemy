@@ -32,12 +32,7 @@ export interface ListTokens extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListTokensRequest,
-    ) => Effect.Effect<
-      licensemanager.ListTokensResponse,
-      licensemanager.ListTokensError
-    >
+    ) => Effect.Effect<licensemanager.ListTokensResponse, licensemanager.ListTokensError>
   >
 > {}
-export const ListTokens = Binding.Service<ListTokens>(
-  "AWS.LicenseManager.ListTokens",
-);
+export const ListTokens = Binding.Service<ListTokens>("AWS.LicenseManager.ListTokens");

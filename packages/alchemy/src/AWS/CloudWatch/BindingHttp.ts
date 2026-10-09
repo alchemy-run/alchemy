@@ -116,9 +116,7 @@ export const makeCloudWatchResourceHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: Omit<I, K>) {
         const input: Record<string, unknown> = { ...request };
         input[options.requestKey] = yield* identifier;
         return yield* op(input as unknown as I);
@@ -159,9 +157,7 @@ export const makeCloudWatchResourceSetHttpBinding = <
 
     return Effect.fn(function* (...resources: [Res, ...Res[]]) {
       const sorted = sortByLogicalId(resources) as [Res, ...Res[]];
-      const names = yield* Effect.forEach(sorted, (resource) =>
-        options.name(resource).asEffect(),
-      );
+      const names = yield* Effect.forEach(sorted, (resource) => options.name(resource).asEffect());
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {

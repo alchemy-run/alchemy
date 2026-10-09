@@ -36,10 +36,7 @@ export interface DescribeEndpointGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ga.DescribeEndpointGroupRequest, "EndpointGroupArn">,
-    ) => Effect.Effect<
-      ga.DescribeEndpointGroupResponse,
-      ga.DescribeEndpointGroupError
-    >
+    ) => Effect.Effect<ga.DescribeEndpointGroupResponse, ga.DescribeEndpointGroupError>
   >
 > {}
 export const DescribeEndpointGroup = Binding.Service<DescribeEndpointGroup>(

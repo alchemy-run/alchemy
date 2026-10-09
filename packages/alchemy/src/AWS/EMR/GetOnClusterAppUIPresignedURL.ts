@@ -31,7 +31,6 @@ export interface GetOnClusterAppUIPresignedURL extends Binding.Service<
     >
   >
 > {}
-export const GetOnClusterAppUIPresignedURL =
-  Binding.Service<GetOnClusterAppUIPresignedURL>(
-    "AWS.EMR.GetOnClusterAppUIPresignedURL",
-  );
+export const GetOnClusterAppUIPresignedURL = Binding.Service<GetOnClusterAppUIPresignedURL>(
+  "AWS.EMR.GetOnClusterAppUIPresignedURL",
+);

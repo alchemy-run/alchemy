@@ -21,12 +21,7 @@ import type { Group } from "./Group.ts";
  * enumeration fans out to), and the runtime half injects the group's name
  * into every request as `Group`.
  */
-export const makeResourceGroupsGroupHttpBinding = <
-  I extends { Group?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ResourceGroups.GroupResources`. */
   tag: string;
   /** The distilled operation. */

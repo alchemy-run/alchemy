@@ -12,10 +12,7 @@ export const AddEndpointsHttp = Layer.effect(
     // endpoint group ("not authorized to perform:
     // globalaccelerator:UpdateEndpointGroup" when only AddEndpoints is
     // granted), so both actions are required.
-    actions: [
-      "globalaccelerator:AddEndpoints",
-      "globalaccelerator:UpdateEndpointGroup",
-    ],
+    actions: ["globalaccelerator:AddEndpoints", "globalaccelerator:UpdateEndpointGroup"],
     // Global Accelerator validates new endpoints by describing them on the
     // caller's behalf, so adding endpoints requires read access to the
     // underlying EC2 / ELB resources (none support resource-level scoping).

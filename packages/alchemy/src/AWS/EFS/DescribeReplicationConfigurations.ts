@@ -50,7 +50,6 @@ export interface DescribeReplicationConfigurations extends Binding.Service<
     >
   >
 > {}
-export const DescribeReplicationConfigurations =
-  Binding.Service<DescribeReplicationConfigurations>(
-    "AWS.EFS.DescribeReplicationConfigurations",
-  );
+export const DescribeReplicationConfigurations = Binding.Service<DescribeReplicationConfigurations>(
+  "AWS.EFS.DescribeReplicationConfigurations",
+);

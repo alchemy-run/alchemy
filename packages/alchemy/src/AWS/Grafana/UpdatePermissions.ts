@@ -38,10 +38,7 @@ export interface UpdatePermissions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<grafana.UpdatePermissionsRequest, "workspaceId">,
-    ) => Effect.Effect<
-      grafana.UpdatePermissionsResponse,
-      grafana.UpdatePermissionsError
-    >
+    ) => Effect.Effect<grafana.UpdatePermissionsResponse, grafana.UpdatePermissionsError>
   >
 > {}
 export const UpdatePermissions = Binding.Service<UpdatePermissions>(

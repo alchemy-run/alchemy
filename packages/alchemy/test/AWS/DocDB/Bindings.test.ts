@@ -1,19 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-
 import DocDBTestFunctionLive, { DocDBTestFunction } from "./handler";
-import DocDBSlowTestFunctionLive, {
-  DocDBSlowTestFunction,
-} from "./slow-handler";
+import DocDBSlowTestFunctionLive, { DocDBSlowTestFunction } from "./slow-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -21,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "DocDBBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,129 +30,121 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
-describe.sequential("DocDB Bindings", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* Effect.logInfo("DocDB test setup: destroying previous resources");
-      yield* sharedStack.destroy();
-
-      yield* Effect.logInfo("DocDB test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
-        Effect.gen(function* () {
-          return yield* DocDBTestFunction;
-        }).pipe(Effect.provide(DocDBTestFunctionLive)),
-      );
-
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
-
-      const readinessUrl = `${baseUrl}/bindings`;
-      yield* HttpClient.get(readinessUrl).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
-      );
-    }),
-    { timeout: 240_000 },
-  );
-
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
-
-  describe("binding registration", () => {
-    test.provider("all capabilities initialize in the runtime", (_stack) =>
+describe.sequential(
+  "DocDB Bindings",
+  { tags: ["provider:aws", "provider:aws:docdb", "provider:aws:lambda", "live"] },
+  () => {
+    beforeAll(
       Effect.gen(function* () {
-        const response = yield* getJson("/bindings");
-        expect((response as any).bound).toHaveLength(8);
-      }),
-    );
-  });
+        yield* Effect.logInfo("DocDB test setup: destroying previous resources");
+        yield* sharedStack.destroy();
 
-  describe("DescribeDBClusters", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent cluster",
-      (_stack) =>
+        yield* Effect.logInfo("DocDB test setup: deploying fixture");
+        const { functionUrl } = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            return yield* DocDBTestFunction;
+          }).pipe(Effect.provide(DocDBTestFunctionLive)),
+        );
+
+        expect(functionUrl).toBeTruthy();
+        baseUrl = functionUrl!.replace(/\/+$/, "");
+
+        const readinessUrl = `${baseUrl}/bindings`;
+        yield* HttpClient.get(readinessUrl).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+          ),
+          Effect.retry({ schedule: readinessPolicy }),
+        );
+      }),
+      { timeout: 240_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+    describe("binding registration", () => {
+      test.provider("all capabilities initialize in the runtime", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/bindings");
+          expect((response as any).bound).toHaveLength(8);
+        }),
+      );
+    });
+
+    describe("DescribeDBClusters", () => {
+      test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/clusters");
           expect((response as any).tag).toBe("DBClusterNotFoundFault");
         }),
-    );
-  });
+      );
+    });
 
-  describe("DescribeEvents", () => {
-    test.provider("lists the account's recent DocumentDB events", (_stack) =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/events");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
+    describe("DescribeEvents", () => {
+      test.provider("lists the account's recent DocumentDB events", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/events");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
+      );
+    });
 
-  describe("DescribeDBInstances", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent instance",
-      (_stack) =>
+    describe("DescribeDBInstances", () => {
+      test.provider("surfaces the typed not-found tag for a nonexistent instance", (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/instances");
           expect((response as any).tag).toBe("DBInstanceNotFoundFault");
         }),
-    );
-  });
+      );
+    });
 
-  describe("DescribeDBClusterSnapshots", () => {
-    test.provider("lists the account's cluster snapshots", (_stack) =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/snapshots");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
+    describe("DescribeDBClusterSnapshots", () => {
+      test.provider("lists the account's cluster snapshots", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/snapshots");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
+      );
+    });
 
-  describe("DeleteDBClusterSnapshot", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent snapshot",
-      (_stack) =>
+    describe("DeleteDBClusterSnapshot", () => {
+      test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/delete-snapshot-probe");
           expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
         }),
-    );
-  });
+      );
+    });
 
-  describe("CopyDBClusterSnapshot", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent source snapshot",
-      (_stack) =>
+    describe("CopyDBClusterSnapshot", () => {
+      test.provider(
+        "surfaces the typed not-found tag for a nonexistent source snapshot",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = yield* getJson("/copy-snapshot-probe");
+            expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
+          }),
+      );
+    });
+
+    describe("DescribePendingMaintenanceActions", () => {
+      test.provider("lists the account's pending maintenance actions", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* getJson("/copy-snapshot-probe");
-          expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
+          const response = yield* getJson("/pending-maintenance");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
         }),
-    );
-  });
+      );
+    });
 
-  describe("DescribePendingMaintenanceActions", () => {
-    test.provider("lists the account's pending maintenance actions", (_stack) =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/pending-maintenance");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
-
-  describe("ApplyPendingMaintenanceAction", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent resource ARN",
-      (_stack) =>
+    describe("ApplyPendingMaintenanceAction", () => {
+      test.provider("surfaces the typed not-found tag for a nonexistent resource ARN", (_stack) =>
         Effect.gen(function* () {
           // Build a well-formed cluster ARN in this account/region that
           // cannot exist — the apply call must decode ResourceNotFoundFault.
@@ -166,14 +152,13 @@ describe.sequential("DocDB Bindings", () => {
           const region = yield* yield* Region;
           const identity = yield* sts.getCallerIdentity({});
           const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-docdb-probe`;
-          const response = yield* getJson(
-            `/apply-probe?arn=${encodeURIComponent(arn)}`,
-          );
+          const response = yield* getJson(`/apply-probe?arn=${encodeURIComponent(arn)}`);
           expect((response as any).tag).toBe("ResourceNotFoundFault");
         }),
-    );
-  });
-});
+      );
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Data-plane binding (Connect + mongo) needs a real DocumentDB cluster +
@@ -242,10 +227,7 @@ const ensureSecretsManagerEndpoint = (network: {
       SecurityGroupIds: network.securityGroupIds as `sg-${string}`[],
       PrivateDnsEnabled: true,
       TagSpecifications: [
-        {
-          ResourceType: "vpc-endpoint",
-          Tags: [{ Key: "alchemy-test", Value: "docdb-bindings" }],
-        },
+        { ResourceType: "vpc-endpoint", Tags: [{ Key: "alchemy-test", Value: "docdb-bindings" }] },
       ],
     });
     // Bounded readiness wait for the endpoint's private DNS to serve.
@@ -260,12 +242,7 @@ const ensureSecretsManagerEndpoint = (network: {
           ? Effect.void
           : Effect.fail(new Error("secretsmanager endpoint not available")),
       ),
-      Effect.retry({
-        schedule: Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(24),
-        ]),
-      }),
+      Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(24)]) }),
     );
   });
 
@@ -296,10 +273,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -329,12 +303,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const ping = (yield* get("/ping")) as { ok: number };
         expect(ping.ok).toBe(1);
 
-        const crud = (yield* get("/crud?value=alchemy-docdb")) as {
-          marker?: string;
-        };
+        const crud = (yield* get("/crud?value=alchemy-docdb")) as { marker?: string };
         expect(crud.marker).toBe("alchemy-docdb");
       }).pipe(Effect.ensuring(slowStack.destroy().pipe(Effect.orDie)));
     }),
   // cluster + instance create (~15 min) + probes + delete initiation.
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:aws", "provider:aws:docdb", "provider:aws:ec2", "provider:aws:lambda", "live"],
+    timeout: 2_400_000,
+  },
 );

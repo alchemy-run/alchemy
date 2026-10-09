@@ -47,12 +47,7 @@ export const bindRumAppMonitorPolicy = (options: {
  * injects the monitor's name as the request's `Name`; the deploy-time half
  * grants `actions` on the monitor ARN.
  */
-export const makeRumAppMonitorHttpBinding = <
-  I extends { Name: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeRumAppMonitorHttpBinding = <I extends { Name: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.RUM.GetAppMonitorData`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the monitor. */

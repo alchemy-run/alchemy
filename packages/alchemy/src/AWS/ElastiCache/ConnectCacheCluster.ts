@@ -49,9 +49,7 @@ export interface ConnectCacheCluster extends Binding.Service<
   (
     cluster: CacheCluster,
     options?: ConnectCacheClusterOptions,
-  ) => Effect.Effect<
-    Effect.Effect<CacheClusterConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<CacheClusterConnectionInfo, never, RuntimeContext>>
 > {}
 export const ConnectCacheCluster = Binding.Service<ConnectCacheCluster>(
   "AWS.ElastiCache.ConnectCacheCluster",

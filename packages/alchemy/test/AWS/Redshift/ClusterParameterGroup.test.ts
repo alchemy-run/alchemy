@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ClusterParameterGroup } from "@/AWS/Redshift";
-import * as Test from "@/Test/Alchemy";
 import * as redshift from "@distilled.cloud/aws/redshift";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ClusterParameterGroup } from "@/AWS/Redshift";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,6 +20,7 @@ test.provider(
       );
       expect(error._tag).toBe("ClusterParameterGroupNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:redshift", "live"] },
 );
 
 // Read the user-sourced parameter overrides out-of-band.
@@ -67,9 +68,7 @@ test.provider(
       });
 
       // Out-of-band verification via distilled.
-      const observedParams = yield* readUserParameters(
-        created.clusterParameterGroupName,
-      );
+      const observedParams = yield* readUserParameters(created.clusterParameterGroupName);
       expect(observedParams).toEqual({
         enable_user_activity_logging: "true",
         statement_timeout: "60000",
@@ -95,14 +94,10 @@ test.provider(
         }),
       );
 
-      expect(updated.clusterParameterGroupName).toBe(
-        created.clusterParameterGroupName,
-      );
+      expect(updated.clusterParameterGroupName).toBe(created.clusterParameterGroupName);
       expect(updated.parameters).toEqual({ statement_timeout: "120000" });
 
-      const reobservedParams = yield* readUserParameters(
-        created.clusterParameterGroupName,
-      );
+      const reobservedParams = yield* readUserParameters(created.clusterParameterGroupName);
       expect(reobservedParams).toEqual({ statement_timeout: "120000" });
 
       // Destroy and verify gone with the typed not-found tag.
@@ -114,7 +109,7 @@ test.provider(
       );
       expect(error._tag).toBe("ClusterParameterGroupNotFoundFault");
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:redshift", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -145,9 +140,7 @@ test.provider(
         }),
       );
       expect(replaced.description).toBe("after replacement");
-      expect(replaced.clusterParameterGroupName).not.toBe(
-        created.clusterParameterGroupName,
-      );
+      expect(replaced.clusterParameterGroupName).not.toBe(created.clusterParameterGroupName);
 
       // Old group is gone, new group exists.
       const oldGone = yield* Effect.flip(
@@ -159,9 +152,7 @@ test.provider(
       const observed = yield* redshift.describeClusterParameterGroups({
         ParameterGroupName: replaced.clusterParameterGroupName,
       });
-      expect(observed.ParameterGroups?.[0]?.Description).toBe(
-        "after replacement",
-      );
+      expect(observed.ParameterGroups?.[0]?.Description).toBe("after replacement");
 
       yield* stack.destroy();
       const error = yield* Effect.flip(
@@ -171,5 +162,5 @@ test.provider(
       );
       expect(error._tag).toBe("ClusterParameterGroupNotFoundFault");
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:redshift", "live"], timeout: 120_000 },
 );

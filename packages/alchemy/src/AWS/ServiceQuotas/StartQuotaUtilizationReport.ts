@@ -33,7 +33,6 @@ export interface StartQuotaUtilizationReport extends Binding.Service<
     >
   >
 > {}
-export const StartQuotaUtilizationReport =
-  Binding.Service<StartQuotaUtilizationReport>(
-    "AWS.ServiceQuotas.StartQuotaUtilizationReport",
-  );
+export const StartQuotaUtilizationReport = Binding.Service<StartQuotaUtilizationReport>(
+  "AWS.ServiceQuotas.StartQuotaUtilizationReport",
+);

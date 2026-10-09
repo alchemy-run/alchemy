@@ -33,10 +33,7 @@ export interface GetMemberOfAddressList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.GetMemberOfAddressListRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.GetMemberOfAddressListResponse,
-      mm.GetMemberOfAddressListError
-    >
+    ) => Effect.Effect<mm.GetMemberOfAddressListResponse, mm.GetMemberOfAddressListError>
   >
 > {}
 export const GetMemberOfAddressList = Binding.Service<GetMemberOfAddressList>(

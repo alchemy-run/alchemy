@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -23,6 +23,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:mwaa", "live"] },
 );
 
 // Resolve two subnets from the account's default VPC in distinct Availability
@@ -137,21 +138,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 {
                   Effect: "Allow",
                   Principal: {
-                    Service: [
-                      "airflow.amazonaws.com",
-                      "airflow-env.amazonaws.com",
-                    ],
+                    Service: ["airflow.amazonaws.com", "airflow-env.amazonaws.com"],
                   },
                   Action: ["sts:AssumeRole"],
                 },
               ],
             },
             inlinePolicies: {
-              "mwaa-execution": executionRolePolicy(
-                bucket.bucketArn,
-                region,
-                accountId,
-              ),
+              "mwaa-execution": executionRolePolicy(bucket.bucketArn, region, accountId),
             },
           });
           const environment = yield* AWS.MWAA.Environment("Airflow", {
@@ -191,7 +185,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertEnvironmentDeleted(environment.environmentName);
     }),
   // create (~20-30 min) + destroy initiation, one test.
-  { timeout: 4_200_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:mwaa",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 4_200_000,
+  },
 );
 
 // Deletion is verified as INITIATED (status DELETING, irreversible) or fully
@@ -200,22 +204,15 @@ const assertEnvironmentDeleted = (name: string) =>
   Effect.gen(function* () {
     const status = yield* mwaa.getEnvironment({ Name: name }).pipe(
       Effect.map((r) => r.Environment?.Status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETING") {
       return yield* Effect.fail(
-        new Error(
-          `MWAA environment '${name}' still exists (status: ${status})`,
-        ),
+        new Error(`MWAA environment '${name}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
     }),
   );

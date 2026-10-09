@@ -65,9 +65,7 @@ export const retryWhileMpConflict = <A, E extends { readonly _tag: string }, R>(
 export const listAllChannelGroups = Effect.fn(function* () {
   return yield* mediapackagev2.listChannelGroups.pages({}).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.Items ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
   );
 });
 
@@ -75,20 +73,14 @@ export const listAllChannelGroups = Effect.fn(function* () {
  * Enumerate every channel in a channel group; a missing group yields `[]`
  * (the typed not-found), so callers can race against a concurrent delete.
  */
-export const listGroupChannels = Effect.fn(function* (
-  channelGroupName: string,
-) {
-  return yield* mediapackagev2.listChannels
-    .pages({ ChannelGroupName: channelGroupName })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.Items ?? []),
-      ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as mediapackagev2.ChannelListConfiguration[]),
-      ),
-    );
+export const listGroupChannels = Effect.fn(function* (channelGroupName: string) {
+  return yield* mediapackagev2.listChannels.pages({ ChannelGroupName: channelGroupName }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as mediapackagev2.ChannelListConfiguration[]),
+    ),
+  );
 });
 
 /**
@@ -103,9 +95,7 @@ export const listChannelEndpoints = Effect.fn(function* (
     .pages({ ChannelGroupName: channelGroupName, ChannelName: channelName })
     .pipe(
       Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.Items ?? []),
-      ),
+      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
       Effect.catchTag("ResourceNotFoundException", () =>
         Effect.succeed([] as mediapackagev2.OriginEndpointListConfiguration[]),
       ),
@@ -151,10 +141,7 @@ export const deleteChannelWithEndpoints = Effect.fn(function* (
  * introduced by AWS never register as drift. Falls back to strict string
  * equality when either side is not valid JSON.
  */
-export const policiesEqual = (
-  a: string | undefined,
-  b: string | undefined,
-): boolean => {
+export const policiesEqual = (a: string | undefined, b: string | undefined): boolean => {
   if (a === undefined || b === undefined) return a === b;
   try {
     return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(b));
@@ -169,10 +156,7 @@ export const policiesEqual = (
  * server-side defaults on the observed state never register as drift. Arrays
  * must match pairwise and in length so removed/added items are detected.
  */
-export const matchesDesired = (
-  desired: unknown,
-  observed: unknown,
-): boolean => {
+export const matchesDesired = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
   if (desired === null) return observed === null;
   if (desired instanceof Date) {
@@ -185,18 +169,13 @@ export const matchesDesired = (
     return desired.every((item, i) => matchesDesired(item, observed[i]));
   }
   if (typeof desired === "object") {
-    if (
-      typeof observed !== "object" ||
-      observed === null ||
-      Array.isArray(observed)
-    ) {
+    if (typeof observed !== "object" || observed === null || Array.isArray(observed)) {
       return false;
     }
-    return Object.entries(desired as Record<string, unknown>).every(
-      ([key, value]) =>
-        value === undefined
-          ? true
-          : matchesDesired(value, (observed as Record<string, unknown>)[key]),
+    return Object.entries(desired as Record<string, unknown>).every(([key, value]) =>
+      value === undefined
+        ? true
+        : matchesDesired(value, (observed as Record<string, unknown>)[key]),
     );
   }
   return desired === observed;

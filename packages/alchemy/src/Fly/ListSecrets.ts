@@ -1,7 +1,4 @@
-import type {
-  AppSecrets,
-  ListSecretsError,
-} from "@distilled.cloud/fly-io/machines";
+import type { AppSecrets, ListSecretsError } from "@distilled.cloud/fly-io/machines";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -49,15 +46,12 @@ import type { App } from "./App.ts";
  * ```
  *
  * @binding
+ * @product Secret
  */
 export interface ListSecrets extends Binding.Service<
   ListSecrets,
   "Fly.ListSecrets",
-  (
-    app: App,
-  ) => Effect.Effect<
-    () => Effect.Effect<AppSecrets, ListSecretsError, RuntimeContext>
-  >
+  (app: App) => Effect.Effect<() => Effect.Effect<AppSecrets, ListSecretsError, RuntimeContext>>
 > {}
 
 export const ListSecrets = Binding.Service<ListSecrets>("Fly.ListSecrets");

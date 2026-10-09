@@ -1,28 +1,23 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -50,53 +45,59 @@ const delegateAccountId = process.env.CLOUDFLARE_TEST_BYOIP_DELEGATE_ACCOUNT_ID;
 
 // The read-only catalog endpoints are available regardless of the BYOIP
 // entitlement — exercise the distilled wiring live on every run.
-test.provider("lists the services catalog and prefixes (read-only)", (stack) =>
-  Effect.gen(function* () {
-    const accountId = yield* resolveAccountId;
+test.provider(
+  "lists the services catalog and prefixes (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      const accountId = yield* resolveAccountId;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const services = yield* retryForbidden(
-      addressing.listServices.items({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((c) => Array.from(c)),
-      ),
-    );
-    expect(Array.isArray(services)).toBe(true);
+      const services = yield* retryForbidden(
+        addressing.listServices.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+        ),
+      );
+      expect(Array.isArray(services)).toBe(true);
 
-    const prefixes = yield* retryForbidden(
-      addressing.listPrefixes.items({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((c) => Array.from(c)),
-      ),
-    );
-    expect(Array.isArray(prefixes)).toBe(true);
+      const prefixes = yield* retryForbidden(
+        addressing.listPrefixes.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+        ),
+      );
+      expect(Array.isArray(prefixes)).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"] },
 );
 
 // `list()` enumerates account-scoped BYOIP prefixes via the catalog endpoint,
 // which is available regardless of the BYOIP entitlement (it returns an empty
 // array on accounts with no onboarded prefixes). The result is a well-typed
 // `PrefixAttributes[]` — the exact shape `read` produces.
-test.provider("list enumerates account prefixes (read-only)", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates account prefixes (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Addressing.Prefix);
-    const all = yield* retryForbidden(provider.list());
+      const provider = yield* Provider.findProvider(Cloudflare.Addressing.Prefix);
+      const all = yield* retryForbidden(provider.list());
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const p of all) {
-      expect(typeof p.prefixId).toBe("string");
-      expect(typeof p.accountId).toBe("string");
-      expect(typeof p.cidr).toBe("string");
-      expect(typeof p.asn).toBe("number");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const p of all) {
+        expect(typeof p.prefixId).toBe("string");
+        expect(typeof p.accountId).toBe("string");
+        expect(typeof p.cidr).toBe("string");
+        expect(typeof p.asn).toBe("number");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"] },
 );
 
 test.provider.skipIf(!byoipCidr || !byoipAsn)(
@@ -149,12 +150,13 @@ test.provider.skipIf(!byoipCidr || !byoipAsn)(
       yield* stack.destroy();
       const gone = yield* retryForbidden(
         addressing.getPrefix({ accountId, prefixId: created.prefixId }),
-      ).pipe(
-        Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)),
-      );
+      ).pipe(Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)));
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!byoipPrefixId)(
@@ -164,9 +166,7 @@ test.provider.skipIf(!byoipPrefixId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       yield* stack.destroy();
@@ -211,7 +211,10 @@ test.provider.skipIf(!byoipPrefixId)(
       );
       expect(after.onDemand?.advertised ?? false).toEqual(false);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!byoipPrefixId || !delegateAccountId)(
@@ -221,9 +224,7 @@ test.provider.skipIf(!byoipPrefixId || !delegateAccountId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       yield* stack.destroy();
@@ -259,7 +260,10 @@ test.provider.skipIf(!byoipPrefixId || !delegateAccountId)(
       );
       expect(after.some((d) => d.id === created.delegationId)).toBe(false);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!byoipPrefixId)(
@@ -269,9 +273,7 @@ test.provider.skipIf(!byoipPrefixId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       const services = yield* retryForbidden(
@@ -297,9 +299,7 @@ test.provider.skipIf(!byoipPrefixId)(
       expect(created.bindingId).toBeDefined();
       expect(created.serviceId).toEqual(cdn!.id);
       // Provisioning to the edge is asynchronous.
-      expect(["provisioning", "active"]).toContain(
-        created.provisioning.state ?? "provisioning",
-      );
+      expect(["provisioning", "active"]).toContain(created.provisioning.state ?? "provisioning");
 
       // Out-of-band verification.
       const live = yield* retryForbidden(
@@ -319,11 +319,12 @@ test.provider.skipIf(!byoipPrefixId)(
           bindingId: created.bindingId,
         }),
       ).pipe(
-        Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)),
       );
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"],
+    timeout: 120_000,
+  },
 );

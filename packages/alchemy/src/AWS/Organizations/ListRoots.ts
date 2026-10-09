@@ -28,12 +28,7 @@ export interface ListRoots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: organizations.ListRootsRequest,
-    ) => Effect.Effect<
-      organizations.ListRootsResponse,
-      organizations.ListRootsError
-    >
+    ) => Effect.Effect<organizations.ListRootsResponse, organizations.ListRootsError>
   >
 > {}
-export const ListRoots = Binding.Service<ListRoots>(
-  "AWS.Organizations.ListRoots",
-);
+export const ListRoots = Binding.Service<ListRoots>("AWS.Organizations.ListRoots");

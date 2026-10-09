@@ -90,9 +90,7 @@ export interface ImageEventSourceProps extends EventRouteProps {
  */
 export const consumeImageEvents = <StreamReq = never, Req = never>(
   props: ImageEventSourceProps,
-  process: (
-    events: Stream.Stream<ImageEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<ImageEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "ImageBuilderImageEvents",

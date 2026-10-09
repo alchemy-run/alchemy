@@ -10,11 +10,7 @@ export const CreateTopicHttp = Layer.effect(
     operation: kafka.createTopic,
     // The control-plane action authorizes against the topic ARN; the
     // kafka-cluster analogs cover the underlying Kafka admin operation.
-    actions: [
-      "kafka:CreateTopic",
-      "kafka-cluster:Connect",
-      "kafka-cluster:CreateTopic",
-    ],
+    actions: ["kafka:CreateTopic", "kafka-cluster:Connect", "kafka-cluster:CreateTopic"],
     topicScoped: true,
   }),
 );

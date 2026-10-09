@@ -19,12 +19,7 @@ import type { Deployment } from "./Deployment.ts";
  * bound component version's ARN, and the runtime half injects the component
  * version's `arn` into every request.
  */
-export const makeGreengrassComponentHttpBinding = <
-  I extends { arn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeGreengrassComponentHttpBinding = <I extends { arn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.GreengrassV2.GetComponent`. */
   tag: string;
   /** The distilled operation. */
@@ -104,8 +99,7 @@ export const makeGreengrassDeploymentHttpBinding = <
                 Action: [...options.actions],
                 Resource: [deployment.deploymentArn],
               },
-              ...(options.dependentActions !== undefined &&
-              options.dependentActions.length > 0
+              ...(options.dependentActions !== undefined && options.dependentActions.length > 0
                 ? [
                     {
                       Effect: "Allow" as const,

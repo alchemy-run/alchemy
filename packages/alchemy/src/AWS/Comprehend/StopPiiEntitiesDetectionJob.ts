@@ -36,7 +36,6 @@ export interface StopPiiEntitiesDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StopPiiEntitiesDetectionJob =
-  Binding.Service<StopPiiEntitiesDetectionJob>(
-    "AWS.Comprehend.StopPiiEntitiesDetectionJob",
-  );
+export const StopPiiEntitiesDetectionJob = Binding.Service<StopPiiEntitiesDetectionJob>(
+  "AWS.Comprehend.StopPiiEntitiesDetectionJob",
+);

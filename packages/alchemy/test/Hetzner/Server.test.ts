@@ -1,24 +1,21 @@
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as servers from "@distilled.cloud/hetzner/servers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
-  Services.servers.getServer({ id }).pipe(
+  servers.getServer({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -41,15 +38,11 @@ test(
     const composed = Hetzner.composeUserData(
       ["#cloud-config", "packages:", "  - nginx"].join("\n"),
     );
-    expect(
-      composed.startsWith('Content-Type: multipart/mixed; boundary="'),
-    ).toBe(true);
+    expect(composed.startsWith('Content-Type: multipart/mixed; boundary="')).toBe(true);
     expect(composed).toContain("Content-Type: text/x-shellscript");
     expect(composed).toContain("Content-Type: text/cloud-config");
     expect(composed).toContain("  - nginx");
-    expect(composed.indexOf("setup_26.x")).toBeLessThan(
-      composed.indexOf("#cloud-config"),
-    );
+    expect(composed.indexOf("setup_26.x")).toBeLessThan(composed.indexOf("#cloud-config"));
 
     // A shell script keeps its shebang; a bare snippet gets one.
     expect(Hetzner.composeUserData("#!/bin/sh\nid")).toContain("#!/bin/sh\nid");
@@ -61,6 +54,7 @@ test(
     const raw = 'Content-Type: multipart/mixed; boundary="x"\n\n--x--\n';
     expect(Hetzner.composeUserData(raw)).toEqual(raw);
   }),
+  { tags: ["provider:hetzner", "provider:hetzner:server", "live"] },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -92,7 +86,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.deleteProtection).toEqual(false);
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.servers.getServer({
+      const fetched = yield* servers.getServer({
         id: created.id,
       });
       expect(fetched.server?.id).toEqual(created.id);
@@ -120,7 +114,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.ipv6).toEqual(created.ipv6);
       expect(updated.labels).toMatchObject({ env: "prod", role: "web" });
 
-      const refetched = yield* Services.servers.getServer({
+      const refetched = yield* servers.getServer({
         id: updated.id,
       });
       expect(refetched.server?.id).toEqual(created.id);
@@ -133,7 +127,11 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -169,7 +167,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.location).toEqual("nbg1");
       expect(replaced.serverType).toEqual("cpx12");
 
-      const fetched = yield* Services.servers.getServer({
+      const fetched = yield* servers.getServer({
         id: replaced.id,
       });
       expect(fetched.server?.image?.name).toEqual("debian-12");
@@ -182,7 +180,11 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -216,7 +218,11 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -231,10 +237,7 @@ test.provider.skipIf(!hasHetznerCreds)(
             serverType: "cpx12",
             image: "ubuntu-24.04",
             location: "nbg1",
-            userData: [
-              "#!/bin/bash",
-              "echo alchemy-init-ok > /etc/alchemy-init-marker",
-            ].join("\n"),
+            userData: ["#!/bin/bash", "echo alchemy-init-ok > /etc/alchemy-init-marker"].join("\n"),
           });
         }),
       );
@@ -242,10 +245,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(server.ipv4).toEqual(expect.any(String));
       expect(server.privateKey).toBeDefined();
       const host = server.ipv4 ?? "";
-      const privateKey =
-        server.privateKey === undefined
-          ? ""
-          : Redacted.value(server.privateKey);
+      const privateKey = server.privateKey === undefined ? "" : Redacted.value(server.privateKey);
 
       // Both cloud-init parts must have run: the user script (marker file)
       // and Alchemy's bootstrap (Node 26). Probed as one command — the box is
@@ -256,10 +256,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           "cat /etc/alchemy-init-marker && command -v node && echo node-ok",
         );
         return stdout;
-      }).pipe(
-        Effect.scoped,
-        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 30 }),
-      );
+      }).pipe(Effect.scoped, Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 30 }));
 
       expect(probe).toContain("alchemy-init-ok");
       expect(probe).toContain("node-ok");
@@ -271,10 +268,7 @@ test.provider.skipIf(!hasHetznerCreds)(
             serverType: "cpx12",
             image: "ubuntu-24.04",
             location: "nbg1",
-            userData: [
-              "#!/bin/bash",
-              "echo alchemy-init-v2 > /etc/alchemy-init-marker",
-            ].join("\n"),
+            userData: ["#!/bin/bash", "echo alchemy-init-v2 > /etc/alchemy-init-marker"].join("\n"),
           });
         }),
       );
@@ -289,5 +283,9 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000, exclusive: true },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
+    timeout: 300_000,
+    exclusive: true,
+  },
 );

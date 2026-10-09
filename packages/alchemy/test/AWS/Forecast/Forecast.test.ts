@@ -1,31 +1,26 @@
-import * as AWS from "@/AWS";
-import { Dataset, DatasetGroup } from "@/AWS/Forecast";
-import { toTagRecord } from "@/AWS/Forecast/internal.ts";
-import * as Test from "@/Test/Alchemy";
 import * as forecast from "@distilled.cloud/aws/forecast";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Dataset, DatasetGroup } from "@/AWS/Forecast";
+import { toTagRecord } from "@/AWS/Forecast/internal.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-class DatasetGroupStillExists extends Data.TaggedError(
-  "DatasetGroupStillExists",
-)<{ readonly arn: string }> {}
+class DatasetGroupStillExists extends Data.TaggedError("DatasetGroupStillExists")<{
+  readonly arn: string;
+}> {}
 
 const assertDatasetGroupDeleted = (arn: string) =>
   forecast.describeDatasetGroup({ DatasetGroupArn: arn }).pipe(
     Effect.flatMap(() => Effect.fail(new DatasetGroupStillExists({ arn }))),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "DatasetGroupStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -44,12 +39,11 @@ test.provider(
           DatasetArn: `arn:aws:forecast:${region}:000000000000:dataset/does_not_exist`,
         }),
       );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
+      expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(
+        true,
+      );
     }),
+  { tags: ["provider:aws", "provider:aws:forecast", "live"] },
 );
 
 // Entitlement probe: Amazon Forecast is closed to new customers — accounts
@@ -79,11 +73,10 @@ test.provider(
         // Entitled account — clean up the probe group.
         yield* forecast
           .deleteDatasetGroup({ DatasetGroupArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       }
     }),
+  { tags: ["provider:aws", "provider:aws:forecast", "live"] },
 );
 
 // Forecast datasets and dataset groups are cheap, fast metadata objects, but
@@ -174,9 +167,7 @@ test.provider.skipIf(!process.env.AWS_TEST_FORECAST)(
       const reDescribedGroup = yield* forecast.describeDatasetGroup({
         DatasetGroupArn: created.group.datasetGroupArn,
       });
-      expect(reDescribedGroup.DatasetArns ?? []).not.toContain(
-        created.dataset.datasetArn,
-      );
+      expect(reDescribedGroup.DatasetArns ?? []).not.toContain(created.dataset.datasetArn);
       const updatedTags = yield* forecast.listTagsForResource({
         ResourceArn: created.group.datasetGroupArn,
       });
@@ -190,5 +181,5 @@ test.provider.skipIf(!process.env.AWS_TEST_FORECAST)(
       );
       expect(datasetError._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:forecast", "live"], timeout: 300_000 },
 );

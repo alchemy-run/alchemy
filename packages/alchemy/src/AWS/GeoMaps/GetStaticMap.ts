@@ -43,6 +43,4 @@ export interface GetStaticMap extends Binding.Service<
     ) => Effect.Effect<geoMaps.GetStaticMapResponse, geoMaps.GetStaticMapError>
   >
 > {}
-export const GetStaticMap = Binding.Service<GetStaticMap>(
-  "AWS.GeoMaps.GetStaticMap",
-);
+export const GetStaticMap = Binding.Service<GetStaticMap>("AWS.GeoMaps.GetStaticMap");

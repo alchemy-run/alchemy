@@ -78,16 +78,12 @@ export const FleetProvider = () =>
     Fleet,
     Effect.gen(function* () {
       const toId = (id: string, props: { fleetId?: string }) =>
-        props.fleetId
-          ? Effect.succeed(props.fleetId)
-          : createPhysicalName({ id, maxLength: 100 });
+        props.fleetId ? Effect.succeed(props.fleetId) : createPhysicalName({ id, maxLength: 100 });
 
       const readFleet = Effect.fn(function* (fleetId: string) {
         return yield* iotfleetwise.getFleet({ fleetId }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -152,10 +148,7 @@ export const FleetProvider = () =>
           }
 
           // 3. Sync description — the only mutable aspect.
-          if (
-            news.description !== undefined &&
-            news.description !== observed.description
-          ) {
+          if (news.description !== undefined && news.description !== observed.description) {
             yield* iotfleetwise
               .updateFleet({ fleetId, description: news.description })
               .pipe(inFleetWiseRegion);
@@ -171,9 +164,7 @@ export const FleetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: deleting a missing fleet succeeds (vehicles are
           // detached automatically before deletion).
-          yield* iotfleetwise
-            .deleteFleet({ fleetId: output.fleetId })
-            .pipe(inFleetWiseRegion);
+          yield* iotfleetwise.deleteFleet({ fleetId: output.fleetId }).pipe(inFleetWiseRegion);
         }),
 
         list: () =>

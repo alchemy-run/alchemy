@@ -34,12 +34,7 @@ export interface CompareFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.CompareFacesRequest,
-    ) => Effect.Effect<
-      rekognition.CompareFacesResponse,
-      rekognition.CompareFacesError
-    >
+    ) => Effect.Effect<rekognition.CompareFacesResponse, rekognition.CompareFacesError>
   >
 > {}
-export const CompareFaces = Binding.Service<CompareFaces>(
-  "AWS.Rekognition.CompareFaces",
-);
+export const CompareFaces = Binding.Service<CompareFaces>("AWS.Rekognition.CompareFaces");

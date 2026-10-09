@@ -34,12 +34,7 @@ export interface SearchSchemas extends Binding.Service<
       Limit?: number;
       /** The pagination token from a previous response. */
       NextToken?: string;
-    }) => Effect.Effect<
-      schemas.SearchSchemasResponse,
-      schemas.SearchSchemasError
-    >
+    }) => Effect.Effect<schemas.SearchSchemasResponse, schemas.SearchSchemasError>
   >
 > {}
-export const SearchSchemas = Binding.Service<SearchSchemas>(
-  "AWS.Schemas.SearchSchemas",
-);
+export const SearchSchemas = Binding.Service<SearchSchemas>("AWS.Schemas.SearchSchemas");

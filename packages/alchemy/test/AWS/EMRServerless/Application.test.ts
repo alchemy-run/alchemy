@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Application } from "@/AWS/EMRServerless";
-import { Role } from "@/AWS/IAM";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Application } from "@/AWS/EMRServerless";
+import { Role } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,13 +18,14 @@ const RELEASE_LABEL = "emr-7.5.0";
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag the read/observe/delete paths depend on.
-test.provider("typed error semantics on a nonexistent application", () =>
-  Effect.gen(function* () {
-    const error = yield* Effect.flip(
-      emr.getApplication({ applicationId: "00abcdefabcdef01" }),
-    );
-    expect(error._tag).toBe("ResourceNotFoundException");
-  }),
+test.provider(
+  "typed error semantics on a nonexistent application",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(emr.getApplication({ applicationId: "00abcdefabcdef01" }));
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+  { tags: ["provider:aws", "provider:aws:emrserverless", "live"] },
 );
 
 // Full ungated lifecycle: an application in the CREATED state is free (billing
@@ -45,10 +46,7 @@ test.provider(
               applicationName: APP_NAME,
               releaseLabel: RELEASE_LABEL,
               autoStartConfiguration: { enabled: true },
-              autoStopConfiguration: {
-                enabled: true,
-                idleTimeout: Duration.minutes(idleMinutes),
-              },
+              autoStopConfiguration: { enabled: true, idleTimeout: Duration.minutes(idleMinutes) },
               tags: { purpose: "alchemy-test" },
             });
           }),
@@ -63,21 +61,15 @@ test.provider(
       expect(created.state).toBe("CREATED");
 
       // Out-of-band verification via distilled.
-      const observed = yield* emr.getApplication({
-        applicationId: created.applicationId,
-      });
+      const observed = yield* emr.getApplication({ applicationId: created.applicationId });
       expect(observed.application.state).toBe("CREATED");
-      expect(
-        observed.application.autoStopConfiguration?.idleTimeoutMinutes,
-      ).toBe(15);
+      expect(observed.application.autoStopConfiguration?.idleTimeoutMinutes).toBe(15);
       expect(observed.application.tags?.purpose).toBe("alchemy-test");
 
       // The provider's list() enumerates it.
       const provider = yield* Provider.findProvider(Application);
       const all = yield* provider.list();
-      expect(all.some((a) => a.applicationId === created.applicationId)).toBe(
-        true,
-      );
+      expect(all.some((a) => a.applicationId === created.applicationId)).toBe(true);
 
       // No-op redeploy: same application, no replacement.
       const noop = yield* deployApp(15);
@@ -86,19 +78,15 @@ test.provider(
       // In-place update: shrink the auto-stop idle timeout.
       const updated = yield* deployApp(5);
       expect(updated.applicationId).toBe(created.applicationId);
-      const afterUpdate = yield* emr.getApplication({
-        applicationId: created.applicationId,
-      });
-      expect(
-        afterUpdate.application.autoStopConfiguration?.idleTimeoutMinutes,
-      ).toBe(5);
+      const afterUpdate = yield* emr.getApplication({ applicationId: created.applicationId });
+      expect(afterUpdate.application.autoStopConfiguration?.idleTimeoutMinutes).toBe(5);
 
       // Destroy and verify deletion out-of-band (deleted applications either
       // disappear or briefly linger as TERMINATED).
       yield* stack.destroy();
       yield* assertApplicationGone(created.applicationId);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:emrserverless", "live"], timeout: 240_000 },
 );
 
 // Live JobRun (SparkPi from the EMR image itself — no S3 assets needed).
@@ -127,10 +115,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const app = yield* Application("JobApp", {
             applicationName: JOB_APP_NAME,
             releaseLabel: RELEASE_LABEL,
-            autoStopConfiguration: {
-              enabled: true,
-              idleTimeout: "1 minute",
-            },
+            autoStopConfiguration: { enabled: true, idleTimeout: "1 minute" },
           });
           return { app, role };
         }),
@@ -154,18 +139,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Poll the job run to a terminal state (app cold-start ~1 min + SparkPi
       // ~1-2 min; bounded at ~8 min).
       const finished = yield* emr
-        .getJobRun({
-          applicationId: app.applicationId,
-          jobRunId: started.jobRunId,
-        })
+        .getJobRun({ applicationId: app.applicationId, jobRunId: started.jobRunId })
         .pipe(
           Effect.map((response) => response.jobRun),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
             until: (run) =>
-              run.state === "SUCCESS" ||
-              run.state === "FAILED" ||
-              run.state === "CANCELLED",
+              run.state === "SUCCESS" || run.state === "FAILED" || run.state === "CANCELLED",
             times: 48,
           }),
         );
@@ -177,27 +157,21 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertApplicationGone(app.applicationId);
     }),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:emrserverless", "provider:aws:iam", "live"],
+    timeout: 900_000,
+  },
 );
 
 const assertApplicationGone = (applicationId: string) =>
   Effect.gen(function* () {
     const state = yield* emr.getApplication({ applicationId }).pipe(
       Effect.map((response) => response.application.state),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone"),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone")),
     );
     if (state !== "gone" && state !== "TERMINATED") {
-      return yield* Effect.fail(
-        new Error(`application ${applicationId} still exists (${state})`),
-      );
+      return yield* Effect.fail(new Error(`application ${applicationId} still exists (${state})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]) }),
   );

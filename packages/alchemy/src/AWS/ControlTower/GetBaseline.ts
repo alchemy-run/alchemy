@@ -27,13 +27,8 @@ export interface GetBaseline extends Binding.Service<
   () => Effect.Effect<
     (
       request: controltower.GetBaselineInput,
-    ) => Effect.Effect<
-      controltower.GetBaselineOutput,
-      controltower.GetBaselineError
-    >
+    ) => Effect.Effect<controltower.GetBaselineOutput, controltower.GetBaselineError>
   >
 > {}
 
-export const GetBaseline = Binding.Service<GetBaseline>(
-  "AWS.ControlTower.GetBaseline",
-);
+export const GetBaseline = Binding.Service<GetBaseline>("AWS.ControlTower.GetBaseline");

@@ -1,22 +1,19 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as mpg from "@distilled.cloud/fly-io/mpg";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilClusterGone = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
@@ -90,7 +87,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:fly", "provider:fly:postgres", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -157,7 +154,16 @@ test.provider(
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:machine",
+      "provider:fly:postgres",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -177,9 +183,7 @@ test.provider(
       );
 
       expect(deployed.db.clusterId).toEqual(expect.any(String));
-      expect(deployed.api.url).toEqual(
-        `https://${deployed.app.appName}.fly.dev`,
-      );
+      expect(deployed.api.url).toEqual(`https://${deployed.app.appName}.fly.dev`);
 
       const names = yield* secretNames(deployed.app.appName);
       expect(names).toContain("DATABASE_URL");
@@ -254,63 +258,47 @@ test.provider(
       }).pipe(Effect.ignore);
 
       const getJson = (path: string) =>
-        Effect.tryPromise({
-          try: async () => {
-            const ac = new AbortController();
-            const timer = setTimeout(() => ac.abort(), 8_000);
-            try {
-              const res = await fetch(`${deployed.api.url}${path}`, {
-                signal: ac.signal,
-              });
-              const body = (await res.json().catch(() => ({
-                status: res.status,
-              }))) as {
-                ok?: boolean;
-                error?: unknown;
-                status?: number;
-                rows?: unknown;
-              };
-              return { status: res.status, body };
-            } finally {
-              clearTimeout(timer);
-            }
-          },
-          catch: () => new NotReady({ status: 0 }),
-        }).pipe(
+        HttpClient.get(`${deployed.api.url}${path}`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? Effect.succeed(res.body)
-              : Effect.fail(
-                  new NotReady({ status: res.status, body: res.body }),
-                ),
+            res.json.pipe(
+              Effect.flatMap((body) =>
+                res.status === 200
+                  ? Effect.succeed(body as { ok?: boolean; rows?: unknown })
+                  : Effect.fail(new NotReady({ status: res.status, body })),
+              ),
+            ),
           ),
+          Effect.timeoutOrElse({
+            duration: "8 seconds",
+            orElse: () => Effect.fail(new NotReady({ status: 0 })),
+          }),
           Effect.retry({
             while: (e) =>
               e._tag === "NotReady" &&
-              (e.status === 0 ||
-                e.status === 404 ||
-                e.status === 502 ||
-                e.status === 503),
+              (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
             schedule: Schedule.spaced("3 seconds"),
-            times: 12,
+            times: 8,
           }),
+          Effect.timeout("60 seconds"),
           Effect.tapError(() => diagnose),
         );
 
       const ping = yield* getJson("/ping");
       expect(ping.ok).toEqual(true);
 
-      const health = yield* getJson("/health");
-      const executed = health.rows as unknown;
-      const list = Array.isArray(executed)
-        ? executed
-        : executed !== null &&
-            typeof executed === "object" &&
-            Array.isArray((executed as { rows?: unknown }).rows)
-          ? (executed as { rows: unknown[] }).rows
-          : [];
-      const first = list[0] as { ok?: unknown } | undefined;
-      expect(Number(first?.ok)).toEqual(1);
+      for (const path of ["/health", "/direct"]) {
+        const health = yield* getJson(path);
+        const executed = health.rows;
+        const list = Array.isArray(executed)
+          ? executed
+          : executed !== null &&
+              typeof executed === "object" &&
+              Array.isArray((executed as { rows?: unknown }).rows)
+            ? (executed as { rows: unknown[] }).rows
+            : [];
+        const first = list[0] as { ok?: unknown } | undefined;
+        expect(Number(first?.ok)).toEqual(1);
+      }
 
       yield* stack.destroy();
 
@@ -319,5 +307,16 @@ test.provider(
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:postgres",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

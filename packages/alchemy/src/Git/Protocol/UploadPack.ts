@@ -23,6 +23,7 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { concatBytes, isOid, type Oid } from "./ObjectCodec.ts";
+import { packDataBytes, type PackEvent, writePack } from "./PackWriter.ts";
 import {
   decodePktLines,
   flushPkt,
@@ -31,7 +32,6 @@ import {
   pktText,
   ProtocolError,
 } from "./Pkt.ts";
-import { packDataBytes, type PackEvent, writePack } from "./PackWriter.ts";
 import { progressMessage, sidebandFrames } from "./Sideband.ts";
 import type { ClosureResult, ClosureSource, ObjectSource } from "./Store.ts";
 import { StoreError } from "./Store.ts";
@@ -62,9 +62,7 @@ const parseOidLine = (
     const body = text.slice(keyword.length + 1);
     const oid = body.slice(0, 40);
     if (!isOid(oid)) {
-      return Effect.fail(
-        new ProtocolError({ reason: `malformed ${keyword} line: ${text}` }),
-      );
+      return Effect.fail(ProtocolError.make({ reason: `malformed ${keyword} line: ${text}` }));
     }
     return Effect.succeed({ oid, rest: body.slice(40).trim() });
   });
@@ -91,7 +89,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       continue;
     }
     if (pkt._tag !== "data") {
-      return yield* new ProtocolError({
+      return yield* ProtocolError.make({
         reason: `unexpected ${pkt._tag} packet in upload-pack request`,
       });
     }
@@ -111,7 +109,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       } else if (text.startsWith("deepen ")) {
         const n = Number.parseInt(text.slice(7), 10);
         if (!Number.isInteger(n) || n <= 0) {
-          return yield* new ProtocolError({
+          return yield* ProtocolError.make({
             reason: `invalid deepen depth: ${text}`,
           });
         }
@@ -121,11 +119,11 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
         text.startsWith("deepen-not ") ||
         text.startsWith("filter ")
       ) {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unsupported argument: ${text.split(" ")[0]}`,
         });
       } else {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unexpected line in want section: ${text}`,
         });
       }
@@ -136,7 +134,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       } else if (text === "done") {
         done = true;
       } else {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unexpected line in have section: ${text}`,
         });
       }
@@ -144,7 +142,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
   }
 
   if (wants.length === 0) {
-    return yield* new ProtocolError({
+    return yield* ProtocolError.make({
       reason: "upload-pack request has no want lines",
     });
   }
@@ -179,10 +177,7 @@ export interface Negotiation {
  * as soon as any common exists, and decides whether the pack follows in this
  * response (`done` received, or `ready` under `no-done`).
  */
-export const negotiate = Effect.fn(function* (
-  request: UploadPackRequest,
-  objects: ObjectSource,
-) {
+export const negotiate = Effect.fn(function* (request: UploadPackRequest, objects: ObjectSource) {
   const existing = new Set(yield* objects.filterExisting(request.haves));
   const common = request.haves.filter((oid) => existing.has(oid));
   const noDone = request.capabilities.has("no-done");
@@ -255,9 +250,7 @@ const shallowSection = (closure: ClosureResult): Uint8Array =>
 const muxPackEvent = (event: PackEvent): Stream.Stream<Uint8Array> =>
   event._tag === "data"
     ? Stream.fromArray(sidebandFrames(1, event.bytes))
-    : Stream.succeed(
-        progressMessage(`Counting objects: ${event.written}/${event.total}\r`),
-      );
+    : Stream.succeed(progressMessage(`Counting objects: ${event.written}/${event.total}\r`));
 
 /**
  * Runs one full upload-pack round: validates the wants, negotiates, computes
@@ -280,13 +273,12 @@ export const uploadPack = Effect.fn(function* (
   const existingWants = new Set(yield* objects.filterExisting(request.wants));
   for (const want of request.wants) {
     if (!existingWants.has(want)) {
-      return yield* new ProtocolError({ reason: `not our ref ${want}` });
+      return yield* ProtocolError.make({ reason: `not our ref ${want}` });
     }
   }
 
   const negotiation = yield* negotiate(request, objects);
-  const shallowRequested =
-    request.depth !== undefined || request.clientShallow.length > 0;
+  const shallowRequested = request.depth !== undefined || request.clientShallow.length > 0;
 
   if (!negotiation.sendPack) {
     // negotiation-only round: shallow section (when requested) + acks
@@ -330,9 +322,7 @@ export const uploadPack = Effect.fn(function* (
         Stream.concat(
           Stream.fromArray([
             ...prelude,
-            progressMessage(
-              `Enumerating objects: ${result.entries.length}, done.`,
-            ),
+            progressMessage(`Enumerating objects: ${result.entries.length}, done.`),
           ]),
           Stream.flatMap(events, muxPackEvent),
         ),
@@ -357,10 +347,7 @@ export const handleUploadPack = (
   body: Uint8Array,
   objects: ObjectSource,
   closure: ClosureSource,
-): Effect.Effect<
-  UploadPackResponse,
-  PktLineError | ProtocolError | StoreError
-> =>
+): Effect.Effect<UploadPackResponse, PktLineError | ProtocolError | StoreError> =>
   parseUploadPackRequest(body).pipe(
     Effect.flatMap((request) => uploadPack(request, objects, closure)),
   );

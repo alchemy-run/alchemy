@@ -1,15 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  AccessPolicy,
-  Collection,
-  SecurityPolicy,
-} from "@/AWS/OpenSearchServerless";
-import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AccessPolicy, Collection, SecurityPolicy } from "@/AWS/OpenSearchServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,23 +17,15 @@ const NET_POLICY = "alchemy-aoss-net";
 const ACC_POLICY = "alchemy-aoss-acc";
 
 const encryptionPolicy = {
-  Rules: [
-    { ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] },
-  ],
+  Rules: [{ ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] }],
   AWSOwnedKey: true,
 };
 
 const networkPolicy = [
   {
     Rules: [
-      {
-        ResourceType: "collection",
-        Resource: [`collection/${COLLECTION_NAME}`],
-      },
-      {
-        ResourceType: "dashboard",
-        Resource: [`collection/${COLLECTION_NAME}`],
-      },
+      { ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] },
+      { ResourceType: "dashboard", Resource: [`collection/${COLLECTION_NAME}`] },
     ],
     AllowFromPublic: true,
   },
@@ -46,11 +34,7 @@ const networkPolicy = [
 const accessPolicy = (principalArn: string) => [
   {
     Rules: [
-      {
-        ResourceType: "index",
-        Resource: [`index/${COLLECTION_NAME}/*`],
-        Permission: ["aoss:*"],
-      },
+      { ResourceType: "index", Resource: [`index/${COLLECTION_NAME}/*`], Permission: ["aoss:*"] },
       {
         ResourceType: "collection",
         Resource: [`collection/${COLLECTION_NAME}`],
@@ -70,10 +54,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const policyError = yield* Effect.flip(
-        aoss.getSecurityPolicy({
-          type: "encryption",
-          name: "alchemy-nonexistent-probe",
-        }),
+        aoss.getSecurityPolicy({ type: "encryption", name: "alchemy-nonexistent-probe" }),
       );
       expect(policyError._tag).toBe("ResourceNotFoundException");
 
@@ -86,6 +67,7 @@ test.provider(
       expect(batch.collectionDetails ?? []).toHaveLength(0);
       expect((batch.collectionErrorDetails ?? []).length).toBeGreaterThan(0);
     }),
+  { tags: ["provider:aws", "provider:aws:opensearchserverless", "live"] },
 );
 
 // Security and access policies are FREE (no OCU cost) and provision instantly,
@@ -131,15 +113,9 @@ test.provider(
       const initialNetVersion = created.net.policyVersion;
 
       // Out-of-band verification via distilled.
-      const encObserved = yield* aoss.getSecurityPolicy({
-        type: "encryption",
-        name: ENC_POLICY,
-      });
+      const encObserved = yield* aoss.getSecurityPolicy({ type: "encryption", name: ENC_POLICY });
       expect(encObserved.securityPolicyDetail?.name).toBe(ENC_POLICY);
-      const accObserved = yield* aoss.getAccessPolicy({
-        type: "data",
-        name: ACC_POLICY,
-      });
+      const accObserved = yield* aoss.getAccessPolicy({ type: "data", name: ACC_POLICY });
       expect(accObserved.accessPolicyDetail?.name).toBe(ACC_POLICY);
 
       // No-op redeploy: policy version must not change.
@@ -180,10 +156,7 @@ test.provider(
             policy: [
               {
                 Rules: [
-                  {
-                    ResourceType: "collection",
-                    Resource: [`collection/${COLLECTION_NAME}`],
-                  },
+                  { ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] },
                 ],
                 AllowFromPublic: true,
               },
@@ -204,7 +177,7 @@ test.provider(
       yield* assertPolicyGone("network", NET_POLICY);
       yield* assertAccessPolicyGone(ACC_POLICY);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:opensearchserverless", "live"], timeout: 120_000 },
 );
 
 // A VECTORSEARCH collection is the vector store Bedrock Knowledge Bases require.
@@ -259,9 +232,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(collection.collectionEndpoint).toContain("aoss.amazonaws.com");
 
       // Out-of-band verification via distilled: the collection is ACTIVE.
-      const observed = yield* aoss.batchGetCollection({
-        ids: [collection.collectionId],
-      });
+      const observed = yield* aoss.batchGetCollection({ ids: [collection.collectionId] });
       const detail = observed.collectionDetails?.[0];
       expect(detail?.status).toBe("ACTIVE");
       expect(detail?.type).toBe("VECTORSEARCH");
@@ -271,25 +242,21 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertCollectionGone(collection.collectionId);
     }),
-  { timeout: 900_000 },
+  { tags: ["provider:aws", "provider:aws:opensearchserverless", "live"], timeout: 900_000 },
 );
 
 const assertPolicyGone = (type: "encryption" | "network", name: string) =>
   aoss.getSecurityPolicy({ type, name }).pipe(
     Effect.flip,
     Effect.map((e) => expect(e._tag).toBe("ResourceNotFoundException")),
-    Effect.retry({
-      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]) }),
   );
 
 const assertAccessPolicyGone = (name: string) =>
   aoss.getAccessPolicy({ type: "data", name }).pipe(
     Effect.flip,
     Effect.map((e) => expect(e._tag).toBe("ResourceNotFoundException")),
-    Effect.retry({
-      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]) }),
   );
 
 // Deletion is verified as INITIATED (status `DELETING`) or fully gone — full
@@ -300,15 +267,8 @@ const assertCollectionGone = (id: string) =>
     const detail = response.collectionDetails?.[0];
     const status = detail?.status ?? "gone";
     if (status !== "gone" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`Collection '${id}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Collection '${id}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );

@@ -57,7 +57,6 @@ export interface GetAssetPropertyAggregates extends Binding.Service<
     >
   >
 > {}
-export const GetAssetPropertyAggregates =
-  Binding.Service<GetAssetPropertyAggregates>(
-    "AWS.IoTSiteWise.GetAssetPropertyAggregates",
-  );
+export const GetAssetPropertyAggregates = Binding.Service<GetAssetPropertyAggregates>(
+  "AWS.IoTSiteWise.GetAssetPropertyAggregates",
+);

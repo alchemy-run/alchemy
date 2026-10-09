@@ -37,7 +37,6 @@ export interface ReleaseFileSystemNfsV3Locks extends Binding.Service<
     >
   >
 > {}
-export const ReleaseFileSystemNfsV3Locks =
-  Binding.Service<ReleaseFileSystemNfsV3Locks>(
-    "AWS.FSx.ReleaseFileSystemNfsV3Locks",
-  );
+export const ReleaseFileSystemNfsV3Locks = Binding.Service<ReleaseFileSystemNfsV3Locks>(
+  "AWS.FSx.ReleaseFileSystemNfsV3Locks",
+);

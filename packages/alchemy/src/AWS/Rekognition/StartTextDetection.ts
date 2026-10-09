@@ -37,10 +37,7 @@ export interface StartTextDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.StartTextDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.StartTextDetectionResponse,
-      rekognition.StartTextDetectionError
-    >
+    ) => Effect.Effect<rekognition.StartTextDetectionResponse, rekognition.StartTextDetectionError>
   >
 > {}
 export const StartTextDetection = Binding.Service<StartTextDetection>(

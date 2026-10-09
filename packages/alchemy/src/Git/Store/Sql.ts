@@ -17,11 +17,8 @@
  * failures surface as typed {@link StoreError}s instead of defects.
  */
 import type * as cf from "@cloudflare/workers-types";
-import type {
-  DurableObjectState,
-  SqlStorageValue,
-} from "../../Cloudflare/Workers/index.ts";
 import * as Effect from "effect/Effect";
+import type { DurableObjectState, SqlStorageValue } from "../../Cloudflare/Workers/index.ts";
 import { StoreError } from "../Protocol/Store.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -364,9 +361,7 @@ class RollbackSignal {
  * factory (not a Layer) so `RepoObject.ts` / `RegistryObject.ts` can wire it
  * inside their inner (per-instance) effects.
  */
-export const makeSqlClient = (
-  state: DurableObjectState["Service"],
-): SqlClient => {
+export const makeSqlClient = (state: DurableObjectState["Service"]): SqlClient => {
   const sql = state.storage.sql.raw;
   const storage = state.raw.storage;
 
@@ -377,7 +372,7 @@ export const makeSqlClient = (
     Effect.try({
       try: () => sql.exec<Row>(query, ...bindings).toArray(),
       catch: (cause) =>
-        new StoreError({
+        StoreError.make({
           reason: `sql failed (${query.slice(0, 120)}): ${errorMessage(cause)}`,
         }),
     });
@@ -408,10 +403,11 @@ export const makeSqlClient = (
         );
         const rows: Array<Row> = [];
         for (const part of chunk(items, size)) {
-          const batch = yield* allWith<Row>(
-            makeQuery(placeholders(part.length)),
-            [...prefix, ...part, ...suffix],
-          );
+          const batch = yield* allWith<Row>(makeQuery(placeholders(part.length)), [
+            ...prefix,
+            ...part,
+            ...suffix,
+          ]);
           for (const row of batch) {
             rows.push(row);
           }
@@ -431,7 +427,7 @@ export const makeSqlClient = (
         catch: (thrown): StoreError | E =>
           thrown instanceof RollbackSignal
             ? (thrown.error as E)
-            : new StoreError({
+            : StoreError.make({
                 reason: `transactionSync failed: ${errorMessage(thrown)}`,
               }),
       }),

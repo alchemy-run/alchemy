@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as AWS from "@/AWS";
 import * as Kubernetes from "@/Kubernetes";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -18,11 +18,16 @@ const { test } = Test.make(testOptions);
 // problem of every Kubernetes workload test (an EKS control-plane create
 // is ~15 min), so lifecycle coverage rides the gated Deployment E2E
 // cluster rather than paying for its own; see Deployment.test.ts.
-test.provider("list returns an empty array (in-cluster objects)", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Kubernetes.Manifest);
-    const all = yield* provider.list();
-    expect(Array.isArray(all)).toBe(true);
-    expect(all).toEqual([]);
-  }),
+test.provider(
+  "list returns an empty array (in-cluster objects)",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Kubernetes.Manifest);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+      expect(all).toEqual([]);
+    }),
+  {
+    tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:manifest", "live"],
+  },
 );

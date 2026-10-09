@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListSchemaVersions}.
  */
-export interface ListSchemaVersionsRequest
-  extends mi.ListSchemaVersionsRequest {}
+export interface ListSchemaVersionsRequest extends mi.ListSchemaVersionsRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:ListSchemaVersions`
@@ -36,10 +35,7 @@ export interface ListSchemaVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListSchemaVersionsRequest,
-    ) => Effect.Effect<
-      mi.ListSchemaVersionsResponse,
-      mi.ListSchemaVersionsError
-    >
+    ) => Effect.Effect<mi.ListSchemaVersionsResponse, mi.ListSchemaVersionsError>
   >
 > {}
 export const ListSchemaVersions = Binding.Service<ListSchemaVersions>(

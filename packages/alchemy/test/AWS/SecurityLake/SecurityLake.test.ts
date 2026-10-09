@@ -1,3 +1,8 @@
+import * as securitylake from "@distilled.cloud/aws/securitylake";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import {
@@ -9,11 +14,6 @@ import {
   SubscriberNotification,
 } from "@/AWS/SecurityLake";
 import * as Test from "@/Test/Alchemy";
-import * as securitylake from "@distilled.cloud/aws/securitylake";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,10 +36,9 @@ test.provider(
       // Onboarded accounts return ResourceNotFoundException; accounts that
       // never enabled Security Lake reject every subscriber API with the
       // (patched-in) UnauthorizedException wire error.
-      expect(["ResourceNotFoundException", "UnauthorizedException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "UnauthorizedException"]).toContain(error._tag);
     }),
+  { tags: ["provider:aws", "provider:aws:securitylake", "live"] },
 );
 
 test.provider(
@@ -55,20 +54,17 @@ test.provider(
         expect(result.failure._tag).toBe("AccessDeniedException");
       }
     }),
+  { tags: ["provider:aws", "provider:aws:securitylake", "live"] },
 );
 
 test.provider(
   "getDataLakeExceptionSubscription returns the subscription or a typed rejection",
   () =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(
-        securitylake.getDataLakeExceptionSubscription({}),
-      );
+      const result = yield* Effect.result(securitylake.getDataLakeExceptionSubscription({}));
       if (Result.isSuccess(result)) {
         // No subscription configured — every field is absent.
-        expect(typeof (result.success.notificationEndpoint ?? "")).toBe(
-          "string",
-        );
+        expect(typeof (result.success.notificationEndpoint ?? "")).toBe("string");
       } else {
         // Accounts that never onboarded Security Lake (or have no
         // subscription) reject with one of the typed tags the
@@ -80,6 +76,7 @@ test.provider(
         ]).toContain(result.failure._tag);
       }
     }),
+  { tags: ["provider:aws", "provider:aws:securitylake", "live"] },
 );
 
 test.provider(
@@ -97,6 +94,7 @@ test.provider(
         "UnauthorizedException",
       ]).toContain(error._tag);
     }),
+  { tags: ["provider:aws", "provider:aws:securitylake", "live"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -113,9 +111,7 @@ const assertDataLakeGone = securitylake.listDataLakes({}).pipe(
       ? Effect.void
       : Effect.fail(new Error("data lake still present")),
   ),
-  Effect.retry({
-    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
-  }),
+  Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]) }),
 );
 
 test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
@@ -155,10 +151,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
             });
             const lake = yield* DataLake("Lake", {
               configurations: [
-                {
-                  region,
-                  lifecycleConfiguration: { expiration: { days: "30 days" } },
-                },
+                { region, lifecycleConfiguration: { expiration: { days: "30 days" } } },
               ],
               metaStoreManagerRoleArn: metastoreRole.roleArn,
               tags: { fixture: "securitylake" },
@@ -168,10 +161,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
               regions: lake.regions,
             });
             const subscriber = yield* Subscriber("Consumer", {
-              subscriberIdentity: {
-                principal: accountId,
-                externalId: "alchemy-securitylake-test",
-              },
+              subscriberIdentity: { principal: accountId, externalId: "alchemy-securitylake-test" },
               subscriberDescription,
               // Reference the log source's output so destroy ordering tears
               // the subscriber down before the source and data lake.
@@ -202,29 +192,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
                   },
                 ],
               },
-              managedPolicyArns: [
-                "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole",
-              ],
+              managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"],
             });
             const custom = yield* CustomLogSource("CustomSource", {
               sourceName: "alchemy-securitylake-test-custom",
               eventClasses: ["FILE_ACTIVITY"],
               crawlerConfiguration: { roleArn: crawlerRole.roleArn },
-              providerIdentity: {
-                principal: accountId,
-                externalId: "alchemy-securitylake-custom",
-              },
+              providerIdentity: { principal: accountId, externalId: "alchemy-securitylake-custom" },
             });
             const notification = yield* SubscriberNotification("Notify", {
               subscriberId: subscriber.subscriberId,
               sqs: true,
             });
-            return {
-              lake,
-              source,
-              subscriber,
-              extras: { exceptions, custom, notification },
-            };
+            return { lake, source, subscriber, extras: { exceptions, custom, notification } };
           }),
         );
 
@@ -243,17 +223,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
       const observedSubscriber = yield* securitylake.getSubscriber({
         subscriberId: subscriber.subscriberId,
       });
-      expect(observedSubscriber.subscriber?.subscriberArn).toBe(
-        subscriber.subscriberArn,
-      );
+      expect(observedSubscriber.subscriber?.subscriberArn).toBe(subscriber.subscriberArn);
 
       // Update in place (subscriber description) + add the second wave of
       // resources (exception subscription, custom source, notification).
       const second = yield* deployOnce("v2", true);
       expect(second.subscriber.subscriberId).toBe(subscriber.subscriberId);
-      const updated = yield* securitylake.getSubscriber({
-        subscriberId: subscriber.subscriberId,
-      });
+      const updated = yield* securitylake.getSubscriber({ subscriberId: subscriber.subscriberId });
       expect(updated.subscriber?.subscriberDescription).toBe("v2");
 
       const extras = second.extras!;
@@ -263,35 +239,29 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
       expect(extras.notification.subscriberEndpoint).toBeDefined();
 
       // Out-of-band verification via distilled.
-      const exceptionSubscription =
-        yield* securitylake.getDataLakeExceptionSubscription({});
-      expect(exceptionSubscription.notificationEndpoint).toBe(
-        "securitylake-test@example.com",
-      );
+      const exceptionSubscription = yield* securitylake.getDataLakeExceptionSubscription({});
+      expect(exceptionSubscription.notificationEndpoint).toBe("securitylake-test@example.com");
       const logSources = yield* securitylake.listLogSources({});
       expect(
         (logSources.sources ?? []).some((entry) =>
           (entry.sources ?? []).some(
-            (source) =>
-              source.customLogSource?.sourceName ===
-              "alchemy-securitylake-test-custom",
+            (source) => source.customLogSource?.sourceName === "alchemy-securitylake-test-custom",
           ),
         ),
       ).toBe(true);
-      const notified = yield* securitylake.getSubscriber({
-        subscriberId: subscriber.subscriberId,
-      });
+      const notified = yield* securitylake.getSubscriber({ subscriberId: subscriber.subscriberId });
       expect(notified.subscriber?.subscriberEndpoint).toBeDefined();
 
       // Destroy — offboards the account; buckets are retained by AWS design.
       yield* stack.destroy();
       const goneSubscriber = yield* Effect.flip(
-        securitylake.getSubscriber({
-          subscriberId: subscriber.subscriberId,
-        }),
+        securitylake.getSubscriber({ subscriberId: subscriber.subscriberId }),
       );
       expect(goneSubscriber._tag).toBe("ResourceNotFoundException");
       yield* assertDataLakeGone;
     }),
-  { timeout: 1_200_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:securitylake", "live"],
+    timeout: 1_200_000,
+  },
 );

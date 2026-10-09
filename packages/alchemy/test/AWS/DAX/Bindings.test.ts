@@ -1,14 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as dax from "@distilled.cloud/aws/dax";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-
 import DAXTestFunctionLive, { DAXTestFunction } from "./handler";
 import DAXSlowTestFunctionLive, {
   DAXSlowTestFunction,
@@ -21,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "DAXBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,74 +32,73 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
-describe.sequential("DAX Bindings", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* Effect.logInfo("DAX test setup: destroying previous resources");
-      yield* sharedStack.destroy();
-
-      yield* Effect.logInfo("DAX test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
-        Effect.gen(function* () {
-          return yield* DAXTestFunction;
-        }).pipe(Effect.provide(DAXTestFunctionLive)),
-      );
-
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
-
-      const readinessUrl = `${baseUrl}/bindings`;
-      yield* HttpClient.get(readinessUrl).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
-      );
-    }),
-    { timeout: 240_000 },
-  );
-
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
-
-  describe("binding registration", () => {
-    test.provider("both capabilities initialize in the runtime", (_stack) =>
+describe.sequential(
+  "DAX Bindings",
+  { tags: ["provider:aws", "provider:aws:dax", "provider:aws:lambda", "live"] },
+  () => {
+    beforeAll(
       Effect.gen(function* () {
-        const response = yield* getJson("/bindings");
-        expect((response as any).bound).toHaveLength(2);
-      }),
-    );
-  });
+        yield* Effect.logInfo("DAX test setup: destroying previous resources");
+        yield* sharedStack.destroy();
 
-  describe("DescribeClusters", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent cluster",
-      (_stack) =>
+        yield* Effect.logInfo("DAX test setup: deploying fixture");
+        const { functionUrl } = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            return yield* DAXTestFunction;
+          }).pipe(Effect.provide(DAXTestFunctionLive)),
+        );
+
+        expect(functionUrl).toBeTruthy();
+        baseUrl = functionUrl!.replace(/\/+$/, "");
+
+        const readinessUrl = `${baseUrl}/bindings`;
+        yield* HttpClient.get(readinessUrl).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+          ),
+          Effect.retry({ schedule: readinessPolicy }),
+        );
+      }),
+      { timeout: 240_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+    describe("binding registration", () => {
+      test.provider("both capabilities initialize in the runtime", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/bindings");
+          expect((response as any).bound).toHaveLength(2);
+        }),
+      );
+    });
+
+    describe("DescribeClusters", () => {
+      test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/clusters");
           expect((response as any).tag).toBe("ClusterNotFoundFault");
         }),
-    );
-  });
+      );
+    });
 
-  describe("DescribeEvents", () => {
-    test.provider("lists the account's recent DAX events", (_stack) =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/events");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
-});
+    describe("DescribeEvents", () => {
+      test.provider("lists the account's recent DAX events", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/events");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
+      );
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Cluster-scoped bindings (ConnectReadWrite, RebootNode) need a real DAX
@@ -125,9 +120,7 @@ const defaultSubnetIds = Effect.gen(function* () {
   });
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -151,18 +144,13 @@ const ensureSubnetGroup = (subnetIds: string[]) =>
 // The subnet group is only deletable once the cluster is fully gone —
 // deletion takes several minutes after destroy initiates it, so retry
 // through SubnetGroupInUseFault (gated test: generous bounded budget).
-const deleteSubnetGroup = dax
-  .deleteSubnetGroup({ SubnetGroupName: SLOW_SUBNET_GROUP_NAME })
-  .pipe(
-    Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
-    Effect.retry({
-      while: (e) => e._tag === "SubnetGroupInUseFault",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(60),
-      ]),
-    }),
-  );
+const deleteSubnetGroup = dax.deleteSubnetGroup({ SubnetGroupName: SLOW_SUBNET_GROUP_NAME }).pipe(
+  Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
+  Effect.retry({
+    while: (e) => e._tag === "SubnetGroupInUseFault",
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
+  }),
+);
 
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "connect + scaling + reboot-node bindings against a live cluster",
@@ -184,10 +172,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -210,18 +195,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         // Scaling bindings: invalid target factors reach service-side
         // validation and surface typed tags — proves the per-cluster IAM
         // grant and the ClusterName injection for both bindings.
-        const scale = (yield* get("/scale-probe")) as {
-          increaseTag: string;
-          decreaseTag: string;
-        };
-        expect([
-          "InvalidParameterValueException",
-          "InvalidClusterStateFault",
-        ]).toContain(scale.increaseTag);
-        expect([
-          "InvalidParameterValueException",
-          "InvalidClusterStateFault",
-        ]).toContain(scale.decreaseTag);
+        const scale = (yield* get("/scale-probe")) as { increaseTag: string; decreaseTag: string };
+        expect(["InvalidParameterValueException", "InvalidClusterStateFault"]).toContain(
+          scale.increaseTag,
+        );
+        expect(["InvalidParameterValueException", "InvalidClusterStateFault"]).toContain(
+          scale.decreaseTag,
+        );
 
         // Reboot the cluster's only node and observe it transition.
         const nodes = (yield* get("/nodes")) as { nodeIds: string[] };
@@ -231,13 +211,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         };
         expect(reboot.nodeStatus).toBeDefined();
       }).pipe(
-        Effect.ensuring(
-          slowStack
-            .destroy()
-            .pipe(Effect.andThen(deleteSubnetGroup), Effect.orDie),
-        ),
+        Effect.ensuring(slowStack.destroy().pipe(Effect.andThen(deleteSubnetGroup), Effect.orDie)),
       );
     }),
   // cluster create (~10 min) + probes + delete (~10 min) in one test.
-  { timeout: 2_400_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:dax",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 2_400_000,
+  },
 );

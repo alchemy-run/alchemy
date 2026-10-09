@@ -18,9 +18,7 @@ export class RpcCallError extends Data.TaggedError("Railway.RpcCallError")<{
   readonly cause: unknown;
 }> {}
 
-export class RpcUnauthorized extends Data.TaggedError(
-  "Railway.RpcUnauthorized",
-)<{
+export class RpcUnauthorized extends Data.TaggedError("Railway.RpcUnauthorized")<{
   readonly method: string;
 }> {}
 
@@ -39,9 +37,7 @@ type RpcTarget = {
 };
 
 const resolveTarget = <Shape, Req>(
-  targetEff:
-    | (RpcTarget & Rpc<Shape>)
-    | Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>,
+  targetEff: (RpcTarget & Rpc<Shape>) | Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>,
 ): Effect.Effect<RpcTarget & Rpc<Shape>, never, Req> =>
   isYieldableEffectLike(targetEff)
     ? (targetEff as Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>)
@@ -60,10 +56,7 @@ const logicalIdOf = (target: unknown): string => {
   return "";
 };
 
-const makeStub = <Shape>(options: {
-  readonly baseUrl: string;
-  readonly token: string;
-}): Shape => {
+const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: string }): Shape => {
   const { baseUrl, token } = options;
   return new Proxy(
     {},
@@ -80,18 +73,15 @@ const makeStub = <Shape>(options: {
             }
             const response = yield* Effect.tryPromise({
               try: () =>
-                fetch(
-                  `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
-                  {
-                    method: "POST",
-                    headers: {
-                      "content-type": "application/json",
-                      [RPC_TOKEN_HEADER]: token,
-                    },
-                    body: JSON.stringify(args),
-                    signal: AbortSignal.timeout(25_000),
+                fetch(`${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`, {
+                  method: "POST",
+                  headers: {
+                    "content-type": "application/json",
+                    [RPC_TOKEN_HEADER]: token,
                   },
-                ),
+                  body: JSON.stringify(args),
+                  signal: AbortSignal.timeout(25_000),
+                }),
               catch: (cause) => new RpcCallError({ method: prop, cause }),
             });
             if (response.status === 401) {
@@ -117,9 +107,7 @@ const makeStub = <Shape>(options: {
 };
 
 const bindRpc = <Shape, Req = never>(
-  targetEff:
-    | (RpcTarget & Rpc<Shape>)
-    | Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>,
+  targetEff: (RpcTarget & Rpc<Shape>) | Effect.Effect<RpcTarget & Rpc<Shape>, never, Req>,
 ): Effect.Effect<Shape, never, Req> =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {

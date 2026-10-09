@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Channel, Input, InputSecurityGroup } from "@/AWS/MediaLive";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as medialive from "@distilled.cloud/aws/medialive";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Channel, Input, InputSecurityGroup } from "@/AWS/MediaLive";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,13 +28,9 @@ test.provider(
   "describeChannel/describeInput/describeInputSecurityGroup on a bogus id fail with NotFoundException",
   () =>
     Effect.gen(function* () {
-      const c = yield* Effect.flip(
-        medialive.describeChannel({ ChannelId: "9999999" }),
-      );
+      const c = yield* Effect.flip(medialive.describeChannel({ ChannelId: "9999999" }));
       expect(c._tag).toBe("NotFoundException");
-      const i = yield* Effect.flip(
-        medialive.describeInput({ InputId: "9999999" }),
-      );
+      const i = yield* Effect.flip(medialive.describeInput({ InputId: "9999999" }));
       expect(i._tag).toBe("NotFoundException");
       const g = yield* Effect.flip(
         medialive.describeInputSecurityGroup({
@@ -43,6 +39,7 @@ test.provider(
       );
       expect(g._tag).toBe("NotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:medialive", "live"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -71,9 +68,7 @@ test.provider(
       const observed = yield* medialive.describeInputSecurityGroup({
         InputSecurityGroupId: created.inputSecurityGroupId,
       });
-      expect(observed.WhitelistRules?.map((r) => r.Cidr)).toEqual([
-        "10.0.0.0/16",
-      ]);
+      expect(observed.WhitelistRules?.map((r) => r.Cidr)).toEqual(["10.0.0.0/16"]);
       expect(observed.Tags?.["alchemy::id"]).toBe("Allowlist");
       expect(observed.Tags?.["Environment"]).toBe("test");
 
@@ -87,10 +82,7 @@ test.provider(
         }),
       );
       expect(updated.inputSecurityGroupId).toBe(created.inputSecurityGroupId);
-      expect([...updated.whitelistRules].sort()).toEqual([
-        "10.1.0.0/16",
-        "192.168.0.0/24",
-      ]);
+      expect([...updated.whitelistRules].sort()).toEqual(["10.1.0.0/16", "192.168.0.0/24"]);
 
       const observed2 = yield* medialive.describeInputSecurityGroup({
         InputSecurityGroupId: created.inputSecurityGroupId,
@@ -104,7 +96,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertInputSecurityGroupDeleted(created.inputSecurityGroupId);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:medialive", "live"],
+    timeout: 120_000,
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -132,9 +127,7 @@ test.provider(
       expect(created.inputArn).toContain(":input:");
       expect(created.inputName).toBe(PULL_INPUT_NAME);
       expect(created.type).toBe("URL_PULL");
-      expect(created.state === "DETACHED" || created.state === "ATTACHED").toBe(
-        true,
-      );
+      expect(created.state === "DETACHED" || created.state === "ATTACHED").toBe(true);
 
       const observed = yield* medialive.describeInput({
         InputId: created.inputId,
@@ -183,7 +176,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertInputDeleted(replaced.inputId);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:medialive", "live"],
+    timeout: 180_000,
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -207,10 +203,7 @@ test.provider(
             name: PUSH_INPUT_NAME,
             type: "RTMP_PUSH",
             inputSecurityGroups: [isg.inputSecurityGroupId],
-            destinations: [
-              { StreamName: "live/primary" },
-              { StreamName: "live/secondary" },
-            ],
+            destinations: [{ StreamName: "live/primary" }, { StreamName: "live/secondary" }],
           });
           return { isg, input };
         }),
@@ -229,7 +222,10 @@ test.provider(
       yield* assertInputDeleted(input.inputId);
       yield* assertInputSecurityGroupDeleted(isg.inputSecurityGroupId);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:medialive", "live"],
+    timeout: 180_000,
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -417,7 +413,10 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDIALIVE)(
       yield* assertChannelDeleted(channel.channelId);
       yield* assertInputDeleted(input.inputId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:medialive", "live"],
+    timeout: 600_000,
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -434,27 +433,19 @@ const assertInputDeleted = (inputId: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
 const assertInputSecurityGroupDeleted = (id: string) =>
   medialive.describeInputSecurityGroup({ InputSecurityGroupId: id }).pipe(
     Effect.flatMap((isg) =>
-      isg.State === "DELETED"
-        ? Effect.void
-        : Effect.fail(new StillExists({ id })),
+      isg.State === "DELETED" ? Effect.void : Effect.fail(new StillExists({ id })),
     ),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -468,9 +459,6 @@ const assertChannelDeleted = (channelId: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
     }),
   );

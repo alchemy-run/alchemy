@@ -33,12 +33,7 @@ export interface GetDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<greengrassv2.GetDeploymentRequest, "deploymentId">,
-    ) => Effect.Effect<
-      greengrassv2.GetDeploymentResponse,
-      greengrassv2.GetDeploymentError
-    >
+    ) => Effect.Effect<greengrassv2.GetDeploymentResponse, greengrassv2.GetDeploymentError>
   >
 > {}
-export const GetDeployment = Binding.Service<GetDeployment>(
-  "AWS.GreengrassV2.GetDeployment",
-);
+export const GetDeployment = Binding.Service<GetDeployment>("AWS.GreengrassV2.GetDeployment");

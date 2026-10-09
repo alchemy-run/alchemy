@@ -1,7 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as ApiGateway from "@/AWS/ApiGateway";
 import * as Lambda from "@/AWS/Lambda";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export class RestApiEventSourceFunction extends Lambda.Function<RestApiEventSourceFunction>()(
   "RestApiEventSourceFunction",
@@ -18,7 +18,7 @@ export class RestApiEventSourceFunction extends Lambda.Function<RestApiEventSour
  * full `create` settles only after every bound child (including the
  * `Method`s that reference `host.functionArn`), so awaiting those outputs
  * inside the host's own effect would deadlock the plan. The test discovers
- * the REST API id out-of-band by its deterministic physical name.
+ * the REST API id out-of-band by its stack, stage, and logical-id tags.
  */
 export default RestApiEventSourceFunction.make(
   {
@@ -31,32 +31,26 @@ export default RestApiEventSourceFunction.make(
     });
 
     // GET /items — static JSON response.
-    yield* ApiGateway.onRestApiRoute(
-      api,
-      { path: "/items", httpMethod: "GET" },
-      () =>
-        Effect.succeed({
-          statusCode: 200,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ items: ["alpha", "beta"] }),
-        }),
+    yield* ApiGateway.onRestApiRoute(api, { path: "/items", httpMethod: "GET" }, () =>
+      Effect.succeed({
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ items: ["alpha", "beta"] }),
+      }),
     );
 
     // POST /echo — proves the proxy event (method, resource, body) reaches
     // the handler intact.
-    yield* ApiGateway.onRestApiRoute(
-      api,
-      { path: "/echo", httpMethod: "POST" },
-      (event) =>
-        Effect.sync(() => ({
-          statusCode: 200,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            method: event.httpMethod,
-            resource: event.resource,
-            echoed: event.body === null ? null : JSON.parse(event.body),
-          }),
-        })),
+    yield* ApiGateway.onRestApiRoute(api, { path: "/echo", httpMethod: "POST" }, (event) =>
+      Effect.sync(() => ({
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          method: event.httpMethod,
+          resource: event.resource,
+          echoed: event.body === null ? null : JSON.parse(event.body),
+        }),
+      })),
     );
 
     const deployment = yield* ApiGateway.Deployment("AgEsDep", {

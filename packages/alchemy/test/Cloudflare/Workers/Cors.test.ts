@@ -1,12 +1,12 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/http/HttpClientResponse";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import CorsWorker from "./fixtures/cors-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -30,17 +30,13 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // Raw HttpClient does not fail on non-2xx, so Effect.retry would not fire
 // through the freshly-deployed workers.dev 404/500 window. Fail non-2xx
 // explicitly so the first request retries until the edge is ready.
-const requestUntilReady = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const requestUntilReady = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.flatMap(
       Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
-          : yield* Effect.fail(
-              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
-            );
+          : yield* Effect.fail(new Error(`Worker not ready: ${res.status} ${yield* res.text}`));
       }),
     ),
     Effect.retry({
@@ -68,7 +64,10 @@ test(
     expect(res.status).toBe(204);
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -89,7 +88,10 @@ test(
     expect(body.message).toBe("world");
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -108,5 +110,8 @@ test(
     expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBe("*");
   }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
+  },
 );

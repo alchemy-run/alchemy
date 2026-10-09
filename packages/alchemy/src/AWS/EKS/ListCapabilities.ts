@@ -33,6 +33,4 @@ export interface ListCapabilities extends Binding.Service<
     ) => Effect.Effect<eks.ListCapabilitiesResponse, eks.ListCapabilitiesError>
   >
 > {}
-export const ListCapabilities = Binding.Service<ListCapabilities>(
-  "AWS.EKS.ListCapabilities",
-);
+export const ListCapabilities = Binding.Service<ListCapabilities>("AWS.EKS.ListCapabilities");

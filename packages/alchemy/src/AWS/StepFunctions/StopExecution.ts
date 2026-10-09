@@ -36,6 +36,4 @@ export interface StopExecution extends Binding.Service<
     ) => Effect.Effect<sfn.StopExecutionOutput, sfn.StopExecutionError>
   >
 > {}
-export const StopExecution = Binding.Service<StopExecution>(
-  "AWS.StepFunctions.StopExecution",
-);
+export const StopExecution = Binding.Service<StopExecution>("AWS.StepFunctions.StopExecution");

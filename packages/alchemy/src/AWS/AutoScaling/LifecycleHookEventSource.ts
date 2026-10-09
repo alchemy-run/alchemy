@@ -1,10 +1,7 @@
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import {
-  consumeBusEvents,
-  type EventRecord,
-} from "../EventBridge/EventSource.ts";
+import { consumeBusEvents, type EventRecord } from "../EventBridge/EventSource.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import {
   LifecycleHook,

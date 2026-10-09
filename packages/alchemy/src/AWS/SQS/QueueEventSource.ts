@@ -22,9 +22,7 @@ export interface MessagesProps extends QueueEventSourceProps {
   maxNumberOfMessages?: number;
 }
 
-type MessagesHandler<Req> = (
-  stream: Stream.Stream<SQSRecord>,
-) => Effect.Effect<void, never, Req>;
+type MessagesHandler<Req> = (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>;
 
 /**
  * Subscribe an Effect handler to messages produced by an SQS {@link Queue}.
@@ -51,25 +49,29 @@ type MessagesHandler<Req> = (
  * );
  * ```
  */
-export function consumeQueueMessages<Q extends Queue, Req = never>(
-  queue: Q,
+export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+  queue: Q | Effect.Effect<Q, never, ResourceReq>,
   process: MessagesHandler<Req>,
-): Effect.Effect<void, never, QueueEventSource>;
-export function consumeQueueMessages<Q extends Queue, Req = never>(
-  queue: Q,
+): Effect.Effect<void, never, QueueEventSource | ResourceReq>;
+export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+  queue: Q | Effect.Effect<Q, never, ResourceReq>,
   props: MessagesProps,
   process: MessagesHandler<Req>,
-): Effect.Effect<void, never, QueueEventSource>;
-export function consumeQueueMessages<Q extends Queue, Req = never>(
-  queue: Q,
+): Effect.Effect<void, never, QueueEventSource | ResourceReq>;
+export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+  queue: Q | Effect.Effect<Q, never, ResourceReq>,
   propsOrProcess: MessagesProps | MessagesHandler<Req>,
   maybeProcess?: MessagesHandler<Req>,
-): Effect.Effect<void, never, QueueEventSource> {
+): Effect.Effect<void, never, QueueEventSource | ResourceReq> {
   const [props, process] =
     typeof propsOrProcess === "function"
       ? [{} as MessagesProps, propsOrProcess]
       : [propsOrProcess, maybeProcess!];
-  return QueueEventSource.use((source) => source(queue, props, process));
+  // Accept the queue or the Effect that declares it, like bindings do.
+  const resolved = Effect.isEffect(queue) ? queue : Effect.succeed(queue);
+  return resolved.pipe(
+    Effect.flatMap((value) => QueueEventSource.use((source) => source(value, props, process))),
+  );
 }
 
 /**
@@ -106,9 +108,7 @@ export interface QueueEventSource extends Binding.Service<
   QueueEventSourceService
 > {}
 
-export const QueueEventSource = Binding.Service<QueueEventSource>(
-  "AWS.SQS.QueueEventSource",
-);
+export const QueueEventSource = Binding.Service<QueueEventSource>("AWS.SQS.QueueEventSource");
 
 export interface QueueEventSourceProps {
   /**
@@ -128,7 +128,5 @@ export interface QueueEventSourceProps {
 export type QueueEventSourceService = <Req = never>(
   bucket: Queue,
   props: MessagesProps,
-  process: (
-    stream: Stream.Stream<SQSRecord>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

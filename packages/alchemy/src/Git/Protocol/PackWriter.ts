@@ -137,5 +137,4 @@ export const packDataBytes = <E, R>(
 export const writePackBytes = (
   entries: ReadonlyArray<ManifestEntry>,
   objects: ObjectSource,
-): Stream.Stream<Uint8Array, StoreError> =>
-  packDataBytes(writePack(entries, objects));
+): Stream.Stream<Uint8Array, StoreError> => packDataBytes(writePack(entries, objects));

@@ -49,13 +49,8 @@ export interface CreateResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.CreateResourceInput,
-    ) => Effect.Effect<
-      cloudcontrol.CreateResourceOutput,
-      cloudcontrol.CreateResourceError
-    >
+    ) => Effect.Effect<cloudcontrol.CreateResourceOutput, cloudcontrol.CreateResourceError>
   >
 > {}
 
-export const CreateResource = Binding.Service<CreateResource>(
-  "AWS.CloudControl.CreateResource",
-);
+export const CreateResource = Binding.Service<CreateResource>("AWS.CloudControl.CreateResource");

@@ -2,8 +2,7 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the React Router build. */
-export const REACT_ROUTER_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/react-router";
+export const REACT_ROUTER_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/react-router";
 
 /** The Node container deploy target for the React Router build. */
 export const REACT_ROUTER_NODE_TARGET_SPECIFIER =

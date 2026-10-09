@@ -1,3 +1,6 @@
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The delete-purge alarm job (DESIGN.md §2.3 Delete).
  *
@@ -20,9 +23,6 @@
  * the caller re-arms the alarm instead of blowing the 15-minute budget.
  */
 import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { StoreError } from "../Protocol/Store.ts";
 import { repoPrefix } from "../Store/Keys.ts";
 
@@ -62,13 +62,9 @@ export interface PurgeJobOptions {
 /** Folds R2 errors into the job's typed error. */
 const r2ToStore =
   (what: string) =>
-  <A>(
-    effect: Effect.Effect<A, BlobStoreError, RuntimeContext>,
-  ): Effect.Effect<A, StoreError> =>
+  <A>(effect: Effect.Effect<A, BlobStoreError, RuntimeContext>): Effect.Effect<A, StoreError> =>
     effect.pipe(
-      Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
-      ),
+      Effect.mapError((error) => StoreError.make({ reason: `${what}: ${error.reason}` })),
       Effect.provide(RuntimeContext.phantom),
     );
 
@@ -80,9 +76,7 @@ const r2ToStore =
  * live forks — the DO's SQLite survives until the pin clears so the alarm
  * keeps re-arming with the repoId at hand).
  */
-export const runPurgeJob = (
-  options: PurgeJobOptions,
-): Effect.Effect<PurgeOutcome, StoreError> =>
+export const runPurgeJob = (options: PurgeJobOptions): Effect.Effect<PurgeOutcome, StoreError> =>
   Effect.gen(function* () {
     const prefix = repoPrefix(options.repoId);
 
@@ -106,13 +100,11 @@ export const runPurgeJob = (
     // from the listing stream, delete in 1000-key batches, and treat a
     // short take as fully drained.
     const cap = MAX_PAGES_PER_RUN * 1000;
-    const keys = yield* r2ToStore(`blob list ${prefix}`)(
-      Stream.runCollect(
-        options.blobs.list(prefix).pipe(
-          Stream.take(cap),
-          Stream.map((meta) => meta.key),
-        ),
-      ),
+    const keys = yield* options.blobs.list(prefix).pipe(
+      Stream.take(cap),
+      Stream.map((meta) => meta.key),
+      Stream.runCollect,
+      r2ToStore(`blob list ${prefix}`),
     );
     for (let at = 0; at < keys.length; at += 1000) {
       yield* r2ToStore(`blob delete under ${prefix}`)(

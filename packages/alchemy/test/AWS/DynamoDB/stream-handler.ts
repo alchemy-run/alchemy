@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
 
 export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "DynamoDBStreamFunction",
@@ -67,11 +67,7 @@ export default DynamoDBStreamFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          AWS.Lambda.TableEventSource,
-          AWS.SQS.QueueSinkHttp,
-          TableAndQueueLive,
-        ),
+        Layer.mergeAll(AWS.Lambda.TableEventSource, AWS.SQS.QueueSinkHttp, TableAndQueueLive),
         Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),

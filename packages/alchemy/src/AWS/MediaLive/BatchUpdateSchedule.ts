@@ -48,10 +48,7 @@ export interface BatchUpdateSchedule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<medialive.BatchUpdateScheduleRequest, "ChannelId">,
-    ) => Effect.Effect<
-      medialive.BatchUpdateScheduleResponse,
-      medialive.BatchUpdateScheduleError
-    >
+    ) => Effect.Effect<medialive.BatchUpdateScheduleResponse, medialive.BatchUpdateScheduleError>
   >
 > {}
 export const BatchUpdateSchedule = Binding.Service<BatchUpdateSchedule>(

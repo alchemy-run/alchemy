@@ -35,6 +35,4 @@ export interface GetResourceSet extends Binding.Service<
   >
 > {}
 
-export const GetResourceSet = Binding.Service<GetResourceSet>(
-  "AWS.FMS.GetResourceSet",
-);
+export const GetResourceSet = Binding.Service<GetResourceSet>("AWS.FMS.GetResourceSet");

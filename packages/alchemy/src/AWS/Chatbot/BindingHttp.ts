@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
+import { inChatbotRegion } from "./internal.ts";
 
 /**
  * Shared scaffolding for AWS Chatbot HTTP bindings.
@@ -9,6 +10,9 @@ import { isBindingHost } from "../Lambda/Function.ts";
  * thin `Layer.effect(Cap, makeChatbotAccountHttpBinding({ … }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
+ *
+ * Chatbot is offered in only four regions, so every operation runs through
+ * {@link inChatbotRegion} (ambient region when supported, else `us-east-2`).
  *
  * All Chatbot management operations bound here are account-scoped: the
  * chat-identity and account-preference IAM actions do not support
@@ -41,7 +45,7 @@ export const makeChatbotAccountHttpBinding = <I, A, E, R>(options: {
         }
       }
       return Effect.fn(options.tag)(function* (request?: I) {
-        return yield* op((request ?? {}) as I);
+        return yield* op((request ?? {}) as I).pipe(inChatbotRegion);
       });
     });
   });

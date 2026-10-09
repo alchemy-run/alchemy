@@ -45,10 +45,7 @@ export interface CompleteMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CompleteMultipartUploadRequest,
-    ) => Effect.Effect<
-      glacier.ArchiveCreationOutput,
-      glacier.CompleteMultipartUploadError
-    >
+    ) => Effect.Effect<glacier.ArchiveCreationOutput, glacier.CompleteMultipartUploadError>
   >
 > {}
 export const CompleteMultipartUpload = Binding.Service<CompleteMultipartUpload>(

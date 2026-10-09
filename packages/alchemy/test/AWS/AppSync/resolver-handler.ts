@@ -3,10 +3,7 @@
  * this function with `{ field, args }` payloads and surface the returned
  * value as the GraphQL result — proving the value was computed here.
  */
-const handler = async (event: {
-  field?: string;
-  args?: Record<string, number & string>;
-}) => {
+const handler = async (event: { field?: string; args?: Record<string, number & string> }) => {
   switch (event?.field) {
     case "add":
       return Number(event.args?.a) + Number(event.args?.b);

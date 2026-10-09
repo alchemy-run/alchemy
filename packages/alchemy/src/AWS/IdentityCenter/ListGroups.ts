@@ -31,12 +31,7 @@ export interface ListGroups extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<identitystore.ListGroupsRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.ListGroupsResponse,
-      identitystore.ListGroupsError
-    >
+    ) => Effect.Effect<identitystore.ListGroupsResponse, identitystore.ListGroupsError>
   >
 > {}
-export const ListGroups = Binding.Service<ListGroups>(
-  "AWS.IdentityCenter.ListGroups",
-);
+export const ListGroups = Binding.Service<ListGroups>("AWS.IdentityCenter.ListGroups");

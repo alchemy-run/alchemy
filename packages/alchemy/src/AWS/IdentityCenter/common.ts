@@ -16,11 +16,7 @@ import * as Stream from "effect/Stream";
 export const unredact = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export const retryIdentityCenter = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -40,9 +36,7 @@ export const listInstances = Effect.fn(function* () {
     })
     .pipe(
       Stream.runCollect,
-      Effect.map(
-        (instances) => Array.from(instances) as ssoAdmin.InstanceMetadata[],
-      ),
+      Effect.map((instances) => Array.from(instances) as ssoAdmin.InstanceMetadata[]),
     );
 });
 
@@ -50,9 +44,7 @@ export const resolveInstance = Effect.fn(function* (instanceArn?: string) {
   const instances = yield* listInstances();
 
   if (instanceArn) {
-    const selected = instances.find(
-      (instance) => instance.InstanceArn === instanceArn,
-    );
+    const selected = instances.find((instance) => instance.InstanceArn === instanceArn);
     if (!selected?.InstanceArn || !selected.IdentityStoreId) {
       return yield* Effect.fail(
         new Error(`Identity Center instance '${instanceArn}' was not found`),

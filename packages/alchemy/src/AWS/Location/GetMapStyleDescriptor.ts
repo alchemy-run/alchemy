@@ -38,10 +38,7 @@ export interface GetMapStyleDescriptor extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetMapStyleDescriptorRequest,
-    ) => Effect.Effect<
-      location.GetMapStyleDescriptorResponse,
-      location.GetMapStyleDescriptorError
-    >
+    ) => Effect.Effect<location.GetMapStyleDescriptorResponse, location.GetMapStyleDescriptorError>
   >
 > {}
 export const GetMapStyleDescriptor = Binding.Service<GetMapStyleDescriptor>(

@@ -118,10 +118,9 @@ export type AccountApiToken = Resource<
  * @product API Tokens
  * @category Account & Identity
  */
-export const AccountApiToken = Resource<AccountApiToken>(
-  "Cloudflare.ApiToken.AccountApiToken",
-  { aliases: ["Cloudflare.AccountApiToken"] },
-);
+export const AccountApiToken = Resource<AccountApiToken>("Cloudflare.ApiToken.AccountApiToken", {
+  aliases: ["Cloudflare.AccountApiToken"],
+});
 
 type AccountApiTokenAttributes = AccountApiToken["Attributes"];
 
@@ -152,23 +151,17 @@ export const AccountApiTokenProvider = () =>
     stables: ["tokenId", "accountId"],
     diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       if (!isResolved(news)) return undefined;
-      const { accountId: defaultAccountId } =
-        yield* yield* CloudflareEnvironment;
+      const { accountId: defaultAccountId } = yield* yield* CloudflareEnvironment;
 
       const newAccountId = news.accountId ?? defaultAccountId;
-      const oldAccountId =
-        output?.accountId ?? olds?.accountId ?? defaultAccountId;
+      const oldAccountId = output?.accountId ?? olds?.accountId ?? defaultAccountId;
       if (oldAccountId !== newAccountId) {
         return { action: "replace" } as const;
       }
       const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
       const newName = yield* resolveName(id, news.name);
-      const oldPolicyFp = policyFingerprint(
-        resolvePolicies(olds?.policies ?? []),
-      );
-      const newPolicyFp = policyFingerprint(
-        resolvePolicies(news.policies ?? []),
-      );
+      const oldPolicyFp = policyFingerprint(resolvePolicies(olds?.policies ?? []));
+      const newPolicyFp = policyFingerprint(resolvePolicies(news.policies ?? []));
       const oldCondFp = conditionFingerprint(olds?.condition);
       const newCondFp = conditionFingerprint(news.condition);
       if (
@@ -182,8 +175,7 @@ export const AccountApiTokenProvider = () =>
       }
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output, bindings }) {
-      const { accountId: defaultAccountId } =
-        yield* yield* CloudflareEnvironment;
+      const { accountId: defaultAccountId } = yield* yield* CloudflareEnvironment;
       const accountId = news.accountId ?? defaultAccountId;
       const name = yield* resolveName(id, news.name);
       const collected = collectPolicies(news.policies, bindings);
@@ -206,8 +198,10 @@ export const AccountApiTokenProvider = () =>
             })
             .pipe(
               Effect.map((token) => token),
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-              Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTags({
+                InvalidRoute: () => Effect.succeed(undefined),
+                TokenNotFound: () => Effect.succeed(undefined),
+              }),
             )
         : undefined;
 
@@ -226,9 +220,7 @@ export const AccountApiTokenProvider = () =>
           notBefore: news.notBefore,
         });
         if (!result.value) {
-          return yield* Effect.die(
-            `Cloudflare did not return a value for token "${name}".`,
-          );
+          return yield* Effect.die(`Cloudflare did not return a value for token "${name}".`);
         }
         return buildAttributes(result, Redacted.make(result.value), accountId);
       }
@@ -258,8 +250,10 @@ export const AccountApiTokenProvider = () =>
           // Already gone — Cloudflare may report this as either an
           // `InvalidRoute` (token-id no longer routable) or a generic
           // `TokenNotFound`. Either is fine; we just want the resource gone.
-          Effect.catchTag("InvalidRoute", () => Effect.void),
-          Effect.catchTag("TokenNotFound", () => Effect.void),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.void,
+            TokenNotFound: () => Effect.void,
+          }),
           // Cloudflare-managed tokens (e.g. "Cloudflare Resource Tagging
           // System") can never be deleted (code 1001). We don't own them, so
           // treat the refusal as a no-op rather than a failure.
@@ -291,11 +285,11 @@ export const AccountApiTokenProvider = () =>
           tokenId: output.tokenId,
         })
         .pipe(
-          Effect.map((token) =>
-            buildAttributes(token, output.value, output.accountId),
-          ),
-          Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-          Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+          Effect.map((token) => buildAttributes(token, output.value, output.accountId)),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.succeed(undefined),
+            TokenNotFound: () => Effect.succeed(undefined),
+          }),
         );
     }),
   });

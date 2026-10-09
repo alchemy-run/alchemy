@@ -44,13 +44,8 @@ export interface IssueCertificate extends Binding.Service<
   ) => Effect.Effect<
     (
       request: IssueCertificateRequest,
-    ) => Effect.Effect<
-      acmpca.IssueCertificateResponse,
-      acmpca.IssueCertificateError
-    >
+    ) => Effect.Effect<acmpca.IssueCertificateResponse, acmpca.IssueCertificateError>
   >
 > {}
 
-export const IssueCertificate = Binding.Service<IssueCertificate>(
-  "AWS.ACMPCA.IssueCertificate",
-);
+export const IssueCertificate = Binding.Service<IssueCertificate>("AWS.ACMPCA.IssueCertificate");

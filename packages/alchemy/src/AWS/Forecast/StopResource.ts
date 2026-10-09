@@ -30,12 +30,7 @@ export interface StopResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.StopResourceRequest,
-    ) => Effect.Effect<
-      forecast.StopResourceResponse,
-      forecast.StopResourceError
-    >
+    ) => Effect.Effect<forecast.StopResourceResponse, forecast.StopResourceError>
   >
 > {}
-export const StopResource = Binding.Service<StopResource>(
-  "AWS.Forecast.StopResource",
-);
+export const StopResource = Binding.Service<StopResource>("AWS.Forecast.StopResource");

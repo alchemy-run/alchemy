@@ -1,32 +1,21 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { QueueArn } from "../SQS/Queue.ts";
 
-export type {
-  IncludeDetail,
-  Level,
-  LogConfig,
-} from "@distilled.cloud/aws/eventbridge";
+export type { IncludeDetail, Level, LogConfig } from "@distilled.cloud/aws/eventbridge";
 
 export type EventBusName = string;
-export type EventBusArn =
-  `arn:aws:events:${RegionID}:${AccountID}:event-bus/${EventBusName}`;
+export type EventBusArn = `arn:aws:events:${RegionID}:${AccountID}:event-bus/${EventBusName}`;
 
 export interface EventBusDeadLetterConfig {
   /** ARN of the SQS queue used as the dead-letter queue. */
@@ -160,17 +149,12 @@ export const EventBusProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const eventBusName =
-            output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
+          const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeEventBus({
               Name: eventBusName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -184,9 +168,7 @@ export const EventBusProvider = () =>
             eventBusArn: described.Arn as EventBusArn,
             description: described.Description,
           };
-          return (yield* hasAlchemyTags(id, Tags ?? []))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, Tags ?? [])) ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {
@@ -220,8 +202,7 @@ export const EventBusProvider = () =>
           }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const eventBusName =
-            output?.eventBusName ?? (yield* createEventBusName(id, news));
+          const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, news));
           const eventBusArn = (output?.eventBusArn ??
             `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
           const internalTags = yield* createInternalTags(id);
@@ -238,11 +219,7 @@ export const EventBusProvider = () =>
             .describeEventBus({
               Name: eventBusName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the bus if missing. Tolerate
           // `ResourceAlreadyExistsException` as a race with a peer
@@ -260,22 +237,13 @@ export const EventBusProvider = () =>
                 LogConfig: news.logConfig,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
 
             described = yield* eventbridge
               .describeEventBus({
                 Name: eventBusName,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
 
           // Sync mutable bus configuration — `updateEventBus` overwrites

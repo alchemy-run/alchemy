@@ -1,7 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -10,14 +8,14 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import crypto from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -53,7 +51,10 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -64,9 +65,7 @@ const r2Credentials = Effect.gen(function* () {
 });
 
 const getLegacyPipeline = (accountId: string, pipelineName: string) =>
-  pipelines
-    .getPipeline({ accountId, pipelineName })
-    .pipe(Effect.retry(forbiddenBlips));
+  pipelines.getPipeline({ accountId, pipelineName }).pipe(Effect.retry(forbiddenBlips));
 
 const expectLegacyPipelineGone = (accountId: string, pipelineName: string) =>
   getLegacyPipeline(accountId, pipelineName).pipe(
@@ -74,10 +73,7 @@ const expectLegacyPipelineGone = (accountId: string, pipelineName: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -137,15 +133,12 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const { pipeline } = yield* legacy(creds);
-            const worker = yield* Cloudflare.Worker(
-              "legacy-pipeline-binding-worker",
-              {
-                script: asyncWorkerScript,
-                env: {
-                  LEGACY: pipeline,
-                },
+            const worker = yield* Cloudflare.Worker("legacy-pipeline-binding-worker", {
+              script: asyncWorkerScript,
+              env: {
+                LEGACY: pipeline,
               },
-            );
+            });
             return { pipeline, worker };
           }),
         ),
@@ -158,9 +151,7 @@ test.provider(
         })
         .pipe(Effect.retry(forbiddenBlips));
 
-      const binding = (settings.bindings ?? []).find(
-        (b) => b.name === "LEGACY",
-      );
+      const binding = (settings.bindings ?? []).find((b) => b.name === "LEGACY");
 
       expect(binding).toMatchObject({
         type: "pipelines",
@@ -171,7 +162,16 @@ test.provider(
       yield* stack.destroy();
       yield* expectLegacyPipelineGone(accountId, pipeline.name);
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 420_000,
+  },
 );
 
 test.provider(
@@ -194,10 +194,7 @@ test.provider(
       const live = yield* getLegacyPipeline(accountId, initial.pipeline.name);
       expect(live.id).toEqual(initial.pipeline.pipelineId);
       expect(live.destination.path.bucket).toEqual(initial.bucket.bucketName);
-      expect(live.source.map((s) => s.type).sort()).toEqual([
-        "binding",
-        "http",
-      ]);
+      expect(live.source.map((s) => s.type).sort()).toEqual(["binding", "http"]);
 
       // Redeploying identical props is a no-op.
       const noop = yield* retryAuthBlip(stack.deploy(legacy(creds)));
@@ -217,17 +214,12 @@ test.provider(
       expect(updated.pipeline.pipelineId).toEqual(initial.pipeline.pipelineId);
       expect(updated.pipeline.name).toEqual(initial.pipeline.name);
 
-      const liveUpdated = yield* getLegacyPipeline(
-        accountId,
-        updated.pipeline.name,
-      );
+      const liveUpdated = yield* getLegacyPipeline(accountId, updated.pipeline.name);
       expect(liveUpdated.destination.path.prefix).toEqual("ingest");
       const httpSource = liveUpdated.source.find((s) => s.type === "http");
-      expect(
-        httpSource && "cors" in httpSource
-          ? httpSource.cors?.origins
-          : undefined,
-      ).toEqual(["https://example.com"]);
+      expect(httpSource && "cors" in httpSource ? httpSource.cors?.origins : undefined).toEqual([
+        "https://example.com",
+      ]);
 
       // Name change — the legacy API addresses pipelines by name, so this
       // is a replacement.
@@ -243,9 +235,7 @@ test.provider(
       );
 
       expect(replaced.pipeline.name).toEqual(replacementName);
-      expect(replaced.pipeline.pipelineId).not.toEqual(
-        initial.pipeline.pipelineId,
-      );
+      expect(replaced.pipeline.pipelineId).not.toEqual(initial.pipeline.pipelineId);
       yield* expectLegacyPipelineGone(accountId, initial.pipeline.name);
 
       yield* stack.destroy();
@@ -254,7 +244,15 @@ test.provider(
       // Destroy again — delete must be idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 420_000,
+  },
 );
 
 // The list endpoint returns truncated summary items
@@ -284,14 +282,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST)(
       // Account collection: list() exhaustively paginates every legacy
       // pipeline in the account and hydrates each into the read
       // Attributes shape.
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Pipelines.LegacyPipeline,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Pipelines.LegacyPipeline);
       const all = yield* provider.list();
 
-      const match = all.find(
-        (p) => p.pipelineId === deployed.pipeline.pipelineId,
-      );
+      const match = all.find((p) => p.pipelineId === deployed.pipeline.pipelineId);
       expect(match).toBeDefined();
       expect(match?.name).toEqual(deployed.pipeline.name);
       expect(match?.accountId).toEqual(accountId);
@@ -300,5 +294,13 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

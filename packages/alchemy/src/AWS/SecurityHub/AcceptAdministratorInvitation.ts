@@ -36,7 +36,6 @@ export interface AcceptAdministratorInvitation extends Binding.Service<
     >
   >
 > {}
-export const AcceptAdministratorInvitation =
-  Binding.Service<AcceptAdministratorInvitation>(
-    "AWS.SecurityHub.AcceptAdministratorInvitation",
-  );
+export const AcceptAdministratorInvitation = Binding.Service<AcceptAdministratorInvitation>(
+  "AWS.SecurityHub.AcceptAdministratorInvitation",
+);

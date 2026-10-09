@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Interaction } from "@/Interaction.ts";
 import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 /**
  * Contract tests for the test harness's sidecar topology (see
@@ -40,6 +40,7 @@ dev.test(
     const proxy = yield* Effect.serviceOption(RpcProviderProxy);
     expect(proxy._tag).toBe("Some");
   }),
+  { tags: ["provider:cloudflare", "local"] },
 );
 
 inProcess.test(
@@ -48,6 +49,7 @@ inProcess.test(
     const proxy = yield* Effect.serviceOption(RpcProviderProxy);
     expect(proxy._tag).toBe("None");
   }),
+  { tags: ["provider:cloudflare", "local"] },
 );
 
 live.test(
@@ -56,15 +58,15 @@ live.test(
     const proxy = yield* Effect.serviceOption(RpcProviderProxy);
     expect(proxy._tag).toBe("None");
   }),
+  { tags: ["provider:cloudflare", "local"] },
 );
 
 live.test(
   "test runtimes provide a non-interactive Interaction",
   Effect.gen(function* () {
     const interaction = yield* Interaction;
-    const failure = yield* Effect.flip(
-      interaction.prompt.confirm({ message: "?" }),
-    );
+    const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "?" }));
     expect(failure._tag).toBe("NonInteractiveTerminal");
   }),
+  { tags: ["provider:cloudflare", "local"] },
 );

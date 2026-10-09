@@ -35,10 +35,7 @@ export interface GetStyleDescriptor extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoMaps.GetStyleDescriptorRequest,
-    ) => Effect.Effect<
-      geoMaps.GetStyleDescriptorResponse,
-      geoMaps.GetStyleDescriptorError
-    >
+    ) => Effect.Effect<geoMaps.GetStyleDescriptorResponse, geoMaps.GetStyleDescriptorError>
   >
 > {}
 export const GetStyleDescriptor = Binding.Service<GetStyleDescriptor>(

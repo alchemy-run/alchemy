@@ -35,7 +35,6 @@ export interface SearchProvisionedProducts extends Binding.Service<
     >
   >
 > {}
-export const SearchProvisionedProducts =
-  Binding.Service<SearchProvisionedProducts>(
-    "AWS.ServiceCatalog.SearchProvisionedProducts",
-  );
+export const SearchProvisionedProducts = Binding.Service<SearchProvisionedProducts>(
+  "AWS.ServiceCatalog.SearchProvisionedProducts",
+);

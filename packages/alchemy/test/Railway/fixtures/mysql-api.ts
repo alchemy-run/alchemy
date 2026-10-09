@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Drizzle from "@/Drizzle/MySQL.ts";
 import * as Railway from "@/Railway";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Partition, Site } from "./suite-env.ts";
 
 export const MYSQL_API_PORT = 3000;
@@ -47,10 +47,7 @@ export default class MySQLApi extends Railway.Service<MySQLApi>()(
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
       }).pipe(
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

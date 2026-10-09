@@ -33,6 +33,4 @@ export interface GetPermission extends Binding.Service<
     ) => Effect.Effect<ram.GetPermissionResponse, ram.GetPermissionError>
   >
 > {}
-export const GetPermission = Binding.Service<GetPermission>(
-  "AWS.RAM.GetPermission",
-);
+export const GetPermission = Binding.Service<GetPermission>("AWS.RAM.GetPermission");

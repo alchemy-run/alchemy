@@ -1,7 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { BunContainer } from "./bun-container.ts";
 
 /**
@@ -26,7 +26,10 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
-                schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+                schedule: Schedule.min([
+                  Schedule.exponential("1 second"),
+                  Schedule.spaced("5 seconds"),
+                ]),
                 times: 40,
               }),
             );

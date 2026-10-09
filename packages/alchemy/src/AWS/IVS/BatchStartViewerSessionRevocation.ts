@@ -43,7 +43,6 @@ export interface BatchStartViewerSessionRevocation extends Binding.Service<
     >
   >
 > {}
-export const BatchStartViewerSessionRevocation =
-  Binding.Service<BatchStartViewerSessionRevocation>(
-    "AWS.IVS.BatchStartViewerSessionRevocation",
-  );
+export const BatchStartViewerSessionRevocation = Binding.Service<BatchStartViewerSessionRevocation>(
+  "AWS.IVS.BatchStartViewerSessionRevocation",
+);

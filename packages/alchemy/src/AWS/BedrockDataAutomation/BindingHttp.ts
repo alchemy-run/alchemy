@@ -88,12 +88,7 @@ export const makeBdaProjectHttpBinding = <
  * {@link DataAutomationLibrary}'s ARN as `libraryArn` and the deploy-time
  * half grants `actions` on the library ARN.
  */
-export const makeBdaLibraryHttpBinding = <
-  I extends { libraryArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities`. */
   tag: string;
   /** The distilled operation; `libraryArn` is injected from the library. */
@@ -206,12 +201,7 @@ export const makeBdaBlueprintOptimizationHttpBinding = <
  * {@link Blueprint}'s ARN as `blueprintArn` and the deploy-time half grants
  * `actions` on the blueprint ARN.
  */
-export const makeBdaBlueprintHttpBinding = <
-  I extends { blueprintArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeBdaBlueprintHttpBinding = <I extends { blueprintArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.BedrockDataAutomation.CreateBlueprintVersion`. */
   tag: string;
   /** The distilled operation; `blueprintArn` is injected from the blueprint. */

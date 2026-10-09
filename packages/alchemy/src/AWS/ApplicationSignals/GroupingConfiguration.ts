@@ -86,9 +86,7 @@ export const GroupingConfiguration = Resource<GroupingConfiguration>(
 );
 
 /** Normalize a definition for comparison (drop undefined members). */
-const normalizeDefinition = (
-  definition: appsignals.GroupingAttributeDefinition,
-) => ({
+const normalizeDefinition = (definition: appsignals.GroupingAttributeDefinition) => ({
   GroupingName: definition.GroupingName,
   GroupingSourceKeys: definition.GroupingSourceKeys ?? [],
   DefaultGroupingValue: definition.DefaultGroupingValue,
@@ -101,8 +99,7 @@ const sameDefinitions = (
   desired.length === observed.length &&
   desired.every(
     (d, i) =>
-      JSON.stringify(normalizeDefinition(d)) ===
-      JSON.stringify(normalizeDefinition(observed[i])),
+      JSON.stringify(normalizeDefinition(d)) === JSON.stringify(normalizeDefinition(observed[i])),
   );
 
 export const GroupingConfigurationProvider = () =>
@@ -116,13 +113,10 @@ export const GroupingConfigurationProvider = () =>
        */
       const observe = appsignals.listGroupingAttributeDefinitions({}).pipe(
         Effect.map((response) =>
-          response.UpdatedAt === undefined &&
-          response.GroupingAttributeDefinitions.length === 0
+          response.UpdatedAt === undefined && response.GroupingAttributeDefinitions.length === 0
             ? undefined
             : {
-                groupingAttributeDefinitions: [
-                  ...response.GroupingAttributeDefinitions,
-                ],
+                groupingAttributeDefinitions: [...response.GroupingAttributeDefinitions],
                 updatedAt: response.UpdatedAt?.toISOString(),
               },
         ),
@@ -137,9 +131,7 @@ export const GroupingConfigurationProvider = () =>
           // The grouping configuration is not taggable, so ownership cannot
           // be branded. If we have no record of creating it, surface it as
           // an existing-but-foreign singleton so takeover requires --adopt.
-          return output !== undefined || olds !== undefined
-            ? observed
-            : Unowned(observed);
+          return output !== undefined || olds !== undefined ? observed : Unowned(observed);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, session }) {
@@ -162,11 +154,9 @@ export const GroupingConfigurationProvider = () =>
                   .pipe(
                     Effect.map((response) => ({
                       groupingAttributeDefinitions: [
-                        ...response.GroupingConfiguration
-                          .GroupingAttributeDefinitions,
+                        ...response.GroupingConfiguration.GroupingAttributeDefinitions,
                       ],
-                      updatedAt:
-                        response.GroupingConfiguration.UpdatedAt?.toISOString(),
+                      updatedAt: response.GroupingConfiguration.UpdatedAt?.toISOString(),
                     })),
                   );
 

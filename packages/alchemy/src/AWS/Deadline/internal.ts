@@ -14,11 +14,7 @@ import { AWSEnvironment } from "../Environment.ts";
 export const asPlain = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * Build a Deadline Cloud ARN factory bound to the ambient account/region.
@@ -37,11 +33,7 @@ export const deadlineArnOf = Effect.gen(function* () {
 export const fetchDeadlineTags = Effect.fn(function* (arn: string) {
   const response = yield* deadline
     .listTagsForResource({ resourceArn: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     Object.entries(response?.tags ?? {}).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
@@ -53,10 +45,7 @@ export const fetchDeadlineTags = Effect.fn(function* (arn: string) {
  * Converge a Deadline resource's tags to the desired set, diffing against
  * the OBSERVED cloud tags (never olds/output).
  */
-export const syncDeadlineTags = Effect.fn(function* (
-  arn: string,
-  desired: Record<string, string>,
-) {
+export const syncDeadlineTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
   const observed = yield* fetchDeadlineTags(arn);
   const { removed, upsert } = diffTags(observed, desired);
   if (removed.length > 0) {
@@ -79,17 +68,15 @@ export const syncDeadlineTags = Effect.fn(function* (
  * gone (or never created) is not an error.
  */
 export const reapDeadlineLogGroups = Effect.fn(function* (prefix: string) {
-  const groups = yield* logs.describeLogGroups
-    .pages({ logGroupNamePrefix: prefix })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .flatMap((page) => page.logGroups ?? [])
-          .map((group) => group.logGroupName)
-          .filter((name): name is string => name != null),
-      ),
-    );
+  const groups = yield* logs.describeLogGroups.pages({ logGroupNamePrefix: prefix }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .flatMap((page) => page.logGroups ?? [])
+        .map((group) => group.logGroupName)
+        .filter((name): name is string => name != null),
+    ),
+  );
   yield* Effect.forEach(
     groups,
     (logGroupName) =>
@@ -119,15 +106,13 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
 
   // 1. Queue-fleet associations — stop scheduling, then delete (the delete
   // rejects with ConflictException until the stop settles to STOPPED).
-  const queueFleetAssociations = yield* deadline.listQueueFleetAssociations
-    .items({ farmId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as deadline.QueueFleetAssociationSummary[]),
-      ),
-    );
+  const queueFleetAssociations = yield* deadline.listQueueFleetAssociations.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.QueueFleetAssociationSummary[]),
+    ),
+  );
   yield* Effect.forEach(
     queueFleetAssociations,
     (assoc) =>
@@ -157,15 +142,13 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
   );
 
   // 2. Queue-limit associations — same stop-then-delete dance.
-  const queueLimitAssociations = yield* deadline.listQueueLimitAssociations
-    .items({ farmId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as deadline.QueueLimitAssociationSummary[]),
-      ),
-    );
+  const queueLimitAssociations = yield* deadline.listQueueLimitAssociations.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.QueueLimitAssociationSummary[]),
+    ),
+  );
   yield* Effect.forEach(
     queueLimitAssociations,
     (assoc) =>
@@ -223,9 +206,9 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
   yield* Effect.forEach(
     queues,
     (queue) =>
-      retryWhileConflict(
-        deadline.deleteQueue({ farmId, queueId: queue.queueId }),
-      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+      retryWhileConflict(deadline.deleteQueue({ farmId, queueId: queue.queueId })).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      ),
     { concurrency: 4, discard: true },
   );
 
@@ -240,9 +223,9 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
   yield* Effect.forEach(
     fleets,
     (fleet) =>
-      retryWhileConflict(
-        deadline.deleteFleet({ farmId, fleetId: fleet.fleetId }),
-      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+      retryWhileConflict(deadline.deleteFleet({ farmId, fleetId: fleet.fleetId })).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      ),
     { concurrency: 4, discard: true },
   );
 
@@ -264,15 +247,13 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
 
   // 7. Storage profiles (after queues — a queue's allowedStorageProfileIds
   // reference blocks profile deletion with ConflictException).
-  const storageProfiles = yield* deadline.listStorageProfiles
-    .items({ farmId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as deadline.StorageProfileSummary[]),
-      ),
-    );
+  const storageProfiles = yield* deadline.listStorageProfiles.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.StorageProfileSummary[]),
+    ),
+  );
   yield* Effect.forEach(
     storageProfiles,
     (profile) =>
@@ -311,11 +292,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
  * before they are provisioned. Bounded retry through the settling window
  * (~60s). Genuine throttling is also safely absorbed here.
  */
-export const retryWhileFarmSettling = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryWhileFarmSettling = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -332,11 +309,7 @@ export const retryWhileFarmSettling = <
  * it — createFleet/createMonitor surface this as AccessDeniedException.
  * Bounded retry through the propagation window (~60s).
  */
-export const retryThroughIamPropagation = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {

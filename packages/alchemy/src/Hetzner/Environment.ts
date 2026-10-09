@@ -25,10 +25,4 @@ export class HetznerEnvironment extends Context.Service<
  * Build a `HetznerEnvironment` layer from the distilled `Credentials`
  * service. Provide this after `Credentials.fromAuthProvider()`.
  */
-export const fromCredentials = () =>
-  Layer.effect(
-    HetznerEnvironment,
-    Effect.gen(function* () {
-      return yield* Credentials;
-    }),
-  );
+export const fromCredentials = () => Layer.effect(HetznerEnvironment, Credentials);

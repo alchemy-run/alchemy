@@ -38,12 +38,7 @@ export interface ReverseGeocode extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoPlaces.ReverseGeocodeRequest,
-    ) => Effect.Effect<
-      geoPlaces.ReverseGeocodeResponse,
-      geoPlaces.ReverseGeocodeError
-    >
+    ) => Effect.Effect<geoPlaces.ReverseGeocodeResponse, geoPlaces.ReverseGeocodeError>
   >
 > {}
-export const ReverseGeocode = Binding.Service<ReverseGeocode>(
-  "AWS.GeoPlaces.ReverseGeocode",
-);
+export const ReverseGeocode = Binding.Service<ReverseGeocode>("AWS.GeoPlaces.ReverseGeocode");

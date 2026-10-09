@@ -37,10 +37,7 @@ export interface StartInvestigation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.StartInvestigationRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.StartInvestigationResponse,
-      detective.StartInvestigationError
-    >
+    ) => Effect.Effect<detective.StartInvestigationResponse, detective.StartInvestigationError>
   >
 > {}
 export const StartInvestigation = Binding.Service<StartInvestigation>(

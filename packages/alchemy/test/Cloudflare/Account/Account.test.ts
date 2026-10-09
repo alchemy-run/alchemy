@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Creating accounts is tenant/partner-entitled. The standard testing
 // account is NOT entitled, so by default only the read paths and the typed
@@ -24,62 +21,69 @@ const tenantEntitled = !!process.env.CLOUDFLARE_TENANT_TEST;
 // A syntactically valid account id that cannot exist.
 const missingAccountId = "00000000000000000000000000000000";
 
-test.provider("read path: getAccount observes the testing account", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider(
+  "read path: getAccount observes the testing account",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const observed = yield* accounts.getAccount({ accountId });
-    expect(observed.id).toEqual(accountId);
-    expect(observed.name).toBeTruthy();
-    expect(["standard", "enterprise"]).toContain(observed.type);
+      const observed = yield* accounts.getAccount({ accountId });
+      expect(observed.id).toEqual(accountId);
+      expect(observed.name).toBeTruthy();
+      expect(["standard", "enterprise"]).toContain(observed.type);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:account", "live"] },
 );
 
-test.provider("inaccessible account surfaces a typed tag", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "inaccessible account surfaces a typed tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    // With an account-scoped token, an account id outside the token's
-    // scope is rejected with the typed `Unauthorized` tag before routing.
-    // (A tenant-owned account that has been deleted surfaces as
-    // `InvalidRoute`, code 7003 — the tag the provider's `read` and
-    // `delete` treat as "gone".)
-    const error = yield* accounts
-      .getAccount({ accountId: missingAccountId })
-      .pipe(Effect.flip);
-    expect(error._tag).toEqual("Unauthorized");
+      // With an account-scoped token, an account id outside the token's
+      // scope is rejected with the typed `Unauthorized` tag before routing.
+      // (A tenant-owned account that has been deleted surfaces as
+      // `InvalidRoute`, code 7003 — the tag the provider's `read` and
+      // `delete` treat as "gone".)
+      const error = yield* accounts.getAccount({ accountId: missingAccountId }).pipe(Effect.flip);
+      expect(error._tag).toEqual("Unauthorized");
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:account", "live"] },
 );
 
 // Account creation is tenant-gated, so list() is verified read-only: a
 // standard token can LIST every account it can access, and the token's own
 // testing account must appear in the exhaustively-paginated result with the
 // exact `Attributes` shape `read` produces.
-test.provider("list enumerates accessible accounts (read-only)", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider(
+  "list enumerates accessible accounts (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Account.Account);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Account.Account);
+      const all = yield* provider.list();
 
-    expect(all.length).toBeGreaterThan(0);
+      expect(all.length).toBeGreaterThan(0);
 
-    const self = all.find((a) => a.accountId === accountId);
-    expect(self).toBeDefined();
-    expect(self?.name).toBeTruthy();
-    expect(["standard", "enterprise"]).toContain(self?.type);
-    expect(typeof self?.enforceTwofactor).toEqual("boolean");
+      const self = all.find((a) => a.accountId === accountId);
+      expect(self).toBeDefined();
+      expect(self?.name).toBeTruthy();
+      expect(["standard", "enterprise"]).toContain(self?.type);
+      expect(typeof self?.enforceTwofactor).toEqual("boolean");
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:account", "live"] },
 );
 
 test.provider.skipIf(tenantEntitled)(
@@ -98,6 +102,7 @@ test.provider.skipIf(tenantEntitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:account", "live"] },
 );
 
 // Full lifecycle — only under tenant credentials (CLOUDFLARE_TENANT_TEST=1).
@@ -109,9 +114,7 @@ test.provider.skipIf(!tenantEntitled)(
       yield* stack.destroy();
 
       const account = yield* stack.deploy(
-        Cloudflare.Account.Account("TestSubaccount", {
-          name: "alchemy-test-subaccount",
-        }),
+        Cloudflare.Account.Account("TestSubaccount", { name: "alchemy-test-subaccount" }),
       );
 
       expect(account.accountId).toBeTruthy();
@@ -119,9 +122,7 @@ test.provider.skipIf(!tenantEntitled)(
       expect(account.type).toEqual("standard");
 
       // Out-of-band verify.
-      const live = yield* accounts.getAccount({
-        accountId: account.accountId,
-      });
+      const live = yield* accounts.getAccount({ accountId: account.accountId });
       expect(live.name).toEqual("alchemy-test-subaccount");
 
       // Rename + settings update happen in place (same account id).
@@ -140,17 +141,13 @@ test.provider.skipIf(!tenantEntitled)(
       // Deletion is queued on Cloudflare's side; the account becomes
       // unreadable (`InvalidRoute`) once it leaves the tenant.
       yield* accounts.getAccount({ accountId: account.accountId }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail({ _tag: "AccountNotDeleted" } as const),
-        ),
+        Effect.flatMap(() => Effect.fail({ _tag: "AccountNotDeleted" } as const)),
         Effect.catchTag("InvalidRoute", () => Effect.void),
         Effect.retry({
           while: (e) => e._tag === "AccountNotDeleted",
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
         }),
       );
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:account", "live"] },
 );

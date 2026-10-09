@@ -7,13 +7,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  apiArn,
-  collectAllPages,
-  retryOnTooManyRequests,
-  syncTags,
-  tagRecord,
-} from "./common.ts";
+import { apiArn, collectAllPages, retryOnTooManyRequests, syncTags, tagRecord } from "./common.ts";
 
 export interface ApiProps {
   /**
@@ -153,9 +147,7 @@ export interface Api extends Resource<
 export const Api = Resource<Api>("AWS.ApiGatewayV2.Api");
 
 const generatedName = (id: string, props: ApiProps) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
 const defaultRouteSelectionExpression = (props: ApiProps) =>
   props.routeSelectionExpression ??
@@ -184,23 +176,15 @@ export const ApiProvider = () =>
       const getApiSafe = (apiId: string) =>
         agw2
           .getApi({ ApiId: apiId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return Api.Provider.of({
         stables: ["apiId", "apiEndpoint"],
 
         list: () =>
           Effect.gen(function* () {
-            const items = yield* collectAllPages((NextToken) =>
-              agw2.getApis({ NextToken }),
-            );
-            return items
-              .filter((api) => api.ApiId != null)
-              .map((api) => snapshotFromApi(api));
+            const items = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
+            return items.filter((api) => api.ApiId != null).map((api) => snapshotFromApi(api));
           }),
 
         read: Effect.fn(function* ({ output }) {
@@ -224,14 +208,11 @@ export const ApiProvider = () =>
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const routeSelectionExpression =
-            defaultRouteSelectionExpression(news);
+          const routeSelectionExpression = defaultRouteSelectionExpression(news);
 
           // 1. OBSERVE — output is only a cache for the stable id; the
           //    cloud is authoritative.
-          let observed = output?.apiId
-            ? yield* getApiSafe(output.apiId)
-            : undefined;
+          let observed = output?.apiId ? yield* getApiSafe(output.apiId) : undefined;
 
           // 2. ENSURE — create if missing (greenfield or deleted
           //    out-of-band).
@@ -263,17 +244,14 @@ export const ApiProvider = () =>
             snapshot.description !== news.description ||
             (routeSelectionExpression !== undefined &&
               snapshot.routeSelectionExpression !== routeSelectionExpression) ||
-            snapshot.apiKeySelectionExpression !==
-              news.apiKeySelectionExpression ||
+            snapshot.apiKeySelectionExpression !== news.apiKeySelectionExpression ||
             (news.corsConfiguration !== undefined &&
               !deepEqual(snapshot.corsConfiguration, news.corsConfiguration)) ||
             (snapshot.disableExecuteApiEndpoint ?? false) !==
               (news.disableExecuteApiEndpoint ?? false) ||
             (news.disableSchemaValidation !== undefined &&
-              snapshot.disableSchemaValidation !==
-                news.disableSchemaValidation) ||
-            (news.ipAddressType !== undefined &&
-              snapshot.ipAddressType !== news.ipAddressType) ||
+              snapshot.disableSchemaValidation !== news.disableSchemaValidation) ||
+            (news.ipAddressType !== undefined && snapshot.ipAddressType !== news.ipAddressType) ||
             snapshot.version !== news.version;
           if (drift) {
             yield* retryOnTooManyRequests(
@@ -294,10 +272,7 @@ export const ApiProvider = () =>
 
           // CORS removal is a separate API call — `updateApi` cannot clear
           // an existing configuration.
-          if (
-            news.corsConfiguration === undefined &&
-            snapshot.corsConfiguration !== undefined
-          ) {
+          if (news.corsConfiguration === undefined && snapshot.corsConfiguration !== undefined) {
             yield* agw2
               .deleteCorsConfiguration({ ApiId: apiId })
               .pipe(Effect.catchTag("NotFoundException", () => Effect.void));

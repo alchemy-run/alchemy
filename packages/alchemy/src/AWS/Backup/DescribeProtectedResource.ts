@@ -35,7 +35,6 @@ export interface DescribeProtectedResource extends Binding.Service<
     >
   >
 > {}
-export const DescribeProtectedResource =
-  Binding.Service<DescribeProtectedResource>(
-    "AWS.Backup.DescribeProtectedResource",
-  );
+export const DescribeProtectedResource = Binding.Service<DescribeProtectedResource>(
+  "AWS.Backup.DescribeProtectedResource",
+);

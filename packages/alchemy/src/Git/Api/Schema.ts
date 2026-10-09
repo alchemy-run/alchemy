@@ -6,13 +6,13 @@
  * `../Api.ts`.
  *
  * The groups carry no middleware and no auth errors of their own: the
- * `HttpApi` you mount them in decides who may call them, and `Git.Hooks`
- * which refs may move.
+ * `HttpApi` you mount them in decides who may call them, and application handlers
+ * decide which refs may move.
  */
 import * as Schema from "effect/Schema";
 // Pulls in the `httpApiStatus` annotation augmentation used by the error
 // classes below.
-import "effect/unstable/httpapi/HttpApiSchema";
+import "effect/http-api/HttpApiSchema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primitives
@@ -50,21 +50,14 @@ export const OwnerName = RepoName;
  * whitespace / `~^:?*[\` characters git itself forbids. HEAD is virtual
  * (symref to the default branch) and is never a valid `RefName` here.
  */
-export const RefName = Schema.String.check(
-  Schema.isPattern(/^refs\/[^\s~^:?*\[\\]+$/),
-);
+export const RefName = Schema.String.check(Schema.isPattern(/^refs\/[^\s~^:?*[\\]+$/));
 
 /**
  * Lifecycle status of a repo. Async operations (import/fork/delete) flip
  * this field; clients poll `GET /repos/:owner/:repo` until `ready` (or 404
  * once a `deleting` repo's purge completes). There is no jobs API.
  */
-export const RepoStatus = Schema.Literals([
-  "ready",
-  "importing",
-  "forking",
-  "deleting",
-]);
+export const RepoStatus = Schema.Literals(["ready", "importing", "forking", "deleting"]);
 
 /** The decoded type of {@link RepoStatus}. */
 export type RepoStatus = typeof RepoStatus.Type;
@@ -80,9 +73,9 @@ export class ReadOnlyRepo extends Schema.TaggedError<ReadOnlyRepo>()(
   { httpApiStatus: 403 },
 ) {}
 
-/** 403 — a pre-receive hook refused the ref update. */
-export class HookRejected extends Schema.TaggedError<HookRejected>()(
-  "HookRejected",
+/** 403 — application policy refused a proposed ref update. */
+export class PushDenied extends Schema.TaggedError<PushDenied>()(
+  "PushDenied",
   { ref: Schema.String, reason: Schema.String },
   { httpApiStatus: 403 },
 ) {}

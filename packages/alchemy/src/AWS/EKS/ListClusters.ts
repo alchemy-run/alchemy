@@ -30,6 +30,4 @@ export interface ListClusters extends Binding.Service<
     ) => Effect.Effect<eks.ListClustersResponse, eks.ListClustersError>
   >
 > {}
-export const ListClusters = Binding.Service<ListClusters>(
-  "AWS.EKS.ListClusters",
-);
+export const ListClusters = Binding.Service<ListClusters>("AWS.EKS.ListClusters");

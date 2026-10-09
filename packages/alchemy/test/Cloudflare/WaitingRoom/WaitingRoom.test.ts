@@ -1,24 +1,20 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Waiting Rooms require a Business or Enterprise zone plan. On the testing
 // account's zone every write fails with "Zone not entitled to this
@@ -26,8 +22,7 @@ const zoneName =
 // `ZoneNotEntitled` error. The full lifecycle test below is gated behind an
 // entitled zone id supplied via env.
 const entitledZoneId = process.env.CLOUDFLARE_TEST_WAITING_ROOM_ZONE_ID;
-const entitledZoneHost =
-  process.env.CLOUDFLARE_TEST_WAITING_ROOM_HOST ?? zoneName;
+const entitledZoneHost = process.env.CLOUDFLARE_TEST_WAITING_ROOM_HOST ?? zoneName;
 
 // Deterministic per-test room names — reused on every run.
 const NAME_LIFECYCLE = "alchemy-waitingroom-lifecycle";
@@ -36,9 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -98,6 +91,14 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:waitingroom",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+  },
 );
 
 test.provider.skipIf(!entitledZoneId)(
@@ -176,7 +177,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Destroy again — deletion is idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:waitingroom", "live"], timeout: 120_000 },
 );
 
 // Canonical `list()` test (zone-scoped collection): waiting rooms have no
@@ -193,9 +194,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.WaitingRoom.WaitingRoom,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.WaitingRoom.WaitingRoom);
 
       if (entitledZoneId) {
         const deployed = yield* stack.deploy(
@@ -212,9 +211,7 @@ test.provider(
         );
 
         const all = yield* provider.list();
-        expect(
-          all.some((r) => r.waitingRoomId === deployed.waitingRoomId),
-        ).toBe(true);
+        expect(all.some((r) => r.waitingRoomId === deployed.waitingRoomId)).toBe(true);
       } else {
         // Unentitled standing zone: no rooms exist, but `list()` must still
         // return a well-typed array (unentitled zones skip to `[]`).
@@ -224,5 +221,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:waitingroom", "live"], timeout: 120_000 },
 );

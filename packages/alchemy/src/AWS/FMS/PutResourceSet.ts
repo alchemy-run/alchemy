@@ -40,6 +40,4 @@ export interface PutResourceSet extends Binding.Service<
   >
 > {}
 
-export const PutResourceSet = Binding.Service<PutResourceSet>(
-  "AWS.FMS.PutResourceSet",
-);
+export const PutResourceSet = Binding.Service<PutResourceSet>("AWS.FMS.PutResourceSet");

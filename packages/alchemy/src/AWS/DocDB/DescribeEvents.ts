@@ -35,6 +35,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<docdb.EventsMessage, docdb.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.DocDB.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DocDB.DescribeEvents");

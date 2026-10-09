@@ -39,10 +39,7 @@ export interface GetTimeSeriesDataPoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetTimeSeriesDataPointRequest,
-    ) => Effect.Effect<
-      datazone.GetTimeSeriesDataPointOutput,
-      datazone.GetTimeSeriesDataPointError
-    >
+    ) => Effect.Effect<datazone.GetTimeSeriesDataPointOutput, datazone.GetTimeSeriesDataPointError>
   >
 > {}
 export const GetTimeSeriesDataPoint = Binding.Service<GetTimeSeriesDataPoint>(

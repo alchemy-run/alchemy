@@ -31,12 +31,7 @@ export interface RebootDBInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<docdb.RebootDBInstanceMessage, "DBInstanceIdentifier">,
-    ) => Effect.Effect<
-      docdb.RebootDBInstanceResult,
-      docdb.RebootDBInstanceError
-    >
+    ) => Effect.Effect<docdb.RebootDBInstanceResult, docdb.RebootDBInstanceError>
   >
 > {}
-export const RebootDBInstance = Binding.Service<RebootDBInstance>(
-  "AWS.DocDB.RebootDBInstance",
-);
+export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.DocDB.RebootDBInstance");

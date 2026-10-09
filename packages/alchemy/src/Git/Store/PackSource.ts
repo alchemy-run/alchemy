@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 /**
  * A {@link RandomAccess} over a blob-store object, for pack ingestion
  * (DESIGN.md §3.6 upgrade seam) — this is what removes the push size cap.
@@ -17,7 +18,6 @@
  * a retained window too.
  */
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 import type { BlobStoreShape } from "../BlobStore.ts";
 import type { RandomAccess } from "../Protocol/PackParser.ts";
 import { StoreError } from "../Protocol/Store.ts";
@@ -55,25 +55,21 @@ export const blobRandomAccess = (options: {
       const body = yield* options.blobs
         .get(options.key, { offset: start, length: windowBytes })
         .pipe(
-          Effect.mapError(
-            (error) =>
-              new StoreError({
-                reason: `incoming pack read ${options.key}: ${error.reason}`,
-              }),
+          Effect.mapError((error) =>
+            StoreError.make({
+              reason: `incoming pack read ${options.key}: ${error.reason}`,
+            }),
           ),
           Effect.provide(RuntimeContext.phantom),
         );
       if (body === null) {
-        return yield* Effect.fail(
-          new StoreError({ reason: `incoming pack missing: ${options.key}` }),
-        );
+        return yield* StoreError.make({ reason: `incoming pack missing: ${options.key}` });
       }
       const bytes = yield* body.bytes.pipe(
-        Effect.mapError(
-          (error) =>
-            new StoreError({
-              reason: `incoming pack read ${options.key}: ${error.reason}`,
-            }),
+        Effect.mapError((error) =>
+          StoreError.make({
+            reason: `incoming pack read ${options.key}: ${error.reason}`,
+          }),
         ),
       );
       const slab = { start, bytes };
@@ -124,10 +120,7 @@ export const blobRandomAccess = (options: {
           const chunkStart = Math.max(offset, slab.start);
           const chunkEnd = Math.min(end, slab.start + slab.bytes.length);
           if (chunkEnd <= chunkStart) continue;
-          out.set(
-            slab.bytes.subarray(chunkStart - slab.start, chunkEnd - slab.start),
-            written,
-          );
+          out.set(slab.bytes.subarray(chunkStart - slab.start, chunkEnd - slab.start), written);
           written += chunkEnd - chunkStart;
         }
         return written === out.length ? out : out.subarray(0, written);
@@ -139,10 +132,7 @@ export const blobRandomAccess = (options: {
  * A view of `source` starting at `start` — used to address the pack that
  * follows the command section inside a spilled receive-pack body.
  */
-export const sliceRandomAccess = (
-  source: RandomAccess,
-  start: number,
-): RandomAccess => ({
+export const sliceRandomAccess = (source: RandomAccess, start: number): RandomAccess => ({
   size: source.size - start,
   read: (offset, length) => source.read(start + offset, length),
   readSync:
@@ -153,8 +143,5 @@ export const sliceRandomAccess = (
     source.awaitEnd === undefined
       ? undefined
       : source.awaitEnd.pipe(Effect.map((total) => total - start)),
-  release:
-    source.release === undefined
-      ? undefined
-      : (offset) => source.release!(start + offset),
+  release: source.release === undefined ? undefined : (offset) => source.release!(start + offset),
 });

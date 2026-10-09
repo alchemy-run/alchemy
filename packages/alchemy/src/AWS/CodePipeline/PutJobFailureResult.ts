@@ -2,8 +2,7 @@ import type * as SVC from "@distilled.cloud/aws/codepipeline";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface PutJobFailureResultRequest
-  extends SVC.PutJobFailureResultInput {}
+export interface PutJobFailureResultRequest extends SVC.PutJobFailureResultInput {}
 
 /**
  * Runtime binding for `codepipeline:PutJobFailureResult` — reports failure
@@ -32,10 +31,7 @@ export interface PutJobFailureResult extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutJobFailureResultRequest,
-    ) => Effect.Effect<
-      SVC.PutJobFailureResultResponse,
-      SVC.PutJobFailureResultError
-    >
+    ) => Effect.Effect<SVC.PutJobFailureResultResponse, SVC.PutJobFailureResultError>
   >
 > {}
 export const PutJobFailureResult = Binding.Service<PutJobFailureResult>(

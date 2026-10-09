@@ -10,12 +10,7 @@ import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type ClusterStatus = sagemaker.ClusterStatus;
@@ -25,12 +20,10 @@ export type ClusterStatus = sagemaker.ClusterStatus;
  * HyperPod nodes join the orchestrating EKS cluster as ordinary Kubernetes
  * nodes carrying this label.
  */
-export const HYPERPOD_INSTANCE_GROUP_LABEL =
-  "sagemaker.amazonaws.com/instance-group-name";
+export const HYPERPOD_INSTANCE_GROUP_LABEL = "sagemaker.amazonaws.com/instance-group-name";
 
 /** The well-known node label carrying HyperPod's node health verdict. */
-export const HYPERPOD_NODE_HEALTH_LABEL =
-  "sagemaker.amazonaws.com/node-health-status";
+export const HYPERPOD_NODE_HEALTH_LABEL = "sagemaker.amazonaws.com/node-health-status";
 
 /**
  * An instance group surfaced on the cluster's attributes — Kubernetes
@@ -188,10 +181,7 @@ const ClusterResource = Resource<Cluster>("AWS.SageMaker.Cluster");
  * a compile error.
  */
 export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
-  instanceGroups: Output.ObjectExpr<
-    { [K in keyof Groups]: ClusterInstanceGroupRef },
-    never
-  >;
+  instanceGroups: Output.ObjectExpr<{ [K in keyof Groups]: ClusterInstanceGroupRef }, never>;
 };
 
 /**
@@ -362,20 +352,11 @@ export const Cluster: {
   >(
     id: string,
     props: Props | Effect.Effect<Props>,
-  ): Effect.Effect<
-    ClusterOf<NonNullable<Props["instanceGroups"]>>,
-    never,
-    Providers
-  >;
+  ): Effect.Effect<ClusterOf<NonNullable<Props["instanceGroups"]>>, never, Providers>;
 } & typeof ClusterResource = ClusterResource as never;
 
-const createClusterName = (
-  id: string,
-  props: { clusterName?: string | undefined },
-) =>
-  props.clusterName
-    ? Effect.succeed(props.clusterName)
-    : createPhysicalName({ id, maxLength: 63 });
+const createClusterName = (id: string, props: { clusterName?: string | undefined }) =>
+  props.clusterName ? Effect.succeed(props.clusterName) : createPhysicalName({ id, maxLength: 63 });
 
 const describeClusterOrUndefined = (name: string) =>
   sagemaker
@@ -385,9 +366,7 @@ const describeClusterOrUndefined = (name: string) =>
 const fetchClusterTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -395,9 +374,7 @@ const fetchClusterTags = Effect.fn(function* (arn: string) {
   );
 });
 
-const toAttrs = (
-  described: sagemaker.DescribeClusterResponse,
-): Cluster["Attributes"] => ({
+const toAttrs = (described: sagemaker.DescribeClusterResponse): Cluster["Attributes"] => ({
   clusterName: described.ClusterName ?? "",
   clusterArn: described.ClusterArn,
   clusterStatus: described.ClusterStatus,
@@ -451,9 +428,7 @@ export class ClusterFailed extends Data.TaggedError("ClusterFailed")<{
  * the role and its permissions must be restored out-of-band, after which
  * SageMaker's own retry completes the deletion within a minute.
  */
-export class ClusterTeardownBlocked extends Data.TaggedError(
-  "ClusterTeardownBlocked",
-)<{
+export class ClusterTeardownBlocked extends Data.TaggedError("ClusterTeardownBlocked")<{
   readonly clusterName: string;
   readonly message: string;
 }> {}
@@ -469,10 +444,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "ClusterNotReady",
     // HyperPod cluster provisioning routinely takes 10–25 minutes.
     // Poll 15s up to ~35 min.
-    schedule: Schedule.max([
-      Schedule.spaced("15 seconds"),
-      Schedule.recurs(140),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(140)]),
   });
 
 // A freshly created execution role isn't assumable by SageMaker for a few
@@ -506,46 +478,32 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
         // full wait budget on a delete that can never finish.
         const nodes = yield* sagemaker
           .listClusterNodes({ ClusterName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
         const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
-          node.InstanceStatus?.Message?.includes(
-            "does not have permission to perform",
-          ),
+          node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );
         if (blocked !== undefined) {
-          return yield* Effect.fail(
-            new ClusterTeardownBlocked({
-              clusterName: name,
-              message: blocked.InstanceStatus?.Message ?? "",
-            }),
-          );
-        }
-        return yield* Effect.fail(
-          new ClusterNotReady({
+          return yield* new ClusterTeardownBlocked({
             clusterName: name,
-            status: described.ClusterStatus,
-          }),
-        );
+            message: blocked.InstanceStatus?.Message ?? "",
+          });
+        }
+        return yield* new ClusterNotReady({
+          clusterName: name,
+          status: described.ClusterStatus,
+        });
       }
       if (described?.ClusterStatus === "InService") return;
       if (described?.ClusterStatus === "Failed") {
-        return yield* Effect.fail(
-          new ClusterFailed({
-            clusterName: name,
-            message: described.FailureMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new ClusterNotReady({
+        return yield* new ClusterFailed({
           clusterName: name,
-          status: described?.ClusterStatus,
-        }),
-      );
+          message: described.FailureMessage,
+        });
+      }
+      return yield* new ClusterNotReady({
+        clusterName: name,
+        status: described?.ClusterStatus,
+      });
     }),
   );
 
@@ -572,9 +530,7 @@ const toGroupSpecs = <G extends { InstanceGroupName?: string }>(
 ): G[] | undefined =>
   groups === undefined
     ? undefined
-    : Object.entries(groups).map(
-        ([name, group]) => ({ InstanceGroupName: name, ...group }) as G,
-      );
+    : Object.entries(groups).map(([name, group]) => ({ InstanceGroupName: name, ...group }) as G);
 
 export const ClusterProvider = () =>
   Provider.effect(
@@ -602,9 +558,7 @@ export const ClusterProvider = () =>
             const summaries = yield* sagemaker.listClusters.pages({}).pipe(
               EffectStream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ClusterSummaries ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ClusterSummaries ?? []),
               ),
             );
             return summaries.flatMap((s) =>
@@ -622,17 +576,14 @@ export const ClusterProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
+          const name = output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
           const described = yield* describeClusterOrUndefined(name);
           if (!described || described.ClusterStatus === "Deleting") {
             return undefined;
           }
           const attrs = toAttrs(described);
           const tags = yield* fetchClusterTags(attrs.clusterArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -650,12 +601,9 @@ export const ClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker HyperPod Cluster requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker HyperPod Cluster requires props"));
           }
-          const name =
-            output?.clusterName ?? (yield* createClusterName(id, news));
+          const name = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -668,11 +616,8 @@ export const ClusterProvider = () =>
               .createCluster({
                 ClusterName: name,
                 InstanceGroups: toGroupSpecs(news.instanceGroups),
-                RestrictedInstanceGroups: toGroupSpecs(
-                  news.restrictedInstanceGroups,
-                ),
-                RestrictedInstanceGroupsConfig:
-                  news.restrictedInstanceGroupsConfig,
+                RestrictedInstanceGroups: toGroupSpecs(news.restrictedInstanceGroups),
+                RestrictedInstanceGroupsConfig: news.restrictedInstanceGroupsConfig,
                 VpcConfig: news.vpcConfig,
                 Orchestrator: news.orchestrator,
                 NodeRecovery: news.nodeRecovery,
@@ -689,9 +634,7 @@ export const ClusterProvider = () =>
                 retryWhileRoleUnassumable,
                 Effect.catchTag("ResourceInUse", () => Effect.void),
               );
-            yield* session.note(
-              `Creating HyperPod cluster ${name} (typically 10-25 minutes)...`,
-            );
+            yield* session.note(`Creating HyperPod cluster ${name} (typically 10-25 minutes)...`);
           } else {
             // Sync — diff observed instance groups + mutable settings
             // against desired and apply one update call for the delta.
@@ -703,9 +646,10 @@ export const ClusterProvider = () =>
               ),
             );
             const desiredGroups = new Map(
-              Object.entries(news.instanceGroups ?? {}).map(
-                ([groupName, g]) => [groupName, desiredGroupIdentity(g)],
-              ),
+              Object.entries(news.instanceGroups ?? {}).map(([groupName, g]) => [
+                groupName,
+                desiredGroupIdentity(g),
+              ]),
             );
             const groupsToDelete = [...observedGroups.keys()].filter(
               (groupName) => !desiredGroups.has(groupName),
@@ -714,12 +658,10 @@ export const ClusterProvider = () =>
               groupsToDelete.length > 0 ||
               [...desiredGroups].some(
                 ([groupName, identity]) =>
-                  JSON.stringify(observedGroups.get(groupName)) !==
-                  JSON.stringify(identity),
+                  JSON.stringify(observedGroups.get(groupName)) !== JSON.stringify(identity),
               );
             const settingsChanged =
-              (news.nodeRecovery !== undefined &&
-                news.nodeRecovery !== described.NodeRecovery) ||
+              (news.nodeRecovery !== undefined && news.nodeRecovery !== described.NodeRecovery) ||
               (news.nodeProvisioningMode !== undefined &&
                 news.nodeProvisioningMode !== described.NodeProvisioningMode) ||
               (news.tieredStorageConfig !== undefined &&
@@ -733,15 +675,11 @@ export const ClusterProvider = () =>
                 .updateCluster({
                   ClusterName: name,
                   InstanceGroups: toGroupSpecs(news.instanceGroups),
-                  RestrictedInstanceGroups: toGroupSpecs(
-                    news.restrictedInstanceGroups,
-                  ),
-                  RestrictedInstanceGroupsConfig:
-                    news.restrictedInstanceGroupsConfig,
+                  RestrictedInstanceGroups: toGroupSpecs(news.restrictedInstanceGroups),
+                  RestrictedInstanceGroupsConfig: news.restrictedInstanceGroupsConfig,
                   TieredStorageConfig: news.tieredStorageConfig,
                   NodeRecovery: news.nodeRecovery,
-                  InstanceGroupsToDelete:
-                    groupsToDelete.length > 0 ? groupsToDelete : undefined,
+                  InstanceGroupsToDelete: groupsToDelete.length > 0 ? groupsToDelete : undefined,
                   NodeProvisioningMode: news.nodeProvisioningMode,
                   ClusterRole: news.clusterRole,
                   AutoScaling: news.autoScaling,
@@ -781,9 +719,7 @@ export const ClusterProvider = () =>
           return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
-          const described = yield* describeClusterOrUndefined(
-            output.clusterName,
-          );
+          const described = yield* describeClusterOrUndefined(output.clusterName);
           if (described === undefined) return;
           // A cluster mid-create/update rejects deletion with a Conflict —
           // wait for it to settle first, then delete. A cluster stuck in
@@ -792,17 +728,14 @@ export const ClusterProvider = () =>
           // Gone wait instead of burning the full InService wait budget.
           if (described.ClusterStatus !== "Deleting") {
             yield* waitForCluster(output.clusterName, "InService").pipe(
-              Effect.catchTag(
-                ["ClusterFailed", "ClusterNotReady"],
-                () => Effect.void,
-              ),
+              Effect.catchTag(["ClusterFailed", "ClusterNotReady"], () => Effect.void),
             );
-            yield* sagemaker
-              .deleteCluster({ ClusterName: output.clusterName })
-              .pipe(
-                Effect.catchTag("ResourceNotFound", () => Effect.void),
-                Effect.catchTag("ConflictException", () => Effect.void),
-              );
+            yield* sagemaker.deleteCluster({ ClusterName: output.clusterName }).pipe(
+              Effect.catchTags({
+                ResourceNotFound: () => Effect.void,
+                ConflictException: () => Effect.void,
+              }),
+            );
           }
           yield* waitForCluster(output.clusterName, "Gone");
         }),

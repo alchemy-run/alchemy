@@ -9,22 +9,13 @@ import { hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import {
-  createName,
-  readResourceTags,
-  retryConcurrent,
-  updateResourceTags,
-} from "./common.ts";
+import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
 export type AlarmName = string;
-export type AlarmArn =
-  `arn:aws:cloudwatch:${RegionID}:${AccountID}:alarm:${string}`;
+export type AlarmArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:alarm:${string}`;
 export type AlarmStateValue = cloudwatch.StateValue;
 
-export interface AlarmProps extends Omit<
-  cloudwatch.PutMetricAlarmInput,
-  "AlarmName" | "Tags"
-> {
+export interface AlarmProps extends Omit<cloudwatch.PutMetricAlarmInput, "AlarmName" | "Tags"> {
   /**
    * Name of the alarm. If omitted, a unique name is generated.
    */
@@ -135,9 +126,7 @@ export const AlarmProvider = () =>
         }
 
         const tags = yield* readResourceTags(metricAlarm.AlarmArn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({}),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
         );
 
         return {
@@ -171,9 +160,7 @@ export const AlarmProvider = () =>
               .pages({ AlarmTypes: ["MetricAlarm"] })
               .pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.MetricAlarms ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.MetricAlarms ?? [])),
               );
 
             const attrs: Alarm["Attributes"][] = yield* Effect.forEach(
@@ -183,17 +170,12 @@ export const AlarmProvider = () =>
                 ): metricAlarm is typeof metricAlarm & {
                   AlarmName: string;
                   AlarmArn: string;
-                } =>
-                  metricAlarm.AlarmName != null && metricAlarm.AlarmArn != null,
+                } => metricAlarm.AlarmName != null && metricAlarm.AlarmArn != null,
               ),
               (metricAlarm) =>
                 Effect.gen(function* () {
-                  const tags = yield* readResourceTags(
-                    metricAlarm.AlarmArn,
-                  ).pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed({}),
-                    ),
+                  const tags = yield* readResourceTags(metricAlarm.AlarmArn).pipe(
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
                   );
                   return {
                     alarmName: metricAlarm.AlarmName,
@@ -209,13 +191,10 @@ export const AlarmProvider = () =>
             return attrs;
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
+          const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readAlarm(name);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // Observe — derive the alarm name and read whatever is currently
@@ -248,9 +227,7 @@ export const AlarmProvider = () =>
 
           const state = yield* readAlarm(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled alarm '${name}'`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled alarm '${name}'`));
           }
 
           return {

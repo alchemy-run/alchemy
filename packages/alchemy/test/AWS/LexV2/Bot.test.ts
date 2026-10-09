@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
-import * as Test from "@/Test/Alchemy";
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,11 +16,10 @@ test.provider(
   "describeBot on a nonexistent bot fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        lexm.describeBot({ botId: "BOGUSBOT01" }),
-      );
+      const error = yield* Effect.flip(lexm.describeBot({ botId: "BOGUSBOT01" }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:lexv2", "live"] },
 );
 
 const lexBotRole = Role("LexBotRole", {
@@ -41,22 +40,13 @@ const assertBotGone = (botId: string) =>
   Effect.gen(function* () {
     const status = yield* lexm.describeBot({ botId }).pipe(
       Effect.map((bot) => bot.botStatus ?? "unknown"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone") {
-      return yield* Effect.fail(
-        new Error(`bot '${botId}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`bot '${botId}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
 test.provider(
@@ -125,21 +115,18 @@ test.provider(
         localeId: "en_US",
         intentId: created.greet.intentId,
       });
-      expect(
-        (intent.sampleUtterances ?? []).map((u) => u.utterance).sort(),
-      ).toEqual(["hello", "hi"]);
+      expect((intent.sampleUtterances ?? []).map((u) => u.utterance).sort()).toEqual([
+        "hello",
+        "hi",
+      ]);
       const slotType = yield* lexm.describeSlotType({
         botId: created.bot.botId,
         botVersion: "DRAFT",
         localeId: "en_US",
         slotTypeId: created.size.slotTypeId,
       });
-      expect(slotType.valueSelectionSetting?.resolutionStrategy).toBe(
-        "TopResolution",
-      );
-      const tags = yield* lexm.listTagsForResource({
-        resourceARN: created.bot.botArn,
-      });
+      expect(slotType.valueSelectionSetting?.resolutionStrategy).toBe("TopResolution");
+      const tags = yield* lexm.listTagsForResource({ resourceARN: created.bot.botArn });
       expect(tags.tags?.fixture).toBe("lexv2-bot");
       expect(tags.tags?.["alchemy::id"]).toBe("TestBot");
 
@@ -206,15 +193,13 @@ test.provider(
         localeId: "en_US",
         intentId: updated.greet.intentId,
       });
-      expect(
-        (updatedIntent.sampleUtterances ?? []).map((u) => u.utterance),
-      ).toContain("good morning");
+      expect((updatedIntent.sampleUtterances ?? []).map((u) => u.utterance)).toContain(
+        "good morning",
+      );
       // Code hook flags synced onto the DRAFT intent by the update.
       expect(updatedIntent.dialogCodeHook?.enabled).toBe(true);
       expect(updatedIntent.fulfillmentCodeHook?.enabled).toBe(true);
-      const updatedTags = yield* lexm.listTagsForResource({
-        resourceARN: updated.bot.botArn,
-      });
+      const updatedTags = yield* lexm.listTagsForResource({ resourceARN: updated.bot.botArn });
       expect(updatedTags.tags?.pass).toBe("two");
 
       // ---- destroy + typed wait-until-gone ----
@@ -222,5 +207,5 @@ test.provider(
       yield* assertBotGone(created.bot.botId);
     }),
   // Observed ~15s live; headroom for slow deletes and the wait-until-gone.
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lexv2", "live"], timeout: 180_000 },
 );

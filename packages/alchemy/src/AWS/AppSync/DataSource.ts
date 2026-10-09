@@ -150,9 +150,7 @@ export interface AppSyncDataSource extends Resource<
  *
  * @resource
  */
-export const DataSourceResource = Resource<AppSyncDataSource>(
-  "AWS.AppSync.DataSource",
-);
+export const DataSourceResource = Resource<AppSyncDataSource>("AWS.AppSync.DataSource");
 
 export interface DataSourceInputProps extends Omit<
   {
@@ -189,14 +187,8 @@ export const DataSourceProvider = () =>
   Provider.effect(
     DataSourceResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<DataSourceProps, "name">,
-      ) {
-        return (
-          props.name ??
-          sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<DataSourceProps, "name">) {
+        return props.name ?? sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getDataSourceSafe = (apiId: string, name: string) =>
@@ -223,10 +215,7 @@ export const DataSourceProvider = () =>
             Resource: /:function:[^:]+:/.test(arn) ? [arn] : [arn, `${arn}:*`],
           });
         }
-        if (
-          news.type === "AMAZON_DYNAMODB" &&
-          news.dynamodbConfig !== undefined
-        ) {
+        if (news.type === "AMAZON_DYNAMODB" && news.dynamodbConfig !== undefined) {
           const tableRegion = news.dynamodbConfig.awsRegion ?? region;
           const tableArn = `arn:aws:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
           statements.push({
@@ -320,9 +309,7 @@ export const DataSourceProvider = () =>
                 RoleName: roleName,
                 PolicyName: policyName,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
           ),
           Stream.runDrain,
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -412,18 +399,16 @@ export const DataSourceProvider = () =>
           // 2. ENSURE — a fresh role can take a few seconds to become
           //    assumable by AppSync.
           if (observed?.name == null) {
-            const created = yield* retryWhileRolePropagates(
-              retryConcurrentModification(
-                appsync.createDataSource({
-                  apiId,
-                  name,
-                  description: news.description,
-                  type: news.type,
-                  serviceRoleArn,
-                  ...configs,
-                }),
-              ),
-            );
+            const created = yield* appsync
+              .createDataSource({
+                apiId,
+                name,
+                description: news.description,
+                type: news.type,
+                serviceRoleArn,
+                ...configs,
+              })
+              .pipe(retryConcurrentModification, retryWhileRolePropagates);
             observed = created.dataSource!;
             yield* session.note(`Created data source ${name}`);
           } else {
@@ -450,8 +435,7 @@ export const DataSourceProvider = () =>
                       : {
                           tableName: ds.dynamodbConfig.tableName,
                           awsRegion: ds.dynamodbConfig.awsRegion,
-                          useCallerCredentials:
-                            ds.dynamodbConfig.useCallerCredentials ?? false,
+                          useCallerCredentials: ds.dynamodbConfig.useCallerCredentials ?? false,
                           versioned: ds.dynamodbConfig.versioned ?? false,
                         },
                   httpConfig: ds.httpConfig,
@@ -464,18 +448,16 @@ export const DataSourceProvider = () =>
               ...configs,
             });
             if (!deepEqual(surface(observed), desired)) {
-              const updated = yield* retryWhileRolePropagates(
-                retryConcurrentModification(
-                  appsync.updateDataSource({
-                    apiId,
-                    name,
-                    description: news.description,
-                    type: news.type,
-                    serviceRoleArn,
-                    ...configs,
-                  }),
-                ),
-              );
+              const updated = yield* appsync
+                .updateDataSource({
+                  apiId,
+                  name,
+                  description: news.description,
+                  type: news.type,
+                  serviceRoleArn,
+                  ...configs,
+                })
+                .pipe(retryConcurrentModification, retryWhileRolePropagates);
               observed = updated.dataSource ?? observed;
               yield* session.note(`Updated data source ${name}`);
             }

@@ -50,7 +50,6 @@ export interface UpdateDataIntegrationAssociation extends Binding.Service<
     >
   >
 > {}
-export const UpdateDataIntegrationAssociation =
-  Binding.Service<UpdateDataIntegrationAssociation>(
-    "AWS.AppIntegrations.UpdateDataIntegrationAssociation",
-  );
+export const UpdateDataIntegrationAssociation = Binding.Service<UpdateDataIntegrationAssociation>(
+  "AWS.AppIntegrations.UpdateDataIntegrationAssociation",
+);

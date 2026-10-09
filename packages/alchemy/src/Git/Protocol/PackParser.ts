@@ -40,14 +40,8 @@ import {
   type Oid,
   type PackEntryType,
 } from "./ObjectCodec.ts";
-import { type ObjectSource, StoreError } from "./Store.ts";
-import {
-  deflate,
-  inflate,
-  inflateEntry,
-  inflateEntrySync,
-  ZlibError,
-} from "./Zlib.ts";
+import { type StoreError } from "./Store.ts";
+import { deflate, inflate, inflateEntry, inflateEntrySync, ZlibError } from "./Zlib.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RandomAccess
@@ -65,9 +59,7 @@ export interface RandomAccess {
    * parser's inner loop uses it to stay synchronous between I/O points
    * (DESIGN §22.5).
    */
-  readonly readSync?:
-    | ((offset: number, length: number) => Uint8Array | undefined)
-    | undefined;
+  readonly readSync?: ((offset: number, length: number) => Uint8Array | undefined) | undefined;
   /**
    * For sources whose total size is not known up front (`size` is
    * `Infinity` while a body is still arriving — DESIGN §22.6): resolves
@@ -89,10 +81,7 @@ export interface RandomAccess {
    * the range extends past the end of the pack. Implementations should return
    * views cheaply (no copy) where possible; callers copy what they retain.
    */
-  readonly read: (
-    offset: number,
-    length: number,
-  ) => Effect.Effect<Uint8Array, StoreError>;
+  readonly read: (offset: number, length: number) => Effect.Effect<Uint8Array, StoreError>;
 }
 
 /**
@@ -102,11 +91,8 @@ export interface RandomAccess {
 export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
   size: buf.length,
   read: (offset, length) =>
-    Effect.sync(() =>
-      buf.subarray(offset, Math.min(offset + length, buf.length)),
-    ),
-  readSync: (offset, length) =>
-    buf.subarray(offset, Math.min(offset + length, buf.length)),
+    Effect.sync(() => buf.subarray(offset, Math.min(offset + length, buf.length))),
+  readSync: (offset, length) => buf.subarray(offset, Math.min(offset + length, buf.length)),
   awaitEnd: Effect.succeed(buf.length),
 });
 
@@ -119,10 +105,9 @@ export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
  * entries, entry-count mismatch, size mismatches, or an OFS_DELTA offset that
  * does not land on an entry boundary.
  */
-export class PackFormatError extends Schema.TaggedError<PackFormatError>()(
-  "PackFormatError",
-  { reason: Schema.String },
-) {}
+export class PackFormatError extends Schema.TaggedError<PackFormatError>()("PackFormatError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * Error raised when the trailing pack SHA-1 does not match the hash of the
@@ -155,10 +140,9 @@ export class ObjectTooLargeError extends Schema.TaggedError<ObjectTooLargeError>
  * (DESIGN §22.6). Retried after the end, when the spilled object is
  * readable; never reaches callers.
  */
-export class BaseEvictedError extends Schema.TaggedError<BaseEvictedError>()(
-  "BaseEvictedError",
-  { offset: Schema.Number },
-) {}
+export class BaseEvictedError extends Schema.TaggedError<BaseEvictedError>()("BaseEvictedError", {
+  offset: Schema.Number,
+}) {}
 
 export class MissingDeltaBaseError extends Schema.TaggedError<MissingDeltaBaseError>()(
   "MissingDeltaBaseError",
@@ -353,10 +337,7 @@ interface IndexedEntry {
 }
 
 const readU32BE = (buf: Uint8Array, offset: number): number =>
-  ((buf[offset]! << 24) |
-    (buf[offset + 1]! << 16) |
-    (buf[offset + 2]! << 8) |
-    buf[offset + 3]!) >>>
+  ((buf[offset]! << 24) | (buf[offset + 1]! << 16) | (buf[offset + 2]! << 8) | buf[offset + 3]!) >>>
   0;
 
 /**
@@ -365,13 +346,13 @@ const readU32BE = (buf: Uint8Array, offset: number): number =>
  */
 export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
   if (Number.isFinite(source.size) && source.size < 12 + 20) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `pack too small: ${source.size} bytes`,
     });
   }
   const header = yield* source.read(0, 12);
   if (header.length < 12) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `pack too small: ${header.length} bytes`,
     });
   }
@@ -382,11 +363,11 @@ export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
     header[2] !== 0x43 || // C
     header[3] !== 0x4b // K
   ) {
-    return yield* new PackFormatError({ reason: "bad pack magic" });
+    return yield* PackFormatError.make({ reason: "bad pack magic" });
   }
   const version = readU32BE(header, 4);
   if (version !== 2) {
-    return yield* new PackFormatError({
+    return yield* PackFormatError.make({
       reason: `unsupported pack version ${version}`,
     });
   }
@@ -438,9 +419,7 @@ export const ingestPack = <E, R>(
     // Unknown while a streaming body is still arriving (DESIGN §22.6); the
     // loop is driven by `count`, and the true end is learned from
     // `awaitEnd` before the trailer is checked.
-    let dataEnd = Number.isFinite(source.size)
-      ? source.size - 20
-      : Number.POSITIVE_INFINITY;
+    let dataEnd = Number.isFinite(source.size) ? source.size - 20 : Number.POSITIVE_INFINITY;
     // The trailer SHA-1 is accumulated as entries are consumed instead of
     // re-reading the whole pack afterwards (on a spilled source that was
     // another full pass of window reads).
@@ -454,15 +433,11 @@ export const ingestPack = <E, R>(
     const deferred: Array<IndexedEntry> = [];
 
     /** Inflates an already-indexed entry's own zlib stream (exact span). */
-    const inflateOwn = (
-      entry: IndexedEntry,
-    ): Effect.Effect<Uint8Array, PackIngestError> =>
+    const inflateOwn = (entry: IndexedEntry): Effect.Effect<Uint8Array, PackIngestError> =>
       Effect.suspend((): Effect.Effect<Uint8Array, PackIngestError> =>
         source.evictedBeforeEnd?.(entry.dataOffset) === true
-          ? Effect.fail(new BaseEvictedError({ offset: entry.dataOffset }))
-          : source
-              .read(entry.dataOffset, entry.span)
-              .pipe(Effect.flatMap((z) => inflate(z))),
+          ? Effect.fail(BaseEvictedError.make({ offset: entry.dataOffset }))
+          : source.read(entry.dataOffset, entry.span).pipe(Effect.flatMap((z) => inflate(z))),
       );
 
     /**
@@ -470,9 +445,7 @@ export const ingestPack = <E, R>(
      * from the LRU, from re-inflation of earlier pack entries, or (thin
      * REF_DELTA) from the object store.
      */
-    const resolveContent = (
-      entry: IndexedEntry,
-    ): Effect.Effect<CachedContent, PackIngestError> =>
+    const resolveContent = (entry: IndexedEntry): Effect.Effect<CachedContent, PackIngestError> =>
       Effect.gen(function* () {
         const key = `ofs:${entry.offset}`;
         const hit = cache.get(key);
@@ -484,12 +457,9 @@ export const ingestPack = <E, R>(
         } else {
           const base = yield* resolveBase(entry);
           const payload = yield* timed("inflate", inflateOwn(entry));
-          const content = yield* timed(
-            "delta",
-            applyDelta(base.content, payload),
-          );
+          const content = yield* timed("delta", applyDelta(base.content, payload));
           if (content.length > maxObjectSize) {
-            return yield* new ObjectTooLargeError({
+            return yield* ObjectTooLargeError.make({
               size: content.length,
               limit: maxObjectSize,
             });
@@ -501,14 +471,12 @@ export const ingestPack = <E, R>(
       });
 
     /** Resolves a delta entry's base content. */
-    const resolveBase = (
-      entry: IndexedEntry,
-    ): Effect.Effect<CachedContent, PackIngestError> =>
+    const resolveBase = (entry: IndexedEntry): Effect.Effect<CachedContent, PackIngestError> =>
       Effect.gen(function* () {
         if (entry.baseOffset !== undefined) {
           const base = byOffset.get(entry.baseOffset);
           if (base === undefined) {
-            return yield* new PackFormatError({
+            return yield* PackFormatError.make({
               reason: `ofs-delta at ${entry.offset} points at ${entry.baseOffset}, not an entry boundary`,
             });
           }
@@ -523,10 +491,10 @@ export const ingestPack = <E, R>(
         if (cachedThin !== undefined) return cachedThin;
         const live = yield* store.readBase(baseOid);
         if (live === undefined) {
-          return yield* new MissingDeltaBaseError({ baseOid });
+          return yield* MissingDeltaBaseError.make({ baseOid });
         }
         if (live.content.length > maxObjectSize) {
-          return yield* new ObjectTooLargeError({
+          return yield* ObjectTooLargeError.make({
             size: live.content.length,
             limit: maxObjectSize,
             oid: baseOid,
@@ -570,9 +538,7 @@ export const ingestPack = <E, R>(
     // they stay within the same task.
     const streaming = !Number.isFinite(source.size);
     const breathe = streaming
-      ? Effect.promise(
-          () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
-        )
+      ? Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
       : Effect.void;
     const flushPending = Effect.suspend(() => {
       if (pendingSink.length === 0 || sinkBatch === undefined) return breathe;
@@ -596,16 +562,15 @@ export const ingestPack = <E, R>(
       try {
         header = decodeTypeSize(window, 0);
       } catch (error) {
-        return new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry ${i}: ${error.reason}`
-              : `entry ${i}: ${String(error)}`,
+        return PackFormatError.make({
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry ${i}: ${error.reason}`
+            : `entry ${i}: ${String(error)}`,
         });
       }
       if (isDeltaType(header.type)) return undefined;
       if (header.size > maxObjectSize) {
-        return new ObjectTooLargeError({
+        return ObjectTooLargeError.make({
           size: header.size,
           limit: maxObjectSize,
         });
@@ -618,7 +583,7 @@ export const ingestPack = <E, R>(
       if (inflated === undefined) return undefined;
       const { bytesConsumed, content } = inflated;
       if (content.length !== header.size) {
-        return new PackFormatError({
+        return PackFormatError.make({
           reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
         });
       }
@@ -657,7 +622,7 @@ export const ingestPack = <E, R>(
     let offset = 12;
     for (let i = 0; i < count; i++) {
       if (offset >= dataEnd) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `truncated pack: entry ${i} of ${count} starts past the trailer`,
         });
       }
@@ -687,11 +652,11 @@ export const ingestPack = <E, R>(
           }
           continue;
         }
-        if (next !== undefined) return yield* Effect.fail(next);
+        if (next !== undefined) return yield* next;
       }
       let window = yield* source.read(offset, probeLength);
       if (window.length === 0) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `truncated pack: entry ${i} of ${count} starts past the end`,
         });
       }
@@ -701,10 +666,7 @@ export const ingestPack = <E, R>(
        * remainder in a handful of steps, and only for objects that need it.
        */
       const growWindow = Effect.fn(function* (needed: number) {
-        const size = Math.min(
-          Math.max(needed, window.length * 2),
-          dataEnd - offset,
-        );
+        const size = Math.min(Math.max(needed, window.length * 2), dataEnd - offset);
         if (size <= window.length) return false;
         window = yield* source.read(offset, size);
         return true;
@@ -713,11 +675,10 @@ export const ingestPack = <E, R>(
       try {
         header = decodeTypeSize(window, 0);
       } catch (error) {
-        return yield* new PackFormatError({
-          reason:
-            error instanceof ObjectParseError
-              ? `entry ${i}: ${error.reason}`
-              : `entry ${i}: ${String(error)}`,
+        return yield* PackFormatError.make({
+          reason: Schema.is(ObjectParseError)(error)
+            ? `entry ${i}: ${error.reason}`
+            : `entry ${i}: ${String(error)}`,
         });
       }
       let pos = header.next;
@@ -728,30 +689,29 @@ export const ingestPack = <E, R>(
         try {
           ofs = decodeOfsDeltaOffset(window, pos);
         } catch (error) {
-          return yield* new PackFormatError({
-            reason:
-              error instanceof ObjectParseError
-                ? `entry ${i}: ${error.reason}`
-                : `entry ${i}: ${String(error)}`,
+          return yield* PackFormatError.make({
+            reason: Schema.is(ObjectParseError)(error)
+              ? `entry ${i}: ${error.reason}`
+              : `entry ${i}: ${String(error)}`,
           });
         }
         pos = ofs.next;
         baseOffset = offset - ofs.value;
         if (baseOffset < 12) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry ${i}: ofs-delta offset ${ofs.value} points before the first entry`,
           });
         }
       } else if (header.type === 7) {
         if (pos + 20 > window.length) {
-          return yield* new PackFormatError({
+          return yield* PackFormatError.make({
             reason: `entry ${i}: truncated ref-delta base id`,
           });
         }
         baseOid = bytesToHex(window.subarray(pos, pos + 20));
         pos += 20;
       } else if (header.size > maxObjectSize) {
-        return yield* new ObjectTooLargeError({
+        return yield* ObjectTooLargeError.make({
           size: header.size,
           limit: maxObjectSize,
         });
@@ -773,20 +733,16 @@ export const ingestPack = <E, R>(
       // failed attempt below costs up to three inflate passes).
       while (
         Result.isFailure(attempt) &&
-        (yield* growWindow(
-          Math.max(window.length * 2, pos + header.size + 64 * 1024),
-        ))
+        (yield* growWindow(Math.max(window.length * 2, pos + header.size + 64 * 1024)))
       ) {
-        attempt = yield* Effect.result(
-          inflateEntry(window, pos, inflateOptions),
-        );
+        attempt = yield* Effect.result(inflateEntry(window, pos, inflateOptions));
       }
       if (Result.isFailure(attempt)) {
-        return yield* Effect.fail(attempt.failure);
+        return yield* attempt.failure;
       }
       const { bytesConsumed, content } = attempt.success;
       if (content.length !== header.size) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
         });
       }
@@ -831,8 +787,8 @@ export const ingestPack = <E, R>(
         const result = yield* Effect.result(emitDelta(entry));
         if (Result.isFailure(result)) {
           if (
-            result.failure instanceof MissingDeltaBaseError ||
-            result.failure instanceof BaseEvictedError
+            Schema.is(MissingDeltaBaseError)(result.failure) ||
+            Schema.is(BaseEvictedError)(result.failure)
           ) {
             // The base may appear later in the pack (thin ref-delta), or
             // it was evicted from a streaming source and is readable once
@@ -851,7 +807,7 @@ export const ingestPack = <E, R>(
     yield* flushPending;
     if (!Number.isFinite(dataEnd)) {
       if (source.awaitEnd === undefined) {
-        return yield* new PackFormatError({
+        return yield* PackFormatError.make({
           reason: "pack source has unknown size and no awaitEnd",
         });
       }
@@ -868,11 +824,11 @@ export const ingestPack = <E, R>(
       for (const entry of pending) {
         const result = yield* Effect.result(emitDelta(entry));
         if (Result.isFailure(result)) {
-          if (result.failure instanceof MissingDeltaBaseError) {
+          if (Schema.is(MissingDeltaBaseError)(result.failure)) {
             firstMissing ??= result.failure;
             next.push(entry);
-          } else if (result.failure instanceof BaseEvictedError) {
-            return yield* new PackFormatError({
+          } else if (Schema.is(BaseEvictedError)(result.failure)) {
+            return yield* PackFormatError.make({
               reason: `delta base at ${result.failure.offset} unreadable after the body ended`,
             });
           } else {
@@ -882,12 +838,12 @@ export const ingestPack = <E, R>(
       }
       if (next.length === pending.length) {
         // no progress — the base genuinely does not exist anywhere
-        return yield* Effect.fail(firstMissing!);
+        return yield* firstMissing!;
       }
       pending = next;
     }
     if (offset !== dataEnd) {
-      return yield* new PackFormatError({
+      return yield* PackFormatError.make({
         reason: `pack has ${dataEnd - offset} unconsumed bytes after ${count} entries`,
       });
     }
@@ -895,12 +851,12 @@ export const ingestPack = <E, R>(
     // ── trailer verification ─────────────────────────────────────────────────
     const trailer = yield* source.read(dataEnd, 20);
     if (trailer.length < 20) {
-      return yield* new PackFormatError({ reason: "truncated pack trailer" });
+      return yield* PackFormatError.make({ reason: "truncated pack trailer" });
     }
     const expected = bytesToHex(trailer);
     const actual = yield* Effect.sync(() => trailerSha.digestHex());
     if (expected !== actual) {
-      return yield* new PackChecksumMismatch({ expected, actual });
+      return yield* PackChecksumMismatch.make({ expected, actual });
     }
 
     return { count, oids } satisfies IngestSummary;

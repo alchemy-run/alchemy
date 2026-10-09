@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Flow } from "./Flow.ts";
 
-export interface StartFlowRequest extends Omit<
-  appflow.StartFlowRequest,
-  "flowName"
-> {}
+export interface StartFlowRequest extends Omit<appflow.StartFlowRequest, "flowName"> {}
 
 /**
  * Runtime binding for `appflow:StartFlow`.
@@ -46,9 +43,7 @@ export interface StartFlow extends Binding.Service<
   (
     flow: Flow,
   ) => Effect.Effect<
-    (
-      request?: StartFlowRequest,
-    ) => Effect.Effect<appflow.StartFlowResponse, appflow.StartFlowError>
+    (request?: StartFlowRequest) => Effect.Effect<appflow.StartFlowResponse, appflow.StartFlowError>
   >
 > {}
 

@@ -5,11 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readMailManagerTags,
@@ -135,24 +131,14 @@ export const RuleSetProvider = () =>
   Provider.effect(
     RuleSet,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { ruleSetName?: string },
-      ) {
-        return (
-          props.ruleSetName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { ruleSetName?: string }) {
+        return props.ruleSetName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       const getById = (ruleSetId: string) =>
         mm
           .getRuleSet({ RuleSetId: ruleSetId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Rule sets have no name-keyed Get — enumerate and match. The physical
       // name is deterministic, so this recovers identity after a lost state
@@ -196,20 +182,15 @@ export const RuleSetProvider = () =>
               Effect.forEach(
                 Array.from(chunk)
                   .flatMap((page) => page.RuleSets ?? [])
-                  .flatMap((r) =>
-                    r.RuleSetId !== undefined ? [r.RuleSetId] : [],
-                  ),
+                  .flatMap((r) => (r.RuleSetId !== undefined ? [r.RuleSetId] : [])),
                 (ruleSetId) => getById(ruleSetId),
               ),
             ),
-            Effect.map((results) =>
-              results.flatMap((r) => (r === undefined ? [] : [toAttrs(r)])),
-            ),
+            Effect.map((results) => results.flatMap((r) => (r === undefined ? [] : [toAttrs(r)]))),
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.ruleSetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.ruleSetName ?? (yield* createName(id, olds ?? {}));
           const ruleSet = yield* observe(output, name);
           if (ruleSet === undefined) return undefined;
           const attrs = toAttrs(ruleSet);
@@ -239,11 +220,7 @@ export const RuleSetProvider = () =>
                 Rules: desiredRules,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             ruleSet =
               created !== undefined
                 ? yield* getById(created.RuleSetId)
@@ -251,18 +228,13 @@ export const RuleSetProvider = () =>
           }
           if (ruleSet === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Mail Manager rule set '${name}' not found after create`,
-              ),
+              new Error(`Mail Manager rule set '${name}' not found after create`),
             );
           }
 
           // 3. SYNC — diff OBSERVED name/rules against desired; apply only
           //    the delta.
-          if (
-            ruleSet.RuleSetName !== name ||
-            !sameShape(ruleSet.Rules, desiredRules)
-          ) {
+          if (ruleSet.RuleSetName !== name || !sameShape(ruleSet.Rules, desiredRules)) {
             yield* mm.updateRuleSet({
               RuleSetId: ruleSet.RuleSetId,
               RuleSetName: name,

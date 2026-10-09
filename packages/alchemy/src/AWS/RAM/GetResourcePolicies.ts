@@ -30,10 +30,7 @@ export interface GetResourcePolicies extends Binding.Service<
   () => Effect.Effect<
     (
       request: ram.GetResourcePoliciesRequest,
-    ) => Effect.Effect<
-      ram.GetResourcePoliciesResponse,
-      ram.GetResourcePoliciesError
-    >
+    ) => Effect.Effect<ram.GetResourcePoliciesResponse, ram.GetResourcePoliciesError>
   >
 > {}
 export const GetResourcePolicies = Binding.Service<GetResourcePolicies>(

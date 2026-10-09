@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface DeleteObjectsRequest extends Omit<
-  S3.DeleteObjectsRequest,
-  "Bucket"
-> {}
+export interface DeleteObjectsRequest extends Omit<S3.DeleteObjectsRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:DeleteObjects` (batch delete).
@@ -40,11 +36,7 @@ export interface DeleteObjects extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: DeleteObjectsRequest,
-    ) => Effect.Effect<S3.DeleteObjectsOutput, S3.DeleteObjectsError>
+    (request: DeleteObjectsRequest) => Effect.Effect<S3.DeleteObjectsOutput, S3.DeleteObjectsError>
   >
 > {}
-export const DeleteObjects = Binding.Service<DeleteObjects>(
-  "AWS.S3.DeleteObjects",
-);
+export const DeleteObjects = Binding.Service<DeleteObjects>("AWS.S3.DeleteObjects");

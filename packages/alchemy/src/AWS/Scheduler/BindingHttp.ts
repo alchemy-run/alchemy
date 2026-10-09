@@ -34,14 +34,11 @@ import type { ScheduleGroup } from "./ScheduleGroup.ts";
  * Passes unresolved Outputs — binding data is resolved by the engine before
  * the host reconciles.
  */
-const scheduleArnPattern = Effect.fn(function* (
-  group: ScheduleGroup | undefined,
-) {
-  const { accountId, region } =
-    yield* AWSEnvironment.current as unknown as Effect.Effect<{
-      accountId: string;
-      region: string;
-    }>;
+const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined) {
+  const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+    accountId: string;
+    region: string;
+  }>;
   return group
     ? Output.interpolate`arn:aws:scheduler:${region}:${accountId}:schedule/${group.scheduleGroupName}/*`
     : (`arn:aws:scheduler:${region}:${accountId}:schedule/default/*` as const);
@@ -53,11 +50,10 @@ const scheduleArnPattern = Effect.fn(function* (
  * the request.
  */
 const allSchedulesArnPattern = Effect.gen(function* () {
-  const { accountId, region } =
-    yield* AWSEnvironment.current as unknown as Effect.Effect<{
-      accountId: string;
-      region: string;
-    }>;
+  const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+    accountId: string;
+    region: string;
+  }>;
   return `arn:aws:scheduler:${region}:${accountId}:schedule/*/*` as const;
 });
 
@@ -106,30 +102,26 @@ export const makeScheduleGroupScopedHttpBinding = <
             options.resourceScope === "all"
               ? yield* allSchedulesArnPattern
               : yield* scheduleArnPattern(group);
-          yield* host.bind`Allow(${host}, ${options.tag}(${group ?? "default"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [pattern],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${group ?? "default"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [pattern],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`${options.tag}(${group?.LogicalId ?? "default"})`)(
-        function* (request?: Omit<I, "GroupName">) {
-          const groupName = GroupName
-            ? yield* GroupName
-            : options.fallbackGroupName;
-          return yield* op({
-            ...request,
-            GroupName: groupName,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${group?.LogicalId ?? "default"})`)(function* (
+        request?: Omit<I, "GroupName">,
+      ) {
+        const groupName = GroupName ? yield* GroupName : options.fallbackGroupName;
+        return yield* op({
+          ...request,
+          GroupName: groupName,
+        } as I);
+      });
     });
   });
 
@@ -162,10 +154,7 @@ export const makeScheduleWriteHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* <Ro extends Role>(
-      executionRole: Ro,
-      group?: ScheduleGroup,
-    ) {
+    return Effect.fn(function* <Ro extends Role>(executionRole: Ro, group?: ScheduleGroup) {
       const RoleArn = yield* executionRole.roleArn;
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {

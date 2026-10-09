@@ -26,8 +26,7 @@ export interface RedshiftServerlessEventDetail {
 }
 
 /** A Redshift Serverless EventBridge event delivered to the handler. */
-export type RedshiftServerlessEvent =
-  EventRecord<RedshiftServerlessEventDetail>;
+export type RedshiftServerlessEvent = EventRecord<RedshiftServerlessEventDetail>;
 
 export interface RedshiftServerlessEventSourceProps extends EventRouteProps {
   /**
@@ -97,12 +96,8 @@ export const consumeRedshiftServerlessEvents = <StreamReq = never, Req = never>(
     props.id ?? "RedshiftServerlessEvents",
     {
       source: ["aws.redshift-serverless"],
-      ...(props.detailTypes !== undefined
-        ? { "detail-type": [...props.detailTypes] }
-        : {}),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      ...(props.detailTypes !== undefined ? { "detail-type": [...props.detailTypes] } : {}),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

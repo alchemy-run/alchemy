@@ -29,6 +29,4 @@ export interface BatchGetBuilds extends Binding.Service<
     ) => Effect.Effect<SVC.BatchGetBuildsOutput, SVC.BatchGetBuildsError>
   >
 > {}
-export const BatchGetBuilds = Binding.Service<BatchGetBuilds>(
-  "AWS.CodeBuild.BatchGetBuilds",
-);
+export const BatchGetBuilds = Binding.Service<BatchGetBuilds>("AWS.CodeBuild.BatchGetBuilds");

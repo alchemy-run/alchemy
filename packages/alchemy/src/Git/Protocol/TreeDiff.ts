@@ -100,7 +100,7 @@ export const diffTrees = (
       }
       const content = yield* objects.readContent(oid);
       return yield* parseTree(content).pipe(
-        Effect.mapError((e) => new StoreError({ reason: e.reason })),
+        Effect.mapError((e) => StoreError.make({ reason: e.reason })),
       );
     });
 
@@ -159,9 +159,7 @@ export const diffTrees = (
         const newEntries = yield* readTree(newOid);
         const oldByName = new Map(oldEntries.map((e) => [e.name, e]));
         const newByName = new Map(newEntries.map((e) => [e.name, e]));
-        const names = Array.from(
-          new Set([...oldByName.keys(), ...newByName.keys()]),
-        ).sort(); // deterministic output order
+        const names = Array.from(new Set([...oldByName.keys(), ...newByName.keys()])).sort(); // deterministic output order
         for (const name of names) {
           if (truncated) return;
           const o = oldByName.get(name);
@@ -359,7 +357,7 @@ export const applyTreeChanges = (
       const metas = yield* objects.getMetaBatch(Array.from(requiredBlobs));
       for (const oid of requiredBlobs) {
         if (!metas.has(oid)) {
-          return yield* new StoreError({
+          return yield* StoreError.make({
             reason: `applyTreeChanges: referenced blob ${oid} is missing from the store`,
           });
         }
@@ -389,7 +387,7 @@ export const applyTreeChanges = (
     const readEntries = Effect.fn(function* (oid: Oid) {
       const content = yield* objects.readContent(oid);
       return yield* parseTree(content).pipe(
-        Effect.mapError((e) => new StoreError({ reason: e.reason })),
+        Effect.mapError((e) => StoreError.make({ reason: e.reason })),
       );
     });
 
@@ -404,8 +402,7 @@ export const applyTreeChanges = (
       children: Map<string, ChangeNode>,
     ): Effect.Effect<Oid | undefined, StoreError> =>
       Effect.gen(function* () {
-        const baseEntries =
-          baseOid === undefined ? [] : yield* readEntries(baseOid);
+        const baseEntries = baseOid === undefined ? [] : yield* readEntries(baseOid);
         const byName = new Map(baseEntries.map((e) => [e.name, e]));
         for (const [name, node] of children) {
           const base = byName.get(name);
@@ -413,9 +410,7 @@ export const applyTreeChanges = (
           let subtree: Oid | undefined;
           if (node.children !== undefined) {
             const subtreeBase =
-              base !== undefined && treeEntryKind(base.mode) === "tree"
-                ? base.oid
-                : undefined;
+              base !== undefined && treeEntryKind(base.mode) === "tree" ? base.oid : undefined;
             subtree = yield* build(subtreeBase, node.children);
           }
           // 2. the leaf op at this exact name decides the entry.
@@ -443,7 +438,7 @@ export const applyTreeChanges = (
         const entries = Array.from(byName.values());
         if (entries.length === 0) return undefined;
         const content = yield* encodeTree(entries).pipe(
-          Effect.mapError((e) => new StoreError({ reason: e.reason })),
+          Effect.mapError((e) => StoreError.make({ reason: e.reason })),
         );
         const oid = yield* hashObject(ObjectType.tree, content);
         if (oid !== baseOid) {

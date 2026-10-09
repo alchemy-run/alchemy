@@ -6,6 +6,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -81,9 +82,7 @@ export const StoreProviderLive = () =>
       // Observe — Cloudflare permits exactly one Secrets Store per
       // account. Reuse the cached store if it still exists, otherwise
       // reuse the first one listed.
-      const cached = output?.storeId
-        ? yield* findStoreById(acct, output.storeId)
-        : undefined;
+      const cached = output?.storeId ? yield* findStoreById(acct, output.storeId) : undefined;
       const observed = cached ?? (yield* firstStore(acct));
 
       if (observed) {
@@ -104,11 +103,7 @@ export const StoreProviderLive = () =>
           // account's default Secrets Store.
           name: "default_secrets_store",
         })
-        .pipe(
-          Effect.catchTag("MaximumStoresExceeded", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)));
 
       if (response) {
         return {
@@ -173,7 +168,7 @@ export const StoreProviderLocal = () =>
   Provider.succeed(Store, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.storeId) return { action: "update" } as const;
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -185,7 +180,7 @@ export const StoreProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       return {
         storeId: output?.storeId ?? generateLocalId(),
         // Mirror the name Cloudflare uses for an account's default store.

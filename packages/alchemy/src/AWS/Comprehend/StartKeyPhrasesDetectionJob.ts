@@ -63,7 +63,6 @@ export interface StartKeyPhrasesDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StartKeyPhrasesDetectionJob =
-  Binding.Service<StartKeyPhrasesDetectionJob>(
-    "AWS.Comprehend.StartKeyPhrasesDetectionJob",
-  );
+export const StartKeyPhrasesDetectionJob = Binding.Service<StartKeyPhrasesDetectionJob>(
+  "AWS.Comprehend.StartKeyPhrasesDetectionJob",
+);

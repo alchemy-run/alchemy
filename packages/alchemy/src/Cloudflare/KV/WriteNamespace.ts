@@ -22,9 +22,7 @@ export interface WriteNamespace extends Binding.Service<
   (namespace: Namespace) => Effect.Effect<WriteNamespaceClient>
 > {}
 
-export const WriteNamespace = Binding.Service<WriteNamespace>(
-  "Cloudflare.KV.WriteNamespace",
-);
+export const WriteNamespace = Binding.Service<WriteNamespace>("Cloudflare.KV.WriteNamespace");
 
 export interface WriteNamespaceClient<Key extends string = string> {
   put(

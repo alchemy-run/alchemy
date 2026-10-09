@@ -32,6 +32,4 @@ export interface UpdateKxVolume extends Binding.Service<
     ) => Effect.Effect<SVC.UpdateKxVolumeResponse, SVC.UpdateKxVolumeError>
   >
 > {}
-export const UpdateKxVolume = Binding.Service<UpdateKxVolume>(
-  "AWS.FinSpace.UpdateKxVolume",
-);
+export const UpdateKxVolume = Binding.Service<UpdateKxVolume>("AWS.FinSpace.UpdateKxVolume");

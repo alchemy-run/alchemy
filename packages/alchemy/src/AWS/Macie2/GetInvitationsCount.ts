@@ -27,10 +27,7 @@ export interface GetInvitationsCount extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetInvitationsCountRequest,
-    ) => Effect.Effect<
-      macie2.GetInvitationsCountResponse,
-      macie2.GetInvitationsCountError
-    >
+    ) => Effect.Effect<macie2.GetInvitationsCountResponse, macie2.GetInvitationsCountError>
   >
 > {}
 export const GetInvitationsCount = Binding.Service<GetInvitationsCount>(

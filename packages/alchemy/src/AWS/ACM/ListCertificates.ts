@@ -42,6 +42,4 @@ export interface ListCertificates extends Binding.Service<
   >
 > {}
 
-export const ListCertificates = Binding.Service<ListCertificates>(
-  "AWS.ACM.ListCertificates",
-);
+export const ListCertificates = Binding.Service<ListCertificates>("AWS.ACM.ListCertificates");

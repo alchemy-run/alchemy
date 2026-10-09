@@ -79,28 +79,25 @@ export const BusSinkHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           // Pass the ARN as an unresolved Output — binding data is resolved
           // by the engine before the host reconciles (see PutEventsHttp).
           const resource = bus
             ? Output.interpolate`${bus.eventBusArn}`
             : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, AWS.EventBridge.BusSink(${bus ?? "default"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["events:PutEvents"],
-                  Resource: [resource],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.EventBridge.BusSink(${bus ?? "default"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["events:PutEvents"],
+                Resource: [resource],
+              },
+            ],
+          });
         }
       }
       const put = yield* putEvents(bus);

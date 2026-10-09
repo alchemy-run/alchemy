@@ -1,7 +1,7 @@
 import * as browser from "@distilled.cloud/cloudflare/browser-rendering";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Stream from "effect/Stream";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Credentials } from "../Credentials.ts";
 import {
@@ -35,11 +35,7 @@ export interface BrowserAuth {
 }
 
 /** A byte stream produced by a binary {@link BrowserClient} action. */
-type BrowserByteStream = Stream.Stream<
-  Uint8Array,
-  BrowserError,
-  RuntimeContext
->;
+type BrowserByteStream = Stream.Stream<Uint8Array, BrowserError, RuntimeContext>;
 
 /**
  * Build a {@link BrowserClient} over the Browser Rendering REST data-plane
@@ -126,9 +122,7 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
           // native shape is an array of matched elements.
           results: (Array.isArray(item.results)
             ? item.results
-            : [
-                item.results,
-              ]) as BrowserScrapeResult["result"][number]["results"],
+            : [item.results]) as BrowserScrapeResult["result"][number]["results"],
         })),
         meta: { status: 200, title: "" },
       })),

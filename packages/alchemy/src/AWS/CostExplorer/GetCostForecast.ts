@@ -40,6 +40,4 @@ export interface GetCostForecast extends Binding.Service<
   >
 > {}
 
-export const GetCostForecast = Binding.Service<GetCostForecast>(
-  "AWS.CostExplorer.GetCostForecast",
-);
+export const GetCostForecast = Binding.Service<GetCostForecast>("AWS.CostExplorer.GetCostForecast");

@@ -1,7 +1,7 @@
 import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Layer from "effect/Layer";
-import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import { BatchDeleteDocument } from "./BatchDeleteDocument.ts";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 
 export const BatchDeleteDocumentHttp = Layer.effect(
   BatchDeleteDocument,

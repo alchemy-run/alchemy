@@ -154,9 +154,7 @@ export interface ResolverEndpoint extends Resource<
  *
  * @resource
  */
-export const ResolverEndpoint = Resource<ResolverEndpoint>(
-  "AWS.Route53Resolver.ResolverEndpoint",
-);
+export const ResolverEndpoint = Resource<ResolverEndpoint>("AWS.Route53Resolver.ResolverEndpoint");
 
 /**
  * Recreating an endpoint whose deterministic `CreatorRequestId` is still
@@ -216,29 +214,21 @@ export const ResolverEndpointProvider = () =>
   Provider.effect(
     ResolverEndpoint,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getEndpoint = (endpointId: string) =>
         r53r.getResolverEndpoint({ ResolverEndpointId: endpointId }).pipe(
           Effect.map((r) => r.ResolverEndpoint),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // Observe by the cached endpoint ID first, falling back to the
       // deterministic CreatorRequestId (set to the physical name at create).
       // Endpoints in DELETING state are treated as missing so a reconcile
       // after an out-of-band delete recreates.
-      const observe = Effect.fn(function* (
-        name: string,
-        endpointId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, endpointId: string | undefined) {
         if (endpointId !== undefined) {
           const byId = yield* getEndpoint(endpointId);
           if (byId !== undefined && byId.Status !== "DELETING") {
@@ -257,13 +247,7 @@ export const ResolverEndpointProvider = () =>
       });
 
       return ResolverEndpoint.Provider.of({
-        stables: [
-          "resolverEndpointId",
-          "resolverEndpointArn",
-          "name",
-          "direction",
-          "hostVpcId",
-        ],
+        stables: ["resolverEndpointId", "resolverEndpointArn", "name", "direction", "hostVpcId"],
         // Top-level resource: enumerate every resolver endpoint in the
         // ambient account/region.
         list: () =>
@@ -319,12 +303,7 @@ export const ResolverEndpointProvider = () =>
           }
           const ipKey = (ip: ResolverEndpointIpAddress) =>
             `${ip.subnetId}:${ip.ip ?? ""}:${ip.ipv6 ?? ""}`;
-          if (
-            !sameStringSet(
-              olds.ipAddresses.map(ipKey),
-              news.ipAddresses.map(ipKey),
-            )
-          ) {
+          if (!sameStringSet(olds.ipAddresses.map(ipKey), news.ipAddresses.map(ipKey))) {
             return { action: "replace" } as const;
           }
         }),
@@ -363,9 +342,7 @@ export const ResolverEndpointProvider = () =>
 
           // Endpoint provisioning is asynchronous (~1-2 min). Wait (bounded)
           // for it to settle so dependents (FORWARD rules) can use it.
-          yield* session.note(
-            `waiting for resolver endpoint ${endpointId} to become OPERATIONAL`,
-          );
+          yield* session.note(`waiting for resolver endpoint ${endpointId} to become OPERATIONAL`);
           const settled = yield* untilEndpointSettled(getEndpoint(endpointId));
           endpoint = settled ?? endpoint;
 
@@ -378,8 +355,7 @@ export const ResolverEndpointProvider = () =>
             !sameStringSet(endpoint.Protocols ?? [], desiredProtocols);
           const desiredType = news.resolverEndpointType;
           const typeDelta =
-            desiredType !== undefined &&
-            endpoint.ResolverEndpointType !== desiredType;
+            desiredType !== undefined && endpoint.ResolverEndpointType !== desiredType;
           if (protocolsDelta || typeDelta) {
             endpoint = yield* r53r
               .updateResolverEndpoint({

@@ -37,7 +37,6 @@ export interface CopyServerlessCacheSnapshot extends Binding.Service<
     >
   >
 > {}
-export const CopyServerlessCacheSnapshot =
-  Binding.Service<CopyServerlessCacheSnapshot>(
-    "AWS.ElastiCache.CopyServerlessCacheSnapshot",
-  );
+export const CopyServerlessCacheSnapshot = Binding.Service<CopyServerlessCacheSnapshot>(
+  "AWS.ElastiCache.CopyServerlessCacheSnapshot",
+);

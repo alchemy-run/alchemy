@@ -16,7 +16,8 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
  *
  * - The `Provider(type)` service placed in context delegates to the
  *   variant for the run's default mode (`AlchemyContext.dev ? "local" :
- *   "live"`), so existing lookups keep working unchanged.
+ *   "live"`). `findProvider` resolves the concrete variant, including its
+ *   optional lifecycle methods and metadata.
  * - Both variants are exposed via {@link ProviderService.modes} as lazy,
  *   memoized builders. NEITHER is constructed at registration: a variant
  *   (and the mode-specific dependency layers composed inside its thunk) is
@@ -59,10 +60,7 @@ export const dual = <
   // Only the resource type string is needed — a ResourceClass, a Platform,
   // or a bare `{ Type }` (useful when importing the class would create a
   // module cycle) all satisfy this.
-  cls:
-    | ResourceClassLike<R>
-    | Platform<R, any, any, any, any>
-    | { Type: R["Type"] },
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any> | { Type: R["Type"] },
   input: {
     live: () => LayerLive;
     local: () => LayerLocal;
@@ -135,8 +133,8 @@ export const dual = <
       // `providerForMode` and reads optional-method presence (`read`,
       // `precreate`, `tail`, `logs`), `version`, `stables` and `nuke`
       // there. The registered service therefore only needs the required
-      // lifecycle methods — what structural provider checks and mode-less
-      // `findProvider` callers use — each forwarding to the default
+      // lifecycle methods for structural provider checks and direct
+      // registration access — each forwarding to the default
       // variant, built on first call.
       const variant = modes[defaultMode];
 
@@ -146,12 +144,9 @@ export const dual = <
           Effect.flatMap(variant, (service) =>
             service.diff === undefined ? Effect.void : service.diff(input),
           ),
-        reconcile: (input) =>
-          Effect.flatMap(variant, (service) => service.reconcile(input)),
-        delete: (input) =>
-          Effect.flatMap(variant, (service) => service.delete(input)),
-        list: (...args) =>
-          Effect.flatMap(variant, (service) => service.list(...args)),
+        reconcile: (input) => Effect.flatMap(variant, (service) => service.reconcile(input)),
+        delete: (input) => Effect.flatMap(variant, (service) => service.delete(input)),
+        list: (...args) => Effect.flatMap(variant, (service) => service.list(...args)),
         mode: defaultMode,
         modes,
         localDataPlane: input.dataPlane,

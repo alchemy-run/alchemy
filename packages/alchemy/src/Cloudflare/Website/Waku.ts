@@ -19,9 +19,7 @@ import {
  */
 const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
-export interface WakuProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -95,6 +93,13 @@ export interface WakuProps<
     basePath?: string;
   };
 }
+
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
+  WakuProps<Bindings>,
+  "compatibility" | "assets" | "waku"
+>;
 
 /**
  * A Cloudflare Worker deployed from a [Waku](https://waku.gg) project.
@@ -230,76 +235,77 @@ export const Waku: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | InputProps<WakuProps<Bindings>>
-        | Effect.Effect<InputProps<WakuProps<Bindings>>, never, Req>,
+      propsEff?: WakuInput<Bindings> | Effect.Effect<WakuInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | InputProps<WakuProps<Bindings>>
-      | Effect.Effect<InputProps<WakuProps<Bindings>>, never, Req>,
+    propsEff?: WakuInput<Bindings> | Effect.Effect<WakuInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?: WakuInput<Bindings> | Effect.Effect<WakuInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Waku(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?: WakuInput<Bindings> | Effect.Effect<WakuInput<Bindings>, never, Req>,
+      ) => effectClass(Waku(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            compatibility: {
-              ...props?.compatibility,
-              // Waku's server runtime needs AsyncLocalStorage — default to
-              // nodejs_als when the user hasn't enabled it (or the broader
-              // nodejs_compat) themselves.
-              flags:
-                props?.compatibility?.flags?.includes("nodejs_als") ||
-                props?.compatibility?.flags?.includes("nodejs_compat")
-                  ? props.compatibility!.flags
-                  : [...(props?.compatibility?.flags ?? []), "nodejs_als"],
-            },
-            // Waku links SSG pages without trailing slashes; serve
-            // `about/index.html` at `/about` directly instead of redirecting.
-            assets: {
-              htmlHandling: "drop-trailing-slash" as const,
-              ...props?.assets,
-            },
-            main: undefined!,
-            source: {
-              provider: WAKU_SOURCE_PROVIDER,
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          compatibility: {
+            ...props?.compatibility,
+            // Waku's server runtime needs AsyncLocalStorage — default to
+            // nodejs_als when the user hasn't enabled it (or the broader
+            // nodejs_compat) themselves.
+            flags:
+              props?.compatibility?.flags?.includes("nodejs_als") ||
+              props?.compatibility?.flags?.includes("nodejs_compat")
+                ? props.compatibility!.flags
+                : [...(props?.compatibility?.flags ?? []), "nodejs_als"],
+          },
+          // Waku links SSG pages without trailing slashes; serve
+          // `about/index.html` at `/about` directly instead of redirecting.
+          assets: {
+            htmlHandling: "drop-trailing-slash" as const,
+            ...props?.assets,
+          },
+          main: undefined!,
+          source: {
+            provider: WAKU_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                // Custom worker entry (wraps waku's handler via
-                // `virtual:waku/server-entry`); resolved against `rootDir`
-                // by the source provider.
-                main: props?.main,
-                // Deploy-time waku config overrides, merged over the
-                // project's `waku.config.*` by the source provider.
-                srcDir: props?.waku?.srcDir,
-                distDir: props?.waku?.distDir,
-                basePath: props?.waku?.basePath,
-                memo: props?.memo,
-              },
+              // Custom worker entry (wraps waku's handler via
+              // `virtual:waku/server-entry`); resolved against `rootDir`
+              // by the source provider.
+              main: props?.main,
+              // Deploy-time waku config overrides, merged over the
+              // project's `waku.config.*` by the source provider.
+              srcDir: props?.waku?.srcDir,
+              distDir: props?.waku?.distDir,
+              basePath: props?.waku?.basePath,
+              memo: props?.memo,
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

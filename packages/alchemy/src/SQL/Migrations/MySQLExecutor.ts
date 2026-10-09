@@ -11,9 +11,7 @@ import { MigrationError, type SqlExecutor } from "./Format.ts";
  * The `mysql2` import is type-only — how the connection is opened stays
  * with the database provider.
  */
-export const makeMySQLMigrationExecutor = (
-  connection: Connection,
-): SqlExecutor => ({
+export const makeMySQLMigrationExecutor = (connection: Connection): SqlExecutor => ({
   dialect: "mysql",
   query: (sql, params) =>
     Effect.tryPromise({

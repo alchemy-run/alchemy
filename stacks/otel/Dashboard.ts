@@ -46,7 +46,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
     const traces = yield* Traces;
     const t = traces.name;
     const isProd = stack.stage === "prod";
-
     const prodTracesName: Input<string> = isProd
       ? t
       : (yield* Axiom.Dataset.ref("Traces", { stage: "prod" })).name;
@@ -192,7 +191,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 2 — Q1 broken out per-project, plus solo-vs-team split.
       {
         id: "users-per-project",
@@ -239,7 +237,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 3 — Q4: state-store breakdown.
       {
         id: "state-store-projects-by-id",
@@ -276,7 +273,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 4 — adoption shape: project growth + CI-vs-local split.
       {
         id: "projects-over-time",
@@ -343,7 +339,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 5 — keep the state-store deploy health signals for the
       // Cloudflare-hosted store (not just init, but actual deploys).
       {
@@ -380,7 +375,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // ─── Cloudflare State Store ────────────────────────────────
       //
       // Two span sources feed this section:
@@ -538,7 +532,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // ─── Resource usage & reliability ──────────────────────────
       //
       // Every provider lifecycle invocation is wrapped in a

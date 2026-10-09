@@ -80,7 +80,7 @@ export class Counter extends Cloudflare.DurableObject<
 :::note
 The `state` *reference* is resolved in the outer (Construction) Effect, but
 `state.storage` is
-[colored with `RuntimeContext`](/infrastructure-as-effects/layers#runtime-as-a-colored-function)
+[colored with `RuntimeContext`](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
 — so the storage reads/writes stay in the inner (runtime) Effect.
 :::
 
@@ -127,8 +127,8 @@ WorkerA's bundle actually contains the DO class:
 // src/workerA.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
 -import { Counter } from "./object.ts";
 +import CounterLive, { Counter } from "./object.ts";
 
@@ -166,8 +166,8 @@ to the existing namespace running under WorkerA's script:
 // src/workerB.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Counter } from "./object.ts";
 import { WorkerA } from "./workerA.ts";
 
@@ -244,7 +244,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
@@ -259,10 +259,10 @@ test(
     const { urlA, urlB } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    yield* client.post(`${urlA}/`);
-    yield* client.post(`${urlA}/`);
+    yield* client.post(`${urlA}/foo`);
+    yield* client.post(`${urlA}/foo`);
 
-    const res = yield* client.get(`${urlB}/`);
+    const res = yield* client.get(`${urlB}/foo`);
     expect((yield* res.json) as { value: number }).toEqual({ value: 2 });
   }),
 );
@@ -370,8 +370,8 @@ order correct (the new host uploads first).
 // src/workerB.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import CounterLive, { Counter } from "./object.ts";
 
 export class WorkerB extends Cloudflare.Worker<WorkerB, {}, Counter>()(

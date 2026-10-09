@@ -28,10 +28,7 @@ export interface DeleteCoreDevice extends Binding.Service<
   () => Effect.Effect<
     (
       request: greengrassv2.DeleteCoreDeviceRequest,
-    ) => Effect.Effect<
-      greengrassv2.DeleteCoreDeviceResponse,
-      greengrassv2.DeleteCoreDeviceError
-    >
+    ) => Effect.Effect<greengrassv2.DeleteCoreDeviceResponse, greengrassv2.DeleteCoreDeviceError>
   >
 > {}
 export const DeleteCoreDevice = Binding.Service<DeleteCoreDevice>(

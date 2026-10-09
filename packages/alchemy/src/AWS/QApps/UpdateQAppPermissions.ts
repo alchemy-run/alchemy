@@ -38,10 +38,7 @@ export interface UpdateQAppPermissions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateQAppPermissionsRequest,
-    ) => Effect.Effect<
-      qapps.UpdateQAppPermissionsOutput,
-      qapps.UpdateQAppPermissionsError
-    >
+    ) => Effect.Effect<qapps.UpdateQAppPermissionsOutput, qapps.UpdateQAppPermissionsError>
   >
 > {}
 

@@ -87,11 +87,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeSubnetGroups({ SubnetGroupNames: [name] })
-          .pipe(
-            Effect.catchTag("SubnetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.SubnetGroups?.[0];
       });
 
@@ -118,9 +114,7 @@ export const SubnetGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.subnetGroupName ??
-            (yield* toName(id, olds ?? { subnetIds: [] }));
+          const name = output?.subnetGroupName ?? (yield* toName(id, olds ?? { subnetIds: [] }));
           const group = yield* readGroup(name);
           if (group?.SubnetGroupName === undefined) return undefined;
           // DAX subnet groups do not support tags, so ownership cannot be
@@ -143,12 +137,7 @@ export const SubnetGroupProvider = () =>
                 Description: props.description,
                 SubnetIds: props.subnetIds,
               })
-              .pipe(
-                Effect.catchTag(
-                  "SubnetGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("SubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
@@ -162,10 +151,7 @@ export const SubnetGroupProvider = () =>
             SubnetGroupName: name,
           };
           let mutated = false;
-          if (
-            props.description !== undefined &&
-            props.description !== observed.Description
-          ) {
+          if (props.description !== undefined && props.description !== observed.Description) {
             update.Description = props.description;
             mutated = true;
           }
@@ -189,18 +175,13 @@ export const SubnetGroupProvider = () =>
           // A subnet group still attached to a cluster rejects deletion with
           // SubnetGroupInUseFault — retry (bounded) while the cluster
           // releases it. NotFound is success (idempotent delete).
-          yield* dax
-            .deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName })
-            .pipe(
-              Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "SubnetGroupInUseFault",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-            );
+          yield* dax.deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName }).pipe(
+            Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "SubnetGroupInUseFault",
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
+            }),
+          );
         }),
 
         list: () =>
@@ -217,9 +198,7 @@ export const SubnetGroupProvider = () =>
               nextToken = response.NextToken;
               if (!nextToken) break;
             }
-            return groups
-              .filter((group) => group.SubnetGroupName !== undefined)
-              .map(toAttrs);
+            return groups.filter((group) => group.SubnetGroupName !== undefined).map(toAttrs);
           }),
       };
     }),

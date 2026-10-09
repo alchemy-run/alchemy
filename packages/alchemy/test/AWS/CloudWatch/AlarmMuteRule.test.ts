@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AlarmMuteRule } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,17 +21,20 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `list()` runs against the live API and returns the well-typed `Attributes`
 // array. When create is unblocked, the deploy-and-find-it assertion below can
 // be re-enabled.
-test.provider("list enumerates alarm mute rules in the region", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates alarm mute rules in the region",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(AlarmMuteRule);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(AlarmMuteRule);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const rule of all) {
-      expect(typeof rule.alarmMuteRuleName).toBe("string");
-      expect(rule.alarmMuteRuleArn).toContain(":alarm-mute-rule:");
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      for (const rule of all) {
+        expect(typeof rule.alarmMuteRuleName).toBe("string");
+        expect(rule.alarmMuteRuleArn).toContain(":alarm-mute-rule:");
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:cloudwatch", "live"] },
 );

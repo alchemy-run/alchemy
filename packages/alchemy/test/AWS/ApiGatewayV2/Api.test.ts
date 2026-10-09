@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,10 +18,7 @@ const assertApiDeleted = (apiId: string) =>
     Effect.flatMap(() => Effect.fail(new ApiStillExists({ apiId }))),
     Effect.retry({
       while: (e) => e._tag === "ApiStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );
@@ -66,9 +63,7 @@ test.provider(
 
       const afterUpdate = yield* agw2.getApi({ ApiId: api.apiId });
       expect(afterUpdate.Description).toBe("v2");
-      expect(afterUpdate.CorsConfiguration?.AllowOrigins).toEqual([
-        "https://example.com",
-      ]);
+      expect(afterUpdate.CorsConfiguration?.AllowOrigins).toEqual(["https://example.com"]);
 
       // Removing CORS deletes the configuration.
       yield* stack.deploy(
@@ -84,7 +79,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertApiDeleted(api.apiId);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -118,7 +116,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertApiDeleted(wsApi.apiId);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -131,16 +132,13 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const api = yield* AWS.ApiGatewayV2.Api("PrimApi", {});
-            const integration = yield* AWS.ApiGatewayV2.Integration(
-              "PrimIntegration",
-              {
-                api,
-                integrationType: "HTTP_PROXY",
-                integrationUri: `https://checkip.amazonaws.com${upstreamPath}`,
-                integrationMethod: "GET",
-                payloadFormatVersion: "1.0",
-              },
-            );
+            const integration = yield* AWS.ApiGatewayV2.Integration("PrimIntegration", {
+              api,
+              integrationType: "HTTP_PROXY",
+              integrationUri: `https://checkip.amazonaws.com${upstreamPath}`,
+              integrationMethod: "GET",
+              payloadFormatVersion: "1.0",
+            });
             const route = yield* AWS.ApiGatewayV2.Route("PrimRoute", {
               api,
               routeKey: "GET /ip",
@@ -198,5 +196,8 @@ test.provider(
       yield* stack.destroy();
       yield* assertApiDeleted(out.apiId);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "live"],
+    timeout: 240_000,
+  },
 );

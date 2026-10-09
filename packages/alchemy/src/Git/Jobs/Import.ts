@@ -13,16 +13,11 @@
  * provide `FetchHttpClient.layer` (see `RepoObject.ts`'s alarm handler).
  */
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { concatBytes, isOid, ZERO_OID } from "../Protocol/ObjectCodec.ts";
-import {
-  flushPkt,
-  pktPayloadText,
-  pktText,
-  readPktLineAt,
-} from "../Protocol/Pkt.ts";
+import { flushPkt, pktPayloadText, pktText, readPktLineAt } from "../Protocol/Pkt.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Errors & shapes
@@ -102,25 +97,19 @@ const DEFAULT_MAX_PACK = 50 * 1024 * 1024;
 const normalizeBase = (url: string): string => url.replace(/\/+$/, "");
 
 /** Decodes all pkt-lines of a buffer into text/flush tokens. */
-type Token =
-  | { readonly _tag: "line"; readonly text: string }
-  | { readonly _tag: "flush" };
+type Token = { readonly _tag: "line"; readonly text: string } | { readonly _tag: "flush" };
 
-const tokenize = (
-  buf: Uint8Array,
-): Effect.Effect<ReadonlyArray<Token>, ImportClientError> =>
+const tokenize = (buf: Uint8Array): Effect.Effect<ReadonlyArray<Token>, ImportClientError> =>
   Effect.suspend(() => {
     const out: Array<Token> = [];
     let pos = 0;
     while (pos < buf.length) {
       const r = readPktLineAt(buf, pos);
       if (r._tag === "incomplete") {
-        return Effect.fail(
-          new ImportClientError({ reason: "truncated advertisement" }),
-        );
+        return Effect.fail(ImportClientError.make({ reason: "truncated advertisement" }));
       }
       if (r._tag === "invalid") {
-        return Effect.fail(new ImportClientError({ reason: r.reason }));
+        return Effect.fail(ImportClientError.make({ reason: r.reason }));
       }
       if (r.pkt._tag === "flush") {
         out.push({ _tag: "flush" });
@@ -149,7 +138,7 @@ export const parseAdvertisement = Effect.fn(function* (body: Uint8Array) {
     const text = token.text;
     if (text.startsWith("#")) continue; // "# service=git-upload-pack"
     if (text.startsWith("ERR ")) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: `remote error: ${text.slice(4)}`,
       });
     }
@@ -209,21 +198,15 @@ export const fetchAdvertisement = Effect.fn(function* (url: string) {
   const response = yield* client
     .get(`${normalizeBase(url)}/info/refs?service=git-upload-pack`)
     .pipe(
-      Effect.mapError(
-        (error) =>
-          new ImportClientError({ reason: `info/refs failed: ${error}` }),
-      ),
+      Effect.mapError((error) => ImportClientError.make({ reason: `info/refs failed: ${error}` })),
     );
   if (response.status !== 200) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `info/refs returned HTTP ${response.status}`,
     });
   }
   const body = yield* response.arrayBuffer.pipe(
-    Effect.mapError(
-      (error) =>
-        new ImportClientError({ reason: `info/refs body read: ${error}` }),
-    ),
+    Effect.mapError((error) => ImportClientError.make({ reason: `info/refs body read: ${error}` })),
   );
   return yield* parseAdvertisement(new Uint8Array(body));
 });
@@ -271,15 +254,14 @@ export const parseUploadPackResponse = Effect.fn(function* (body: Uint8Array) {
   let pos = 0;
   for (;;) {
     if (pos >= body.length) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: "upload-pack response ended before NAK/ACK",
       });
     }
     const r = readPktLineAt(body, pos);
     if (r._tag === "incomplete" || r._tag === "invalid") {
-      return yield* new ImportClientError({
-        reason:
-          r._tag === "invalid" ? r.reason : "truncated upload-pack response",
+      return yield* ImportClientError.make({
+        reason: r._tag === "invalid" ? r.reason : "truncated upload-pack response",
       });
     }
     pos = r.next;
@@ -292,7 +274,7 @@ export const parseUploadPackResponse = Effect.fn(function* (body: Uint8Array) {
     }
     if (text.startsWith("unshallow ")) continue;
     if (text.startsWith("ERR ")) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: `remote error: ${text.slice(4)}`,
       });
     }
@@ -320,46 +302,40 @@ export const fetchPack = Effect.fn(function* (
 ) {
   const client = yield* HttpClient.HttpClient;
   const maxPack = options?.maxPackBytes ?? DEFAULT_MAX_PACK;
-  const request = HttpClientRequest.post(
-    `${normalizeBase(url)}/git-upload-pack`,
-  ).pipe(
+  const request = HttpClientRequest.post(`${normalizeBase(url)}/git-upload-pack`).pipe(
     HttpClientRequest.setHeaders({
       "content-type": "application/x-git-upload-pack-request",
       accept: "application/x-git-upload-pack-result",
     }),
-    HttpClientRequest.bodyUint8Array(
-      buildUploadPackRequest(wants, { depth: options?.depth }),
-    ),
+    HttpClientRequest.bodyUint8Array(buildUploadPackRequest(wants, { depth: options?.depth })),
   );
   const response = yield* client
     .execute(request)
     .pipe(
-      Effect.mapError(
-        (error) =>
-          new ImportClientError({ reason: `git-upload-pack failed: ${error}` }),
+      Effect.mapError((error) =>
+        ImportClientError.make({ reason: `git-upload-pack failed: ${error}` }),
       ),
     );
   if (response.status !== 200) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `git-upload-pack returned HTTP ${response.status}`,
     });
   }
   const body = yield* response.arrayBuffer.pipe(
-    Effect.mapError(
-      (error) =>
-        new ImportClientError({
-          reason: `git-upload-pack body read: ${error}`,
-        }),
+    Effect.mapError((error) =>
+      ImportClientError.make({
+        reason: `git-upload-pack body read: ${error}`,
+      }),
     ),
   );
   if (body.byteLength > maxPack + 65536) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `source pack exceeds the ${maxPack} byte import cap`,
     });
   }
   const parsed = yield* parseUploadPackResponse(new Uint8Array(body));
   if (parsed.pack.byteLength > maxPack) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `source pack exceeds the ${maxPack} byte import cap`,
     });
   }
@@ -377,8 +353,7 @@ const selectRefs = (
 ): ReadonlyArray<RemoteRef> | undefined => {
   if (ref === undefined) {
     return advertised.filter(
-      (r) =>
-        r.name.startsWith("refs/heads/") || r.name.startsWith("refs/tags/"),
+      (r) => r.name.startsWith("refs/heads/") || r.name.startsWith("refs/tags/"),
     );
   }
   const candidates = [ref, `refs/heads/${ref}`, `refs/tags/${ref}`];
@@ -398,7 +373,7 @@ export const runImport = Effect.fn(function* (options: ImportOptions) {
 
   const selected = selectRefs(advertisement.refs, source.ref);
   if (selected === undefined) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `ref '${source.ref}' not found on the remote`,
     });
   }

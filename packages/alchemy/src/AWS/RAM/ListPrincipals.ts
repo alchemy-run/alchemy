@@ -31,6 +31,4 @@ export interface ListPrincipals extends Binding.Service<
     ) => Effect.Effect<ram.ListPrincipalsResponse, ram.ListPrincipalsError>
   >
 > {}
-export const ListPrincipals = Binding.Service<ListPrincipals>(
-  "AWS.RAM.ListPrincipals",
-);
+export const ListPrincipals = Binding.Service<ListPrincipals>("AWS.RAM.ListPrincipals");

@@ -28,6 +28,4 @@ export interface GetDeployment extends Binding.Service<
     ) => Effect.Effect<SVC.GetDeploymentOutput, SVC.GetDeploymentError>
   >
 > {}
-export const GetDeployment = Binding.Service<GetDeployment>(
-  "AWS.CodeDeploy.GetDeployment",
-);
+export const GetDeployment = Binding.Service<GetDeployment>("AWS.CodeDeploy.GetDeployment");

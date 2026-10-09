@@ -49,7 +49,6 @@ export interface CreateHostedConfigurationVersion extends Binding.Service<
     >
   >
 > {}
-export const CreateHostedConfigurationVersion =
-  Binding.Service<CreateHostedConfigurationVersion>(
-    "AWS.AppConfig.CreateHostedConfigurationVersion",
-  );
+export const CreateHostedConfigurationVersion = Binding.Service<CreateHostedConfigurationVersion>(
+  "AWS.AppConfig.CreateHostedConfigurationVersion",
+);

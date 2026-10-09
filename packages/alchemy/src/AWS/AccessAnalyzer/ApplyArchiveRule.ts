@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Analyzer } from "./Analyzer.ts";
 
 /** `ApplyArchiveRule` request with `analyzerArn` injected from the bound {@link Analyzer}. */
-export interface ApplyArchiveRuleRequest extends Omit<
-  aa.ApplyArchiveRuleRequest,
-  "analyzerArn"
-> {}
+export interface ApplyArchiveRuleRequest extends Omit<aa.ApplyArchiveRuleRequest, "analyzerArn"> {}
 
 /**
  * Runtime binding for `access-analyzer:ApplyArchiveRule`.

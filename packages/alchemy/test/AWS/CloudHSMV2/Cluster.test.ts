@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Cluster, Hsm } from "@/AWS/CloudHSMV2";
-import * as Test from "@/Test/Alchemy";
 import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster, Hsm } from "@/AWS/CloudHSMV2";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -22,6 +22,7 @@ test.provider(
       });
       expect(response.Clusters ?? []).toHaveLength(0);
     }),
+  { tags: ["provider:aws", "provider:aws:cloudhsmv2", "live"] },
 );
 
 // Ungated typed-error probe: prove the distilled union carries the not-found
@@ -35,6 +36,7 @@ test.provider(
       );
       expect(error._tag).toBe("CloudHsmResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:cloudhsmv2", "live"] },
 );
 
 // Resolve two default-for-AZ subnets (distinct AZs) from the default VPC.
@@ -50,20 +52,14 @@ const defaultNetwork = Effect.gen(function* () {
   // first AZs (suffix a/b) only.
   const picked = (subnets.Subnets ?? [])
     .filter((s) => /[ab]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .slice(0, 2);
-  const subnetIds = picked
-    .map((s) => s.SubnetId)
-    .filter((id): id is string => id !== undefined);
+  const subnetIds = picked.map((s) => s.SubnetId).filter((id): id is string => id !== undefined);
   const availabilityZones = picked
     .map((s) => s.AvailabilityZone)
     .filter((az): az is string => az !== undefined);
   if (subnetIds.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC is missing default-for-az subnets in AZs a/b"),
-    );
+    return yield* Effect.die(new Error("default VPC is missing default-for-az subnets in AZs a/b"));
   }
   return { subnetIds, availabilityZones };
 });
@@ -72,26 +68,13 @@ const defaultNetwork = Effect.gen(function* () {
 // fully gone (absent / DELETED).
 const assertClusterDeleting = (clusterId: string) =>
   Effect.gen(function* () {
-    const response = yield* cloudhsm.describeClusters({
-      Filters: { clusterIds: [clusterId] },
-    });
+    const response = yield* cloudhsm.describeClusters({ Filters: { clusterIds: [clusterId] } });
     const state = response.Clusters?.[0]?.State ?? "gone";
-    if (
-      state !== "gone" &&
-      state !== "DELETED" &&
-      state !== "DELETE_IN_PROGRESS"
-    ) {
-      return yield* Effect.fail(
-        new Error(`cluster '${clusterId}' still exists (state: ${state})`),
-      );
+    if (state !== "gone" && state !== "DELETED" && state !== "DELETE_IN_PROGRESS") {
+      return yield* Effect.fail(new Error(`cluster '${clusterId}' still exists (state: ${state})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A CloudHSM cluster provisions in a few minutes but its HSM takes ~10-20
@@ -121,9 +104,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDHSM)(
       );
 
       expect(cluster.clusterId).toMatch(/^cluster-/);
-      expect(["UNINITIALIZED", "INITIALIZED", "ACTIVE", "DEGRADED"]).toContain(
-        cluster.state,
-      );
+      expect(["UNINITIALIZED", "INITIALIZED", "ACTIVE", "DEGRADED"]).toContain(cluster.state);
       expect(cluster.hsmType).toBe("hsm2m.medium");
       expect(cluster.vpcId).toBeDefined();
       expect(cluster.securityGroup).toBeDefined();
@@ -141,9 +122,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDHSM)(
       expect(observed?.ClusterId).toBe(cluster.clusterId);
       expect(observed?.HsmType).toBe("hsm2m.medium");
       expect(
-        observed?.TagList?.some(
-          (tag) => tag.Key === "fixture" && tag.Value === "cloudhsm-cluster",
-        ),
+        observed?.TagList?.some((tag) => tag.Key === "fixture" && tag.Value === "cloudhsm-cluster"),
       ).toBe(true);
       expect(observed?.Hsms?.some((h) => h.HsmId === hsm.hsmId)).toBe(true);
 
@@ -153,5 +132,8 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDHSM)(
       yield* assertClusterDeleting(cluster.clusterId);
     }),
   // HSM create (~10-20 min) + HSM delete wait + cluster delete, one test.
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:aws", "provider:aws:cloudhsmv2", "provider:aws:ec2", "live"],
+    timeout: 2_400_000,
+  },
 );

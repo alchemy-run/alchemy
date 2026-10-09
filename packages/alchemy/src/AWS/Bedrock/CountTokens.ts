@@ -7,10 +7,7 @@ import * as Binding from "../../Binding.ts";
  * optional: it defaults to the first bound model id and may be overridden
  * per call with any of the bound model ids.
  */
-export interface CountTokensRequest extends Omit<
-  bedrock.CountTokensRequest,
-  "modelId"
-> {
+export interface CountTokensRequest extends Omit<bedrock.CountTokensRequest, "modelId"> {
   /**
    * The model whose tokenizer counts the input. Must be one of the model
    * ids the binding was created with (IAM is scoped to exactly those).
@@ -80,6 +77,4 @@ export interface CountTokens extends Binding.Service<
     ) => Effect.Effect<bedrock.CountTokensResponse, bedrock.CountTokensError>
   >
 > {}
-export const CountTokens = Binding.Service<CountTokens>(
-  "AWS.Bedrock.CountTokens",
-);
+export const CountTokens = Binding.Service<CountTokens>("AWS.Bedrock.CountTokens");

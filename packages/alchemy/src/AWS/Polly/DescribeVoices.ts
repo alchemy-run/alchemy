@@ -32,6 +32,4 @@ export interface DescribeVoices extends Binding.Service<
     ) => Effect.Effect<polly.DescribeVoicesOutput, polly.DescribeVoicesError>
   >
 > {}
-export const DescribeVoices = Binding.Service<DescribeVoices>(
-  "AWS.Polly.DescribeVoices",
-);
+export const DescribeVoices = Binding.Service<DescribeVoices>("AWS.Polly.DescribeVoices");

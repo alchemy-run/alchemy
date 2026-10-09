@@ -51,10 +51,7 @@ export interface ForwardableEmailMessage {
    * account. Fails with `EmailError` if Cloudflare rejects the forward
    * (e.g. unverified destination).
    */
-  forward(
-    rcptTo: string,
-    headers?: cf.Headers,
-  ): Effect.Effect<void, EmailError>;
+  forward(rcptTo: string, headers?: cf.Headers): Effect.Effect<void, EmailError>;
   /**
    * Reply to the sender with a new outbound message. Fails with
    * `EmailError` if Cloudflare rejects the reply.
@@ -105,8 +102,7 @@ const wrap = (raw: cf.ForwardableEmailMessage): ForwardableEmailMessage => ({
  * so it maps to `Email.CatchAll` rather than `Email.Rule`.
  */
 const isCatchAll = (matchers: Matcher[] | undefined): boolean =>
-  matchers === undefined ||
-  (matchers.length === 1 && matchers[0]?.type === "all");
+  matchers === undefined || (matchers.length === 1 && matchers[0]?.type === "all");
 
 const formatCause = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -248,10 +244,9 @@ export type EmailEventSourceService = <E = never, Req = never>(
   process: (message: ForwardableEmailMessage) => Effect.Effect<void, E, Req>,
 ) => Effect.Effect<void, never, never>;
 
-export class EmailEventSource extends Context.Service<
-  EmailEventSource,
-  EmailEventSourceService
->()("Cloudflare.Workers.EmailEventSource") {}
+export class EmailEventSource extends Context.Service<EmailEventSource, EmailEventSourceService>()(
+  "Cloudflare.Workers.EmailEventSource",
+) {}
 
 export const EmailEventSourceLive = Layer.effect(
   EmailEventSource,
@@ -259,9 +254,7 @@ export const EmailEventSourceLive = Layer.effect(
     const host = yield* Worker;
     return Effect.fn(function* <E, Req>(
       props: EmailSubscribeProps,
-      process: (
-        message: ForwardableEmailMessage,
-      ) => Effect.Effect<void, E, Req>,
+      process: (message: ForwardableEmailMessage) => Effect.Effect<void, E, Req>,
     ) {
       // Deploy-time: provision the Email.Routing toggle plus the routing
       // resource that hands matched mail to this Worker. Skipped once

@@ -95,9 +95,9 @@ export const consumeReplicationEvents = <StreamReq = never, Req = never>(
     props.id ?? "DmsReplicationEvents",
     {
       source: ["aws.dms"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as DmsReplicationEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as DmsReplicationEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
     },
     { description: props.description, state: props.state },
     process,

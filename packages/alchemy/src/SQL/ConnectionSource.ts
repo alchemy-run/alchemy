@@ -33,9 +33,7 @@ export type StaticConnectionSource = Exclude<
   Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>
 >;
 
-const toRedacted = (
-  value: string | Redacted.Redacted<string>,
-): Redacted.Redacted<string> =>
+const toRedacted = (value: string | Redacted.Redacted<string>): Redacted.Redacted<string> =>
   typeof value === "string" ? Redacted.make(value) : value;
 
 /**
@@ -52,12 +50,10 @@ export const resolveConnectionSource = (
   Effect.gen(function* () {
     if (Output.isOutput(source)) {
       const accessor = yield* source;
-      return Effect.map(
-        accessor as Effect.Effect<string | Redacted.Redacted<string>>,
-        toRedacted,
-      );
+      return Effect.map(accessor as Effect.Effect<string | Redacted.Redacted<string>>, toRedacted);
     }
     if (Effect.isEffect(source)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RuntimeContext is satisfied by the host at runtime
       return source as Effect.Effect<Redacted.Redacted<string>>;
     }
     return Effect.succeed(toRedacted(source));
@@ -88,9 +84,7 @@ export const staticConnectionSource = (
  * persisted identity inputs (e.g. a migration Action's diff key) where the
  * connection string itself must never be stored.
  */
-export const connectionSourceDigest = (
-  source: StaticConnectionSource,
-): Output.Output<string> => {
+export const connectionSourceDigest = (source: StaticConnectionSource): Output.Output<string> => {
   const digest = (value: string | Redacted.Redacted<string>) =>
     sha256(typeof value === "string" ? value : Redacted.value(value));
   return Output.isOutput(source)

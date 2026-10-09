@@ -45,10 +45,7 @@ export interface InvokeAgentRuntime extends Binding.Service<
   ) => Effect.Effect<
     (
       request: InvokeAgentRuntimeRequest,
-    ) => Effect.Effect<
-      agentcore.InvokeAgentRuntimeResponse,
-      agentcore.InvokeAgentRuntimeError
-    >
+    ) => Effect.Effect<agentcore.InvokeAgentRuntimeResponse, agentcore.InvokeAgentRuntimeError>
   >
 > {}
 export const InvokeAgentRuntime = Binding.Service<InvokeAgentRuntime>(

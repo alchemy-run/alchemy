@@ -31,7 +31,7 @@ export const toWireTags = (tags: Record<string, string>): b2bi.Tag[] =>
 export const readB2biTags = Effect.fn(function* (arn: string) {
   const response = yield* b2bi
     .listTagsForResource({ ResourceARN: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 
@@ -39,10 +39,7 @@ export const readB2biTags = Effect.fn(function* (arn: string) {
  * Sync tags on a B2BI resource: diff the OBSERVED cloud tags against the
  * desired set and apply only the delta.
  */
-export const syncB2biTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncB2biTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readB2biTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {

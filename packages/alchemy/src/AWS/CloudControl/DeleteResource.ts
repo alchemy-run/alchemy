@@ -38,13 +38,8 @@ export interface DeleteResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.DeleteResourceInput,
-    ) => Effect.Effect<
-      cloudcontrol.DeleteResourceOutput,
-      cloudcontrol.DeleteResourceError
-    >
+    ) => Effect.Effect<cloudcontrol.DeleteResourceOutput, cloudcontrol.DeleteResourceError>
   >
 > {}
 
-export const DeleteResource = Binding.Service<DeleteResource>(
-  "AWS.CloudControl.DeleteResource",
-);
+export const DeleteResource = Binding.Service<DeleteResource>("AWS.CloudControl.DeleteResource");

@@ -39,11 +39,9 @@ export interface CreateDataRepositoryTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<fsx.CreateDataRepositoryTaskRequest, "FileSystemId">,
-    ) => Effect.Effect<
-      fsx.CreateDataRepositoryTaskResponse,
-      fsx.CreateDataRepositoryTaskError
-    >
+    ) => Effect.Effect<fsx.CreateDataRepositoryTaskResponse, fsx.CreateDataRepositoryTaskError>
   >
 > {}
-export const CreateDataRepositoryTask =
-  Binding.Service<CreateDataRepositoryTask>("AWS.FSx.CreateDataRepositoryTask");
+export const CreateDataRepositoryTask = Binding.Service<CreateDataRepositoryTask>(
+  "AWS.FSx.CreateDataRepositoryTask",
+);

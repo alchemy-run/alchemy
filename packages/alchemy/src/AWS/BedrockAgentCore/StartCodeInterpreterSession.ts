@@ -64,7 +64,6 @@ export interface StartCodeInterpreterSession extends Binding.Service<
     >
   >
 > {}
-export const StartCodeInterpreterSession =
-  Binding.Service<StartCodeInterpreterSession>(
-    "AWS.BedrockAgentCore.StartCodeInterpreterSession",
-  );
+export const StartCodeInterpreterSession = Binding.Service<StartCodeInterpreterSession>(
+  "AWS.BedrockAgentCore.StartCodeInterpreterSession",
+);

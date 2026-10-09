@@ -37,10 +37,7 @@ export interface PutResourcePolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.PutResourcePolicyRequest,
-    ) => Effect.Effect<
-      cloudhsm.PutResourcePolicyResponse,
-      cloudhsm.PutResourcePolicyError
-    >
+    ) => Effect.Effect<cloudhsm.PutResourcePolicyResponse, cloudhsm.PutResourcePolicyError>
   >
 > {}
 export const PutResourcePolicy = Binding.Service<PutResourcePolicy>(

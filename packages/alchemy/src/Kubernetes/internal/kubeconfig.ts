@@ -11,23 +11,19 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as YAML from "yaml";
 
 /** A kubeconfig file could not be read, parsed, or resolved. */
-export class KubeConfigError extends Data.TaggedError(
-  "Kubernetes.KubeConfigError",
-)<{
+export class KubeConfigError extends Data.TaggedError("Kubernetes.KubeConfigError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
 /** An exec credential plugin invocation failed or answered malformed. */
-export class ExecCredentialError extends Data.TaggedError(
-  "Kubernetes.ExecCredentialError",
-)<{
+export class ExecCredentialError extends Data.TaggedError("Kubernetes.ExecCredentialError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -76,33 +72,24 @@ export interface ResolvedKubeContext {
   user: KubeConfigUser;
 }
 
-const decodeBase64 = (value: string) =>
-  Buffer.from(value, "base64").toString("utf8");
+const decodeBase64 = (value: string) => Buffer.from(value, "base64").toString("utf8");
 
 const expandHome = Effect.fn(function* (input: string) {
   if (!input.startsWith("~")) return input;
-  const home = yield* Effect.sync(
-    () => process.env.HOME ?? process.env.USERPROFILE,
-  );
+  const home = yield* Effect.sync(() => process.env.HOME ?? process.env.USERPROFILE);
   if (!home) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Cannot expand '${input}': no HOME environment variable`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Cannot expand '${input}': no HOME environment variable`,
+    });
   }
   const path = yield* Path.Path;
   return path.join(home, input.slice(1));
 });
 
 /** Resolve the kubeconfig file path: explicit → `$KUBECONFIG` → default. */
-export const resolveKubeConfigPath = Effect.fn(function* (
-  explicit: string | undefined,
-) {
+export const resolveKubeConfigPath = Effect.fn(function* (explicit: string | undefined) {
   if (explicit) return yield* expandHome(explicit);
-  const fromEnv = yield* Config.String("KUBECONFIG").pipe(
-    Effect.orElseSucceed(() => undefined),
-  );
+  const fromEnv = yield* Config.String("KUBECONFIG").pipe(Effect.orElseSucceed(() => undefined));
   // $KUBECONFIG may be a path list; use the first entry like kubectl's
   // effective-config merge order.
   const candidate = fromEnv?.split(":")[0];
@@ -139,37 +126,26 @@ export const resolveKubeContext = Effect.fn(function* (options: {
 
   const contextName = options.context ?? parsed["current-context"];
   if (!contextName) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Kubeconfig '${configPath}' has no current-context — pass an explicit context`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Kubeconfig '${configPath}' has no current-context — pass an explicit context`,
+    });
   }
 
-  const context = parsed.contexts?.find(
-    (entry) => entry.name === contextName,
-  )?.context;
+  const context = parsed.contexts?.find((entry) => entry.name === contextName)?.context;
   if (!context?.cluster) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Context '${contextName}' not found in kubeconfig '${configPath}'`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Context '${contextName}' not found in kubeconfig '${configPath}'`,
+    });
   }
 
-  const cluster = parsed.clusters?.find(
-    (entry) => entry.name === context.cluster,
-  )?.cluster;
+  const cluster = parsed.clusters?.find((entry) => entry.name === context.cluster)?.cluster;
   if (!cluster?.server) {
-    return yield* Effect.fail(
-      new KubeConfigError({
-        message: `Cluster '${context.cluster}' (context '${contextName}') has no server in kubeconfig '${configPath}'`,
-      }),
-    );
+    return yield* new KubeConfigError({
+      message: `Cluster '${context.cluster}' (context '${contextName}') has no server in kubeconfig '${configPath}'`,
+    });
   }
 
-  const user =
-    parsed.users?.find((entry) => entry.name === context.user)?.user ?? {};
+  const user = parsed.users?.find((entry) => entry.name === context.user)?.user ?? {};
 
   let certificateAuthorityData = cluster["certificate-authority-data"];
   if (!certificateAuthorityData && cluster["certificate-authority"]) {
@@ -210,10 +186,7 @@ export interface MintedCredentials {
 // Exec plugin invocations are cached per (command, args) until their
 // expirationTimestamp (or briefly, when the plugin doesn't declare one).
 // Plain cached values, no finalizers — module scope is safe.
-const execCache = new Map<
-  string,
-  { credentials: MintedCredentials; expiresAt: number }
->();
+const execCache = new Map<string, { credentials: MintedCredentials; expiresAt: number }>();
 
 /**
  * Run a kubeconfig-style exec credential plugin and parse its
@@ -224,11 +197,7 @@ export const runExecCredential = Effect.fn(function* (options: {
   args?: string[] | undefined;
   env?: Record<string, string> | undefined;
 }) {
-  const cacheKey = JSON.stringify([
-    options.command,
-    options.args ?? [],
-    options.env ?? {},
-  ]);
+  const cacheKey = JSON.stringify([options.command, options.args ?? [], options.env ?? {}]);
   const cached = execCache.get(cacheKey);
   const now = yield* Effect.sync(() => Date.now());
   if (cached && cached.expiresAt > now) {
@@ -268,18 +237,15 @@ export const runExecCredential = Effect.fn(function* (options: {
   );
 
   if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new ExecCredentialError({
-        message:
-          `Exec credential plugin '${options.command} ${(options.args ?? []).join(" ")}' ` +
-          `exited with code ${String(result.exitCode)}: ${result.stderr.trim()}`,
-      }),
-    );
+    return yield* new ExecCredentialError({
+      message:
+        `Exec credential plugin '${options.command} ${(options.args ?? []).join(" ")}' ` +
+        `exited with code ${String(result.exitCode)}: ${result.stderr.trim()}`,
+    });
   }
 
   const status = yield* Effect.try({
-    try: () =>
-      (JSON.parse(result.stdout) as { status?: ExecCredentialStatus }).status,
+    try: () => (JSON.parse(result.stdout) as { status?: ExecCredentialStatus }).status,
     catch: (cause) =>
       new ExecCredentialError({
         message: `Exec credential plugin '${options.command}' answered malformed JSON`,
@@ -287,15 +253,10 @@ export const runExecCredential = Effect.fn(function* (options: {
       }),
   });
 
-  if (
-    !status ||
-    (!status.token && !(status.clientCertificateData && status.clientKeyData))
-  ) {
-    return yield* Effect.fail(
-      new ExecCredentialError({
-        message: `Exec credential plugin '${options.command}' returned no token or client certificate`,
-      }),
-    );
+  if (!status || (!status.token && !(status.clientCertificateData && status.clientKeyData))) {
+    return yield* new ExecCredentialError({
+      message: `Exec credential plugin '${options.command}' returned no token or client certificate`,
+    });
   }
 
   const credentials: MintedCredentials = {
@@ -331,8 +292,7 @@ export const mintUserCredentials = Effect.fn(function* (user: KubeConfigUser) {
             user.exec.env
               .filter(
                 (entry): entry is { name: string; value: string } =>
-                  typeof entry.name === "string" &&
-                  typeof entry.value === "string",
+                  typeof entry.name === "string" && typeof entry.value === "string",
               )
               .map((entry) => [entry.name, entry.value]),
           )
@@ -396,11 +356,9 @@ export const mintUserCredentials = Effect.fn(function* (user: KubeConfigUser) {
     } satisfies MintedCredentials;
   }
 
-  return yield* Effect.fail(
-    new KubeConfigError({
-      message:
-        "Kubeconfig user has no supported auth stanza (token, tokenFile, " +
-        "client certificate, or exec credential plugin)",
-    }),
-  );
+  return yield* new KubeConfigError({
+    message:
+      "Kubeconfig user has no supported auth stanza (token, tokenFile, " +
+      "client certificate, or exec credential plugin)",
+  });
 });

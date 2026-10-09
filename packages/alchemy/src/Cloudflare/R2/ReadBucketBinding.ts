@@ -2,8 +2,8 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBucketBinding, makeHelpers } from "./BucketBinding.ts";
-import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 import type { GetOptions, ListOptions, Objects } from "./BucketTypes.ts";
+import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 
 /**
  * Implementation of the {@link ReadBucket} binding that uses a Worker binding.
@@ -35,9 +35,7 @@ export const makeRead = ({
         Effect.map((object) => (object ? wrapR2Object(object) : object)),
       ),
     get: ((key: string, options?: GetOptions) =>
-      use((raw) => raw.get(key, options)).pipe(
-        Effect.map(wrapR2ObjectOrBody),
-      )) as any,
+      use((raw) => raw.get(key, options)).pipe(Effect.map(wrapR2ObjectOrBody))) as any,
     list: (options?: ListOptions) =>
       use((raw) => raw.list(options)).pipe(Effect.map(wrapR2Objects)),
   };

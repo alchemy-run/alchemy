@@ -20,9 +20,7 @@ export const DeleteApiKeyHttp = Layer.effect(
         verb: "DELETE",
         paths: (region) => [`arn:aws:apigateway:${region}::/apikeys/*`],
       });
-      return Effect.fn("AWS.ApiGateway.DeleteApiKey")(function* (
-        request: DeleteApiKeyRequest,
-      ) {
+      return Effect.fn("AWS.ApiGateway.DeleteApiKey")(function* (request: DeleteApiKeyRequest) {
         return yield* deleteApiKey(request);
       });
     });

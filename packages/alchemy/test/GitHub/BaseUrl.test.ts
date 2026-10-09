@@ -1,20 +1,19 @@
+import { describe, expect, test } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { readEnvCredentials } from "@/GitHub/AuthProvider";
-import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import {
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@/GitHub/BaseUrl";
+import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import { gitHubBaseUrlChanged, octokitFor } from "@/GitHub/Octokit";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { describe, expect, test } from "alchemy-test";
 
-const normalize = (input: string) =>
-  Effect.runSync(normalizeGitHubBaseUrl(input));
+const normalize = (input: string) => Effect.runSync(normalizeGitHubBaseUrl(input));
 
-describe("normalizeGitHubBaseUrl", () => {
+describe("normalizeGitHubBaseUrl", { tags: ["unit", "provider:github", "local"] }, () => {
   test("github.com hosts normalize to undefined (Octokit default)", () => {
     expect(normalize("github.com")).toBeUndefined();
     expect(normalize("https://github.com")).toBeUndefined();
@@ -23,15 +22,9 @@ describe("normalizeGitHubBaseUrl", () => {
   });
 
   test("GitHub Enterprise Server hosts get /api/v3 appended", () => {
-    expect(normalize("github.example.com")).toBe(
-      "https://github.example.com/api/v3",
-    );
-    expect(normalize("https://github.example.com")).toBe(
-      "https://github.example.com/api/v3",
-    );
-    expect(normalize("https://github.example.com/")).toBe(
-      "https://github.example.com/api/v3",
-    );
+    expect(normalize("github.example.com")).toBe("https://github.example.com/api/v3");
+    expect(normalize("https://github.example.com")).toBe("https://github.example.com/api/v3");
+    expect(normalize("https://github.example.com/")).toBe("https://github.example.com/api/v3");
   });
 
   test("an explicit API path is honored as-is", () => {
@@ -52,24 +45,18 @@ describe("normalizeGitHubBaseUrl", () => {
   test("data-residency ghe.com hosts get the api. prefix", () => {
     expect(normalize("acme.ghe.com")).toBe("https://api.acme.ghe.com");
     expect(normalize("https://acme.ghe.com")).toBe("https://api.acme.ghe.com");
-    expect(normalize("https://api.acme.ghe.com")).toBe(
-      "https://api.acme.ghe.com",
-    );
+    expect(normalize("https://api.acme.ghe.com")).toBe("https://api.acme.ghe.com");
   });
 
   test("invalid input fails with AuthError", () => {
-    const result = Effect.runSync(
-      Effect.result(normalizeGitHubBaseUrl("https://")),
-    );
+    const result = Effect.runSync(Effect.result(normalizeGitHubBaseUrl("https://")));
     expect(Result.isFailure(result)).toBe(true);
   });
 });
 
-describe("githubHostname", () => {
+describe("githubHostname", { tags: ["unit", "provider:github", "local"] }, () => {
   test("GHES base URL yields the plain host", () => {
-    expect(githubHostname("https://github.example.com/api/v3")).toBe(
-      "github.example.com",
-    );
+    expect(githubHostname("https://github.example.com/api/v3")).toBe("github.example.com");
   });
 
   test("data-residency base URL drops the api. prefix", () => {
@@ -77,16 +64,13 @@ describe("githubHostname", () => {
   });
 });
 
-describe("resolveGitHubBaseUrlFromEnv", () => {
+describe("resolveGitHubBaseUrlFromEnv", { tags: ["unit", "provider:github", "local"] }, () => {
   // The default ConfigProvider snapshots process.env, so tests inject their
   // environment via a ConfigProvider layer instead of mutating process.env.
   const resolveWith = (env: Record<string, string>) =>
     Effect.runSync(
       resolveGitHubBaseUrlFromEnv.pipe(
-        Effect.provideService(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv({ env }),
-        ),
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env })),
       ),
     );
 
@@ -100,9 +84,7 @@ describe("resolveGitHubBaseUrlFromEnv", () => {
   });
 
   test("GITHUB_API_URL pointing at github.com resolves to undefined", () => {
-    expect(
-      resolveWith({ GITHUB_API_URL: "https://api.github.com" }),
-    ).toBeUndefined();
+    expect(resolveWith({ GITHUB_API_URL: "https://api.github.com" })).toBeUndefined();
   });
 
   test("GH_HOST resolves as a bare hostname", () => {
@@ -116,14 +98,11 @@ describe("resolveGitHubBaseUrlFromEnv", () => {
   });
 });
 
-describe("readEnvCredentials", () => {
+describe("readEnvCredentials", { tags: ["unit", "provider:github", "local"] }, () => {
   const readWith = (env: Record<string, string>, configBaseUrl?: string) =>
     Effect.runSync(
       readEnvCredentials(configBaseUrl).pipe(
-        Effect.provideService(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv({ env }),
-        ),
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env })),
       ),
     );
 
@@ -148,10 +127,7 @@ describe("readEnvCredentials", () => {
 
   test("an explicit config baseUrl wins over the environment", () => {
     const creds = readWith(
-      {
-        GITHUB_BASE_URL: "https://other.example.com",
-        GITHUB_ACCESS_TOKEN: "token",
-      },
+      { GITHUB_BASE_URL: "https://other.example.com", GITHUB_ACCESS_TOKEN: "token" },
       "https://github.example.com/api/v3",
     );
     expect(creds.baseUrl).toBe("https://github.example.com/api/v3");
@@ -162,10 +138,7 @@ describe("readEnvCredentials", () => {
     const result = Effect.runSync(
       Effect.result(
         readEnvCredentials().pipe(
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromEnv({ env: {} }),
-          ),
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
         ),
       ),
     );
@@ -173,15 +146,11 @@ describe("readEnvCredentials", () => {
   });
 });
 
-describe("gitHubBaseUrlChanged", () => {
+describe("gitHubBaseUrlChanged", { tags: ["unit", "provider:github", "local"] }, () => {
   // The comparison resolves each side through the full fallback chain, so it
   // needs the ambient credentials host — `undefined` in props means "use the
   // credentials' host", not "github.com".
-  const changed = (
-    a: string | undefined,
-    b: string | undefined,
-    credsBaseUrl?: string,
-  ) =>
+  const changed = (a: string | undefined, b: string | undefined, credsBaseUrl?: string) =>
     Effect.runSync(
       gitHubBaseUrlChanged({ baseUrl: a }, { baseUrl: b }).pipe(
         Effect.provide(
@@ -194,9 +163,7 @@ describe("gitHubBaseUrlChanged", () => {
     );
 
   test("cosmetic rewrites of the same host do not count as a change", () => {
-    expect(
-      changed("github.example.com", "https://github.example.com/api/v3"),
-    ).toBe(false);
+    expect(changed("github.example.com", "https://github.example.com/api/v3")).toBe(false);
     expect(changed(undefined, "github.com")).toBe(false);
     expect(changed("acme.ghe.com", "https://api.acme.ghe.com")).toBe(false);
   });
@@ -210,19 +177,11 @@ describe("gitHubBaseUrlChanged", () => {
   test("making the ambient enterprise host explicit is not a change", () => {
     // providers({ baseUrl: "github.example.com" }): prop undefined and prop
     // "github.example.com" resolve to the same effective host.
-    expect(changed(undefined, "github.example.com", "github.example.com")).toBe(
+    expect(changed(undefined, "github.example.com", "github.example.com")).toBe(false);
+    expect(changed("github.example.com", undefined, "github.example.com")).toBe(false);
+    expect(changed(undefined, "https://github.example.com/api/v3", "github.example.com")).toBe(
       false,
     );
-    expect(changed("github.example.com", undefined, "github.example.com")).toBe(
-      false,
-    );
-    expect(
-      changed(
-        undefined,
-        "https://github.example.com/api/v3",
-        "github.example.com",
-      ),
-    ).toBe(false);
   });
 
   test("explicit github.com under an ambient enterprise host IS a change", () => {
@@ -238,11 +197,8 @@ describe("gitHubBaseUrlChanged", () => {
   });
 });
 
-describe("octokitFor", () => {
-  const octokitOf = (
-    credsBaseUrl: string | undefined,
-    resourceBaseUrl: string | undefined,
-  ) =>
+describe("octokitFor", { tags: ["unit", "provider:github", "local"] }, () => {
+  const octokitOf = (credsBaseUrl: string | undefined, resourceBaseUrl: string | undefined) =>
     Effect.runSync(
       octokitFor(resourceBaseUrl).pipe(
         Effect.provide(
@@ -256,27 +212,21 @@ describe("octokitFor", () => {
 
   test("falls back to the credentials' host when no override is given", () => {
     const octokit = octokitOf("github.example.com", undefined);
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://github.example.com/api/v3",
-    );
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://github.example.com/api/v3");
   });
 
   test("a per-resource baseUrl overrides the credentials' host", () => {
     const octokit = octokitOf("github.example.com", "other.example.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://other.example.com/api/v3",
-    );
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://other.example.com/api/v3");
   });
 
   test("an explicit github.com override wins over an enterprise credential host", () => {
     const octokit = octokitOf("github.example.com", "github.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://api.github.com",
-    );
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://api.github.com");
   });
 });
 
-describe("fromToken", () => {
+describe("fromToken", { tags: ["unit", "provider:github", "local"] }, () => {
   const octokitOf = (options?: { baseUrl?: string }) =>
     Effect.runSync(
       Effect.gen(function* () {
@@ -287,15 +237,11 @@ describe("fromToken", () => {
 
   test("defaults to api.github.com", () => {
     const octokit = octokitOf();
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://api.github.com",
-    );
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://api.github.com");
   });
 
   test("passes the normalized enterprise base URL to Octokit", () => {
     const octokit = octokitOf({ baseUrl: "github.example.com" });
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://github.example.com/api/v3",
-    );
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://github.example.com/api/v3");
   });
 });

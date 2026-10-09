@@ -42,12 +42,7 @@ export const Parameter: {
         (template: TemplateStringsArray, ...refs: any[]) =>
           makeParameter(name, schema, template, refs)) as any;
 
-const makeParameter = (
-  name: string,
-  schema: S.Top,
-  template: TemplateStringsArray,
-  refs: any[],
-) =>
+const makeParameter = (name: string, schema: S.Top, template: TemplateStringsArray, refs: any[]) =>
   Object.assign(function () {}, {
     "~alchemy/Kind": "Param",
     "~alchemy/Name": name,

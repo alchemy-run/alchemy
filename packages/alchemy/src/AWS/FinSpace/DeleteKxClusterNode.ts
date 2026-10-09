@@ -25,10 +25,7 @@ export interface DeleteKxClusterNode extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.DeleteKxClusterNodeRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.DeleteKxClusterNodeResponse,
-      SVC.DeleteKxClusterNodeError
-    >
+    ) => Effect.Effect<SVC.DeleteKxClusterNodeResponse, SVC.DeleteKxClusterNodeError>
   >
 > {}
 export const DeleteKxClusterNode = Binding.Service<DeleteKxClusterNode>(

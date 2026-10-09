@@ -1,7 +1,6 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -86,9 +85,7 @@ export type MetadataIndex = Resource<
  * @product Vectorize
  * @category AI
  */
-export const MetadataIndex = Resource<MetadataIndex>(
-  "Cloudflare.VectorizeMetadataIndex",
-);
+export const MetadataIndex = Resource<MetadataIndex>("Cloudflare.VectorizeMetadataIndex");
 
 export const MetadataIndexProvider = () =>
   Provider.succeed(MetadataIndex, {
@@ -169,12 +166,7 @@ export const MetadataIndexProvider = () =>
           indexName: output.indexName,
           propertyName: output.propertyName,
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "Gone", "MetadataIndexNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "Gone", "MetadataIndexNotFound"], () => Effect.void));
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -194,9 +186,7 @@ export const MetadataIndexProvider = () =>
         // A parent index deleted by a concurrent operation mid-enumeration
         // can fail the account-scoped pagination with "index deleted" (typed
         // as Gone) — skip the whole enumeration rather than throw.
-        Effect.catchTag(["NotFound", "Gone"], () =>
-          Effect.succeed<string[]>([]),
-        ),
+        Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed<string[]>([])),
       );
 
       const rows = yield* Effect.forEach(
@@ -204,22 +194,20 @@ export const MetadataIndexProvider = () =>
         (indexName) =>
           vectorize.listIndexMetadataIndexes({ accountId, indexName }).pipe(
             Effect.map((res) =>
-              (res.metadataIndexes ?? []).flatMap(
-                (m): MetadataIndexAttributes[] => {
-                  if (m.propertyName == null || m.indexType == null) {
-                    return [];
-                  }
-                  return [
-                    {
-                      propertyName: m.propertyName,
-                      indexType: m.indexType.toLowerCase() as MetadataIndexType,
-                      indexName,
-                      accountId,
-                      mutationId: undefined,
-                    },
-                  ];
-                },
-              ),
+              (res.metadataIndexes ?? []).flatMap((m): MetadataIndexAttributes[] => {
+                if (m.propertyName == null || m.indexType == null) {
+                  return [];
+                }
+                return [
+                  {
+                    propertyName: m.propertyName,
+                    indexType: m.indexType.toLowerCase() as MetadataIndexType,
+                    indexName,
+                    accountId,
+                    mutationId: undefined,
+                  },
+                ];
+              }),
             ),
             // Parent index removed between enumeration and read; skip it.
             Effect.catchTag(["NotFound", "Gone"], () =>
@@ -241,9 +229,7 @@ const findExisting = (acct: string, indexName: string, propertyName: string) =>
     })
     .pipe(
       Effect.map((res) => {
-        const index = res.metadataIndexes?.find(
-          (m) => m.propertyName === propertyName,
-        );
+        const index = res.metadataIndexes?.find((m) => m.propertyName === propertyName);
         return index
           ? {
               propertyName: index.propertyName,

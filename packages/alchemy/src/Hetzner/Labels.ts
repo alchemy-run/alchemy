@@ -46,22 +46,15 @@ export const sanitizeLabelValue = (value: string): string => {
   return cleaned.length > 0 ? cleaned : "x";
 };
 
-export const toLabels = (
-  tags: Record<string, string> | null | undefined,
-): Record<string, string> =>
+export const toLabels = (tags: Record<string, string> | null | undefined): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).map(([key, value]) => [
-      toLabelKey(key),
-      sanitizeLabelValue(value),
-    ]),
+    Object.entries(tags ?? {}).map(([key, value]) => [toLabelKey(key), sanitizeLabelValue(value)]),
   );
 
 export const fromLabels = (
   labels: Record<string, string> | null | undefined,
 ): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(labels ?? {}).map(([key, value]) => [toTagKey(key), value]),
-  );
+  Object.fromEntries(Object.entries(labels ?? {}).map(([key, value]) => [toTagKey(key), value]));
 
 export const createInternalLabels = Effect.fn(function* (id: string) {
   return toLabels(yield* createInternalTags(id));
@@ -71,15 +64,10 @@ export const stripInternalLabels = (
   labels: Record<string, string> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(labels ?? {}).filter(
-      ([key]) => !key.startsWith(ALCHEMY_LABEL_PREFIX),
-    ),
+    Object.entries(labels ?? {}).filter(([key]) => !key.startsWith(ALCHEMY_LABEL_PREFIX)),
   );
 
-export const hasAlchemyLabels = Effect.fn(function* (
-  id: string,
-  labels: Tags | undefined,
-) {
+export const hasAlchemyLabels = Effect.fn(function* (id: string, labels: Tags | undefined) {
   const expected = yield* createInternalLabels(id);
   return hasTags(expected, labels);
 });

@@ -36,7 +36,6 @@ export interface GetServiceLevelObjective extends Binding.Service<
   >
 > {}
 
-export const GetServiceLevelObjective =
-  Binding.Service<GetServiceLevelObjective>(
-    "AWS.ApplicationSignals.GetServiceLevelObjective",
-  );
+export const GetServiceLevelObjective = Binding.Service<GetServiceLevelObjective>(
+  "AWS.ApplicationSignals.GetServiceLevelObjective",
+);

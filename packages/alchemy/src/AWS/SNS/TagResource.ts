@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface TagResourceRequest extends Omit<
-  sns.TagResourceRequest,
-  "ResourceArn"
-> {}
+export interface TagResourceRequest extends Omit<sns.TagResourceRequest, "ResourceArn"> {}
 
 /**
  * Runtime binding for `sns:TagResource`.
@@ -36,9 +33,7 @@ export interface TagResource extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (
-      request: TagResourceRequest,
-    ) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
+    (request: TagResourceRequest) => Effect.Effect<sns.TagResourceResponse, sns.TagResourceError>
   >
 > {}
 

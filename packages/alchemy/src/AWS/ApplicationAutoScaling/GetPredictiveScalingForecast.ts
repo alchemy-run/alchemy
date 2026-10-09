@@ -58,7 +58,6 @@ export interface GetPredictiveScalingForecast extends Binding.Service<
   >
 > {}
 
-export const GetPredictiveScalingForecast =
-  Binding.Service<GetPredictiveScalingForecast>(
-    "AWS.ApplicationAutoScaling.GetPredictiveScalingForecast",
-  );
+export const GetPredictiveScalingForecast = Binding.Service<GetPredictiveScalingForecast>(
+  "AWS.ApplicationAutoScaling.GetPredictiveScalingForecast",
+);

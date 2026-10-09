@@ -1,8 +1,8 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import type { ProviderService } from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,11 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
  * back to the real cloud for them (see Provider.ts). Every other AWS dual
  * runs on floci and must say so.
  */
-const PROCESS_HOSTED = new Set([
-  "Command.Dev",
-  "AWS.Website.Server",
-  "Website.Server",
-]);
+const PROCESS_HOSTED = new Set(["Command.Dev", "AWS.Website.Server", "Website.Server"]);
 
 /**
  * Every floci-backed dual provider must declare the emulator as its
@@ -63,4 +59,5 @@ test.provider(
       expect(duals).toBeGreaterThan(100);
       expect(missing).toEqual([]);
     }),
+  { tags: ["provider:aws", "local"] },
 );

@@ -1,14 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
 import BindingEffectCaller from "./binding-effect-caller.ts";
 import BindingTargetWorker from "./binding-target-worker.ts";
 
-const asyncCallerMain = pathe.resolve(
-  import.meta.dirname,
-  "binding-async-caller.ts",
-);
+const asyncCallerMain = pathe.resolve(import.meta.dirname, "binding-async-caller.ts");
 
 /**
  * Stack with three workers:

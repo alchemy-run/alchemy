@@ -33,7 +33,6 @@ export interface ListSecurityControlDefinitions extends Binding.Service<
     >
   >
 > {}
-export const ListSecurityControlDefinitions =
-  Binding.Service<ListSecurityControlDefinitions>(
-    "AWS.SecurityHub.ListSecurityControlDefinitions",
-  );
+export const ListSecurityControlDefinitions = Binding.Service<ListSecurityControlDefinitions>(
+  "AWS.SecurityHub.ListSecurityControlDefinitions",
+);

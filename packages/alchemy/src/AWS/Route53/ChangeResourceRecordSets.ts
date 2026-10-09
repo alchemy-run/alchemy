@@ -58,7 +58,6 @@ export interface ChangeResourceRecordSets extends Binding.Service<
     >
   >
 > {}
-export const ChangeResourceRecordSets =
-  Binding.Service<ChangeResourceRecordSets>(
-    "AWS.Route53.ChangeResourceRecordSets",
-  );
+export const ChangeResourceRecordSets = Binding.Service<ChangeResourceRecordSets>(
+  "AWS.Route53.ChangeResourceRecordSets",
+);

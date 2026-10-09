@@ -28,6 +28,4 @@ export interface UpdateKxUser extends Binding.Service<
     ) => Effect.Effect<SVC.UpdateKxUserResponse, SVC.UpdateKxUserError>
   >
 > {}
-export const UpdateKxUser = Binding.Service<UpdateKxUser>(
-  "AWS.FinSpace.UpdateKxUser",
-);
+export const UpdateKxUser = Binding.Service<UpdateKxUser>("AWS.FinSpace.UpdateKxUser");

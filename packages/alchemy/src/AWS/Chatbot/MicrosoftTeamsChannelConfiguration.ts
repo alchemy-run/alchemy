@@ -9,7 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { fromChatbotTags, toChatbotTags } from "./internal.ts";
+import { fromChatbotTags, inChatbotRegion, toChatbotTags } from "./internal.ts";
 
 export interface MicrosoftTeamsChannelConfigurationProps {
   /**
@@ -154,10 +154,9 @@ export interface MicrosoftTeamsChannelConfiguration extends Resource<
  *
  * @resource
  */
-export const MicrosoftTeamsChannelConfiguration =
-  Resource<MicrosoftTeamsChannelConfiguration>(
-    "AWS.Chatbot.MicrosoftTeamsChannelConfiguration",
-  );
+export const MicrosoftTeamsChannelConfiguration = Resource<MicrosoftTeamsChannelConfiguration>(
+  "AWS.Chatbot.MicrosoftTeamsChannelConfiguration",
+);
 
 export const MicrosoftTeamsChannelConfigurationProvider = () =>
   Provider.effect(
@@ -165,15 +164,9 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
     Effect.gen(function* () {
       const createConfigurationName = Effect.fn(function* (
         id: string,
-        props: Pick<
-          MicrosoftTeamsChannelConfigurationProps,
-          "configurationName"
-        >,
+        props: Pick<MicrosoftTeamsChannelConfigurationProps, "configurationName">,
       ) {
-        return (
-          props.configurationName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.configurationName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const configurationArn = Effect.fn(function* (configurationName: string) {
@@ -183,19 +176,17 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
       });
 
       const observeConfiguration = (arn: string) =>
-        chatbot
-          .getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn })
-          .pipe(
-            Effect.map((r) => r.ChannelConfiguration),
-            // Typed via the distilled chatbot patch — the wire error is a
-            // ResourceNotFoundException outside the Smithy model's union.
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        chatbot.getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn }).pipe(
+          inChatbotRegion,
+          Effect.map((r) => r.ChannelConfiguration),
+          // Typed via the distilled chatbot patch — the wire error is a
+          // ResourceNotFoundException outside the Smithy model's union.
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
 
       const observedTags = (arn: string) =>
         chatbot.listTagsForResource({ ResourceARN: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => fromChatbotTags(r.Tags)),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
@@ -215,18 +206,12 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
       });
 
       return MicrosoftTeamsChannelConfiguration.Provider.of({
-        stables: [
-          "configurationName",
-          "chatConfigurationArn",
-          "teamId",
-          "tenantId",
-        ],
+        stables: ["configurationName", "chatConfigurationArn", "teamId", "tenantId"],
         list: () =>
           Effect.gen(function* () {
-            const configurations =
-              yield* chatbot.listMicrosoftTeamsChannelConfigurations
-                .items({})
-                .pipe(Stream.runCollect);
+            const configurations = yield* chatbot.listMicrosoftTeamsChannelConfigurations
+              .items({})
+              .pipe(Stream.runCollect, inChatbotRegion);
             return Array.from(configurations).map((config) => {
               const arn = config.ChatConfigurationArn;
               return toAttributes(arn.slice(arn.lastIndexOf("/") + 1), config);
@@ -234,11 +219,8 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, olds ?? {}));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, olds ?? {}));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const found = yield* observeConfiguration(arn);
           if (found === undefined) return undefined;
           const attrs = toAttributes(configurationName, found);
@@ -260,11 +242,8 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, news));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, news));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredTopics = [...(news.snsTopicArns ?? [])].sort();
@@ -295,10 +274,9 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
                 Tags: toChatbotTags(desiredTags),
               })
               .pipe(
+                inChatbotRegion,
                 Effect.map((r) => r.ChannelConfiguration),
-                Effect.catchTag("ConflictException", () =>
-                  observeConfiguration(arn),
-                ),
+                Effect.catchTag("ConflictException", () => observeConfiguration(arn)),
               );
           }
 
@@ -308,16 +286,12 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
             live !== undefined &&
             live.ChannelId === news.teamsChannelId &&
             live.IamRoleArn === news.iamRoleArn &&
-            JSON.stringify([...live.SnsTopicArns].sort()) ===
-              JSON.stringify(desiredTopics) &&
+            JSON.stringify([...live.SnsTopicArns].sort()) === JSON.stringify(desiredTopics) &&
             (live.LoggingLevel ?? "NONE") === (news.loggingLevel ?? "NONE") &&
             JSON.stringify(
-              live.GuardrailPolicyArns
-                ? [...live.GuardrailPolicyArns].sort()
-                : undefined,
+              live.GuardrailPolicyArns ? [...live.GuardrailPolicyArns].sort() : undefined,
             ) === JSON.stringify(desiredGuardrails) &&
-            (live.UserAuthorizationRequired ?? false) ===
-              (news.userAuthorizationRequired ?? false);
+            (live.UserAuthorizationRequired ?? false) === (news.userAuthorizationRequired ?? false);
           if (!inSync) {
             live = yield* chatbot
               .updateMicrosoftTeamsChannelConfiguration({
@@ -330,7 +304,10 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
                 GuardrailPolicyArns: news.guardrailPolicyArns,
                 UserAuthorizationRequired: news.userAuthorizationRequired,
               })
-              .pipe(Effect.map((r) => r.ChannelConfiguration));
+              .pipe(
+                inChatbotRegion,
+                Effect.map((r) => r.ChannelConfiguration),
+              );
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -338,19 +315,23 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {
-            yield* chatbot.tagResource({
-              ResourceARN: arn,
-              Tags: upsert.map(({ Key, Value }) => ({
-                TagKey: Key,
-                TagValue: Value,
-              })),
-            });
+            yield* chatbot
+              .tagResource({
+                ResourceARN: arn,
+                Tags: upsert.map(({ Key, Value }) => ({
+                  TagKey: Key,
+                  TagValue: Value,
+                })),
+              })
+              .pipe(inChatbotRegion);
           }
           if (removed.length > 0) {
-            yield* chatbot.untagResource({
-              ResourceARN: arn,
-              TagKeys: removed,
-            });
+            yield* chatbot
+              .untagResource({
+                ResourceARN: arn,
+                TagKeys: removed,
+              })
+              .pipe(inChatbotRegion);
           }
 
           yield* session.note(configurationName);
@@ -371,6 +352,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
               ChatConfigurationArn: output.chatConfigurationArn,
             })
             .pipe(
+              inChatbotRegion,
               // Idempotent delete — a missing configuration is not an error.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );

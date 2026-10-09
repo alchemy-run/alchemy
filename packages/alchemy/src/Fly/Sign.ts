@@ -31,6 +31,7 @@ export interface SignResult {
  * ```
  *
  * @binding
+ * @product Secret Key
  */
 export interface Sign extends Binding.Service<
   Sign,
@@ -38,9 +39,7 @@ export interface Sign extends Binding.Service<
   (
     key: SecretKey,
   ) => Effect.Effect<
-    (
-      request: SignRequest,
-    ) => Effect.Effect<SignResult, SignSecretKeyError, RuntimeContext>
+    (request: SignRequest) => Effect.Effect<SignResult, SignSecretKeyError, RuntimeContext>
   >
 > {}
 

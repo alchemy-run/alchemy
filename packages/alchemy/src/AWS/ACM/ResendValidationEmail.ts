@@ -44,10 +44,7 @@ export interface ResendValidationEmail extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ResendValidationEmailRequest,
-    ) => Effect.Effect<
-      acm.ResendValidationEmailResponse,
-      acm.ResendValidationEmailError
-    >
+    ) => Effect.Effect<acm.ResendValidationEmailResponse, acm.ResendValidationEmailError>
   >
 > {}
 

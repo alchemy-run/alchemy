@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface CancelTraceRetrievalRequest
-  extends xray.CancelTraceRetrievalRequest {}
+export interface CancelTraceRetrievalRequest extends xray.CancelTraceRetrievalRequest {}
 
 /**
  * Cancel an ongoing Transaction Search trace retrieval job by its
@@ -33,10 +32,7 @@ export interface CancelTraceRetrieval extends Binding.Service<
   () => Effect.Effect<
     (
       request: CancelTraceRetrievalRequest,
-    ) => Effect.Effect<
-      xray.CancelTraceRetrievalResult,
-      xray.CancelTraceRetrievalError
-    >
+    ) => Effect.Effect<xray.CancelTraceRetrievalResult, xray.CancelTraceRetrievalError>
   >
 > {}
 export const CancelTraceRetrieval = Binding.Service<CancelTraceRetrieval>(

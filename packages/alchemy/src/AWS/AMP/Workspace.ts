@@ -147,11 +147,7 @@ export const WorkspaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeWorkspace({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.workspace;
       });
 
@@ -162,12 +158,8 @@ export const WorkspaceProvider = () =>
        * this tag search is the only way to reclaim the existing workspace
        * instead of creating an orphan-producing duplicate.
        */
-      const findByInternalTags = Effect.fn(function* (
-        internalTags: Record<string, string>,
-      ) {
-        const pages = yield* amp.listWorkspaces
-          .pages({})
-          .pipe(Stream.runCollect);
+      const findByInternalTags = Effect.fn(function* (internalTags: Record<string, string>) {
+        const pages = yield* amp.listWorkspaces.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.workspaces)
           .find(
@@ -177,9 +169,7 @@ export const WorkspaceProvider = () =>
                 ([key, value]) => toTagRecord(w.tags)[key] === value,
               ),
           );
-        return summary === undefined
-          ? undefined
-          : yield* describe(summary.workspaceId);
+        return summary === undefined ? undefined : yield* describe(summary.workspaceId);
       });
 
       /**
@@ -197,18 +187,12 @@ export const WorkspaceProvider = () =>
             .map((entry) => ({
               labelSet: Object.fromEntries(
                 Object.entries(entry.labelSet)
-                  .filter(
-                    (kv): kv is [string, string] => typeof kv[1] === "string",
-                  )
+                  .filter((kv): kv is [string, string] => typeof kv[1] === "string")
                   .sort(([a], [b]) => a.localeCompare(b)),
               ),
               maxSeries: entry.maxSeries ?? null,
             }))
-            .sort((a, b) =>
-              JSON.stringify(a.labelSet).localeCompare(
-                JSON.stringify(b.labelSet),
-              ),
-            ),
+            .sort((a, b) => JSON.stringify(a.labelSet).localeCompare(JSON.stringify(b.labelSet))),
         );
 
       /**
@@ -221,10 +205,7 @@ export const WorkspaceProvider = () =>
         workspaceId: string,
         news: WorkspaceProps,
       ) {
-        if (
-          news.retentionPeriod === undefined &&
-          news.limitsPerLabelSet === undefined
-        ) {
+        if (news.retentionPeriod === undefined && news.limitsPerLabelSet === undefined) {
           return;
         }
         const observed = (yield* amp.describeWorkspaceConfiguration({
@@ -233,8 +214,7 @@ export const WorkspaceProvider = () =>
 
         const desiredDays = toWireDays(news.retentionPeriod);
         const retentionDrifts =
-          desiredDays !== undefined &&
-          desiredDays !== observed.retentionPeriodInDays;
+          desiredDays !== undefined && desiredDays !== observed.retentionPeriodInDays;
 
         const desiredLimits = news.limitsPerLabelSet?.map((entry) => ({
           labelSet: entry.labelSet,
@@ -268,10 +248,7 @@ export const WorkspaceProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("6 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(15)]),
             }),
           );
 
@@ -281,14 +258,10 @@ export const WorkspaceProvider = () =>
         yield* amp.describeWorkspaceConfiguration({ workspaceId }).pipe(
           Effect.map((r) => r.workspaceConfiguration),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
             until: (c): boolean =>
               c.status.statusCode === "ACTIVE" &&
-              (desiredDays === undefined ||
-                c.retentionPeriodInDays === desiredDays),
+              (desiredDays === undefined || c.retentionPeriodInDays === desiredDays),
           }),
         );
       });
@@ -301,10 +274,7 @@ export const WorkspaceProvider = () =>
         const workspace = yield* amp.describeWorkspace({ workspaceId }).pipe(
           Effect.map((r) => r.workspace),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
             until: (w) => w.status.statusCode === "ACTIVE",
           }),
         );
@@ -324,9 +294,7 @@ export const WorkspaceProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // Encryption configuration is immutable — a change replaces.
-          if (
-            (olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)
-          ) {
+          if ((olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -398,10 +366,7 @@ export const WorkspaceProvider = () =>
             // A workspace mid-transition rejects deletion; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
         }),
@@ -409,9 +374,7 @@ export const WorkspaceProvider = () =>
         list: () =>
           amp.listWorkspaces.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.workspaces),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.workspaces)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

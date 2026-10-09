@@ -30,10 +30,7 @@ export interface ListHostedZonesByName extends Binding.Service<
   () => Effect.Effect<
     (
       request?: route53.ListHostedZonesByNameRequest,
-    ) => Effect.Effect<
-      route53.ListHostedZonesByNameResponse,
-      route53.ListHostedZonesByNameError
-    >
+    ) => Effect.Effect<route53.ListHostedZonesByNameResponse, route53.ListHostedZonesByNameError>
   >
 > {}
 export const ListHostedZonesByName = Binding.Service<ListHostedZonesByName>(

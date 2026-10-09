@@ -32,12 +32,7 @@ export interface GetTagSyncTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: resourcegroups.GetTagSyncTaskInput,
-    ) => Effect.Effect<
-      resourcegroups.GetTagSyncTaskOutput,
-      resourcegroups.GetTagSyncTaskError
-    >
+    ) => Effect.Effect<resourcegroups.GetTagSyncTaskOutput, resourcegroups.GetTagSyncTaskError>
   >
 > {}
-export const GetTagSyncTask = Binding.Service<GetTagSyncTask>(
-  "AWS.ResourceGroups.GetTagSyncTask",
-);
+export const GetTagSyncTask = Binding.Service<GetTagSyncTask>("AWS.ResourceGroups.GetTagSyncTask");

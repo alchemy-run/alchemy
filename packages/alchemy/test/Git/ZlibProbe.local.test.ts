@@ -1,19 +1,22 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import ZlibProbeWorker from "./fixtures/zlib-probe-worker.ts";
+
+const state = Alchemy.inMemoryState();
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
+  state,
   dev: true,
 });
 
 const Stack = Alchemy.Stack(
   "ZlibProbeStack",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const worker = yield* ZlibProbeWorker;
     return { url: worker.url.as<string>() };
@@ -43,9 +46,7 @@ test(
       "deflate1",
     ]) {
       const n = path.startsWith("deflate") ? 200 : 2000;
-      yield* client
-        .get(`${url}/?path=${path}&n=50`)
-        .pipe(Effect.flatMap((r) => r.json));
+      yield* client.get(`${url}/?path=${path}&n=50`).pipe(Effect.flatMap((r) => r.json));
       const t0 = performance.now();
       const r = (yield* client
         .get(`${url}/?path=${path}&n=${n}`)
@@ -69,5 +70,8 @@ test(
     expect(body.info?.outLen).toBe(body.contentLen);
     expect(body.info?.bytesWritten).toBe(body.info?.expectedConsumed);
   }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 60_000,
+  },
 );

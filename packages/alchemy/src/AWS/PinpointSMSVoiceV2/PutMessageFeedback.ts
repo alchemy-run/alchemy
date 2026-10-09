@@ -35,10 +35,7 @@ export interface PutMessageFeedback extends Binding.Service<
   () => Effect.Effect<
     (
       request: smsvoice.PutMessageFeedbackRequest,
-    ) => Effect.Effect<
-      smsvoice.PutMessageFeedbackResult,
-      smsvoice.PutMessageFeedbackError
-    >
+    ) => Effect.Effect<smsvoice.PutMessageFeedbackResult, smsvoice.PutMessageFeedbackError>
   >
 > {}
 export const PutMessageFeedback = Binding.Service<PutMessageFeedback>(

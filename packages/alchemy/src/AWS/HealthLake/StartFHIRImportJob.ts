@@ -64,10 +64,7 @@ export interface StartFHIRImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartFHIRImportJobRequest,
-    ) => Effect.Effect<
-      healthlake.StartFHIRImportJobResponse,
-      healthlake.StartFHIRImportJobError
-    >
+    ) => Effect.Effect<healthlake.StartFHIRImportJobResponse, healthlake.StartFHIRImportJobError>
   >
 > {}
 export const StartFHIRImportJob = Binding.Service<StartFHIRImportJob>(

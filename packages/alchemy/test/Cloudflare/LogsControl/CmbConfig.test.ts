@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Customer Metadata Boundary is part of the Data Localization Suite and
 // requires an Enterprise plan. On the standard testing account every
@@ -46,9 +43,7 @@ test.provider.skipIf(entitled)(
       // The testing account has no CMB / Data Localization entitlement —
       // both reads and writes must fail with the typed authorization tag
       // (Cloudflare error code 10000).
-      const readError = yield* logs
-        .getControlCmbConfig({ accountId })
-        .pipe(Effect.flip);
+      const readError = yield* logs.getControlCmbConfig({ accountId }).pipe(Effect.flip);
       expect(readError._tag).toEqual("LogsControlNotAuthorized");
 
       const writeError = yield* logs
@@ -58,6 +53,7 @@ test.provider.skipIf(entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:logscontrol", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -108,7 +104,10 @@ test.provider.skipIf(!entitled)(
       );
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:logscontrol", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Account-singleton `list()`: there is no account-wide collection API, so
@@ -125,14 +124,13 @@ test.provider.skipIf(entitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.CmbConfig,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.CmbConfig);
       const all = yield* provider.list();
       expect(all).toEqual([]);
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:logscontrol", "live"] },
 );
 
 // Live `list()` on an entitled account: deploy the singleton, then assert
@@ -151,9 +149,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.CmbConfig,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.CmbConfig);
       const all = yield* provider.list();
 
       expect(all.length).toEqual(1);
@@ -166,5 +162,8 @@ test.provider.skipIf(!entitled)(
       const empty = yield* provider.list();
       expect(empty).toEqual([]);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:logscontrol", "live"],
+    timeout: 120_000,
+  },
 );

@@ -1,10 +1,10 @@
-import { applyMigrations } from "@/SQL/Migrations/index.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Database } from "bun:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate as drizzleMigrate } from "drizzle-orm/bun-sqlite/migrator";
 import * as Effect from "effect/Effect";
+import { applyMigrations } from "@/SQL/Migrations/index.ts";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 /**
@@ -34,9 +34,7 @@ describe("drizzle adoption (one-way conversion)", (it) => {
         const db = new Database(":memory:");
         // The user's pre-Alchemy state, produced by drizzle's own migrator.
         yield* Effect.sync(() =>
-          drizzleMigrate(drizzle({ client: db }), {
-            migrationsFolder: fixturesDir,
-          }),
+          drizzleMigrate(drizzle({ client: db }), { migrationsFolder: fixturesDir }),
         );
         const drizzleRows = rowsOf(db, "__drizzle_migrations");
         expect(drizzleRows.length).toBe(2);
@@ -62,50 +60,55 @@ describe("drizzle adoption (one-way conversion)", (it) => {
           expect.arrayContaining(["users", "posts", "__drizzle_migrations"]),
         );
       }),
+    { tags: ["unit", "local"] },
   );
 
-  it.effect("after conversion, drizzle's table is never written again", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      yield* Effect.sync(() =>
-        drizzleMigrate(drizzle({ client: db }), {
-          migrationsFolder: fixturesDir,
-        }),
-      );
-      const frozen = rowsOf(db, "__drizzle_migrations");
+  it.effect(
+    "after conversion, drizzle's table is never written again",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        yield* Effect.sync(() =>
+          drizzleMigrate(drizzle({ client: db }), { migrationsFolder: fixturesDir }),
+        );
+        const frozen = rowsOf(db, "__drizzle_migrations");
 
-      const executor = makeSqliteExecutor(db);
-      yield* applyMigrations({
-        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
-        executor,
-      });
-      yield* applyMigrations({
-        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
-        executor,
-      });
+        const executor = makeSqliteExecutor(db);
+        yield* applyMigrations({
+          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+          executor,
+        });
+        yield* applyMigrations({
+          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+          executor,
+        });
 
-      // One-way: drizzle's table never moves again.
-      expect(rowsOf(db, "__drizzle_migrations")).toEqual(frozen);
-      expect(rowsOf(db, "__alchemy_migrations").length).toBe(2);
-    }),
+        // One-way: drizzle's table never moves again.
+        expect(rowsOf(db, "__drizzle_migrations")).toEqual(frozen);
+        expect(rowsOf(db, "__alchemy_migrations").length).toBe(2);
+      }),
+    { tags: ["unit", "local"] },
   );
 
-  it.effect("our flow is idempotent across repeated deploys", () =>
-    Effect.gen(function* () {
-      const db = new Database(":memory:");
-      const executor = makeSqliteExecutor(db);
-      yield* applyMigrations({
-        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
-        executor,
-      });
-      const first = rowsOf(db, "__alchemy_migrations");
-      yield* applyMigrations({
-        resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
-        executor,
-      });
-      expect(rowsOf(db, "__alchemy_migrations")).toEqual(first);
-      // No drizzle table was ever created on a greenfield database.
-      expect(tableNames(db)).not.toContain("__drizzle_migrations");
-    }),
+  it.effect(
+    "our flow is idempotent across repeated deploys",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        yield* applyMigrations({
+          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+          executor,
+        });
+        const first = rowsOf(db, "__alchemy_migrations");
+        yield* applyMigrations({
+          resolved: { dir: fixturesDir, table: "__alchemy_migrations" },
+          executor,
+        });
+        expect(rowsOf(db, "__alchemy_migrations")).toEqual(first);
+        // No drizzle table was ever created on a greenfield database.
+        expect(tableNames(db)).not.toContain("__drizzle_migrations");
+      }),
+    { tags: ["unit", "local"] },
   );
 });

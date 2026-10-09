@@ -29,12 +29,7 @@ export interface DeleteProgram extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.DeleteProgramRequest,
-    ) => Effect.Effect<
-      mediatailor.DeleteProgramResponse,
-      mediatailor.DeleteProgramError
-    >
+    ) => Effect.Effect<mediatailor.DeleteProgramResponse, mediatailor.DeleteProgramError>
   >
 > {}
-export const DeleteProgram = Binding.Service<DeleteProgram>(
-  "AWS.MediaTailor.DeleteProgram",
-);
+export const DeleteProgram = Binding.Service<DeleteProgram>("AWS.MediaTailor.DeleteProgram");

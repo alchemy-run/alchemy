@@ -38,7 +38,6 @@ export interface DescribeDataRepositoryTasks extends Binding.Service<
     >
   >
 > {}
-export const DescribeDataRepositoryTasks =
-  Binding.Service<DescribeDataRepositoryTasks>(
-    "AWS.FSx.DescribeDataRepositoryTasks",
-  );
+export const DescribeDataRepositoryTasks = Binding.Service<DescribeDataRepositoryTasks>(
+  "AWS.FSx.DescribeDataRepositoryTasks",
+);

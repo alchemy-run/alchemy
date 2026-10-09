@@ -1,55 +1,40 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { resolveConnectionOptions, resolveSsl } from "@/SQL/PostgresTls.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import { resolveConnectionOptions, resolvePoolConfig, resolveSsl } from "@/SQL/PostgresTls.ts";
 
 const url = (s: string) => Redacted.make(s);
 
-describe("SQL/PostgresTls resolveSsl", () => {
+describe("SQL/PostgresTls resolveSsl", { tags: ["unit", "local"] }, () => {
   it("resolves sslmode=prefer|allow to TLS on when ssl is implicit", () => {
     for (const mode of ["prefer", "allow"]) {
-      expect(
-        resolveSsl(
-          url(`postgres://u@ep-x.neon.tech/x?sslmode=${mode}`),
-          undefined,
-        ),
-      ).toBe(true);
-      expect(
-        resolveSsl(
-          url(`postgres://u@127.0.0.1:5432/x?sslmode=${mode}`),
-          undefined,
-        ),
-      ).toBe(true);
+      expect(resolveSsl(url(`postgres://u@ep-x.neon.tech/x?sslmode=${mode}`), undefined)).toBe(
+        true,
+      );
+      expect(resolveSsl(url(`postgres://u@127.0.0.1:5432/x?sslmode=${mode}`), undefined)).toBe(
+        true,
+      );
     }
   });
 
   it("leaves every other URL to @effect/sql-pg", () => {
-    expect(
-      resolveSsl(url("postgres://u@db.example.com/x"), undefined),
-    ).toBeUndefined();
+    expect(resolveSsl(url("postgres://u@db.example.com/x"), undefined)).toBeUndefined();
     for (const mode of ["disable", "require", "verify-ca", "verify-full"]) {
       expect(
-        resolveSsl(
-          url(`postgres://u@db.example.com/x?sslmode=${mode}`),
-          undefined,
-        ),
+        resolveSsl(url(`postgres://u@db.example.com/x?sslmode=${mode}`), undefined),
       ).toBeUndefined();
     }
   });
 
   it("never overrides an explicit ssl option", () => {
     const explicit = { rejectUnauthorized: false, servername: "override" };
-    expect(
-      resolveSsl(url("postgres://u@db.example.com/x?sslmode=prefer"), explicit),
-    ).toBe(explicit);
-    expect(
-      resolveSsl(url("postgres://u@db.example.com/x?sslmode=prefer"), false),
-    ).toBe(false);
-    expect(
-      resolveSsl(url("postgres://u@db.example.com/x?sslmode=require"), true),
-    ).toBe(true);
+    expect(resolveSsl(url("postgres://u@db.example.com/x?sslmode=prefer"), explicit)).toBe(
+      explicit,
+    );
+    expect(resolveSsl(url("postgres://u@db.example.com/x?sslmode=prefer"), false)).toBe(false);
+    expect(resolveSsl(url("postgres://u@db.example.com/x?sslmode=require"), true)).toBe(true);
   });
 
   it("passes malformed URLs through untouched", () => {
@@ -58,7 +43,7 @@ describe("SQL/PostgresTls resolveSsl", () => {
   });
 });
 
-describe("SQL/PostgresTls resolveConnectionOptions", () => {
+describe("SQL/PostgresTls resolveConnectionOptions", { tags: ["unit", "local"] }, () => {
   const railwayUrl = url(
     "postgresql://user:p%40ss@db.railway.internal:5432/railway?sslmode=no-verify&connect_timeout=7&application_name=app",
   );
@@ -70,9 +55,7 @@ describe("SQL/PostgresTls resolveConnectionOptions", () => {
     expect(parsed.searchParams.get("connect_timeout")).toBe("7");
     expect(parsed.searchParams.get("application_name")).toBe("app");
     expect(parsed.password).toBe("p%40ss");
-    expect(options.ssl).toEqual({
-      rejectUnauthorized: false,
-    });
+    expect(options.ssl).toEqual({ rejectUnauthorized: false });
     expect(Redacted.value(railwayUrl)).toContain("sslmode=no-verify");
   });
 
@@ -112,33 +95,51 @@ describe("SQL/PostgresTls resolveConnectionOptions", () => {
         servername: "custom.example.com",
         ca: "test-ca",
       }).ssl,
-    ).toEqual({
-      rejectUnauthorized: true,
-      servername: "custom.example.com",
-      ca: "test-ca",
-    });
+    ).toEqual({ rejectUnauthorized: true, servername: "custom.example.com", ca: "test-ca" });
     expect(resolveConnectionOptions(railwayUrl, false).ssl).toBe(false);
     expect(
-      new URL(
-        Redacted.value(resolveConnectionOptions(railwayUrl, false).url),
-      ).searchParams.get("sslmode"),
+      new URL(Redacted.value(resolveConnectionOptions(railwayUrl, false).url)).searchParams.get(
+        "sslmode",
+      ),
     ).toBe("require");
   });
 
   it("does not invent SNI for a no-verify IP connection", () => {
-    expect(
-      resolveConnectionOptions(url("postgres://u@[::1]/db?sslmode=no-verify"))
-        .ssl,
-    ).toEqual({ rejectUnauthorized: false });
+    expect(resolveConnectionOptions(url("postgres://u@[::1]/db?sslmode=no-verify")).ssl).toEqual({
+      rejectUnauthorized: false,
+    });
   });
 
   it("preserves unmodified and malformed URLs for driver validation", () => {
-    for (const value of [
-      "postgres://u@db.example/db?sslmode=verify-full",
-      "not a url",
-    ]) {
+    for (const value of ["postgres://u@db.example/db?sslmode=verify-full", "not a url"]) {
       const original = url(value);
       expect(resolveConnectionOptions(original).url).toBe(original);
     }
+  });
+});
+
+describe("SQL/PostgresTls resolvePoolConfig", { tags: ["unit", "local"] }, () => {
+  it("passes client options through with the URL's TLS settings", () => {
+    const config = resolvePoolConfig(url("postgres://u@127.0.0.1:5432/x?sslmode=prefer"), {
+      prepare: false,
+      maxConnections: 3,
+    });
+    expect(config.prepare).toBe(false);
+    expect(config.maxConnections).toBe(3);
+    expect(config.ssl).toBe(true);
+    expect(Redacted.value(config.url!)).toBe("postgres://u@127.0.0.1:5432/x?sslmode=prefer");
+  });
+
+  it("keeps an explicit ssl option over the URL's sslmode", () => {
+    const config = resolvePoolConfig(url("postgres://u@127.0.0.1:5432/x?sslmode=prefer"), {
+      ssl: false,
+    });
+    expect(config.ssl).toBe(false);
+  });
+
+  it("leaves the driver defaults without options", () => {
+    const config = resolvePoolConfig(url("postgres://u@db.example.com/x"));
+    expect(config.prepare).toBeUndefined();
+    expect(config.ssl).toBeUndefined();
   });
 });

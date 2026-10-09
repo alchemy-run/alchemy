@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type { GetPrimaryIpResponsePrimaryIp } from "@distilled.cloud/hetzner/primary_ips";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -175,19 +175,17 @@ export type PrimaryIp = Resource<
  * ```
  *
  * @resource
+ * @product IP Address
  */
 export const PrimaryIp = Resource<PrimaryIp>("Hetzner.PrimaryIp");
 
 export class PrimaryIpPlacementRequired extends Data.TaggedError(
   "Hetzner.PrimaryIpPlacementRequired",
-)<{
-  message: string;
-}> {}
+)<{ message: string }> {}
 
 type CloudPrimaryIp = GetPrimaryIpResponsePrimaryIp;
 
-const asType = (type: string): PrimaryIpType =>
-  type === "ipv6" ? "ipv6" : "ipv4";
+const asType = (type: string): PrimaryIpType => (type === "ipv6" ? "ipv6" : "ipv4");
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -197,9 +195,7 @@ const userLabels = (
  * Hetzner datacenter names are `{location}-dc{n}` (e.g. `nbg1-dc3`).
  * Numeric ids are passed through — Locations use a different id space.
  */
-export const locationFromDatacenter = (
-  datacenter: string | number,
-): string | number => {
+export const locationFromDatacenter = (datacenter: string | number): string | number => {
   if (typeof datacenter === "number") return datacenter;
   const match = /^([a-z0-9]+)-dc\d+$/i.exec(datacenter);
   return match ? match[1]!.toLowerCase() : datacenter;
@@ -238,8 +234,7 @@ const toAttrs = (
   ip: ip.ip,
   location: ip.location.name,
   locationId: ip.location.id,
-  datacenter:
-    extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
+  datacenter: extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
   blocked: ip.blocked,
   autoDelete: ip.auto_delete,
   assigneeId: ip.assignee_id,
@@ -249,25 +244,19 @@ const toAttrs = (
   deleteProtection: ip.protection.delete,
 });
 
-const createPrimaryIpName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createPrimaryIpName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }));
   });
 
 const getById = (id: number) =>
-  Services.primaryIps.getPrimaryIp({ id }).pipe(
+  Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const getByName = (name: string) =>
-  Services.primaryIps
+  Hetzner.primaryIps
     .listPrimaryIps({ name, per_page: 50 })
     .pipe(Effect.map(({ primary_ips }) => primary_ips[0]));
 
@@ -294,7 +283,7 @@ const observe = Effect.fn(function* ({
 });
 
 const refresh = (id: number) =>
-  Services.primaryIps.getPrimaryIp({ id }).pipe(
+  Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
     Effect.retry({
       while: (e) => e._tag === "NotFound",
@@ -307,7 +296,7 @@ const refresh = (id: number) =>
   );
 
 const disableProtection = (id: number) =>
-  Services.primaryIpActions
+  Hetzner.primaryIpActions
     .changePrimaryIpProtection({ id, delete: false })
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
@@ -316,7 +305,7 @@ export const PrimaryIpProvider = () =>
     stables: ["id", "ip", "type", "location", "locationId", "created"],
     nuke: { dependsOn: ["Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Services.primaryIps.listPrimaryIps
+      const items = yield* Hetzner.primaryIps.listPrimaryIps
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -337,35 +326,22 @@ export const PrimaryIpProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const found = yield* observe({
-        id,
-        name: olds?.name ?? output?.name,
-        outputId: output?.id,
-      });
+      const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
-      const attrs = toAttrs(found, {
-        datacenter: olds?.datacenter ?? output?.datacenter,
-      });
+      const attrs = toAttrs(found, { datacenter: olds?.datacenter ?? output?.datacenter });
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* createPrimaryIpName(id, news.name, output?.name);
       const internalLabels = yield* createInternalLabels(id);
-      const desiredLabels = {
-        ...toLabels(news.labels),
-        ...internalLabels,
-      };
+      const desiredLabels = { ...toLabels(news.labels), ...internalLabels };
       const desiredAutoDelete = news.autoDelete ?? false;
       const desiredProtection = news.deleteProtection ?? false;
 
       // Observe — cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
-      let current = yield* observe({
-        id,
-        name,
-        outputId: output?.id,
-      });
+      let current = yield* observe({ id, name, outputId: output?.id });
 
       // Ensure — create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
@@ -373,12 +349,11 @@ export const PrimaryIpProvider = () =>
         const placement = resolvePlacement(news);
         if (placement === undefined) {
           return yield* new PrimaryIpPlacementRequired({
-            message:
-              "PrimaryIp requires `location` or `datacenter` when creating",
+            message: "PrimaryIp requires `location` or `datacenter` when creating",
           });
         }
         const location = yield* findLocation(placement);
-        const created = yield* Services.primaryIps
+        const created = yield* Hetzner.primaryIps
           .createPrimaryIp({
             name,
             type: news.type,
@@ -392,7 +367,7 @@ export const PrimaryIpProvider = () =>
                 Effect.flatMap((hit) =>
                   hit !== undefined
                     ? Effect.succeed({ primary_ip: hit, action: undefined })
-                    : Services.primaryIps.createPrimaryIp({
+                    : Hetzner.primaryIps.createPrimaryIp({
                         name,
                         type: news.type,
                         location: location.name,
@@ -419,7 +394,7 @@ export const PrimaryIpProvider = () =>
         upsert.length > 0 ||
         removed.length > 0;
       if (needsUpdate) {
-        const updated = yield* Services.primaryIps.updatePrimaryIp({
+        const updated = yield* Hetzner.primaryIps.updatePrimaryIp({
           id: current.id,
           name,
           auto_delete: desiredAutoDelete,
@@ -429,17 +404,14 @@ export const PrimaryIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } =
-          yield* Services.primaryIpActions.changePrimaryIpProtection({
-            id: current.id,
-            delete: desiredProtection,
-          });
+        const { action } = yield* Hetzner.primaryIpActions.changePrimaryIpProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
         yield* waitForAction(action);
       }
 
-      return toAttrs(yield* refresh(current.id), {
-        datacenter: news.datacenter,
-      });
+      return toAttrs(yield* refresh(current.id), { datacenter: news.datacenter });
     }),
     delete: Effect.fn(function* ({ output }) {
       const current = yield* getById(output.id);
@@ -448,12 +420,10 @@ export const PrimaryIpProvider = () =>
         yield* disableProtection(current.id);
       }
       if (current.assignee_id !== null) {
-        const { action } = yield* Services.primaryIpActions.unassignPrimaryIp({
-          id: current.id,
-        });
+        const { action } = yield* Hetzner.primaryIpActions.unassignPrimaryIp({ id: current.id });
         yield* waitForAction(action);
       }
-      yield* Services.primaryIps
+      yield* Hetzner.primaryIps
         .deletePrimaryIp({ id: current.id })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
