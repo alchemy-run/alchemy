@@ -97,7 +97,7 @@ test.provider(
       });
       expect(moved).toBeUndefined();
     }),
-  { tags },
+  { tags: ["unit", ...tags, "local"] },
 );
 
 test.provider(
@@ -134,7 +134,7 @@ test.provider(
       expect(config.nodes).toHaveLength(2);
       expect(config.containerdConfigPatches).toEqual(["# user patch", REGISTRY_CONTAINERD_PATCH]);
     }),
-  { tags },
+  { tags: ["unit", ...tags, "local"] },
 );
 
 test.provider(
@@ -146,7 +146,7 @@ test.provider(
       expect(imagePlatformOf("amd64", connection)).toBe("linux/amd64");
       expect(imagePlatformOf(undefined, undefined)).toBe("linux/amd64");
     }),
-  { tags },
+  { tags: ["unit", ...tags, "local"] },
 );
 
 const stack = Core.scratchStack(testOptions, "LocalClusterE2E");

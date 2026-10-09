@@ -665,7 +665,10 @@ test.provider(
       );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -742,7 +745,10 @@ test.provider(
       );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -811,5 +817,8 @@ test.provider(
       expect(live.filter((machine) => machine.state !== "destroyed")).toEqual([]);
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 120_000,
+  },
 );

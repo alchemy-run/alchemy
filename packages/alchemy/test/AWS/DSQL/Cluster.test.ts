@@ -198,5 +198,5 @@ ALTER TABLE users RENAME COLUMN email TO address;`,
         true,
       );
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:dsql", "live"], timeout: 600_000 },
 );
