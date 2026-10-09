@@ -450,9 +450,7 @@ export const RouteTableProvider = () =>
               // Retry on dependency violations (associations still being deleted)
               Effect.retry({
                 // DependencyViolation means there are still dependent resources
-                while: (e) => {
-                  return e._tag === "DependencyViolation";
-                },
+                while: (e) => e._tag === "DependencyViolation",
                 schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(10)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
@@ -505,29 +503,25 @@ class RouteTableNotVisible extends Data.TaggedError("RouteTableNotVisible")<{
  * Wait for route table to be deleted
  */
 const waitForRouteTableDeleted = (routeTableId: string, session: ScopedPlanStatusSession) =>
-  Effect.gen(function* () {
-    yield* Effect.retry(
-      Effect.gen(function* () {
-        const result = yield* ec2.describeRouteTables({ RouteTableIds: [routeTableId] }).pipe(
-          Effect.tapError(Effect.logDebug),
-          Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-            Effect.succeed({ RouteTables: [] }),
-          ),
-        );
+  Effect.retry(
+    Effect.gen(function* () {
+      const result = yield* ec2.describeRouteTables({ RouteTableIds: [routeTableId] }).pipe(
+        Effect.tapError(Effect.logDebug),
+        Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.succeed({ RouteTables: [] })),
+      );
 
-        if (!result.RouteTables || result.RouteTables.length === 0) {
-          return; // Successfully deleted
-        }
+      if (!result.RouteTables || result.RouteTables.length === 0) {
+        return; // Successfully deleted
+      }
 
-        // Still exists, fail to trigger retry
-        return yield* Effect.fail(new Error("Route table still exists"));
-      }),
-      {
-        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]).pipe(
-          Schedule.tap(({ attempt }) =>
-            session.note(`Waiting for route table deletion... (${attempt * 2}s)`),
-          ),
+      // Still exists, fail to trigger retry
+      return yield* Effect.fail(new Error("Route table still exists"));
+    }),
+    {
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for route table deletion... (${attempt * 2}s)`),
         ),
-      },
-    );
-  });
+      ),
+    },
+  );

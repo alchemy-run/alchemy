@@ -872,7 +872,7 @@ p:has(> .alc-btn) {
      for the active tab; the active underline is the moss accent.
    - Icons are sized larger (1.25em) and painted with each
      product's official brand color via positional selectors
-     (the package-manager tab order is bun → npm → pnpm → yarn,
+     (the package-manager tab order is pnpm → bun → npm → yarn,
      and is consistent across the docs).
    ============================================================ */
 
@@ -914,30 +914,31 @@ starlight-tabs [role="tab"] > svg {
 
 /* ── Per-package brand colors ──
    The Tabs.astro markup wraps each tab anchor in <li class="tab">,
-   so we color the SVG icon inside each LI by position. Order on
-   our docs is bun(1), npm(2), pnpm(3), yarn(4). Colors come from
-   each project's brand guidelines, tuned slightly for contrast
-   on the warm cream surface. */
+   so we color the SVG icon inside each LI by position. Package-manager
+   tabs (PackageManagers.astro, syncKey "pkgManager") are always
+   pnpm(1), bun(2), npm(3), yarn(4). Colors come from each project's
+   brand guidelines, tuned slightly for contrast on the warm cream
+   surface. */
+starlight-tabs[data-sync-key="pkgManager"] [role="tablist"] > li:nth-child(1) [role="tab"] > svg {
+  color: #f59f00; /* pnpm — orange */
+}
 
 /* Bun: Starlight's built-in `bun` icon is a single-path silhouette —
    painting it any single color loses the eyes, cheeks and mouth that
    make the mascot recognizable. We hide that path and overlay the
    official multi-color mascot from bun.com/logo.svg (saved locally as
    /bun-logo.svg) via a background image. */
-starlight-tabs [role="tablist"] > li:nth-child(1) [role="tab"] > svg {
+starlight-tabs[data-sync-key="pkgManager"] [role="tablist"] > li:nth-child(2) [role="tab"] > svg {
   color: transparent;
   background-image: url("/bun-logo.svg");
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
 }
-starlight-tabs [role="tablist"] > li:nth-child(2) [role="tab"] > svg {
+starlight-tabs[data-sync-key="pkgManager"] [role="tablist"] > li:nth-child(3) [role="tab"] > svg {
   color: #cb3837; /* npm — npm red */
 }
-starlight-tabs [role="tablist"] > li:nth-child(3) [role="tab"] > svg {
-  color: #f59f00; /* pnpm — orange */
-}
-starlight-tabs [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
+starlight-tabs[data-sync-key="pkgManager"] [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
   color: #2c8ebb; /* yarn — yarn blue */
 }
 

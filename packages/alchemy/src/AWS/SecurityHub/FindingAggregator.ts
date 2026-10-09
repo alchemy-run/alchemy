@@ -81,8 +81,10 @@ export const FindingAggregatorProvider = () =>
       const getAggregator = (arn: string) =>
         securityhub.getFindingAggregator({ FindingAggregatorArn: arn }).pipe(
           Effect.map((r) => r as securityhub.GetFindingAggregatorResponse | undefined),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            InvalidAccessException: () => Effect.succeed(undefined),
+          }),
         );
 
       // At most one aggregator exists per account — a single page suffices.
@@ -158,8 +160,10 @@ export const FindingAggregatorProvider = () =>
               FindingAggregatorArn: output.findingAggregatorArn,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("InvalidAccessException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                InvalidAccessException: () => Effect.void,
+              }),
             );
         }),
       };

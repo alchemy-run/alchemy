@@ -31,13 +31,11 @@ import {
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 
-export const isTask = (value: any): value is Task => {
-  return (
-    typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task"
-  );
-};
+export const isTask = (value: any): value is Task =>
+  typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task";
 
 export class TaskEnvironment extends Context.Service<TaskEnvironment, Record<string, any>>()(
   "AWS.ECS.TaskEnvironment",
@@ -110,6 +108,11 @@ export interface TaskDefinitionConfig {
    * primary container.
    */
   container?: Partial<ecs.ContainerDefinition>;
+  /**
+   * Retention for the task's CloudWatch log group, e.g.
+   * `{ retention: "2 weeks" }` or `{ retention: "forever" }`.
+   */
+  logging?: LogRetentionConfig;
   /**
    * Additional sidecar containers appended to the task definition after the
    * primary container. Each entry is a full, typed
@@ -1175,6 +1178,10 @@ export const TaskProvider = () =>
               id,
               logGroupName,
             }));
+          yield* syncLogGroupRetention({
+            logGroupName,
+            retention: news.logging?.retention,
+          });
 
           // Resolve the container image from whichever source the props
           // declare (`main` | `context` | `image`), building/mirroring and

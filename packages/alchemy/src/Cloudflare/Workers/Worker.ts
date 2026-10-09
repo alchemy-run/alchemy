@@ -4,6 +4,7 @@ import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import path from "pathe";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
@@ -27,6 +28,7 @@ import {
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -333,8 +335,8 @@ export interface WorkerVersionAffinity {
  *
  * A gradual rollout carries only what a version can: code, static assets,
  * bindings, compatibility settings, and cache configuration. A deploy that
- * changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
+ * creates, renames, deletes or moves Durable Object classes must go out at
+ * 100% (class lifecycle changes cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */
@@ -836,6 +838,11 @@ export interface WorkerProps<
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
    * `pattern`. When the zone is omitted, it is inferred from the pattern's
    * hostname.
+   *
+   * `alchemy dev` emulates zone routing locally: a Worker whose custom
+   * {@link domain} matches a route's hostname serves the routes on its own
+   * dev URL, and each route's `url` attribute is a local listener for its
+   * hostname.
    */
   routes?: WorkerRouteConfig[];
   /**
@@ -1149,7 +1156,12 @@ export type Worker<Bindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    routes: { id: string; pattern: string; zoneId: string }[];
+    /**
+     * The zone routes attached to this Worker. `url` is the origin serving
+     * the route's hostname — `https://<host>` when deployed, the local edge
+     * listener under `alchemy dev` — and `undefined` for a wildcard host.
+     */
+    routes: { id: string; pattern: string; zoneId: string; url?: string }[];
     crons: string[];
     /**
      * The tail consumers attached to this Worker's script — each entry the
@@ -1272,6 +1284,11 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Application name and prepared images for the native container API. */
+      name?: string;
+      images?: Record<string, string>;
+      /** Named image sources for local workerd. An empty map enables managed images. */
+      devImages?: Record<string, DevContainerImage>;
       dev: DevContainerImage | undefined;
       /**
        * Content hash of the image (bundle/Dockerfile/context). Part of the
@@ -1400,6 +1417,10 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * lowers it into a `service` binding targeting the Worker's own physical
  * name at upload, and local dev serves it with the runtime's in-process
  * self service.
+ *
+ * `Self` targets the Worker's default export. To bind one of its named
+ * `WorkerEntrypoint` classes instead, name it with
+ * `Cloudflare.WorkerEntrypoint("McpEntrypoint")`.
  *
  * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
  * revalidation queue re-fetches the worker through it):
@@ -1567,6 +1588,8 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/caller.ts",
  *   env: {
  *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *     // one of this Worker's own entrypoints
+ *     MCP: Cloudflare.WorkerEntrypoint("McpEntrypoint"),
  *   },
  * });
  * ```
@@ -1724,6 +1747,31 @@ export const isSelf = (value: unknown): value is Self =>
  * ) {}
  * ```
  *
+ * **Example:** Binding a Worker to itself
+ *
+ * Declare the class before `.make()` so the implementation can reference it.
+ * The self binding uses workerd's `ctx.exports` loopback, so nothing is
+ * added to the Worker's deployed bindings.
+ * ```typescript
+ * export class Greeter extends Cloudflare.Worker<
+ *   Greeter,
+ *   { greet: (name: string) => Effect.Effect<string> }
+ * >()("Greeter") {}
+ *
+ * export default Greeter.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const self = yield* Cloudflare.Workers.bindWorker(Greeter);
+ *     return {
+ *       greet: (name: string) => Effect.succeed(`Hello ${name}`),
+ *       fetch: Effect.gen(function* () {
+ *         return HttpServerResponse.text(yield* self.greet("world"));
+ *       }),
+ *     };
+ *   }),
+ * );
+ * ```
+ *
  * ### Configuration
  * The props object controls compatibility flags, static assets, and
  * build options. These are evaluated at deploy time.
@@ -1791,6 +1839,28 @@ export const isSelf = (value: unknown): value is Self =>
  *     { pattern: "example.com/api/*", zoneId: "<YOUR_ZONE_ID>" },
  *   ],
  * }
+ * ```
+ *
+ * **Example:** Federating one hostname across Workers
+ * Routes take precedence over custom domains, so one Worker can own the
+ * hostname while others claim paths under it — no gateway Worker in the
+ * request path, and each Worker binds only what its paths need. `alchemy
+ * dev` applies the same routing on the custom-domain Worker's local URL.
+ * ```typescript
+ * const home = yield* Cloudflare.Worker("Home", {
+ *   main: "./src/home.ts",
+ *   domain: "api.example.com",
+ * });
+ * yield* Cloudflare.Worker("Products", {
+ *   main: "./src/products.ts",
+ *   routes: [{ pattern: "api.example.com/products*" }],
+ * });
+ * yield* Cloudflare.Worker("Orders", {
+ *   main: "./src/orders.ts",
+ *   routes: [{ pattern: "api.example.com/orders*" }],
+ * });
+ * // https://api.example.com/orders/1 runs Orders; /about runs Home.
+ * return { url: home.url };
  * ```
  *
  * **Example:** Deploying a prebuilt Worker without bundling
@@ -2339,10 +2409,9 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
- * bind, start, and monitor the container; then `yield* Sandbox`
- * resolves the **running** instance. Call its typed methods or use
- * `getTcpPort` to make HTTP requests to its exposed ports.
+ * `yield* Sandbox` binds the container to the DO and returns its handle
+ * without starting it. Call `start()` (a no-op once running) before using
+ * its typed methods or `getTcpPort`.
  *
  * **Example:** Running a Container from a Durable Object
  * ```typescript
@@ -2352,10 +2421,12 @@ export const isSelf = (value: unknown): value is Self =>
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* start;
  *             const { fetch } = yield* sandbox.getTcpPort(3000);
  *             const res = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
@@ -2364,11 +2435,7 @@ export const isSelf = (value: unknown): value is Self =>
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *
@@ -2541,6 +2608,27 @@ export const Worker: ResourceClassLike<Worker> &
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
     onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+    transformProps: (_id, props) =>
+      Effect.sync(() =>
+        globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"
+          ? props
+          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+      ),
   },
   { URL },
 );
+
+/**
+ * `main` as a path relative to `cwd` when it points inside `cwd`. State keeps
+ * the Worker's props and `alchemy drift` rebuilds the bundle from them, so an
+ * absolute `main` (such as `import.meta.url`) fails once the checkout that
+ * deployed it moves or is removed. Paths outside `cwd` are kept as given.
+ *
+ * @internal exported for unit testing.
+ */
+export const relativeWorkerMain = (main: string, cwd: string): string => {
+  const file = main.startsWith("file:")
+    ? decodeURIComponent(new globalThis.URL(main).pathname)
+    : main;
+  return path.isAbsolute(file) && isPathWithin(cwd, file, cwd) ? path.relative(cwd, file) : main;
+};

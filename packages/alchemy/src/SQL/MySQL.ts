@@ -141,9 +141,6 @@ export const MySQL = <E = never, R = never>(config: MySQLConfig<E, R>) =>
 export const MySQLLayer = <E = never, R = never>(config: MySQLConfig<E, R>) =>
   // Derive SqlClient from the single MysqlClient build so both tags share
   // one per-execution pool.
-  Layer.effect(
-    Sql.SqlClient,
-    Effect.gen(function* () {
-      return yield* MysqlClient.MysqlClient;
-    }),
-  ).pipe(Layer.provideMerge(Layer.effect(MysqlClient.MysqlClient, MySQL(config))));
+  Layer.effect(Sql.SqlClient, MysqlClient.MysqlClient).pipe(
+    Layer.provideMerge(Layer.effect(MysqlClient.MysqlClient, MySQL(config))),
+  );

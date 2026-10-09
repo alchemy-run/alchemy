@@ -1,7 +1,10 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { InstantNamespace } from "./InstantNamespace.ts";
+import type { ReadInstantNamespaceClient } from "./InstantNamespaceTypes.ts";
 import type { Namespace } from "./Namespace.ts";
 import type { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -13,6 +16,9 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.KV.ReadNamespace(ns)`.
  *
+ * Also accepts InstantNamespace, returning a client without metadata or
+ * paginated listing options.
+ *
  * @binding
  * @product KV
  * @category Storage & Databases
@@ -20,8 +26,21 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
 export interface ReadNamespace extends Binding.Service<
   ReadNamespace,
   "Cloudflare.KV.ReadNamespace",
-  (namespace: Namespace) => Effect.Effect<ReadNamespaceClient>
-> {}
+  {
+    (namespace: InstantNamespace): Effect.Effect<ReadInstantNamespaceClient>;
+    (namespace: Namespace): Effect.Effect<ReadNamespaceClient>;
+    (namespace: Namespace | InstantNamespace): Effect.Effect<ReadInstantNamespaceClient>;
+  }
+> {
+  <Req = never>(
+    namespace: Input<Namespace> | Effect.Effect<Namespace, never, Req>,
+  ): Effect.Effect<ReadNamespaceClient, never, ReadNamespace | Req>;
+  <Req = never>(
+    namespace:
+      | Input<Namespace | InstantNamespace>
+      | Effect.Effect<Namespace | InstantNamespace, never, Req>,
+  ): Effect.Effect<ReadInstantNamespaceClient, never, ReadNamespace | Req>;
+}
 
 export const ReadNamespace = Binding.Service<ReadNamespace>("Cloudflare.KV.ReadNamespace");
 

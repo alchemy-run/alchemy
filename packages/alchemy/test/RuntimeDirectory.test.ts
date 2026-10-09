@@ -3,6 +3,7 @@ import nextjsSource from "@alchemy.run/frontend-frameworks/nextjs/source";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { AlchemyContext, dotAlchemyDirectory } from "@/AlchemyContext";
@@ -12,6 +13,7 @@ import { WorkerBundle } from "@/Cloudflare/Workers/Sources/Rolldown";
 import { watchBundleDirectory } from "@/Cloudflare/Workers/Sources/shared";
 import { hashDirectory } from "@/Command/Memo";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
+import { ResourceContext } from "@/ResourceContext";
 import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
 import { localState } from "@/State/LocalState";
@@ -20,6 +22,32 @@ import { copyTree, hashExtraFiles } from "@/Util/extraFiles";
 import { isPathWithin } from "@/Util/isPathWithin";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256 } from "@/Util/sha256";
+import { resourceContext } from "./Utils/ResourceContext.ts";
+
+/**
+ * Runs a Worker build the way the engine runs a provider lifecycle call: with
+ * the resource's context, its stack, and (when given) the configured
+ * `.alchemy` directory. Without `dotAlchemy`, the default relative `.alchemy`
+ * applies.
+ */
+const inWorkerLifecycle =
+  (logicalId: string, dotAlchemy?: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provide([
+        Layer.succeed(ResourceContext, resourceContext("0".repeat(32), logicalId)),
+        Layer.succeed(Stack, {
+          name: "test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        dotAlchemy === undefined
+          ? Layer.empty
+          : Layer.succeed(AlchemyContext, { dotAlchemy, dev: false, adopt: false }),
+      ]),
+    );
 
 layer(PlatformServices)("runtime directory", (it) => {
   it.effect(
@@ -111,19 +139,19 @@ layer(PlatformServices)("runtime directory", (it) => {
         const main = path.join(root, "worker.mjs");
         yield* fs.writeFileString(path.join(root, "package.json"), "{}");
         yield* fs.writeFileString(main, 'export default { fetch: () => new Response("ok") };');
-        const bundler = yield* WorkerBundle.pipe(
-          Effect.provideService(AlchemyContext, { dotAlchemy: runtime, dev: false, adopt: false }),
-        );
+        const bundler = yield* WorkerBundle;
         for (const override of [undefined, path.join(root, "explicit")]) {
-          const bundle = yield* bundler.build({
-            id: "test",
-            main,
-            compatibility: { date: "2026-03-17", flags: [] },
-            entry: { kind: "external" },
-            stack: { name: "test", stage: "test" },
-            extraOptions: override ? { output: { dir: override } } : undefined,
-          });
-          const directory = override ?? path.join(runtime, "bundles/test");
+          const bundle = yield* bundler
+            .build({
+              id: "test",
+              main,
+              compatibility: { date: "2026-03-17", flags: [] },
+              entry: { kind: "external" },
+              stack: { name: "test", stage: "test" },
+              extraOptions: override ? { output: { dir: override } } : undefined,
+            })
+            .pipe(inWorkerLifecycle("test", runtime));
+          const directory = override ?? path.join(runtime, "bundles/test-test-test");
           expect(bundle.files.length).toBeGreaterThan(0);
           expect((yield* fs.readDirectory(directory)).length).toBeGreaterThan(0);
         }
@@ -143,26 +171,21 @@ layer(PlatformServices)("runtime directory", (it) => {
         yield* fs.writeFileString(path.join(root, "package.json"), "{}");
         yield* fs.writeFileString(main, 'export default { fetch: () => new Response("ok") };');
         for (const configured of [undefined, "custom/runtime"]) {
-          const bundler = yield* configured === undefined
-            ? WorkerBundle
-            : WorkerBundle.pipe(
-                Effect.provideService(AlchemyContext, {
-                  dotAlchemy: configured,
-                  dev: false,
-                  adopt: false,
-                }),
-              );
-          yield* bundler.build({
-            id: "relative",
-            main,
-            compatibility: { date: "2026-03-17", flags: [] },
-            entry: { kind: "external" },
-            stack: { name: "test", stage: "test" },
-            extraOptions: undefined,
-          });
+          const bundler = yield* WorkerBundle;
+          yield* bundler
+            .build({
+              id: "relative",
+              main,
+              compatibility: { date: "2026-03-17", flags: [] },
+              entry: { kind: "external" },
+              stack: { name: "test", stage: "test" },
+              extraOptions: undefined,
+            })
+            .pipe(inWorkerLifecycle("relative", configured));
           expect(
-            (yield* fs.readDirectory(path.join(root, configured ?? ".alchemy", "bundles/relative")))
-              .length,
+            (yield* fs.readDirectory(
+              path.join(root, configured ?? ".alchemy", "bundles/test-test-relative"),
+            )).length,
           ).toBeGreaterThan(0);
         }
       }),

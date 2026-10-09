@@ -208,7 +208,7 @@ export const CollectionGroupProvider = () =>
             return undefined;
           }
           const attrs = toAttributes(detail);
-          const tags = yield* observeTags(detail.arn).pipe(Effect.catch(() => Effect.succeed({})));
+          const tags = yield* observeTags(detail.arn).pipe(Effect.orElseSucceed(() => ({})));
           return (yield* hasAlchemyTags(
             id,
             Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
@@ -272,11 +272,9 @@ export const CollectionGroupProvider = () =>
           }
 
           if (detail?.id === undefined || detail.arn === undefined) {
-            return yield* Effect.fail(
-              new aoss.ResourceNotFoundException({
-                message: `collection group ${name} not visible after reconcile`,
-              }),
-            );
+            return yield* aoss.ResourceNotFoundException.make({
+              message: `collection group ${name} not visible after reconcile`,
+            });
           }
 
           // 3b. SYNC TAGS — diff against observed cloud tags (read via

@@ -211,6 +211,21 @@ export type Branch = Resource<
  * });
  * ```
  *
+ * ### Configuring the default branch
+ * Adopt the project's default branch to manage its compute. Destroying the
+ * stack leaves the branch to be removed with its project, since Neon does
+ * not delete a project's root or default branch on its own.
+ *
+ * **Example:** Adopt the default branch
+ * ```typescript
+ * const project = yield* Neon.Project("my-project");
+ * const main = yield* Neon.Branch("main", {
+ *   project,
+ *   name: "main",
+ *   endpoints: [{ type: "read_write", autoscalingLimitMaxCu: 1 }],
+ * }).pipe(adopt(true));
+ * ```
+ *
  * ### Migrations on a branch
  * **Example:** Apply migrations on the branch only
  * ```typescript
@@ -251,14 +266,29 @@ export const BranchProvider = () =>
       if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const pending = news as Partial<BranchProps>;
       const replacement = {
         action: "replace",
         deleteFirst:
-          news.name !== undefined &&
-          news.name === (output?.branchName ?? olds.name) &&
+          pending.name !== undefined &&
+          pending.name === (output?.branchName ?? olds.name) &&
           oldProjectId === newProjectId,
       } as const;
+      // A fork point only known at apply time cannot be proven unchanged, and
+      // `reconcile` never re-forks an existing branch, so an update would
+      // silently keep the old data.
+      if (
+        output &&
+        !isResolved([
+          pending.parentBranch,
+          pending.parentLsn,
+          pending.parentTimestamp,
+          pending.initSource,
+        ])
+      ) {
+        return replacement;
+      }
+      if (!isResolved(news)) return undefined;
       if (
         olds.parentLsn !== news.parentLsn ||
         olds.parentTimestamp !== news.parentTimestamp ||
@@ -400,7 +430,7 @@ export const BranchProvider = () =>
             findBranchByName(projectId, newName).pipe(
               Effect.flatMap(
                 Effect.fn(function* (matches) {
-                  if (matches.length !== 1) return yield* Effect.fail(error);
+                  if (matches.length !== 1) return yield* error;
                   const branch = yield* authorize(matches[0]!);
                   return { branch, operations: [] };
                 }),
@@ -476,11 +506,22 @@ export const BranchProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* Effect.gen(function* () {
+      const retained = yield* Effect.gen(function* () {
         const { branch } = yield* getProjectBranch({
           project_id: output.projectId,
           branch_id: output.branchId,
         });
+        // Neon refuses to delete a project's root or default branch (an
+        // adopted `main`, say); it is removed together with the project.
+        // Schema-only branches are parentless too, but they are deletable.
+        if (
+          branch.default ||
+          (branch.parent_id === undefined &&
+            branch.init_source !== "parent-schema" &&
+            branch.init_source !== "schema-only")
+        ) {
+          return true;
+        }
         if (branch.protected) {
           const updated = yield* updateProjectBranch({
             project_id: output.projectId,
@@ -494,7 +535,9 @@ export const BranchProvider = () =>
           branch_id: output.branchId,
         });
         yield* waitForOperations(deleted.operations);
-      }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        return false;
+      }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(false)));
+      if (retained) return;
       yield* getProjectBranch({
         project_id: output.projectId,
         branch_id: output.branchId,

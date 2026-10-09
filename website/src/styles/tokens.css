@@ -18,6 +18,14 @@ html {
   text-size-adjust: 100%;
 }
 
+/* Thin hairline scrollbars everywhere. `scrollbar-width` doesn't inherit,
+   so it's set on every element; per-component `scrollbar-width: none`
+   still wins on specificity. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--alc-hairline-3) transparent;
+}
+
 :root {
   /* ---------- Brand: muted forest greens ---------- */
   --alc-accent: #5c7a3e; /* moss — primary brand */

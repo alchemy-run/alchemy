@@ -6,9 +6,12 @@ import {
   toTimestampString,
 } from "./Convert.ts";
 import {
+  describeRewrittenHistory,
   MigrationError,
-  MigrationHistoryConflictError,
+  RewrittenMigrationHistoryError,
+  type MigrationApplyError,
   type MigrationDialect,
+  type MigrationHistoryConflictError,
   type MigrationRecord,
   type SqlExecutor,
 } from "./Format.ts";
@@ -25,7 +28,7 @@ export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
  * format Alchemy ever writes. Migrating from drizzle/prisma/wrangler
  * bookkeeping is a one-way conversion performed once (see `Convert.ts`).
  */
-const createTableSql = (table: string, dialect: MigrationDialect): string => {
+const createTableSql = (table: string, dialect: MigrationDialect, id?: "uuid"): string => {
   const quoted = quoteIdentifier(table, dialect);
   switch (dialect) {
     case "sqlite":
@@ -38,7 +41,7 @@ const createTableSql = (table: string, dialect: MigrationDialect): string => {
 );`;
     case "postgres":
       return `CREATE TABLE IF NOT EXISTS ${quoted} (
-  id SERIAL PRIMARY KEY,
+  id ${id === "uuid" ? "uuid DEFAULT gen_random_uuid()" : "SERIAL"} PRIMARY KEY,
   hash text NOT NULL,
   created_at bigint,
   name text,
@@ -88,6 +91,11 @@ const rebuildInPlace = (options: {
 }) =>
   Effect.gen(function* () {
     const { executor, table, records, nameExpr } = options;
+    if (executor.transactionalDdl === false) {
+      return yield* new MigrationError({
+        message: `Cannot automatically rebuild migration history in "${table}" on a target without transactional DDL. Convert the history explicitly before deploying.`,
+      });
+    }
     const dialect = executor.dialect;
     const quoted = quoteIdentifier(table, dialect);
     const rows = yield* executor.query(
@@ -112,7 +120,10 @@ const rebuildInPlace = (options: {
     const temp = `${table}_alchemy_upgrade`;
     yield* executor.batch([
       `DROP TABLE IF EXISTS ${quoteIdentifier(temp, dialect)};`,
-      createTableSql(temp, dialect).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE"),
+      createTableSql(temp, dialect, executor.migrationTableId).replace(
+        "CREATE TABLE IF NOT EXISTS",
+        "CREATE TABLE",
+      ),
       ...matched.map((row) => convertedRowInsertSql(temp, dialect, row)),
       `DROP TABLE ${quoted};`,
       renameSql(temp, table, dialect),
@@ -134,8 +145,13 @@ const ensureTable = (options: {
         // behind: copy it into our table ONCE and freeze theirs. One-way.
         const history = yield* findForeignHistory({ executor, table });
         const converted = history ? yield* matchForeignRows({ history, records }) : [];
+        if (converted.length > 0 && executor.transactionalDdl === false) {
+          return yield* new MigrationError({
+            message: `Cannot automatically copy foreign migration history into "${table}" without transactional DDL. Convert the history explicitly before deploying.`,
+          });
+        }
         yield* executor.batch([
-          createTableSql(table, executor.dialect),
+          createTableSql(table, executor.dialect, executor.migrationTableId),
           ...converted.map((row) => convertedRowInsertSql(table, executor.dialect, row)),
         ]);
         return;
@@ -184,30 +200,113 @@ const ensureTable = (options: {
     }
   });
 
-const appliedNames = (executor: SqlExecutor, table: string) =>
-  executor.query(`SELECT name FROM ${quoteIdentifier(table, executor.dialect)};`).pipe(
-    Effect.map(
-      (rows) =>
-        new Set(
-          rows
-            .map((row) => row.name)
-            .filter((name) => name !== null && name !== undefined)
-            .map(String),
-        ),
-    ),
+const aliasesOf = (name: string): readonly string[] => [
+  name,
+  `${name}/migration.sql`,
+  name.replace(/\/migration\.sql$/, ""),
+];
+
+const appliedHistory = (executor: SqlExecutor, table: string) =>
+  executor.query(`SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`).pipe(
+    Effect.map((rows) => {
+      const byName = new Map<string, string | undefined>();
+      for (const row of rows) {
+        if (row.name === null || row.name === undefined) continue;
+        byName.set(
+          String(row.name),
+          row.hash === null || row.hash === undefined ? undefined : String(row.hash),
+        );
+      }
+      return byName;
+    }),
   );
+
+const lookupApplied = (
+  byName: Map<string, string | undefined>,
+  name: string,
+): { name: string; hash: string | undefined } | undefined => {
+  for (const alias of aliasesOf(name)) {
+    if (byName.has(alias)) {
+      return { name: alias, hash: byName.get(alias) };
+    }
+  }
+  return undefined;
+};
+
+const applyPending = (options: {
+  executor: SqlExecutor;
+  table: string;
+  records: ReadonlyArray<MigrationRecord>;
+  applied: Map<string, string | undefined>;
+}) =>
+  Effect.gen(function* () {
+    const { executor, table, records, applied } = options;
+    for (const record of records) {
+      if (lookupApplied(applied, record.name)) continue;
+      const bookkeeping = insertSql(table, executor.dialect, record);
+      yield* executor.applyMigration
+        ? executor.applyMigration(record, bookkeeping)
+        : executor.batch([...record.statements, bookkeeping]);
+    }
+  });
 
 /**
  * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
  * migration's statements and its bookkeeping INSERT go through
  * `executor.batch` as one unit (a transaction on pg/mysql, one batched
- * query on D1, which has no transactions over HTTP).
+ * query on D1, which has no transactions over HTTP). Nontransactional DDL
+ * targets can supply `applyMigration` to checkpoint individual statements.
  *
  * Applied-detection is name-keyed with layout aliasing: pre-registry
  * Alchemy recorded drizzle-layout migrations under `<dir>/migration.sql`
  * while current records key them by `<dir>`, so both keys are honored.
+ * An already-applied name whose local hash changed, or a recorded name
+ * with no local file, is a hard {@link RewrittenMigrationHistoryError}
+ * rather than a silent skip that would persist the new hashes.
  */
 export const applyAlchemyFormat = (options: {
+  executor: SqlExecutor;
+  table: string;
+  records: ReadonlyArray<MigrationRecord>;
+}): Effect.Effect<void, MigrationApplyError> =>
+  Effect.gen(function* () {
+    const { executor, table, records } = options;
+    yield* ensureTable({ executor, table, records });
+    const applied = yield* appliedHistory(executor, table);
+    const localNames = new Set(records.flatMap((record) => aliasesOf(record.name)));
+    const changed: string[] = [];
+    const removed: string[] = [];
+    for (const name of applied.keys()) {
+      if (!localNames.has(name)) removed.push(name);
+    }
+    for (const record of records) {
+      const row = lookupApplied(applied, record.name);
+      if (row?.hash && row.hash !== record.hash) {
+        changed.push(record.name);
+      }
+    }
+    if (changed.length > 0 || removed.length > 0) {
+      changed.sort();
+      removed.sort();
+      return yield* new RewrittenMigrationHistoryError({
+        changed,
+        removed,
+        message:
+          `Applied migration history in "${table}" does not match the local files ` +
+          `(${describeRewrittenHistory({ changed, removed })}). ` +
+          "Add a new forward migration instead of editing or deleting already-applied files.",
+      });
+    }
+    yield* applyPending({ executor, table, records, applied });
+  });
+
+/**
+ * {@link applyAlchemyFormat} without the rewritten-history check: applied
+ * names are skipped regardless of their hash. For runtime appliers (Durable
+ * Object SQLite) where failing would take every instance down after a
+ * deploy that already succeeded.
+ */
+export const applyPendingAlchemyFormat = (options: {
   executor: SqlExecutor;
   table: string;
   records: ReadonlyArray<MigrationRecord>;
@@ -215,15 +314,6 @@ export const applyAlchemyFormat = (options: {
   Effect.gen(function* () {
     const { executor, table, records } = options;
     yield* ensureTable({ executor, table, records });
-    const applied = yield* appliedNames(executor, table);
-    for (const record of records) {
-      if (
-        applied.has(record.name) ||
-        applied.has(`${record.name}/migration.sql`) ||
-        applied.has(record.name.replace(/\/migration\.sql$/, ""))
-      ) {
-        continue;
-      }
-      yield* executor.batch([...record.statements, insertSql(table, executor.dialect, record)]);
-    }
+    const applied = yield* appliedHistory(executor, table);
+    yield* applyPending({ executor, table, records, applied });
   });

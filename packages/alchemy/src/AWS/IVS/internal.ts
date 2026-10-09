@@ -23,7 +23,7 @@ export const toTagRecord = (
 export const readIvsTags = Effect.fn(function* (arn: string) {
   const response = yield* ivs
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

@@ -31,6 +31,7 @@ import {
   BINDING_KV_OBJECT,
   HEADER_KV_CONTROL_OP,
   HEADER_KV_NAMESPACE,
+  HEADER_KV_MODE,
 } from "./KvNamespaceOptions.shared.ts";
 
 interface Env {
@@ -41,10 +42,11 @@ interface Env {
 
 export default {
   async fetch(request, env, ctx) {
-    const { namespaceId } = (ctx as { props: KvServiceProps }).props;
+    const { namespaceId, mode } = (ctx as { props: KvServiceProps }).props;
     const stub = env[BINDING_KV_OBJECT].getByName(namespaceId);
     const headers = new Headers(request.headers);
     headers.set(HEADER_KV_NAMESPACE, encodeURIComponent(namespaceId));
+    headers.set(HEADER_KV_MODE, mode ?? "classic");
     return stub.fetch(new Request(request, { headers }));
   },
 } satisfies ExportedHandler<Env>;
@@ -321,6 +323,7 @@ export class KVNamespaceObject implements DurableObject {
   beingTested = false;
 
   #name?: string;
+  #instant = false;
   #blob?: BlobStore;
   #storage?: KeyValueStorage;
 
@@ -354,6 +357,7 @@ export class KVNamespaceObject implements DurableObject {
     const encodedName = req.headers.get(HEADER_KV_NAMESPACE);
     assert(encodedName !== null, `Expected ${HEADER_KV_NAMESPACE} header`);
     this.#name = decodeURIComponent(encodedName);
+    this.#instant = req.headers.get(HEADER_KV_MODE) === "instant";
 
     // Allow control of object internals via a reserved header. Used by tests
     // to update fake time and access internal storage.
@@ -431,6 +435,12 @@ export class KVNamespaceObject implements DurableObject {
     }
   }
 
+  #validateInstantKeySize(key: string): void {
+    if (this.#instant && utf8ByteLength(key) > 300) {
+      throw new HttpError(400, "KV Instant keys must be at most 300 bytes");
+    }
+  }
+
   async #get(rawKey: string, url: URL): Promise<Response> {
     // Decode URL parameters
     const key = decodeKey(rawKey, url.searchParams);
@@ -438,6 +448,7 @@ export class KVNamespaceObject implements DurableObject {
     const cacheTtl = cacheTtlParam === null ? undefined : parseInt(cacheTtlParam);
 
     // Get value from storage
+    this.#validateInstantKeySize(key);
     validateGetOptions(key, { cacheTtl });
     const entry = await this.storage.get(key);
     if (entry === null) throw new HttpError(404, "Not Found");
@@ -477,6 +488,7 @@ export class KVNamespaceObject implements DurableObject {
     const obj: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const key of keys) {
+      this.#validateInstantKeySize(key);
       validateGetOptions(key, { cacheTtl: parsedBody.cacheTtl });
       const entry = await this.storage.get(key);
       const [value, size] = await processKeyValue(
@@ -506,6 +518,10 @@ export class KVNamespaceObject implements DurableObject {
     const rawExpiration = url.searchParams.get(KVParams.EXPIRATION);
     const rawExpirationTtl = url.searchParams.get(KVParams.EXPIRATION_TTL);
     const rawMetadata = req.headers.get(KVHeaders.METADATA);
+    if (this.#instant && rawMetadata !== null) {
+      throw new HttpError(400, "KV Instant does not support metadata");
+    }
+    this.#validateInstantKeySize(key);
 
     // Validate key, expiration and metadata
     const now = millisToSeconds(this.timers.now());
@@ -575,6 +591,7 @@ export class KVNamespaceObject implements DurableObject {
   async #delete(rawKey: string, url: URL): Promise<Response> {
     // Decode URL parameters
     const key = decodeKey(rawKey, url.searchParams);
+    this.#validateInstantKeySize(key);
     validateKey(key);
 
     // Delete key from storage
@@ -586,6 +603,12 @@ export class KVNamespaceObject implements DurableObject {
     // Decode URL parameters
     const options = decodeListOptions(url);
     validateListOptions(options);
+    if (this.#instant) {
+      // workerd may supply its default page size even when list() has no
+      // options. Ignore it and return every matching key in a single response.
+      options.limit = Number.MAX_SAFE_INTEGER - 1;
+      options.cursor = undefined;
+    }
 
     // List keys from storage
     const res = this.storage.list(options);

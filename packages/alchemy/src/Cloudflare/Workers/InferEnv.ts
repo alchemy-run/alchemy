@@ -23,7 +23,10 @@ import type * as Email from "../Email/index.ts";
 import type * as FlagshipNs from "../Flagship/index.ts";
 import type * as HyperdriveNs from "../Hyperdrive/index.ts";
 import type * as ImagesNs from "../Images/index.ts";
+import type * as K2Ns from "../K2/index.ts";
+import type { K2StreamBinding } from "../K2/WriteStreamBinding.ts";
 import type * as KV from "../KV/index.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type * as PipelinesNs from "../Pipelines/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
@@ -41,7 +44,7 @@ import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
-import type { Worker } from "./Worker.ts";
+import type { Self, Worker } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
 
@@ -62,98 +65,109 @@ export type GetBindingType<T> =
   // branches must never see it.
   T extends WorkerEntrypointBinding<infer Entrypoint>
     ? Service<Entrypoint>
-    : // A Container bound in `env` is a container-backed Durable Object class —
-      // the runtime binding is the class's namespace. Must be tested BEFORE the
-      // generic Effect unwrap: a Container declaration is itself an Effect.
-      T extends Container.Decl<any, any, any, any, infer DOShape>
-      ? DurableObjectNamespace<DOShape & Rpc.DurableObjectBranded>
-      : // A Worker-only binding lifted by `.pipe(Alchemy.remote())` — the brand
-        // carries the underlying binding value type; recurse on it. Must also
-        // be tested BEFORE the generic Effect unwrap (its Effect `A` is the
-        // runtime client, not the binding value).
-        T extends WorkerOnlyBinding.BindingEffect<infer B>
-        ? GetBindingType<B>
-        : // `R2.S3Credentials` is an Effect whose `A` is the Effect-native
-          // accessor; on an async Worker's `env` it arrives as a JSON string
-          // (a `secret_text` when deployed). Tested BEFORE the Effect unwrap.
-          T extends R2.S3Credentials
-          ? string
-          : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
-            // no case of its own: the generic Effect unwrap below reduces it to
-            // `string` via the fallthrough.
-            T extends Output<infer A, infer _Req> | Effect.Effect<infer A, infer _E, infer _R>
-            ? GetBindingType<A>
-            : T extends FlagshipNs.App
-              ? Flagship
-              : T extends Assets
-                ? Service
-                : T extends AlchemyRpc<infer Shape extends object>
-                  ? RpcWireShape<Shape> & Service
-                  : T extends D1.Database
-                    ? D1Database
-                    : T extends R2.Bucket
-                      ? R2Bucket
-                      : T extends KV.Namespace
-                        ? KVNamespace
-                        : T extends DispatchNamespaceResource
-                          ? DispatchNamespace
-                          : T extends Queues.Queue
-                            ? Queue<unknown>
-                            : T extends AI.Gateway
-                              ? Ai
-                              : T extends AIBinding
-                                ? Ai
-                                : T extends AI.Search
-                                  ? AiSearchInstance
-                                  : T extends AI.SearchNamespace
-                                    ? AiSearchNamespace
-                                    : T extends Email.SendEmail
-                                      ? SendEmail
-                                      : T extends AnalyticsEngine.Dataset
-                                        ? AnalyticsEngineDataset
-                                        : T extends ArtifactsNs.Namespace
-                                          ? Artifacts
-                                          : T extends RateLimitBinding
-                                            ? RateLimit
-                                            : T extends SecretKeyBinding
-                                              ? CryptoKey
-                                              : T extends ImagesNs.ImagesBinding
-                                                ? ImagesBinding
-                                                : T extends BrowserBinding
-                                                  ? BrowserRun
-                                                  : // The ambient global `StreamBinding` from
-                                                    // @cloudflare/workers-types (the alchemy binding value
-                                                    // type of the same name is only reachable as
-                                                    // `StreamNs.StreamBinding`).
-                                                    T extends StreamNs.StreamBinding
-                                                    ? StreamBinding
-                                                    : T extends HyperdriveNs.Connection
-                                                      ? Hyperdrive
-                                                      : T extends VersionMetadataBinding
-                                                        ? WorkerVersionMetadata
-                                                        : T extends WorkerLoaderResource
-                                                          ? WorkerLoader
-                                                          : T extends
-                                                                | WorkflowLike<infer Params>
-                                                                | WorkflowBinding<infer Params>
-                                                            ? Workflow<Params>
-                                                            : T extends DurableObjectLike
-                                                              ? DurableObjectNamespace<
-                                                                  Exclude<T["Shape"], undefined>
-                                                                >
+    : // A service binding to this Worker itself (`Workers.Self` /
+      // `Workers.SelfEntrypoint`). Typed as a plain `Fetcher`: carrying the
+      // entrypoint class would make the Worker's type depend on its own
+      // module. `ctx.exports` (see `InferGlobalProps`) is the typed path.
+      T extends Self
+      ? Service
+      : // A Container bound in `env` is a container-backed Durable Object class —
+        // the runtime binding is the class's namespace. Must be tested BEFORE the
+        // generic Effect unwrap: a Container declaration is itself an Effect.
+        T extends Container.Decl<any, any, any, any, infer DOShape>
+        ? DurableObjectNamespace<DOShape & Rpc.DurableObjectBranded>
+        : // A Worker-only binding lifted by `.pipe(Alchemy.remote())` — the brand
+          // carries the underlying binding value type; recurse on it. Must also
+          // be tested BEFORE the generic Effect unwrap (its Effect `A` is the
+          // runtime client, not the binding value).
+          T extends WorkerOnlyBinding.BindingEffect<infer B>
+          ? GetBindingType<B>
+          : // `R2.S3Credentials` is an Effect whose `A` is the Effect-native
+            // accessor; on an async Worker's `env` it arrives as a JSON string
+            // (a `secret_text` when deployed). Tested BEFORE the Effect unwrap.
+            T extends R2.S3Credentials
+            ? string
+            : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
+              // no case of its own: the generic Effect unwrap below reduces it to
+              // `string` via the fallthrough.
+              T extends Output<infer A, infer _Req> | Effect.Effect<infer A, infer _E, infer _R>
+              ? GetBindingType<A>
+              : T extends FlagshipNs.App
+                ? Flagship
+                : T extends Assets
+                  ? Service
+                  : T extends AlchemyRpc<infer Shape extends object>
+                    ? RpcWireShape<Shape> & Service
+                    : T extends D1.Database
+                      ? D1Database
+                      : T extends R2.Bucket
+                        ? R2Bucket
+                        : T extends KV.InstantNamespace
+                          ? KV.InstantNamespaceBindingClient
+                          : T extends KV.Namespace
+                            ? KVNamespace
+                            : T extends DispatchNamespaceResource
+                              ? DispatchNamespace
+                              : T extends Queues.Queue
+                                ? Queue<unknown>
+                                : T extends AI.Gateway
+                                  ? Ai
+                                  : T extends AIBinding
+                                    ? Ai
+                                    : T extends AI.Search
+                                      ? AiSearchInstance
+                                      : T extends AI.SearchNamespace
+                                        ? AiSearchNamespace
+                                        : T extends Email.SendEmail
+                                          ? SendEmail
+                                          : T extends AnalyticsEngine.Dataset
+                                            ? AnalyticsEngineDataset
+                                            : T extends ArtifactsNs.Namespace
+                                              ? Artifacts
+                                              : T extends RateLimitBinding
+                                                ? RateLimit
+                                                : T extends SecretKeyBinding
+                                                  ? CryptoKey
+                                                  : T extends ImagesNs.ImagesBinding
+                                                    ? ImagesBinding
+                                                    : T extends BrowserBinding
+                                                      ? BrowserRun
+                                                      : // The ambient global `StreamBinding` from
+                                                        // @cloudflare/workers-types (the alchemy binding value
+                                                        // type of the same name is only reachable as
+                                                        // `StreamNs.StreamBinding`).
+                                                        T extends StreamNs.StreamBinding
+                                                        ? StreamBinding
+                                                        : T extends HyperdriveNs.Connection
+                                                          ? Hyperdrive
+                                                          : T extends VersionMetadataBinding
+                                                            ? WorkerVersionMetadata
+                                                            : T extends WorkerLoaderResource
+                                                              ? WorkerLoader
                                                               : T extends
-                                                                    | VpcService
-                                                                    | VpcServiceLookup
-                                                                ? Fetcher
-                                                                : T extends
-                                                                      | PipelinesNs.Stream
-                                                                      | PipelinesNs.LegacyPipeline
-                                                                  ? Pipeline
-                                                                  : T extends Redacted<any>
-                                                                    ? // redacteds are always stored as secret_text, so are always string
-                                                                      // we JSON.stringify when not a Redacted<string>
-                                                                      string
-                                                                    : T;
+                                                                    | WorkflowLike<infer Params>
+                                                                    | WorkflowBinding<infer Params>
+                                                                ? Workflow<Params>
+                                                                : T extends DurableObjectLike
+                                                                  ? DurableObjectNamespace<
+                                                                      Exclude<T["Shape"], undefined>
+                                                                    >
+                                                                  : T extends
+                                                                        | VpcService
+                                                                        | VpcServiceLookup
+                                                                        | MtlsCertificate
+                                                                    ? Fetcher
+                                                                    : T extends
+                                                                          | PipelinesNs.Stream
+                                                                          | PipelinesNs.LegacyPipeline
+                                                                      ? Pipeline
+                                                                      : T extends K2Ns.Stream
+                                                                        ? K2StreamBinding
+                                                                        : T extends Redacted<any>
+                                                                          ? // redacteds are always stored as secret_text, so are always string
+                                                                            // we JSON.stringify when not a Redacted<string>
+                                                                            string
+                                                                          : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

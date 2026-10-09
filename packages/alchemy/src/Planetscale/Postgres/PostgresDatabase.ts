@@ -16,9 +16,16 @@ import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
-import { PlanetscaleConflict, waitForBranchReady, waitForDatabaseReady } from "../Util.ts";
+import {
+  deleteUnprotectedDatabase,
+  PlanetscaleConflict,
+  replaceDatabase,
+  waitForBranchReady,
+  waitForDatabaseReady,
+} from "../Util.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   type PostgresClusterSize,
 } from "./PostgresClusterSize.ts";
@@ -92,6 +99,15 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
+ * ### Deletion protection
+ * **Example:** Refuse deletes of a production database
+ * ```typescript
+ * const db = yield* Planetscale.PostgresDatabase("MyDb", {
+ *   clusterSize: "PS_10",
+ *   deletionProtection: true,
+ * });
+ * ```
+ *
  * ### Adoption
  * **Example:** Adopting an existing database
  * ```typescript
@@ -136,16 +152,16 @@ export const PostgresDatabaseProvider = () =>
       const stables = nameIsStable ? ["id", "organization", "region", "name"] : undefined;
 
       if (news.region?.slug && output?.region?.slug && news.region.slug !== output.region.slug) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "region");
       }
 
       if (news.replicas !== olds.replicas) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "replicas");
       }
 
       const oldArch = output?.arch ?? olds.arch ?? "x86";
       if (news.arch && news.arch !== oldArch) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "arch");
       }
 
       if (yield* diffMigrations({ news, output })) {
@@ -168,7 +184,11 @@ export const PostgresDatabaseProvider = () =>
         return { action: "update", stables } as const;
       }
 
-      return undefined;
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -185,14 +205,12 @@ export const PostgresDatabaseProvider = () =>
       if (!data) return undefined;
 
       if (data.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       const defaultBranch = data.default_branch ?? "main";
@@ -207,7 +225,7 @@ export const PostgresDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-      const arch: "x86" | "arm" = branch!.cluster_architecture === "aarch64" ? "arm" : "x86";
+      const arch = toPostgresClusterArch(branch!.cluster_architecture);
       const clusterSize = branch!.cluster_name;
 
       return {
@@ -230,6 +248,7 @@ export const PostgresDatabaseProvider = () =>
         requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
         restrictBranchRegion: data.restrict_branch_region ?? false,
         productionBranchWebConsole: data.production_branch_web_console ?? false,
+        deletionProtection: data.deletion_protected ?? false,
       };
     }),
 
@@ -281,14 +300,12 @@ export const PostgresDatabaseProvider = () =>
       yield* waitForDatabaseReady(organization, observed.name, session);
 
       if (observed.kind !== "postgresql") {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
-              `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
-              `or delete the existing database and retry.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale database "${observed.name}" has kind "${observed.kind}" but this resource ` +
+            `is a PostgresDatabase. Use Planetscale.${observed.kind === "mysql" ? "MySQLDatabase" : observed.kind}() instead, ` +
+            `or delete the existing database and retry.`,
+        });
       }
 
       // Sync — ensure a non-`main` default branch exists before
@@ -327,6 +344,7 @@ export const PostgresDatabaseProvider = () =>
         require_approval_for_deploy: news.requireApprovalForDeploy,
         restrict_branch_region: news.restrictBranchRegion,
         production_branch_web_console: news.productionBranchWebConsole,
+        deletion_protected: news.deletionProtection,
         default_branch: news.defaultBranch,
       });
 
@@ -378,16 +396,12 @@ export const PostgresDatabaseProvider = () =>
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
         restrictBranchRegion: updated.restrict_branch_region ?? false,
         productionBranchWebConsole: updated.production_branch_web_console ?? false,
+        deletionProtection: updated.deletion_protected ?? false,
       } satisfies PostgresDatabaseAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* planetscale
-        .deleteDatabase({
-          organization: output.organization,
-          database: output.name,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* deleteUnprotectedDatabase(output.organization, output.name);
     }),
 
     list: Effect.fn(function* () {
@@ -413,7 +427,7 @@ export const PostgresDatabaseProvider = () =>
               })
               .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-            const arch: "x86" | "arm" = branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
+            const arch = toPostgresClusterArch(branch?.cluster_architecture);
             const clusterSize = branch?.cluster_name ?? "";
 
             const attrs: PostgresDatabase["Attributes"] = {
@@ -436,6 +450,7 @@ export const PostgresDatabaseProvider = () =>
               requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
               restrictBranchRegion: data.restrict_branch_region ?? false,
               productionBranchWebConsole: data.production_branch_web_console ?? false,
+              deletionProtection: data.deletion_protected ?? false,
             };
             return attrs;
           }),

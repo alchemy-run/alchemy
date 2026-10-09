@@ -51,6 +51,7 @@ export const makeProxyBucketHelpers = (
   ambient: Context.Context<never>,
 ): ReturnType<typeof makeHelpers> => {
   const use = <T>(fn: (raw: runtime.R2Bucket) => Promise<T>): Effect.Effect<T, R2Error> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining requirements are satisfied by the captured ambient context
     Effect.scoped(
       Effect.gen(function* () {
         const proxy = yield* open({

@@ -1,4 +1,3 @@
-import * as NodeHttp from "node:http";
 import { URL as NodeURL } from "node:url";
 import type * as Context from "effect/Context";
 import * as vite from "vite";
@@ -16,9 +15,9 @@ import { resolvePluginApi } from "../rolldown/utils.ts";
 import { DistilledDevEnvironment } from "./dev-environment.ts";
 import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
-import { proxyRequestHeaders } from "./forwarded-host.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 import { handleWebSocket } from "./websockets.ts";
+import { forwardWorkerRequest } from "./worker-request.ts";
 
 let context: Context.Context<RuntimeServices> | undefined;
 
@@ -261,28 +260,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       return () => {
         server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
           const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
-          const request = NodeHttp.request(url, {
-            method: req.method,
-            headers: proxyRequestHeaders(req, url, proxySharedSecret),
-          });
-          req.pipe(request);
-          request.on("response", (response) => {
-            res.writeHead(response.statusCode ?? 500, response.headers);
-            response.pipe(res);
-          });
-          // Without a listener a connection error is an unhandled `error`
-          // event, which takes down the dev server. Requests in flight while
-          // the Worker runtime is being replaced hit exactly that.
-          request.on("error", (error) => {
-            server.config.logger.error(`Worker request failed: ${error.message}`, {
-              error,
-              timestamp: true,
-            });
-            if (!res.headersSent) {
-              res.writeHead(502, { "content-type": "text/plain" });
-            }
-            res.end("Bad Gateway");
-          });
+          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
           // Move the proxy middleware from the end of the stack to directly

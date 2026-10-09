@@ -236,16 +236,6 @@ export const getSubscription = (name: string) =>
     ? Effect.succeed(undefined)
     : catchMissing(we.getSubscriptions({ name: toSubscriptionName(name) }));
 
-export const getConfig = (name: string, tenant?: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(
-        we.getTasksPushNotificationConfigs({
-          name,
-          tenant,
-        }),
-      );
-
 export const getTopic = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
@@ -395,13 +385,3 @@ export const findSubscription = (
     const listed = yield* listSubscriptions(listFilter(eventTypes, targetResource));
     return listed[0];
   });
-
-export const listConfigs = (parent: string, tenant?: string) =>
-  collectPages(
-    we.listTasksPushNotificationConfigs.pages({
-      parent,
-      tenant,
-      pageSize: 100,
-    }),
-    (page) => page.configs,
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as we.TaskPushNotificationConfig[])));

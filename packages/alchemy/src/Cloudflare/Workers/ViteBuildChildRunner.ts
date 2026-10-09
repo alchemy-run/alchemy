@@ -1,4 +1,6 @@
 import * as NodeV8 from "node:v8";
+import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
@@ -51,9 +53,15 @@ const program = Effect.gen(function* () {
   yield* fs.writeFile(config.outputPath, NodeV8.serialize(result));
 });
 
-// The parent streams this child's output and turns its exit code into the
-// resource-scoped build error. Do not print a second Effect failure report
-// (the extra `✖` block) from the child itself.
-runMain(program.pipe(Effect.provide(PlatformServices)), {
-  disableErrorReporting: true,
-});
+// The parent streams this child's output and turns its exit code + stderr
+// into the resource-scoped build error. Skip runMain's own `✖` report, but
+// print the cause: vite only logs `✗ Build failed in …`, so this is the only
+// place the actual error (a rolldown diagnostic, a plugin throwing during
+// config resolution) reaches the parent.
+runMain(
+  program.pipe(
+    Effect.tapCause((cause) => cause.pipe(Cause.pretty, Console.error)),
+    Effect.provide(PlatformServices),
+  ),
+  { disableErrorReporting: true },
+);

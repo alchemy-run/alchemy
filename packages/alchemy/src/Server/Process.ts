@@ -142,6 +142,7 @@ export const createContainerRuntimeContext =
         const shape = options?.shape;
         const run = shape?.run;
         if (Effect.isEffect(run)) {
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
           yield* base.run(run as Effect.Effect<void, never, any>);
         }
         // Boot the HTTP server only for an impl that declared `fetch` — a

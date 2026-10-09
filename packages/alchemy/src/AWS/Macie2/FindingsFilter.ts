@@ -125,10 +125,12 @@ export const FindingsFilterProvider = () =>
     Effect.gen(function* () {
       const getFilter = (id: string) =>
         macie2.getFindingsFilter({ id }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          // Macie disabled ⇒ the filter is unreachable (and disabling deletes
-          // all Macie configuration), so report it as gone.
-          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            // Macie disabled ⇒ the filter is unreachable (and disabling deletes
+            // all Macie configuration), so report it as gone.
+            AccessDeniedException: () => Effect.succeed(undefined),
+          }),
         );
 
       return {
@@ -226,8 +228,10 @@ export const FindingsFilterProvider = () =>
           // Idempotent — the filter may already be gone, or Macie may already
           // be disabled for the account.
           yield* macie2.deleteFindingsFilter({ id: output.id }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("AccessDeniedException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              AccessDeniedException: () => Effect.void,
+            }),
           );
         }),
       };

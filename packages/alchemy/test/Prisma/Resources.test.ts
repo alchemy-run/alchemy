@@ -7,7 +7,6 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
-import { InstanceId } from "@/InstanceId";
 import * as Output from "@/Output";
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
@@ -31,12 +30,14 @@ import {
 } from "@/Prisma/SourceRepository";
 import type { Database as ApiDatabase } from "@/Prisma/Types";
 import * as Provider from "@/Provider";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { RuntimeContext } from "@/RuntimeContext";
 import { Self } from "@/Self";
 import { Stack, type StackSpec } from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State/InMemoryState";
 import { PlatformServices } from "@/Util/PlatformServices";
+import { resourceContext } from "../Utils/ResourceContext.ts";
 import {
   type Captured,
   conflict,
@@ -4092,7 +4093,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           actions: {},
         }),
         Effect.provideService(Stage, "test"),
-        Effect.provideService(InstanceId, "00000000000000000000000000000000"),
+        Effect.provideService(ResourceContext, resourceContext("00000000000000000000000000000000")),
       );
     },
     {
@@ -4182,7 +4183,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           actions: {},
         }),
         Effect.provideService(Stage, "test"),
-        Effect.provideService(InstanceId, "00000000000000000000000000000000"),
+        Effect.provideService(ResourceContext, resourceContext("00000000000000000000000000000000")),
       );
     },
     {

@@ -146,6 +146,64 @@ describe.sequential(
       }).pipe(logLevel),
     );
 
+    test.provider("destroy removes only its own rules and keeps the entrypoint", (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
+              name: zoneName,
+            }).pipe(AdoptPolicy.adopt(true));
+            return yield* Cloudflare.Ruleset.Ruleset("OwnedRules", {
+              zone,
+              phase,
+              rules: [
+                {
+                  description: "Alchemy owned rule",
+                  expression: 'http.request.uri.path eq "/__alchemy_ruleset_owned__"',
+                  action: "block",
+                },
+              ],
+            });
+          }),
+        );
+
+        // A rule added outside this stack after the deploy. Remove it
+        // even when an assertion below fails.
+        const withForeign = yield* rulesets.createRuleForZone({
+          zoneId: deployed.zoneId,
+          rulesetId: deployed.rulesetId,
+          body: {
+            description: "Foreign rule",
+            expression: 'http.request.uri.path eq "/__alchemy_ruleset_foreign__"',
+            action: "block",
+          },
+        });
+        const foreignId = withForeign.rules.find((r) => r.description === "Foreign rule")?.id;
+        expect(foreignId).toBeTruthy();
+        yield* Effect.addFinalizer(() =>
+          rulesets
+            .deleteRuleForZone({
+              zoneId: deployed.zoneId,
+              rulesetId: deployed.rulesetId,
+              ruleId: foreignId!,
+            })
+            .pipe(Effect.ignore),
+        );
+
+        yield* stack.destroy();
+
+        // The entrypoint survives with only the foreign rule left in it.
+        const entrypoint = yield* rulesets.getPhasForZone({
+          zoneId: deployed.zoneId,
+          rulesetPhase: phase,
+        });
+        expect(entrypoint.id).toEqual(deployed.rulesetId);
+        expect(entrypoint.rules.map((r) => r.id)).toEqual([foreignId]);
+      }).pipe(logLevel),
+    );
+
     test.provider(
       "creates and tears down a ruleset whose zone is provisioned in the same deploy",
       (stack) =>

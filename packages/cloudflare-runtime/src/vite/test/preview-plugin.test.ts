@@ -47,7 +47,11 @@ describe("preview plugin", () => {
     runtimeAddress = await listen(runtimeServer);
     // A fake built project: the entry environment's outDir with the entry
     // chunk, and a client outDir with a static asset.
-    root = await NodeFs.mkdtemp(NodePath.join(NodeOs.tmpdir(), "distilled-preview-"));
+    // Canonicalize the temp root: Windows may hand back an 8.3 short path
+    // (C:\Users\RUNNER~1\...) that the plugin keeps while realpath expands it.
+    root = await NodeFs.realpath(
+      await NodeFs.mkdtemp(NodePath.join(NodeOs.tmpdir(), "distilled-preview-")),
+    );
     await NodeFs.mkdir(NodePath.join(root, "dist", "ssr"), { recursive: true });
     await NodeFs.mkdir(NodePath.join(root, "dist", "client"), {
       recursive: true,

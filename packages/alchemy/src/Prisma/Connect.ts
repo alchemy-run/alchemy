@@ -126,8 +126,7 @@ export interface ConnectClient {
  * A container is a real process with no workerd bindings, so the connection
  * travels as plain environment variables — the same channel Prisma Compute
  * and Lambda use. Start the container with
- * `Cloudflare.Containers.layer(Api, { enableInternet: true })` so it can
- * reach the database. (Hyperdrive, by contrast, is a workerd binding and is
+ * `api.start({ enableInternet: true })` so it can reach the database. (Hyperdrive, by contrast, is a workerd binding and is
  * unavailable inside a container.)
  *
  * @binding

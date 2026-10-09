@@ -55,8 +55,8 @@ uses when AWS asks for physical resource names.
 
 `providers: AWS.providers()` registers every AWS resource and
 IAM policy binding that ships with Alchemy, and resolves
-credentials from your Alchemy profile — SSO, environment
-variables, or stored keys, whichever you picked in
+credentials from your Alchemy profile — SSO, console login,
+or stored keys, whichever you picked in
 [Setup](/aws/setup).
 
 `state: AWS.state()` stores deploy state in an account-regional
@@ -187,6 +187,13 @@ surrounding Effect context — handy for stack-level config like
 `stage`, `appName`, or anything else you'd want to vary per
 environment.
 
+Lambda creates the function's log group on its first invocation
+and keeps events forever. Set `logging: { retention: "2 weeks" }`
+to have Alchemy create the group up front with that retention (the
+duration is rounded up to the nearest value CloudWatch Logs
+supports; `"forever"` clears an existing policy). The group is
+deleted with the function.
+
 ## Wire the function into the Stack
 
 The `Api` class is just a typed identifier — yielding it inside
@@ -292,6 +299,45 @@ The contract is blocking and honest: request finalizers run before
 the response, keep them cheap, and anything that must not be lost
 gets written durably (a queue, a table) inside the handler itself.
 :::
+
+### Timeouts still export their trace
+
+A Lambda that hits its timeout is killed mid-flight, and its buffered
+telemetry is lost with it, on exactly the invocation you most want a
+trace for. So the runtime watches the deadline. If the handler is
+still running 500 ms before the timeout, the runtime ends the
+invocation's root span with an `AWS.Lambda.InvocationTimeoutError`,
+logs a warning, and drains the exporters. The handler is not
+interrupted and the response is not changed: if it does finish in
+that last half second, it returns as normal, and its root span stays
+the timeout error, marked `aws.lambda.timeout.imminent`.
+
+Size the margin for one export round-trip to your telemetry backend,
+or set it to zero to turn the flush off:
+
+```typescript
+// src/api.ts
+import * as AWS from "alchemy/AWS";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    functionUrl: true,
+    timeout: Duration.seconds(30),
+    // flush 1 s before the deadline instead of the default 500 ms
+    timeoutMargin: Duration.seconds(1),
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
+    };
+  }),
+) {}
+```
 
 Construction-level finalizers run at **sandbox shutdown**. A Lambda sandbox
 with no registered extensions is killed with no signal at all, so

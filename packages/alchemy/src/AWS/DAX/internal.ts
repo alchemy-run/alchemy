@@ -26,7 +26,7 @@ export const toTagRecord = (
 export const readDaxTags = Effect.fn(function* (arn: string) {
   const response = yield* dax
     .listTags({ ResourceName: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

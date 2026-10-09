@@ -73,9 +73,8 @@ through the typed handle.
 
 ## Run it from a Durable Object
 
-Yield the class inside a DO's Construction phase and provide
-`Cloudflare.Containers.layer` — that layer binds, starts, and
-monitors the container, then hands you a running instance:
+Yield the class inside a DO's Construction phase. That binds the
+container to the DO and hands you its handle, without starting it:
 
 ```typescript
 // src/Agent.ts
@@ -89,17 +88,24 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     const sandbox = yield* Sandbox;
 
     return Effect.gen(function* () {
+      const start = sandbox.start({ enableInternet: true });
       return {
-        ping: () => sandbox.ping(),
+        ping: () => start.pipe(Effect.andThen(sandbox.ping())),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
-    ),
-  ),
+  }),
 ) {}
 ```
+
+`start` is idempotent: it starts the container unless it is already
+running, and concurrent calls start it once, so call it at the top of
+each operation. RPC methods and `getTcpPort` wait until the container's
+port accepts connections, but never start it.
+
+:::note
+Stopping, sleeping, crash handling and snapshots are covered in
+[Container lifecycle](/cloudflare/compute/container-lifecycle).
+:::
 
 Importing `Sandbox` (the class) does not pull in the runtime file —
 it gets tree-shaken out of the DO's bundle. A Worker then binds
@@ -144,6 +150,7 @@ const { fetch } = yield* sandbox.getTcpPort(3000);
 return {
   hello: () =>
     Effect.gen(function* () {
+      yield* sandbox.start({ enableInternet: true });
       const response = yield* fetch(
         HttpClientRequest.get("http://container/"),
       );
@@ -152,8 +159,9 @@ return {
 };
 ```
 
-The returned `fetch` retries with backoff while the container is
-still booting, so you don't coordinate readiness yourself.
+The returned `fetch` waits until the port accepts connections, so you
+don't coordinate readiness yourself. It never starts the container:
+call `start` first.
 
 ## Process scope vs request scope
 
@@ -390,7 +398,7 @@ Start it with outbound networking, or the container never reaches the
 database at all:
 
 ```typescript
-Effect.provide(Cloudflare.Containers.layer(Api, { enableInternet: true }))
+yield* api.start({ enableInternet: true });
 ```
 
 ## Connect an arbitrary image to a database
@@ -456,18 +464,18 @@ Alchemy does not go that way:
 2. A unix socket on the host forwards to that port.
 3. The workerd `<name>-proxy` sidecar bind-mounts the socket and maps
    `host.docker.localhost` to `127.0.0.1` in the shared netns.
-4. A listener in that netns accepts `127.0.0.1:<port>` and forwards
-   through the socket.
+4. A Docker-managed helper shares that network namespace, accepts
+   `127.0.0.1:<port>`, and forwards through the socket. Alchemy waits
+   for its listeners before completing container startup and removes
+   the helper when the container is deleted or the dev runtime stops.
 
 The container talks to itself. The socket crosses the boundary. UFW
 never sees a SYN to `172.17.0.1`.
 
-If the unix-socket path cannot attach (missing `nsenter`, EPERM),
-Alchemy logs this UFW hole — do not set `DEFAULT_INPUT_POLICY=ACCEPT`:
-
-```
-sudo ufw allow from 172.16.0.0/12 to any port <prisma-or-dev-ports> proto tcp
-```
+The helper uses `node:22-alpine`, which Docker downloads on first use.
+Normal Docker access is sufficient; Alchemy does not require host-side
+`nsenter` permissions. If the helper fails to start, container startup
+reports the error.
 
 Neon and PlanetScale have no local emulator: even under `alchemy
 dev` the URL is a cloud host (`*.neon.tech`, `*.psdb.cloud`) and the
@@ -606,6 +614,8 @@ The full walkthrough:
 
 Related:
 
+- [Container lifecycle](/cloudflare/compute/container-lifecycle) — start,
+  stop, sleep, and snapshot a container.
 - [Durable Objects](/cloudflare/compute/durable-objects) — every container
   is fronted by one.
 - [Workers](/cloudflare/compute/workers) — the entrypoint that reaches the

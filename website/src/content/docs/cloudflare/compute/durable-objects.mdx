@@ -47,10 +47,11 @@ export default class Counter extends Cloudflare.DurableObject<Counter>()(
 ) {}
 ```
 
-:::tip[Why `Counter<Counter>()(...)` ?]
-The empty `()` after `Counter<Counter>` lets TypeScript capture the
-class identity for the typed RPC stub. It's a one-time bit of
-ceremony — the rest of your DO code looks completely normal.
+:::tip[Why `Cloudflare.DurableObject<Counter>()(...)` ?]
+The empty `()` after `Cloudflare.DurableObject<Counter>` lets
+TypeScript capture the class identity for the typed RPC stub. It's a
+one-time bit of ceremony — the rest of your DO code looks completely
+normal.
 :::
 
 ## Persist the count
@@ -161,7 +162,7 @@ export default Cloudflare.Worker(
 ```
 
 `yield* Counter` in the constructor registers the DO with the Worker
-(binding + class-migration metadata) and hands you the namespace.
+(binding + Durable Object `exports` metadata) and hands you the namespace.
 
 ## Call the DO from `fetch`
 
@@ -682,6 +683,32 @@ compatible with old JSON payloads. Unknown callback names remain pending;
 renaming a handler does not migrate those jobs. TypeScript payload types
 do not validate data stored by an earlier deployment, so decode evolving
 payloads explicitly with a schema when needed.
+
+## Adopt a Worker deployed by Wrangler
+
+Alchemy deploys Durable Object classes with Cloudflare's declarative
+[`exports`](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
+map, the same flow Wrangler uses since 4.107. An
+[adopted](/infrastructure-as-code/resource-lifecycle#adoption) Worker
+keeps every namespace it already has, with its data and storage backend:
+
+```typescript
+const worker = yield* Cloudflare.Worker("Api", {
+  name: "my-existing-worker",
+  main: "./src/worker.ts",
+  env: { Counter: Cloudflare.DurableObject("Counter") },
+}).pipe(adopt(true));
+```
+
+A namespace whose class is no longer exported by your code stops the
+deploy instead of being deleted. Export the class again to keep it.
+
+:::caution
+Cloudflare doesn't allow a Worker to go back to the older `migrations`
+flow once it has deployed with `exports`. Alchemy releases from before
+this change can no longer deploy a Worker after its first deploy with a
+newer release.
+:::
 
 ## Where next
 

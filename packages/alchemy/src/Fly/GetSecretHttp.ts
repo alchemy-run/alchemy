@@ -43,7 +43,7 @@ export const GetSecretHttp = Layer.effect(
                 name,
                 value: Redacted.value(value),
               })),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.orElseSucceed(() => undefined),
             );
             if (fromEnv !== undefined) return fromEnv;
           }

@@ -104,7 +104,7 @@ export const makeHttpFlagshipClient = (
   ): Effect.Effect<T, FlagshipError, RuntimeContext> =>
     evaluate(flagKey, context).pipe(
       Effect.map((r) => (match(r.value) ? r.value : defaultValue)),
-      Effect.catch(() => Effect.succeed(defaultValue)),
+      Effect.orElseSucceed(() => defaultValue),
     );
 
   const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
@@ -124,7 +124,7 @@ export const makeHttpFlagshipClient = (
     get: (flagKey, defaultValue, context) =>
       evaluate(flagKey, context).pipe(
         Effect.map((r) => r.value ?? defaultValue),
-        Effect.catch(() => Effect.succeed(defaultValue)),
+        Effect.orElseSucceed(() => defaultValue),
       ),
     getBooleanValue: (flagKey, defaultValue, context) =>
       value(flagKey, defaultValue, isBoolean, context),
@@ -137,7 +137,7 @@ export const makeHttpFlagshipClient = (
         Effect.map((r) =>
           isObjectLike(r.value) ? (r.value as typeof defaultValue) : defaultValue,
         ),
-        Effect.catch(() => Effect.succeed(defaultValue)),
+        Effect.orElseSucceed(() => defaultValue),
       ),
     getBooleanDetails: (flagKey, defaultValue, context) =>
       details(flagKey, defaultValue, isBoolean, context),

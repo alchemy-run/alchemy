@@ -416,7 +416,7 @@ export default <ExportedHandler<Env>>{
         return Response.json({ ok: true, result });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserQueueHandler",
             message: `User worker's queue handler threw: ${
               error instanceof Error ? error.message : String(error)
@@ -444,7 +444,7 @@ export default <ExportedHandler<Env>>{
         return new Response(result.outcome, { status: result.outcome === "ok" ? 200 : 500 });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserScheduledHandler",
             message: `User worker's scheduled handler threw: ${
               error instanceof Error ? error.message : String(error)

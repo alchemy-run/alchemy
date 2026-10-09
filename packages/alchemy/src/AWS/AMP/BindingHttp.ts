@@ -110,14 +110,12 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
       ) {
         const endpoint = yield* PrometheusEndpoint;
         if (endpoint === undefined) {
-          return yield* Effect.fail(
-            new PrometheusApiError({
-              method: request.method,
-              path: request.path,
-              status: 0,
-              body: "workspace has no prometheusEndpoint",
-            }),
-          );
+          return yield* new PrometheusApiError({
+            method: request.method,
+            path: request.path,
+            status: 0,
+            body: "workspace has no prometheusEndpoint",
+          });
         }
 
         const base = endpoint.endsWith("/") ? endpoint : `${endpoint}/`;
@@ -185,14 +183,12 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
         });
 
         if (response.status < 200 || response.status >= 300) {
-          return yield* Effect.fail(
-            new PrometheusApiError({
-              method: request.method,
-              path: request.path,
-              status: response.status,
-              body: text,
-            }),
-          );
+          return yield* new PrometheusApiError({
+            method: request.method,
+            path: request.path,
+            status: response.status,
+            body: text,
+          });
         }
         if (text.trim() === "") {
           // remote-write success has no body.
@@ -210,14 +206,12 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
           catch: toError(response.status),
         });
         if (envelope.status !== undefined && envelope.status !== "success") {
-          return yield* Effect.fail(
-            new PrometheusApiError({
-              method: request.method,
-              path: request.path,
-              status: response.status,
-              body: text,
-            }),
-          );
+          return yield* new PrometheusApiError({
+            method: request.method,
+            path: request.path,
+            status: response.status,
+            body: text,
+          });
         }
         return envelope.data;
       });
