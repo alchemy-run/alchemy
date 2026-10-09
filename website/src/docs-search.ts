@@ -72,6 +72,8 @@ export const toSnippet = (text: string, max = 220): string => {
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/<[^>]+>/g, " ")
     .replace(/[#*_>`|]+/g, " ")
+    // Table rules and horizontal rules.
+    .replace(/[-:=]{3,}/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return plain.length > max ? `${plain.slice(0, max).replace(/\s+\S*$/, "")}…` : plain;
