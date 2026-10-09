@@ -106,10 +106,10 @@ const tokenize = (buf: Uint8Array): Effect.Effect<ReadonlyArray<Token>, ImportCl
     while (pos < buf.length) {
       const r = readPktLineAt(buf, pos);
       if (r._tag === "incomplete") {
-        return Effect.fail(new ImportClientError({ reason: "truncated advertisement" }));
+        return Effect.fail(ImportClientError.make({ reason: "truncated advertisement" }));
       }
       if (r._tag === "invalid") {
-        return Effect.fail(new ImportClientError({ reason: r.reason }));
+        return Effect.fail(ImportClientError.make({ reason: r.reason }));
       }
       if (r.pkt._tag === "flush") {
         out.push({ _tag: "flush" });
@@ -138,7 +138,7 @@ export const parseAdvertisement = Effect.fn(function* (body: Uint8Array) {
     const text = token.text;
     if (text.startsWith("#")) continue; // "# service=git-upload-pack"
     if (text.startsWith("ERR ")) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: `remote error: ${text.slice(4)}`,
       });
     }
@@ -198,15 +198,15 @@ export const fetchAdvertisement = Effect.fn(function* (url: string) {
   const response = yield* client
     .get(`${normalizeBase(url)}/info/refs?service=git-upload-pack`)
     .pipe(
-      Effect.mapError((error) => new ImportClientError({ reason: `info/refs failed: ${error}` })),
+      Effect.mapError((error) => ImportClientError.make({ reason: `info/refs failed: ${error}` })),
     );
   if (response.status !== 200) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `info/refs returned HTTP ${response.status}`,
     });
   }
   const body = yield* response.arrayBuffer.pipe(
-    Effect.mapError((error) => new ImportClientError({ reason: `info/refs body read: ${error}` })),
+    Effect.mapError((error) => ImportClientError.make({ reason: `info/refs body read: ${error}` })),
   );
   return yield* parseAdvertisement(new Uint8Array(body));
 });
@@ -254,13 +254,13 @@ export const parseUploadPackResponse = Effect.fn(function* (body: Uint8Array) {
   let pos = 0;
   for (;;) {
     if (pos >= body.length) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: "upload-pack response ended before NAK/ACK",
       });
     }
     const r = readPktLineAt(body, pos);
     if (r._tag === "incomplete" || r._tag === "invalid") {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: r._tag === "invalid" ? r.reason : "truncated upload-pack response",
       });
     }
@@ -274,7 +274,7 @@ export const parseUploadPackResponse = Effect.fn(function* (body: Uint8Array) {
     }
     if (text.startsWith("unshallow ")) continue;
     if (text.startsWith("ERR ")) {
-      return yield* new ImportClientError({
+      return yield* ImportClientError.make({
         reason: `remote error: ${text.slice(4)}`,
       });
     }
@@ -312,31 +312,30 @@ export const fetchPack = Effect.fn(function* (
   const response = yield* client
     .execute(request)
     .pipe(
-      Effect.mapError(
-        (error) => new ImportClientError({ reason: `git-upload-pack failed: ${error}` }),
+      Effect.mapError((error) =>
+        ImportClientError.make({ reason: `git-upload-pack failed: ${error}` }),
       ),
     );
   if (response.status !== 200) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `git-upload-pack returned HTTP ${response.status}`,
     });
   }
   const body = yield* response.arrayBuffer.pipe(
-    Effect.mapError(
-      (error) =>
-        new ImportClientError({
-          reason: `git-upload-pack body read: ${error}`,
-        }),
+    Effect.mapError((error) =>
+      ImportClientError.make({
+        reason: `git-upload-pack body read: ${error}`,
+      }),
     ),
   );
   if (body.byteLength > maxPack + 65536) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `source pack exceeds the ${maxPack} byte import cap`,
     });
   }
   const parsed = yield* parseUploadPackResponse(new Uint8Array(body));
   if (parsed.pack.byteLength > maxPack) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `source pack exceeds the ${maxPack} byte import cap`,
     });
   }
@@ -374,7 +373,7 @@ export const runImport = Effect.fn(function* (options: ImportOptions) {
 
   const selected = selectRefs(advertisement.refs, source.ref);
   if (selected === undefined) {
-    return yield* new ImportClientError({
+    return yield* ImportClientError.make({
       reason: `ref '${source.ref}' not found on the remote`,
     });
   }

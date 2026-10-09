@@ -476,15 +476,13 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       }
 
       if (current.kind !== opts.expectedKind) {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
-              `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
-              `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
-              `resource instead.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
+            `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
+            `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
+            `resource instead.`,
+        });
       }
 
       yield* waitForBranchReady(organization, databaseName, current.name, session);

@@ -152,7 +152,7 @@ export const AliasProvider = () =>
         times: 20,
       });
       if (remaining !== undefined) {
-        yield* Effect.die(
+        return yield* Effect.die(
           new Error(`KMS alias ${output.aliasName} remained observable after delete`),
         );
       }

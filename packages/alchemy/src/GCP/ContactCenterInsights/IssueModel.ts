@@ -313,8 +313,10 @@ export const IssueModelProvider = () =>
             body: { name: output.name },
           })
           .pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(undefined),
+              BadRequest: () => Effect.succeed(undefined),
+            }),
           );
         if (undeploy !== undefined) {
           yield* waitForOperation(undeploy, { notFoundOk: true });

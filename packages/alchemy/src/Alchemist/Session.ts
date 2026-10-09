@@ -79,12 +79,11 @@ export const importStack = Effect.fn(function* (main: string) {
     !Predicate.hasProperty(module.default, "stackName") ||
     typeof module.default.stackName !== "string"
   ) {
-    return yield* Effect.fail(
-      new StackEntrypointError({
-        message: `Stack entrypoint '${main}' must export a default stack definition (export default Alchemy.Stack({...})).`,
-      }),
-    );
+    return yield* new StackEntrypointError({
+      message: `Stack entrypoint '${main}' must export a default stack definition (export default Alchemy.Stack({...})).`,
+    });
   }
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- default export shape validated at runtime above
   return module.default as StackModule;
 });
 
@@ -389,9 +388,9 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
     const entrypointExists = yield* fs.exists(options.main);
     const missingDefault = options.main === DEFAULT_ENTRYPOINT && !entrypointExists;
     if (!entrypointExists && !missingDefault) {
-      return yield* Effect.fail(
-        new AuthError({ message: `Stack entrypoint '${options.main}' does not exist.` }),
-      );
+      return yield* AuthError.make({
+        message: `Stack entrypoint '${options.main}' does not exist.`,
+      });
     }
     if (!missingDefault) {
       yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
@@ -408,7 +407,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
           return suppressed
             ? Effect.void
             : Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: `Could not load auth providers from '${options.main}'.`,
                   cause,
                 }),

@@ -176,7 +176,8 @@ export const makeWorkerBridge = (
                 // success channel so `handleRpcExit` encodes it directly.
                 return [
                   Effect.isEffect(result)
-                    ? (result as Effect.Effect<any>)
+                    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
+                      (result as Effect.Effect<any>)
                     : Stream.isStream(result)
                       ? Effect.succeed(result)
                       : (result as Effect.Effect<any>),
@@ -353,6 +354,7 @@ export const getWorkerExport = <Export = any>({
   >;
 
   const runtimeContext = tag.pipe(Effect.map((func) => func.RuntimeContext));
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- export resolution requirements are provided by the bridge at runtime
   const exported = runtimeContext.pipe(
     Effect.flatMap((context) => context.exports),
     Effect.flatMap((exports) =>
@@ -428,7 +430,8 @@ export const makeRpcProxy = (
               // `Stream` (not an Effect) is lifted into the success channel so
               // `handleRpcExit` encodes it directly.
               return Effect.isEffect(result)
-                ? (result as Effect.Effect<any>)
+                ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
+                  (result as Effect.Effect<any>)
                 : Stream.isStream(result)
                   ? Effect.succeed(result)
                   : (result as Effect.Effect<any>);

@@ -154,11 +154,10 @@ export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
           ? undefined
           : yield* Effect.forkDetach(
               blobs.uploadPart(spill.key, spill.uploadId, spill.partNumber, payload).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new HashError({
-                      reason: `spill part ${spill.partNumber}: ${error.reason}`,
-                    }),
+                Effect.mapError((error) =>
+                  HashError.make({
+                    reason: `spill part ${spill.partNumber}: ${error.reason}`,
+                  }),
                 ),
                 Effect.provide(RuntimeContext.phantom),
               ),
@@ -241,14 +240,14 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStor
               },
               body: body as unknown as BodyInit,
             }),
-          catch: (error) => new HashError({ reason: `hash part fetch: ${String(error)}` }),
+          catch: (error) => HashError.make({ reason: `hash part fetch: ${String(error)}` }),
         });
         if (response.status !== 200 || response.body === null) {
           const text = yield* Effect.tryPromise({
             try: () => response.text(),
-            catch: () => new HashError({ reason: "hash part: unreadable" }),
+            catch: () => HashError.make({ reason: "hash part: unreadable" }),
           });
-          return yield* new HashError({
+          return yield* HashError.make({
             reason: `hash part: status ${response.status}: ${text.slice(0, 200)}`,
           });
         }
@@ -259,7 +258,7 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStor
         const next = yield* send(url, body);
         const first = yield* next();
         if (first === undefined) {
-          return yield* new HashError({ reason: "hash part: empty response" });
+          return yield* HashError.make({ reason: "hash part: empty response" });
         }
         return decodeScanResult(first);
       });
@@ -277,7 +276,7 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStor
           );
           const first = yield* next();
           if (first === undefined) {
-            return yield* new HashError({
+            return yield* HashError.make({
               reason: "hash part: empty response",
             });
           }
@@ -287,7 +286,7 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStor
           const part = next().pipe(
             Effect.flatMap((bytes) =>
               bytes === undefined
-                ? Effect.fail(new HashError({ reason: "hash part: no part frame" }))
+                ? Effect.fail(HashError.make({ reason: "hash part: no part frame" }))
                 : Effect.succeed(JSON.parse(new TextDecoder().decode(bytes)) as UploadedPart),
             ),
           );
@@ -306,7 +305,7 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment | BlobStor
           );
           const first = yield* next();
           if (first === undefined) {
-            return yield* new HashError({
+            return yield* HashError.make({
               reason: "delta batch: empty response",
             });
           }

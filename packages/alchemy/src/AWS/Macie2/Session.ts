@@ -84,8 +84,10 @@ export { SessionResource as Session };
 // right after enablement — both mean "no session", so collapse to `undefined`.
 const getSession = macie2.getMacieSession({}).pipe(
   Effect.map((s) => s as macie2.GetMacieSessionResponse | undefined),
-  Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTags({
+    AccessDeniedException: () => Effect.succeed(undefined),
+    ResourceNotFoundException: () => Effect.succeed(undefined),
+  }),
 );
 
 const buildAttrs = (accountId: string, s: macie2.GetMacieSessionResponse) => ({
@@ -157,8 +159,10 @@ export const SessionProvider = () =>
 
         delete: Effect.fn(function* () {
           yield* macie2.disableMacie({}).pipe(
-            Effect.catchTag("AccessDeniedException", () => Effect.void),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.catchTags({
+              AccessDeniedException: () => Effect.void,
+              ResourceNotFoundException: () => Effect.void,
+            }),
           );
         }),
       };

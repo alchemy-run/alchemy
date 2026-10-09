@@ -272,18 +272,16 @@ const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (instance === undefined) return;
-        return yield* Effect.fail(new DbInstanceNotReady({ identifier, status: instance.status }));
+        return yield* new DbInstanceNotReady({ identifier, status: instance.status });
       }
       if (instance?.status === "AVAILABLE") return;
       if (instance?.status === "FAILED" || instance?.status === "REBOOT_FAILED") {
-        return yield* Effect.fail(
-          new DbInstanceProvisioningFailed({
-            identifier,
-            status: instance.status,
-          }),
-        );
+        return yield* new DbInstanceProvisioningFailed({
+          identifier,
+          status: instance.status,
+        });
       }
-      return yield* Effect.fail(new DbInstanceNotReady({ identifier, status: instance?.status }));
+      return yield* new DbInstanceNotReady({ identifier, status: instance?.status });
     }),
   );
 

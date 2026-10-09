@@ -32,11 +32,10 @@ export const fromAuthProvider = () =>
               apiKey: creds.apiKey,
               apiBaseUrl: DEFAULT_BASE_URL,
             })),
-            Effect.mapError(
-              (e) =>
-                new ConfigError({
-                  message: `Failed to resolve Neon credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              ConfigError.make({
+                message: `Failed to resolve Neon credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),

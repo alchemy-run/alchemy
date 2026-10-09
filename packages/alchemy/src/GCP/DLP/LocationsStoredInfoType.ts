@@ -284,21 +284,19 @@ export const LocationsStoredInfoTypeProvider = () =>
         dictionaryChanged ||
         largeChanged
       ) {
-        current = yield* dlp
-          .patchProjectsLocationsStoredInfoTypes({
-            name: current.name ?? name,
-            body: {
-              config,
-              updateMask: updateMaskOf(
-                displayChanged ? "displayName" : undefined,
-                descriptionChanged ? "description" : undefined,
-                regexChanged ? "regex" : undefined,
-                dictionaryChanged ? "dictionary" : undefined,
-                largeChanged ? "largeCustomDictionary" : undefined,
-              ),
-            },
-          })
-          .pipe();
+        current = yield* dlp.patchProjectsLocationsStoredInfoTypes({
+          name: current.name ?? name,
+          body: {
+            config,
+            updateMask: updateMaskOf(
+              displayChanged ? "displayName" : undefined,
+              descriptionChanged ? "description" : undefined,
+              regexChanged ? "regex" : undefined,
+              dictionaryChanged ? "dictionary" : undefined,
+              largeChanged ? "largeCustomDictionary" : undefined,
+            ),
+          },
+        });
       }
 
       const readyName = current.name ?? name;

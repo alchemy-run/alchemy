@@ -94,7 +94,7 @@ export const installTag = (run: Run) =>
   run.pr !== null ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}` : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
-  new Upstream({ message: GitHub.describe(e) });
+  Upstream.make({ message: GitHub.describe(e) });
 
 /**
  * Storage failures are not part of the protocol: they are defects, which
@@ -112,17 +112,17 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   const github = yield* GitHub.GitHubApp;
 
   if (!policy.repos.includes(ref.repo)) {
-    return yield* new Forbidden({ message: `${ref.repo} may not publish` });
+    return yield* Forbidden.make({ message: `${ref.repo} may not publish` });
   }
   const data = yield* github.getRun(ref.repo, ref.runId).pipe(Effect.mapError(upstream));
   if (
     data.status !== "in_progress" ||
     (data.run_attempt !== undefined && data.run_attempt !== ref.attempt)
   ) {
-    return yield* new RunNotInProgress({ message: "run is not in progress" });
+    return yield* RunNotInProgress.make({ message: "run is not in progress" });
   }
   if (data.event !== "push" && data.event !== "pull_request") {
-    return yield* new BadRequest({
+    return yield* BadRequest.make({
       message: `unsupported event ${data.event}`,
     });
   }
@@ -130,7 +130,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   let pr: number | null = null;
   if (data.event === "pull_request") {
     if (data.head_branch === null) {
-      return yield* new BadRequest({
+      return yield* BadRequest.make({
         message: `pull request run ${ref.runId} has no head branch`,
       });
     }
@@ -144,13 +144,13 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
-      return yield* new BadRequest({
+      return yield* BadRequest.make({
         message: `no open pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
     pr = first.number;
   } else if (headRepo !== ref.repo) {
-    return yield* new BadRequest({
+    return yield* BadRequest.make({
       message: `push run ${ref.runId} is for ${headRepo}, not ${ref.repo}`,
     });
   }
@@ -176,7 +176,7 @@ const requireVouched = Effect.fn("requireVouched")(function* (run: Run, manifest
     .listRunArtifacts(run.repo, run.runId, expected)
     .pipe(Effect.mapError(upstream));
   if (!artifacts.some((a) => a.name === expected && !a.expired)) {
-    return yield* new Forbidden({
+    return yield* Forbidden.make({
       message: `run ${run.runId} has not vouched for this manifest (no artifact ${expected})`,
     });
   }
@@ -190,14 +190,14 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
 
   yield* requireVouched(run, manifestText);
   const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
-    Effect.mapError((e) => new BadRequest({ message: `invalid manifest: ${String(e)}` })),
+    Effect.mapError((e) => BadRequest.make({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's
   // head, so the packed checkout has to be that commit: a `pull_request`
   // job that packs the synthetic merge commit would otherwise publish bytes
   // built from a commit that exists nowhere under the commit's name.
   if (manifest.head !== run.headSha) {
-    return yield* new BadRequest({
+    return yield* BadRequest.make({
       message: `manifest was packed at ${manifest.head}, but the run's head is ${run.headSha}`,
     });
   }
@@ -206,7 +206,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const tooLarge =
     maxSize === undefined ? undefined : packages.find((pkg) => BigInt(pkg.size) > maxSize);
   if (tooLarge !== undefined) {
-    return yield* new PackageTooLarge({
+    return yield* PackageTooLarge.make({
       message: `${tooLarge.name} exceeds ${maxSize} bytes`,
     });
   }
@@ -218,7 +218,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
     { concurrency: 8 },
   ).pipe(Effect.map((packages) => packages.map(({ name, sha256 }) => ({ name, sha256 }))));
   if (missing.length > 0) {
-    return yield* new MissingTarballs({ missing });
+    return yield* MissingTarballs.make({ missing });
   }
 
   const now = yield* Clock.currentTimeMillis;
@@ -296,11 +296,11 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
 
   const contentLength = Number(request.headers["content-length"] ?? 0);
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
-    return yield* new BadRequest({ message: "Content-Length is required" });
+    return yield* BadRequest.make({ message: "Content-Length is required" });
   }
   const maxSize = policy.maxPackageSize;
   if (maxSize !== undefined && BigInt(contentLength) > maxSize) {
-    return yield* new PackageTooLarge({
+    return yield* PackageTooLarge.make({
       message: `tarball exceeds ${maxSize} bytes`,
     });
   }
@@ -315,7 +315,7 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
       // The params schema already constrained this to 64 hex chars.
       sha256: Result.getOrThrow(Hex.decode(sha256)),
     })
-    .pipe(Effect.mapError((e) => new BadRequest({ message: `upload rejected: ${String(e)}` })));
+    .pipe(Effect.mapError((e) => BadRequest.make({ message: `upload rejected: ${String(e)}` })));
   return { name, sha256, size: contentLength, uploaded: true };
 });
 

@@ -150,11 +150,9 @@ export const OptOutListProvider = () =>
             observed = yield* getByName(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new SmsVoiceOptOutListMissing({
-                message: `opt-out list '${name}' not observable after create`,
-              }),
-            );
+            return yield* new SmsVoiceOptOutListMissing({
+              message: `opt-out list '${name}' not observable after create`,
+            });
           }
 
           // 3. Sync tags — diff against OBSERVED cloud tags.

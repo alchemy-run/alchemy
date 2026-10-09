@@ -202,14 +202,12 @@ export const RuleProvider = () =>
       // and deleting it through the rule endpoint does the same — refuse
       // before any write and point at `Email.CatchAll`.
       if (isCatchAllMatchers(desired.matchers)) {
-        return yield* Effect.fail(
-          new CatchAllRuleNotSupported({
-            message:
-              'Cloudflare.Email.Rule cannot manage the zone catch-all (matchers: [{ type: "all" }]). ' +
-              "Cloudflare models that as a per-zone singleton behind PUT /zones/{zone_id}/email/routing/rules/catch_all. " +
-              "Use Cloudflare.Email.CatchAll instead.",
-          }),
-        );
+        return yield* new CatchAllRuleNotSupported({
+          message:
+            'Cloudflare.Email.Rule cannot manage the zone catch-all (matchers: [{ type: "all" }]). ' +
+            "Cloudflare models that as a per-zone singleton behind PUT /zones/{zone_id}/email/routing/rules/catch_all. " +
+            "Use Cloudflare.Email.CatchAll instead.",
+        });
       }
 
       // 1. Observe — cached id is a hint, not a guarantee the rule still

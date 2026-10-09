@@ -100,10 +100,12 @@ export const AllowListProvider = () =>
     Effect.gen(function* () {
       const getAllowList = (id: string) =>
         macie2.getAllowList({ id }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          // Macie disabled ⇒ the list is unreachable (and disabling deletes
-          // all Macie configuration), so report it as gone.
-          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            // Macie disabled ⇒ the list is unreachable (and disabling deletes
+            // all Macie configuration), so report it as gone.
+            AccessDeniedException: () => Effect.succeed(undefined),
+          }),
         );
 
       return {
@@ -195,8 +197,10 @@ export const AllowListProvider = () =>
           // Idempotent — the list may already be gone, or Macie may already be
           // disabled for the account (which removes all Macie configuration).
           yield* macie2.deleteAllowList({ id: output.id, ignoreJobChecks: "true" }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("AccessDeniedException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              AccessDeniedException: () => Effect.void,
+            }),
           );
         }),
       };

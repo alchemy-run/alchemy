@@ -204,8 +204,10 @@ export const BlockSenderProvider = () =>
             (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
         ),
-        Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        Effect.catchTags({
+          EmailSecurityNotEntitled: () => Effect.succeed([]),
+          Forbidden: () => Effect.succeed([]),
+        }),
       );
     }),
   });

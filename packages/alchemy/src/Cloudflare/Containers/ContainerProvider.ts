@@ -256,7 +256,7 @@ export const LiveContainerProvider = () =>
         });
         const username = credentials.username ?? credentials.user;
         if (!username) {
-          return yield* new ContainerRegistryError({
+          return yield* ContainerRegistryError.make({
             reason: "CredentialsMissingUsername",
             message: `Cloudflare registry ${registryId} did not return a username`,
           });
@@ -281,7 +281,7 @@ export const LiveContainerProvider = () =>
 
         const registryHost = credentials.server.replace(/^https?:\/\//, "").replace(/\/$/, "");
         if (!imageRef.startsWith(`${registryHost}/`)) {
-          return yield* new ContainerRegistryError({
+          return yield* ContainerRegistryError.make({
             reason: "ImageOutsideRegistry",
             message: `Cannot resolve an image outside registry ${registryHost}`,
             imageRef,
@@ -290,7 +290,7 @@ export const LiveContainerProvider = () =>
         const repositoryAndTag = imageRef.slice(registryHost.length + 1);
         const tagSeparator = repositoryAndTag.lastIndexOf(":");
         if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
-          return yield* new ContainerRegistryError({
+          return yield* ContainerRegistryError.make({
             reason: "InvalidImageReference",
             message: "Container image reference has no tag or digest",
             imageRef,
@@ -310,24 +310,23 @@ export const LiveContainerProvider = () =>
           ),
         );
         const response = yield* http.execute(request).pipe(
-          Effect.mapError(
-            () =>
-              new ContainerRegistryError({
-                reason: "ManifestRequestFailed",
-                message: "Failed to resolve the container registry digest",
-                imageRef,
-              }),
+          Effect.mapError(() =>
+            ContainerRegistryError.make({
+              reason: "ManifestRequestFailed",
+              message: "Failed to resolve the container registry digest",
+              imageRef,
+            }),
           ),
         );
         if (response.status === 404) {
-          return yield* new ContainerRegistryError({
+          return yield* ContainerRegistryError.make({
             reason: "ImageNotFound",
             message: "Container image is not published",
             imageRef,
           });
         }
         if (response.status < 200 || response.status >= 300) {
-          return yield* new ContainerRegistryError({
+          return yield* ContainerRegistryError.make({
             reason: "ManifestRequestFailed",
             message: `Container registry returned HTTP ${response.status}`,
             imageRef,
@@ -336,14 +335,13 @@ export const LiveContainerProvider = () =>
         return yield* Schema.decodeUnknownEffect(RegistryDigest)(
           response.headers["docker-content-digest"],
         ).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ContainerRegistryError({
-                reason: "InvalidManifestDigest",
-                message: "Registry response did not include a valid digest",
-                imageRef,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            ContainerRegistryError.make({
+              reason: "InvalidManifestDigest",
+              message: "Registry response did not include a valid digest",
+              imageRef,
+              cause,
+            }),
           ),
         );
       });

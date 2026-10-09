@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { resolveTsconfig } from "rolldown/experimental";
 import { parseSync, transformSync, TsconfigCache, type TransformOptions } from "rolldown/utils";
-import type { OxcLoaderOptions } from "./register-oxc.ts";
-import { resolveCacheDirectory, TransformCache } from "./transform-cache.ts";
+import { resolveCacheDirectory, TransformCache } from "./cache.ts";
+import type { LoaderOptions } from "./hooks.ts";
+import { attachSourceMap, storedSourceMap } from "./source-map.ts";
 
 /** Extensions Oxc transpiles; everything else is JavaScript Node can run. */
 export const transformExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".jsx"]);
@@ -29,27 +29,36 @@ const nodeFormat = (format: string | null | undefined): ModuleFormat | undefined
   }
 };
 
-/** Fallback for older Nodes that pass no format: extension, then package type. */
+/**
+ * Format of a module Node gave no format for — resolved by our own
+ * resolver, so Node never looked at it: the extension, then the nearest
+ * `package.json#type`, memoized per directory.
+ */
+const packageTypes = new Map<string, ModuleFormat>();
+const packageType = (directory: string): ModuleFormat => {
+  let format = packageTypes.get(directory);
+  if (format !== undefined) return format;
+  const packageJson = path.join(directory, "package.json");
+  const parent = path.dirname(directory);
+  if (existsSync(packageJson)) {
+    try {
+      format =
+        JSON.parse(readFileSync(packageJson, "utf8")).type === "module" ? "module" : "commonjs";
+    } catch {
+      format = "commonjs";
+    }
+  } else {
+    format = parent === directory ? "commonjs" : packageType(parent);
+  }
+  packageTypes.set(directory, format);
+  return format;
+};
+
 const inferFormat = (filePath: string): ModuleFormat => {
   const extension = path.extname(filePath);
   if (extension === ".mts" || extension === ".mjs") return "module";
   if (extension === ".cts" || extension === ".cjs") return "commonjs";
-  let directory = path.dirname(filePath);
-  while (true) {
-    const packageJson = path.join(directory, "package.json");
-    if (existsSync(packageJson)) {
-      try {
-        return JSON.parse(readFileSync(packageJson, "utf8")).type === "module"
-          ? "module"
-          : "commonjs";
-      } catch {
-        return "commonjs";
-      }
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) return "commonjs";
-    directory = parent;
-  }
+  return packageType(path.dirname(filePath));
 };
 
 const language = (filePath: string): TransformOptions["lang"] => {
@@ -67,47 +76,24 @@ const language = (filePath: string): TransformOptions["lang"] => {
   }
 };
 
-/**
- * Inline map, for when there is no cache file to point at. Only the
- * fallback: the base64 becomes part of the script source V8 retains, and
- * for a non-ASCII source it is stored two bytes per character on top.
- */
-const inlineSourceMapComment = (map: string | object) => {
-  const json = typeof map === "string" ? map : JSON.stringify(map);
-  return `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(json).toString("base64")}`;
-};
-
-/**
- * Map by reference. Node's source-map support only understands `data:`
- * URLs and scheme-less paths (it resolves the latter against the module
- * URL and reads the file), so this is the file URL's path component —
- * `/var/…/x.map` on POSIX, `/C:/…/x.map` on Windows — never a `file:` URL.
- */
-const fileSourceMapComment = (mapFile: string) =>
-  `\n//# sourceMappingURL=${pathToFileURL(mapFile).pathname}`;
-
-/**
- * The transform's map without `sourcesContent`. Every source is a file on
- * this machine, named by the map's `sources`, so embedding its text only
- * makes the map larger than the code it describes and every process that
- * loads the module pay for it.
- */
-const withoutSourcesContent = ({
-  sourcesContent: _sourcesContent,
-  ...map
-}: NonNullable<ReturnType<typeof transformSync>["map"]>) => map;
-
 export interface TransformedSource {
   readonly format: ModuleFormat;
   readonly source: string;
 }
 
 export class SourceTransformer {
-  readonly #options: OxcLoaderOptions;
+  readonly #options: LoaderOptions;
   readonly #tsconfigCache = new TsconfigCache();
   readonly #cache: TransformCache | undefined;
+  /**
+   * Serialized merged tsconfig per discovered config chain. Discovery runs
+   * per file (a solution-style tsconfig assigns files of one directory to
+   * different referenced projects), but thousands of files share a chain
+   * and the serialization is the expensive part of the key.
+   */
+  readonly #tsconfigKeys = new Map<string, string>();
 
-  constructor(options: OxcLoaderOptions) {
+  constructor(options: LoaderOptions) {
     this.#options = options;
     const directory = resolveCacheDirectory(options.cache);
     this.#cache = directory === undefined ? undefined : new TransformCache(directory);
@@ -131,10 +117,19 @@ export class SourceTransformer {
     } catch {
       return undefined;
     }
-    let tsconfig: unknown = null;
+    let tsconfig = "null";
     try {
       if (options.tsconfig === true) {
-        tsconfig = resolveTsconfig(filePath, this.#tsconfigCache)?.tsconfig;
+        const resolved = resolveTsconfig(filePath, this.#tsconfigCache);
+        if (resolved != null) {
+          const chain = resolved.tsconfigFilePaths.join("\0");
+          let serialized = this.#tsconfigKeys.get(chain);
+          if (serialized === undefined) {
+            serialized = JSON.stringify(resolved.tsconfig);
+            this.#tsconfigKeys.set(chain, serialized);
+          }
+          tsconfig = serialized;
+        }
       } else if (typeof options.tsconfig === "string") {
         tsconfig = readFileSync(options.tsconfig, "utf8");
       }
@@ -146,7 +141,7 @@ export class SourceTransformer {
       filePath,
       `${stat.size}:${stat.mtimeNs}`,
       JSON.stringify(options),
-      JSON.stringify(tsconfig ?? null),
+      tsconfig,
       format,
     ]);
   }
@@ -172,12 +167,17 @@ export class SourceTransformer {
     const key = this.#cacheKey(filePath, options, moduleFormat);
     const cached = key === undefined ? undefined : this.#cache?.get(key);
     if (cached !== undefined) {
+      const { mapFile } = cached;
       return {
         format: cached.format,
         source:
-          cached.mapFile === undefined
+          mapFile === undefined
             ? cached.code
-            : cached.code + fileSourceMapComment(cached.mapFile),
+            : attachSourceMap(
+                cached.code,
+                { file: mapFile, text: () => readFileSync(mapFile, "utf8") },
+                () => readFileSync(filePath, "utf8"),
+              ),
       };
     }
     const source = readFileSync(filePath, "utf8");
@@ -206,11 +206,9 @@ export class SourceTransformer {
           );
     }
     const map =
-      transformed.map === undefined
-        ? undefined
-        : JSON.stringify(withoutSourcesContent(transformed.map));
-    // The map ends up in the module exactly one way: on disk next to the
-    // cache entry and referenced by path, or (cache off) inlined.
+      transformed.map === undefined ? undefined : storedSourceMap(transformed.map, filePath);
+    // The map is stored next to the cache entry and referenced by path; see
+    // `attachSourceMap` for when it is inlined instead.
     const mapFile =
       key === undefined || map === undefined
         ? undefined
@@ -222,11 +220,9 @@ export class SourceTransformer {
     return {
       format: moduleFormat,
       source:
-        mapFile !== undefined
-          ? transformed.code + fileSourceMapComment(mapFile)
-          : map !== undefined
-            ? transformed.code + inlineSourceMapComment(map)
-            : transformed.code,
+        map === undefined
+          ? transformed.code
+          : attachSourceMap(transformed.code, { file: mapFile, text: () => map }, () => source),
     };
   }
 }

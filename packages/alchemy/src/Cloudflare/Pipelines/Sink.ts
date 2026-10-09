@@ -571,8 +571,10 @@ const sinkName = (id: string, name: string | undefined) =>
 const getSink = (accountId: string, sinkId: string) =>
   pipelines.getSink({ accountId, sinkId }).pipe(
     Effect.map((s): ObservedSink | undefined => s),
-    Effect.catchTag("SinkNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidSinkId", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      SinkNotFound: () => Effect.succeed(undefined),
+      InvalidSinkId: () => Effect.succeed(undefined),
+    }),
   );
 
 /**
@@ -586,8 +588,10 @@ const deleteSink = (accountId: string, sinkId: string) =>
       while: (e) => e._tag === "SinkInUse",
       schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
     }),
-    Effect.catchTag("SinkNotFound", () => Effect.void),
-    Effect.catchTag("InvalidSinkId", () => Effect.void),
+    Effect.catchTags({
+      SinkNotFound: () => Effect.void,
+      InvalidSinkId: () => Effect.void,
+    }),
   );
 
 /**
