@@ -1,4 +1,3 @@
-import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Cloudflare from "@/Cloudflare";
@@ -27,22 +26,17 @@ export class ExternalContainerObject extends Cloudflare.DurableObject<ExternalCo
     const container = yield* ExternalContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: Effect.fn("hello")(function* () {
+          yield* start;
           const response = yield* fetch(HttpClientRequest.get("http://container/"));
           return yield* response.text;
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.Containers.layer(ExternalContainer, {
-          enableInternet: true,
-        }),
-      ),
-    ),
-  ),
+  }),
 ) {}

@@ -53,7 +53,7 @@ export const withBuilder =
 export const supportsRegistryExport = Effect.gen(function* () {
   const docker = yield* Docker;
   const version = yield* docker.run(["buildx", "version"]);
-  const match = /buildx v(\d+)\.(\d+)\./.exec(version.stdout);
+  const match = /buildx v?(\d+)\.(\d+)\./.exec(version.stdout);
   if (!match) return false;
   return Number(match[1]) >= 1 || Number(match[2]) >= 26;
 });

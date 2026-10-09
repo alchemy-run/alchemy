@@ -170,11 +170,9 @@ export const ChannelProvider = () =>
           channel.ingestEndpoint === undefined ||
           channel.playbackUrl === undefined
         ) {
-          return yield* Effect.fail(
-            new IvsChannelIncomplete({
-              message: "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
-            }),
-          );
+          return yield* new IvsChannelIncomplete({
+            message: "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
+          });
         }
         return {
           channelName: channel.name,
@@ -254,11 +252,9 @@ export const ChannelProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsChannelIncomplete({
-                message: "IVS CreateChannel returned no channel ARN",
-              }),
-            );
+            return yield* new IvsChannelIncomplete({
+              message: "IVS CreateChannel returned no channel ARN",
+            });
           }
 
           // 3. Sync — diff observed against desired for each prop the user
@@ -309,11 +305,9 @@ export const ChannelProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsChannelIncomplete({
-                message: `IVS channel '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsChannelIncomplete({
+              message: `IVS channel '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

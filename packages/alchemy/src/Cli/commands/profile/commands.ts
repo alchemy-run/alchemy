@@ -169,31 +169,25 @@ const resolveSetValues = Effect.fn(function* (
   for (const entry of sets) {
     const separator = entry.indexOf("=");
     if (separator <= 0) {
-      return yield* Effect.fail(
-        new UserInputError({
-          message: `Invalid --set '${entry}'. Expected name=value, name=env:VAR, or name=-.`,
-        }),
-      );
+      return yield* new UserInputError({
+        message: `Invalid --set '${entry}'. Expected name=value, name=env:VAR, or name=-.`,
+      });
     }
     const key = entry.slice(0, separator);
     const raw = entry.slice(separator + 1);
     if (key in values) {
-      return yield* Effect.fail(new UserInputError({ message: `Duplicate --set for '${key}'.` }));
+      return yield* new UserInputError({ message: `Duplicate --set for '${key}'.` });
     }
     if (raw === "-") {
       if (stdinUsed) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: "Only one --set field may read from stdin.",
-          }),
-        );
+        return yield* new UserInputError({
+          message: "Only one --set field may read from stdin.",
+        });
       }
       if (process.stdin.isTTY) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: `--set ${key}=- reads from stdin, but stdin is a terminal. Pipe the value in.`,
-          }),
-        );
+        return yield* new UserInputError({
+          message: `--set ${key}=- reads from stdin, but stdin is a terminal. Pipe the value in.`,
+        });
       }
       stdinUsed = true;
       // Reading fd 0 to EOF is inherently synchronous whole-input
@@ -212,11 +206,9 @@ const resolveSetValues = Effect.fn(function* (
         Effect.mapError((e) => new UserInputError({ message: e.message })),
       );
       if (value === undefined || value.length === 0) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: `--set ${key}=env:${variable}: '${variable}' is not set.`,
-          }),
-        );
+        return yield* new UserInputError({
+          message: `--set ${key}=env:${variable}: '${variable}' is not set.`,
+        });
       }
       values[key] = value;
     } else {
@@ -257,12 +249,10 @@ const editCommand = Command.make(
       let configureInput: { method?: string; values: Record<string, string> } | undefined;
       if (method !== undefined || set.length > 0) {
         if (add.length + reconfigure.length !== 1 || remove.length > 0) {
-          return yield* Effect.fail(
-            new UserInputError({
-              message:
-                "--method/--set configure exactly one provider: pass a single --add or --reconfigure (and no --remove).",
-            }),
-          );
+          return yield* new UserInputError({
+            message:
+              "--method/--set configure exactly one provider: pass a single --add or --reconfigure (and no --remove).",
+          });
         }
         configureInput = {
           method,

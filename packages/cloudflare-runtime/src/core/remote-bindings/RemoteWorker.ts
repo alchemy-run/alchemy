@@ -176,28 +176,29 @@ const sandboxApi = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, ApiError, R> =>
   effect.pipe(
-    Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))),
+    Effect.tapCause((cause) => cause.pipe(Cause.pretty, Effect.logError)),
     Effect.catchCause((cause) => {
       const failure = Cause.findErrorOption(cause);
       const defect = Cause.findDefect(cause);
       const original: unknown =
         failure._tag === "Some" ? failure.value : Result.isSuccess(defect) ? defect.success : cause;
       return Effect.fail(
-        new ApiError({
+        ApiError.make({
           subtag,
           message,
           cause: original,
         }),
       );
     }),
-    Effect.timeout(30_000),
-    Effect.catchTag("TimeoutError", () =>
-      Effect.fail(
-        new ApiError({
-          subtag,
-          message,
-          hint: "The request timed out after 30 seconds.",
-        }),
-      ),
-    ),
+    Effect.timeoutOrElse({
+      duration: 30000,
+      orElse: () =>
+        Effect.fail(
+          ApiError.make({
+            subtag,
+            message,
+            hint: "The request timed out after 30 seconds.",
+          }),
+        ),
+    }),
   );

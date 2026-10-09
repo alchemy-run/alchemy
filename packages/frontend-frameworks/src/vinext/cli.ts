@@ -243,18 +243,14 @@ export const collectVinextDist = (root: string) =>
     const pagesEntry = path.join(distDir, VINEXT_PAGES_ENTRY);
     const hasDist = yield* fs.exists(distDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasDist) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no ${distDir}`)(undefined),
-      );
+      return yield* failFramework(`The vinext build produced no ${distDir}`)(undefined);
     }
     const hasRsc = yield* fs.exists(rscEntry).pipe(Effect.orElseSucceed(() => false));
     const hasPages = yield* fs.exists(pagesEntry).pipe(Effect.orElseSucceed(() => false));
     if (!hasRsc && !hasPages) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`)(
-          undefined,
-        ),
-      );
+      return yield* failFramework(
+        `The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`,
+      )(undefined);
     }
     const hasClient = yield* fs.exists(clientDir).pipe(Effect.orElseSucceed(() => false));
     yield* fs
@@ -381,11 +377,9 @@ export const awaitVinextDevReady = (options: {
     const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          failFramework(
-            `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* failFramework(
+          `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.callback<boolean>((resume) => {
         const net = createRequire(import.meta.url)("net") as typeof NodeNet;
@@ -415,8 +409,8 @@ export const awaitVinextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(undefined),
+    return yield* failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(
+      undefined,
     );
   });
 

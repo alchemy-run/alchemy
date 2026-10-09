@@ -77,7 +77,7 @@ export const QueueLive = Layer.effect(
             consumer.maxBatchTimeout !== undefined &&
             (consumer.maxBatchTimeout < 0 || consumer.maxBatchTimeout > 60)
           ) {
-            return yield* new ConfigError({
+            return yield* ConfigError.make({
               subtag: "Queue",
               message: `Invalid maxBatchTimeout for queue "${consumer.queueName}": must be between 0 and 60 seconds`,
               hint: "Set `maxBatchTimeout` to a value between 0 and 60 (seconds).",
@@ -91,7 +91,7 @@ export const QueueLive = Layer.effect(
             consumer.deadLetterQueue !== undefined &&
             consumer.deadLetterQueue === consumer.queueName
           ) {
-            return yield* new ConfigError({
+            return yield* ConfigError.make({
               subtag: "Queue",
               message: `Dead letter queue for queue "${consumer.queueName}" cannot be itself`,
               hint: "Point `deadLetterQueue` at a different queue name.",
@@ -229,6 +229,7 @@ export const QueueLive = Layer.effect(
           pull: { queueId: string; accountId: string },
           port: number,
         ) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- requirements come from the ambient context, see comment at the cast below
           Effect.gen(function* () {
             const endpoint = `http://127.0.0.1:${port}/message`;
 
@@ -266,7 +267,7 @@ export const QueueLive = Layer.effect(
               return messages.length > 0;
             });
 
-            yield* iteration.pipe(
+            return yield* iteration.pipe(
               Effect.flatMap((busy) => (busy ? Effect.void : Effect.sleep("1 second"))),
               Effect.catchCause((cause) =>
                 Effect.logWarning(

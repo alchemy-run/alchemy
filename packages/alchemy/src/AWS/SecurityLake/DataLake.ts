@@ -268,13 +268,11 @@ export const DataLakeProvider = () =>
             (lake) => regions.includes(lake.region) && lake.createStatus === "FAILED",
           );
           if (failed) {
-            return yield* Effect.fail(
-              new DataLakeCreateFailed({
-                region: failed.region,
-                reason: failed.updateStatus?.exception?.reason,
-                code: failed.updateStatus?.exception?.code,
-              }),
-            );
+            return yield* new DataLakeCreateFailed({
+              region: failed.region,
+              reason: failed.updateStatus?.exception?.reason,
+              code: failed.updateStatus?.exception?.code,
+            });
           }
           const allReady = regions.every((region) =>
             lakes.some((lake) => lake.region === region && lake.createStatus === "COMPLETED"),
@@ -354,13 +352,11 @@ export const DataLakeProvider = () =>
           // 3c. Wait (bounded) for onboarding to complete in every Region.
           lakes = yield* awaitDataLakeReady(desiredRegions);
           if (lakes.length === 0) {
-            return yield* Effect.fail(
-              new DataLakeCreateFailed({
-                region: desiredRegions[0] ?? region,
-                reason: "data lake not observable after create",
-                code: undefined,
-              }),
-            );
+            return yield* new DataLakeCreateFailed({
+              region: desiredRegions[0] ?? region,
+              reason: "data lake not observable after create",
+              code: undefined,
+            });
           }
           const managed = lakes.filter((lake) => desiredRegions.includes(lake.region));
           const attrs = buildAttrs(managed.length > 0 ? managed : lakes, region);

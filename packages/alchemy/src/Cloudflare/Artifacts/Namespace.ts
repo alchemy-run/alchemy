@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -11,12 +12,11 @@ const NamespaceTypeId = "Cloudflare.Artifacts.Namespace" as const;
  */
 const ARTIFACTS_NAMESPACE_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 
-export class InvalidNamespaceError extends Error {
-  readonly _tag = "InvalidNamespaceError" as const;
-  constructor(public readonly namespace: string) {
-    super(
-      `Invalid artifacts namespace name '${namespace}'. Must be 3-63 characters, start and end with a lowercase alphanumeric character, and contain only lowercase alphanumeric characters and hyphens.`,
-    );
+export class InvalidNamespaceError extends Data.TaggedError("InvalidNamespaceError")<{
+  readonly namespace: string;
+}> {
+  override get message() {
+    return `Invalid artifacts namespace name '${this.namespace}'. Must be 3-63 characters, start and end with a lowercase alphanumeric character, and contain only lowercase alphanumeric characters and hyphens.`;
   }
 }
 
@@ -124,7 +124,7 @@ export const Namespace: (
 ) {
   const namespace = props?.namespace ? props.namespace : name.toLocaleLowerCase();
   if (!ARTIFACTS_NAMESPACE_REGEX.test(namespace)) {
-    return yield* Effect.die(new InvalidNamespaceError(namespace));
+    return yield* Effect.die(new InvalidNamespaceError({ namespace }));
   }
   return {
     kind: NamespaceTypeId,

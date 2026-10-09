@@ -233,7 +233,7 @@ export const CollectionProvider = () =>
           const attrs = toAttributes(detail);
           const tags = yield* aoss.listTagsForResource({ resourceArn: detail.arn }).pipe(
             Effect.map((r) => r.tags),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           return (yield* hasAlchemyTags(
             id,
@@ -283,11 +283,9 @@ export const CollectionProvider = () =>
               );
             const collectionId = created?.id ?? (yield* observeByName(name))?.id;
             if (collectionId === undefined) {
-              return yield* Effect.fail(
-                new aoss.ResourceNotFoundException({
-                  message: `collection ${name} not visible after create`,
-                }),
-              );
+              return yield* aoss.ResourceNotFoundException.make({
+                message: `collection ${name} not visible after create`,
+              });
             }
             yield* session.note(`creating collection ${name} (async)...`);
             detail = yield* awaitCollectionActive(collectionId);

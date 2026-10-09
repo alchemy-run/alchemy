@@ -10,7 +10,7 @@ export class DevBox extends Cloudflare.Container<
   {
     readFile: (path: string) => Effect.Effect<string>;
     writeFile: (path: string, contents: string) => Effect.Effect<void>;
-    exec: (command: string) => Effect.Effect<{
+    shell: (command: string) => Effect.Effect<{
       exitCode: number;
       stdout: string;
       stderr: string;
@@ -31,7 +31,7 @@ export default DevBox.make(
       readFile: (path: string) => fs.readFileString(path).pipe(Effect.orDie),
       writeFile: (path: string, contents: string) =>
         fs.writeFileString(path, contents).pipe(Effect.orDie),
-      exec: (command: string) =>
+      shell: (command: string) =>
         cp.spawn(ChildProcess.make(command, { shell: true })).pipe(
           Effect.flatMap(({ exitCode, stdout, stderr }) =>
             Effect.all({

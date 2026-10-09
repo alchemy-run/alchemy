@@ -161,20 +161,16 @@ const waitForLandingZoneOperation = (operationIdentifier: string) =>
         return;
       }
       if (operationDetails.status === "FAILED") {
-        return yield* Effect.fail(
-          new LandingZoneOperationFailed({
-            operationIdentifier,
-            status: operationDetails.status,
-            statusMessage: operationDetails.statusMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new LandingZoneOperationPending({
+        return yield* new LandingZoneOperationFailed({
           operationIdentifier,
           status: operationDetails.status,
-        }),
-      );
+          statusMessage: operationDetails.statusMessage,
+        });
+      }
+      return yield* new LandingZoneOperationPending({
+        operationIdentifier,
+        status: operationDetails.status,
+      });
     }),
   );
 

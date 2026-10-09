@@ -335,8 +335,8 @@ export interface WorkerVersionAffinity {
  *
  * A gradual rollout carries only what a version can: code, static assets,
  * bindings, compatibility settings, and cache configuration. A deploy that
- * changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
+ * creates, renames, deletes or moves Durable Object classes must go out at
+ * 100% (class lifecycle changes cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */
@@ -1284,6 +1284,11 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Application name and prepared images for the native container API. */
+      name?: string;
+      images?: Record<string, string>;
+      /** Named image sources for local workerd. An empty map enables managed images. */
+      devImages?: Record<string, DevContainerImage>;
       dev: DevContainerImage | undefined;
       /**
        * Content hash of the image (bundle/Dockerfile/context). Part of the
@@ -1412,6 +1417,10 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * lowers it into a `service` binding targeting the Worker's own physical
  * name at upload, and local dev serves it with the runtime's in-process
  * self service.
+ *
+ * `Self` targets the Worker's default export. To bind one of its named
+ * `WorkerEntrypoint` classes instead, name it with
+ * `Cloudflare.WorkerEntrypoint("McpEntrypoint")`.
  *
  * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
  * revalidation queue re-fetches the worker through it):
@@ -1579,6 +1588,8 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/caller.ts",
  *   env: {
  *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *     // one of this Worker's own entrypoints
+ *     MCP: Cloudflare.WorkerEntrypoint("McpEntrypoint"),
  *   },
  * });
  * ```
@@ -1734,6 +1745,31 @@ export const isSelf = (value: unknown): value is Self =>
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * **Example:** Binding a Worker to itself
+ *
+ * Declare the class before `.make()` so the implementation can reference it.
+ * The self binding uses workerd's `ctx.exports` loopback, so nothing is
+ * added to the Worker's deployed bindings.
+ * ```typescript
+ * export class Greeter extends Cloudflare.Worker<
+ *   Greeter,
+ *   { greet: (name: string) => Effect.Effect<string> }
+ * >()("Greeter") {}
+ *
+ * export default Greeter.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const self = yield* Cloudflare.Workers.bindWorker(Greeter);
+ *     return {
+ *       greet: (name: string) => Effect.succeed(`Hello ${name}`),
+ *       fetch: Effect.gen(function* () {
+ *         return HttpServerResponse.text(yield* self.greet("world"));
+ *       }),
+ *     };
+ *   }),
+ * );
  * ```
  *
  * ### Configuration
@@ -2373,10 +2409,9 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
- * bind, start, and monitor the container; then `yield* Sandbox`
- * resolves the **running** instance. Call its typed methods or use
- * `getTcpPort` to make HTTP requests to its exposed ports.
+ * `yield* Sandbox` binds the container to the DO and returns its handle
+ * without starting it. Call `start()` (a no-op once running) before using
+ * its typed methods or `getTcpPort`.
  *
  * **Example:** Running a Container from a Durable Object
  * ```typescript
@@ -2386,10 +2421,12 @@ export const isSelf = (value: unknown): value is Self =>
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* start;
  *             const { fetch } = yield* sandbox.getTcpPort(3000);
  *             const res = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
@@ -2398,11 +2435,7 @@ export const isSelf = (value: unknown): value is Self =>
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *

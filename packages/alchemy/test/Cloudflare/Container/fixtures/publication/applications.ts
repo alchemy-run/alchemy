@@ -46,7 +46,7 @@ export const historyApplications = (converge = false) =>
           image: "docker.io/alpine:3.19",
         }).Application
       : undefined;
-    const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
+    const image = target?.configuration.pipe(Output.map((configuration) => configuration.image!));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
     }).Application;

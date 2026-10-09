@@ -7,9 +7,8 @@ import { BunContainer } from "./bun-container.ts";
 /**
  * Durable Object backing one bun-baseline container instance. `boot()` blocks
  * until the `Bun.serve` HTTP server answers on its TCP port. NOTE: the
- * authoritative cold-start clock runs in the Worker AROUND the whole DO call —
- * the container layer eagerly starts the container during DO construction, so
- * a clock started here would miss part of the start.
+ * authoritative cold-start clock runs in the Worker AROUND the whole DO call,
+ * so it also covers Durable Object construction.
  */
 export class BunObject extends Cloudflare.DurableObject<BunObject>()(
   "BenchBunObject",
@@ -23,6 +22,7 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
+            yield* container.start({ enableInternet: true });
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
@@ -39,11 +39,5 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
         shutdown: () => container.destroy().pipe(Effect.ignore),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(BunContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

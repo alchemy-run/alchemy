@@ -173,8 +173,10 @@ export const EnvironmentProvider = () =>
             identifier: environmentId,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.succeed(undefined),
+              AccessDeniedException: () => Effect.succeed(undefined),
+            }),
           );
       });
 
@@ -186,8 +188,10 @@ export const EnvironmentProvider = () =>
             name,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.succeed(undefined),
+              AccessDeniedException: () => Effect.succeed(undefined),
+            }),
           );
         const summary = (found?.items ?? []).find(
           (s) => unredact(s.name) === name && s.status !== "DELETING",
@@ -376,10 +380,12 @@ export const EnvironmentProvider = () =>
               identifier: output.environmentId,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // deleting an environment whose domain is already gone surfaces
-              // as AccessDenied — auth is checked before existence.
-              Effect.catchTag("AccessDeniedException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // deleting an environment whose domain is already gone surfaces
+                // as AccessDenied — auth is checked before existence.
+                AccessDeniedException: () => Effect.void,
+              }),
             );
           yield* waitForGone(output.domainId, output.environmentId);
         }),

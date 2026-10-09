@@ -21,7 +21,7 @@ export const fetchResolverTags = (arn: string) =>
           string
         >,
     ),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 
 /**

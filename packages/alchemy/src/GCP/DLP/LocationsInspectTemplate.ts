@@ -256,25 +256,23 @@ export const LocationsInspectTemplateProvider = () =>
         (current.allowLimitedAvailabilityInfoTypes === true) !== allowLimitedAvailabilityInfoTypes;
 
       if (displayChanged || descriptionChanged || configChanged || limitedChanged) {
-        current = yield* dlp
-          .patchProjectsLocationsInspectTemplates({
-            name: current.name ?? name,
-            body: {
-              updateMask: updateMaskOf(
-                displayChanged ? "displayName" : undefined,
-                descriptionChanged ? "description" : undefined,
-                configChanged ? "inspectConfig" : undefined,
-                limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
-              ),
-              inspectTemplate: {
-                displayName: news.displayName,
-                description,
-                inspectConfig: news.inspectConfig,
-                allowLimitedAvailabilityInfoTypes,
-              },
+        current = yield* dlp.patchProjectsLocationsInspectTemplates({
+          name: current.name ?? name,
+          body: {
+            updateMask: updateMaskOf(
+              displayChanged ? "displayName" : undefined,
+              descriptionChanged ? "description" : undefined,
+              configChanged ? "inspectConfig" : undefined,
+              limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
+            ),
+            inspectTemplate: {
+              displayName: news.displayName,
+              description,
+              inspectConfig: news.inspectConfig,
+              allowLimitedAvailabilityInfoTypes,
             },
-          })
-          .pipe();
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);
