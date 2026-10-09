@@ -716,7 +716,8 @@ export default { async fetch() { return new Response("v4"); } };
             const fqn = fqns.find((fqn) => fqn.endsWith("consumer-worker"));
             expect(fqn).toBeDefined();
             const row = yield* state.get({ stack: scratch.name, stage: scratch.stage, fqn: fqn! });
-            return (row?.attr as { url?: string } | undefined)?.url;
+            const attr = row && "attr" in row ? row.attr : undefined;
+            return (attr as { url?: string } | undefined)?.url;
           }).pipe(Effect.provide(scratch.state));
           expect(consumerUrl).toBeDefined();
 
