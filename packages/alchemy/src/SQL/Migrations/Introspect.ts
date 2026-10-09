@@ -28,7 +28,7 @@ export const tableColumns = (
         ),
         // A missing table yields an empty PRAGMA result, not an error, but
         // some tunnels surface it as one — treat both as "absent".
-        Effect.catch(() => Effect.succeed([])),
+        Effect.orElseSucceed(() => []),
       );
     case "postgres":
       return executor
@@ -63,7 +63,7 @@ export const tableColumns = (
               type: String(row.type ?? "").toUpperCase(),
             })),
           ),
-          Effect.catch(() => Effect.succeed([])),
+          Effect.orElseSucceed(() => []),
         );
   }
 };

@@ -169,7 +169,8 @@ const constructStream = (id: string, props: unknown) =>
       return split.props;
     };
     const persisted = Effect.isEffect(props)
-      ? (props as Effect.Effect<unknown>).pipe(Effect.map((p) => capture(splitSchema(p))))
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
+        (props as Effect.Effect<unknown>).pipe(Effect.map((p) => capture(splitSchema(p))))
       : capture(splitSchema(props));
     const construct = StreamResource as unknown as (
       id: string,

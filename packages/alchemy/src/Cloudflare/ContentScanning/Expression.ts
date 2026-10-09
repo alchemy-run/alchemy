@@ -125,9 +125,11 @@ export const ExpressionProvider = () =>
                 (page.result ?? []).map((expression) => toAttributes(zone.id, expression)),
               ),
             ),
-            Effect.catchTag("ContentScanningNotEnabled", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            Effect.catchTags({
+              ContentScanningNotEnabled: () => Effect.succeed([]),
+              Forbidden: () => Effect.succeed([]),
+              InvalidRoute: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -206,12 +208,10 @@ export const ExpressionProvider = () =>
         });
         observed = created.result.find((e) => e.payload === news.payload);
         if (!observed) {
-          return yield* Effect.fail(
-            new ExpressionCreateAnomaly({
-              zoneId,
-              payload: news.payload,
-            }),
-          );
+          return yield* new ExpressionCreateAnomaly({
+            zoneId,
+            payload: news.payload,
+          });
         }
       }
 
@@ -228,8 +228,10 @@ export const ExpressionProvider = () =>
       if (!expressions.some((e) => e.id === expressionId)) return;
       yield* contentScanning.deletePayload({ zoneId, expressionId }).pipe(
         // A concurrent disable between observe and delete is "gone".
-        Effect.catchTag("ContentScanningNotEnabled", () => Effect.void),
-        Effect.catchTag("InvalidRoute", () => Effect.void),
+        Effect.catchTags({
+          ContentScanningNotEnabled: () => Effect.void,
+          InvalidRoute: () => Effect.void,
+        }),
       );
     }),
   });
@@ -254,8 +256,10 @@ const listExpressions = (zoneId: string) =>
   contentScanning.listPayloads.items({ zoneId }).pipe(
     Stream.runCollect,
     Effect.map((chunk): readonly ObservedExpression[] | undefined => Array.from(chunk)),
-    Effect.catchTag("ContentScanningNotEnabled", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      ContentScanningNotEnabled: () => Effect.succeed(undefined),
+      InvalidRoute: () => Effect.succeed(undefined),
+    }),
   );
 
 const toAttributes = (zoneId: string, expression: ObservedExpression): ExpressionAttributes => ({

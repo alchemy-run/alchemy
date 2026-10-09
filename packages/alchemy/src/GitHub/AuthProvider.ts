@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -69,9 +70,9 @@ export interface GitHubResolvedCredentials {
 
 export const GITHUB_AUTH_PROVIDER_NAME = "GitHub";
 
-class GhCliError extends Error {
-  readonly _tag = "GhCliError";
-}
+class GhCliError extends Data.TaggedError("GhCliError")<{
+  readonly message: string;
+}> {}
 
 const readEnvTokenFor = (
   baseUrl: string | undefined,
@@ -92,7 +93,7 @@ const readEnvTokenFor = (
         };
       }
     }
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: `GitHub env credentials not found. Set ${candidates.join(", ")}.`,
     });
   });
@@ -183,29 +184,27 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           const [exitCode, stdout, stderr] = yield* Effect.all(
             [
               handle.exitCode,
-              Stream.mkString(Stream.decodeText(handle.stdout)),
-              Stream.mkString(Stream.decodeText(handle.stderr)),
+              handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+              handle.stderr.pipe(Stream.decodeText, Stream.mkString),
             ],
             { concurrency: 3 },
           );
           if (exitCode !== 0) {
-            return yield* Effect.fail(
-              new GhCliError(
-                `gh auth token exited with ${exitCode}: ${stderr.trim() || stdout.trim()}`,
-              ),
-            );
+            return yield* new GhCliError({
+              message: `gh auth token exited with ${exitCode}: ${stderr.trim() || stdout.trim()}`,
+            });
           }
           const token = stdout.trim();
           if (!token) {
-            return yield* Effect.fail(new GhCliError("gh auth token returned empty output"));
+            return yield* new GhCliError({ message: "gh auth token returned empty output" });
           }
           return token;
         }).pipe(
           Effect.scoped,
           Effect.mapError((e) =>
             e instanceof GhCliError
-              ? new AuthError({ message: e.message, cause: e })
-              : new AuthError({
+              ? AuthError.make({ message: e.message, cause: e })
+              : AuthError.make({
                   message:
                     "Could not invoke `gh`. Install GitHub CLI from https://cli.github.com/ and run `gh auth login`.",
                   cause: e,
@@ -263,12 +262,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                   token,
                   baseUrl,
                 })),
-                Effect.mapError(
-                  (e) =>
-                    new AuthError({
-                      message: `gh CLI not available: ${e.message}`,
-                      cause: e,
-                    }),
+                Effect.mapError((e) =>
+                  AuthError.make({
+                    message: `gh CLI not available: ${e.message}`,
+                    cause: e,
+                  }),
                 ),
               ),
             ),
@@ -279,12 +277,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
 
       const configureCredentials = (profileName: string) =>
         configureInteractive(profileName).pipe(
-          Effect.mapError(
-            (e) =>
-              new AuthError({
-                message: "failed to configure credentials",
-                cause: e,
-              }),
+          Effect.mapError((e) =>
+            AuthError.make({
+              message: "failed to configure credentials",
+              cause: e,
+            }),
           ),
         );
 
@@ -315,14 +312,13 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                 (yield* ghCliToken(
                   baseUrl !== undefined ? githubHostname(baseUrl) : undefined,
                 ).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new NeedsReauth({
-                        provider: GITHUB_AUTH_PROVIDER_NAME,
-                        profile: profileName,
-                        message: `GitHub CLI credentials need to be refreshed. ${refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
-                        cause,
-                      }),
+                  Effect.mapError((cause) =>
+                    NeedsReauth.make({
+                      provider: GITHUB_AUTH_PROVIDER_NAME,
+                      profile: profileName,
+                      message: `GitHub CLI credentials need to be refreshed. ${refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
+                      cause,
+                    }),
                   ),
                 ));
               if (c.token === undefined && updateConfig !== undefined) {
@@ -347,23 +343,22 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         );
 
       const login = (_profileName: string, config: GitHubAuthConfig) =>
-        Match.value(config)
-          .pipe(
-            Match.when({ method: "gh-cli" }, (c) =>
-              effectiveBaseUrl(c).pipe(
-                Effect.flatMap((baseUrl) =>
-                  ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
-                ),
-                Effect.tap(() =>
-                  interaction.output.success("GitHub: gh CLI authentication available."),
-                ),
-                Effect.map((token) => ({ ...c, token })),
+        Match.value(config).pipe(
+          Match.when({ method: "gh-cli" }, (c) =>
+            effectiveBaseUrl(c).pipe(
+              Effect.flatMap((baseUrl) =>
+                ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
               ),
+              Effect.tap(() =>
+                interaction.output.success("GitHub: gh CLI authentication available."),
+              ),
+              Effect.map((token) => ({ ...c, token })),
             ),
-            Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
-            Match.exhaustive,
-          )
-          .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
+          ),
+          Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
+          Match.exhaustive,
+          Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+        );
 
       const details = (
         profileName: string,
@@ -435,7 +430,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               ),
             )
           : Effect.fail(
-              new AuthError({
+              AuthError.make({
                 message: `GitHub: unknown method '${input.method}'. Valid methods: stored. (gh-cli is interactive-only.)`,
               }),
             );

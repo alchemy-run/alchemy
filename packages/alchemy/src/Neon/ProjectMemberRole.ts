@@ -383,7 +383,7 @@ export const ProjectMemberRoleProvider = () =>
         Effect.catchTag("NotFound", (error) =>
           Effect.gen(function* () {
             if (yield* projectAbsenceProven(output, members)) return undefined;
-            return yield* Effect.fail(error);
+            return yield* error;
           }),
         ),
       );

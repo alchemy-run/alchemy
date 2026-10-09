@@ -210,8 +210,10 @@ export const CustomTopicsProvider = () =>
       // entitlement was revoked, the list is unreachable and there is
       // nothing we can restore.
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
-        Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
-        Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          ZoneNotAuthorized: () => Effect.succeed(undefined),
+          AiSecurityNotEntitled: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return;
       // Restore the pre-management list; skip the call when it already

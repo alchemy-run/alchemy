@@ -187,11 +187,9 @@ export const StageProvider = () =>
 
       const toAttrs = Effect.fn(function* (stage: ivsrealtime.Stage) {
         if (!stage.name) {
-          return yield* Effect.fail(
-            new IvsRealtimeStageIncomplete({
-              message: "IVS Real-Time stage is missing its name",
-            }),
-          );
+          return yield* new IvsRealtimeStageIncomplete({
+            message: "IVS Real-Time stage is missing its name",
+          });
         }
         return {
           stageName: stage.name,
@@ -262,11 +260,9 @@ export const StageProvider = () =>
             observed = created.stage;
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new IvsRealtimeStageIncomplete({
-                message: "IVS Real-Time CreateStage returned no stage",
-              }),
-            );
+            return yield* new IvsRealtimeStageIncomplete({
+              message: "IVS Real-Time CreateStage returned no stage",
+            });
           }
           const arn = observed.arn;
 
@@ -291,11 +287,9 @@ export const StageProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsRealtimeStageIncomplete({
-                message: `IVS Real-Time stage '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsRealtimeStageIncomplete({
+              message: `IVS Real-Time stage '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

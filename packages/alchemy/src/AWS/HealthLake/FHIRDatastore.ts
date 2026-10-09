@@ -168,7 +168,7 @@ export const FHIRDatastoreProvider = () =>
       const readDatastoreTags = Effect.fn(function* (arn: string) {
         const response = yield* healthlake
           .listTagsForResource({ ResourceARN: arn })
-          .pipe(Effect.catch(() => Effect.succeed({ Tags: [] })));
+          .pipe(Effect.orElseSucceed(() => ({ Tags: [] })));
         const tags: Record<string, string> = {};
         for (const tag of response.Tags ?? []) {
           tags[tag.Key] = tag.Value;
@@ -406,7 +406,7 @@ export const FHIRDatastoreProvider = () =>
           // A data store mid-create/update rejects deletion with
           // ConflictException — wait (bounded) for it to settle first.
           const settled = yield* waitUntilSettled(datastoreId).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           if (settled === undefined || settled.DatastoreStatus === "DELETED") {
             return;

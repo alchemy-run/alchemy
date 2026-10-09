@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Box as SigilBox, type DOMElement } from "@alchemy.run/sigil";
 import { forwardRef } from "@alchemy.run/sigil/react";

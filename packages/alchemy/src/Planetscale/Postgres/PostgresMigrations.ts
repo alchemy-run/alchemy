@@ -94,7 +94,7 @@ const withPostgresClient = <A, E, R>(
         const client = yield* Effect.sync(
           () =>
             new Client({
-              connectionString: stripPgSslQueryParams(Redacted.value(role.connectionUrl)),
+              connectionString: role.connectionUrl.pipe(Redacted.value, stripPgSslQueryParams),
               ssl: { rejectUnauthorized: true },
             }),
         );
@@ -109,7 +109,7 @@ const withPostgresClient = <A, E, R>(
         Effect.tryPromise({
           try: () => client.end(),
           catch: toMigrationError,
-        }).pipe(Effect.catch(() => Effect.void)),
+        }).pipe(Effect.ignore),
     ),
   );
 

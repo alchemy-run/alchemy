@@ -190,12 +190,10 @@ const listVariables = (
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -326,6 +324,12 @@ const ProviderLive = () =>
           const variableId = isPrismaDevId(output?.environmentVariableId)
             ? undefined
             : output?.environmentVariableId;
+          const findVariableInProject = Effect.gen(function* () {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            return projectId
+              ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
+              : undefined;
+          });
           const variable = variableId
             ? yield* getEnvironmentVariable({
                 envVarId: variableId,
@@ -333,12 +337,7 @@ const ProviderLive = () =>
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
-                  : undefined;
-              });
+            : yield* findVariableInProject;
           if (!variable) return undefined;
           const attrs = attrsFrom(
             variable,

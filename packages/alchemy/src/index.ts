@@ -28,6 +28,7 @@ export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export { renamedFrom } from "./Rename.ts";
 export * from "./Resource.ts";
+export * from "./ResourceContext.ts";
 export * as Schema from "./Schema.ts";
 export * as Secrets from "./Secrets/index.ts";
 export * as Server from "./Server/index.ts";

@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";

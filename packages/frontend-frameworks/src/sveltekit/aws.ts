@@ -184,11 +184,9 @@ const makeAwsAdapterTarget = (config: SvelteKitAwsTargetConfig = {}): SvelteKitT
         const path = yield* Path.Path;
         const entry = context.entry;
         if (entry === undefined) {
-          return yield* Effect.fail(
-            fail(
-              "The SvelteKit build produced no on-disk Lambda entry for the finishing pass " +
-                "(context.entry is missing)",
-            ),
+          return yield* fail(
+            "The SvelteKit build produced no on-disk Lambda entry for the finishing pass " +
+              "(context.entry is missing)",
           );
         }
         const root = context.root;

@@ -68,12 +68,11 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
   const readModuleFile = Effect.fn(function* (name: string) {
     const file = path.join(root, name);
     const content = yield* fs.readFile(file).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to read prebuilt worker bundle module "${file}"`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to read prebuilt worker bundle module "${file}"`,
+          cause,
+        }),
       ),
     );
     const hash = yield* sha256(content);
@@ -94,7 +93,7 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
             },
           ),
         catch: (error) =>
-          new Bundle.BundleError({
+          Bundle.BundleError.make({
             message: `Failed to read additional modules in directory "${root}"`,
             cause: error,
           }),

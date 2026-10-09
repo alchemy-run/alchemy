@@ -282,11 +282,9 @@ export const makePostgresState = <E = never, R = never>(
             ? client
             : url !== undefined && client === undefined
               ? yield* openPool(url)
-              : yield* Effect.fail(
-                  new StateStoreError({
-                    message: "postgresState requires exactly one of `client` or `url`",
-                  }),
-                );
+              : yield* new StateStoreError({
+                  message: "postgresState requires exactly one of `client` or `url`",
+                });
         // The store reads columns by the exact names written below, so a
         // client configured with name transforms must not rewrite them.
         const sql = resolved.withoutTransforms();
@@ -340,11 +338,9 @@ export const makePostgresState = <E = never, R = never>(
           );
           if (acquired?.acquired !== true) {
             yield* releaseReserved;
-            return yield* Effect.fail(
-              new StateStoreError({
-                message: `another deploy holds the Postgres state lock '${key}'`,
-              }),
-            );
+            return yield* new StateStoreError({
+              message: `another deploy holds the Postgres state lock '${key}'`,
+            });
           }
           const lockPid = Number(acquired.pid);
 

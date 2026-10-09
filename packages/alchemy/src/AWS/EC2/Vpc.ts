@@ -535,14 +535,11 @@ export const VpcProvider = () =>
               Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
               // Retry on dependency violations (resources still being deleted)
               Effect.retry({
-                while: (e) => {
-                  // DependencyViolation means there are still dependent resources
-                  // This can happen if subnets/IGW are being deleted concurrently
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" && e.message?.includes("DependencyViolation"))
-                  );
-                },
+                // DependencyViolation means there are still dependent resources
+                // This can happen if subnets/IGW are being deleted concurrently
+                while: (e) =>
+                  e._tag === "DependencyViolation" ||
+                  (e._tag === "ValidationError" && e.message?.includes("DependencyViolation")),
                 schedule: Schedule.fixed(5000).pipe(
                   Schedule.upTo({ duration: "5 minutes" }),
                   Schedule.tap(({ attempt }) =>

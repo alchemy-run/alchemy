@@ -199,11 +199,9 @@ export const runBuildChild = (
         const reason = yield* fs
           .readFileString(errorPath)
           .pipe(Effect.orElseSucceed(() => undefined));
-        return yield* Effect.fail(
-          fail(reason ?? `The ${options.framework} build child exited with code ${exitCode}`)(
-            undefined,
-          ),
-        );
+        return yield* fail(
+          reason ?? `The ${options.framework} build child exited with code ${exitCode}`,
+        )(undefined);
       }
 
       return yield* readBuildOutput(outputPath).pipe(

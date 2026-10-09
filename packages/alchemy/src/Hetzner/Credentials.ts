@@ -43,11 +43,10 @@ export const fromAuthProvider = () =>
               token: creds.token,
               apiBaseUrl: creds.apiBaseUrl,
             })),
-            Effect.mapError(
-              (e) =>
-                new ConfigError({
-                  message: `Failed to resolve Hetzner credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              ConfigError.make({
+                message: `Failed to resolve Hetzner credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),
