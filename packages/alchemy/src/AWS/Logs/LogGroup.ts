@@ -338,7 +338,7 @@ export const LogGroupProvider = () =>
                 ),
               ),
             ),
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
           );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -410,7 +410,7 @@ export const LogGroupProvider = () =>
             },
           );
           if (remaining) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(
                 `CloudWatch log group ${output.logGroupName} remained observable after delete`,
               ),

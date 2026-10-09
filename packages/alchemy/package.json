@@ -397,8 +397,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun scripts/build.ts",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
     "clear:state": "cd ../../ && bun clear:state",
+    "pretest": "pnpm -w ensure:built",
     "test": "alchemy-test --exclude test/Railway",
     "nuke": "cd ../../ && bun nuke"
   },

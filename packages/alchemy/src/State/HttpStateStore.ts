@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
@@ -214,7 +215,7 @@ export const describeStateStoreFailure = (
   e: unknown,
   profileCommand = "alchemy profile edit",
 ): string => {
-  if (e instanceof HttpApiError.Unauthorized) {
+  if (Schema.is(HttpApiError.Unauthorized)(e)) {
     return (
       "State store rejected the request as unauthorized. " +
       `The stored state-store credentials may be stale. Run \`${profileCommand}\` to reconfigure them.`
@@ -234,16 +235,14 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.catch((e: E) =>
       Effect.gen(function* () {
         const command = yield* profileCommandHint("alchemy profile edit");
-        return yield* Effect.fail(
-          new StateStoreError({
-            message: describeStateStoreFailure(e, command),
-            http: HttpClientError.isHttpClientError(e)
-              ? { status: e.response?.status }
-              : e instanceof HttpApiError.Unauthorized
-                ? { status: 401 }
-                : undefined,
-          }),
-        );
+        return yield* new StateStoreError({
+          message: describeStateStoreFailure(e, command),
+          http: HttpClientError.isHttpClientError(e)
+            ? { status: e.response?.status }
+            : Schema.is(HttpApiError.Unauthorized)(e)
+              ? { status: 401 }
+              : undefined,
+        });
       }),
     ),
   ) as Effect.Effect<A, StateStoreError, R>;

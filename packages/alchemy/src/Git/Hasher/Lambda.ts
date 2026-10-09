@@ -38,26 +38,24 @@ export const HasherLambda = (
           const response = yield* invoke({
             Payload: JSON.stringify(encodeHashEvent(payload, options)),
           }).pipe(
-            Effect.mapError(
-              (error) =>
-                new HashError({
-                  reason: `lambda invoke: ${error._tag}${"message" in error ? `: ${String(error.message)}` : ""}`,
-                }),
+            Effect.mapError((error) =>
+              HashError.make({
+                reason: `lambda invoke: ${error._tag}${"message" in error ? `: ${String(error.message)}` : ""}`,
+              }),
             ),
           );
           if (response.FunctionError !== undefined) {
-            return yield* new HashError({
+            return yield* HashError.make({
               reason: `lambda hasher: ${response.FunctionError}`,
             });
           }
           const chunks = response.Payload
             ? Array.from(
                 yield* Stream.runCollect(response.Payload).pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new HashError({
-                        reason: `lambda response: ${String(error)}`,
-                      }),
+                  Effect.mapError((error) =>
+                    HashError.make({
+                      reason: `lambda response: ${String(error)}`,
+                    }),
                   ),
                 ),
               )
@@ -65,7 +63,7 @@ export const HasherLambda = (
           const text = new TextDecoder().decode(chunks.length === 1 ? chunks[0] : concat(chunks));
           const parsed = yield* Effect.try({
             try: () => JSON.parse(text) as HashResponse,
-            catch: () => new HashError({ reason: `lambda response: not JSON` }),
+            catch: () => HashError.make({ reason: `lambda response: not JSON` }),
           });
           return yield* decodeHashResponse(parsed);
         });
@@ -77,7 +75,7 @@ export const HasherLambda = (
           // cannot fit the invoke payload: hash it here without the trip.
           (payload.length > LAMBDA_CHUNK_BYTES
             ? Effect.fail(
-                new HashError({
+                HashError.make({
                   reason: `payload of ${payload.length} bytes exceeds the invoke limit`,
                 }),
               )

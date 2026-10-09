@@ -10,7 +10,7 @@ import { diffTags, tagRecord } from "../../Tags.ts";
 export const readIotWirelessTags = (arn: string) =>
   iotw.listTagsForResource({ ResourceArn: arn }).pipe(
     Effect.map((r) => tagRecord(r.Tags ?? [])),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 /**

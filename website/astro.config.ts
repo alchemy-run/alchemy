@@ -11,6 +11,7 @@ import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
+import type { StarlightPlugin } from "@astrojs/starlight/types";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
@@ -211,6 +212,26 @@ function copyMarkdownSources(): AstroIntegration {
   };
 }
 
+/**
+ * Registered after starlight-blog so it replaces the blog's MarkdownContent
+ * override (which ours wraps) instead of tripping its conflict warning.
+ */
+function markdownContentOverride(): StarlightPlugin {
+  return {
+    name: "markdown-content-override",
+    hooks: {
+      "config:setup": ({ config, updateConfig }) => {
+        updateConfig({
+          components: {
+            ...config.components,
+            MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
+          },
+        });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
@@ -252,7 +273,6 @@ export default defineConfig({
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
-        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -1665,7 +1685,12 @@ export default defineConfig({
       // starlight-blog feeds this many posts into the sidebar's "Recent"
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
-      plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
+      plugins: [
+        // The header blog link renders inside ThemeSelect, which the
+        // dark-only site overrides to nothing.
+        starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER, navigation: "none" }),
+        markdownContentOverride(),
+      ],
       routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts", "./src/favicon.ts"],
     }),
     mdx(),

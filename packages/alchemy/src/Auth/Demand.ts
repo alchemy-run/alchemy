@@ -106,7 +106,7 @@ export const failCredentialsRequired =
   (fqn: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.catchDefect(self, (defect) =>
-      defect instanceof CredentialsUnavailable
+      Schema.is(CredentialsUnavailable)(defect)
         ? Effect.fail(
             new CredentialsRequired({
               provider: defect.provider,
@@ -246,13 +246,13 @@ const attachDemandContext =
           `These resources require ${demand.provider} credentials:\n` +
           resourceLines(demand);
         return error._tag === "NeedsReauth"
-          ? new NeedsReauth({
+          ? NeedsReauth.make({
               provider: error.provider,
               profile: error.profile,
               message,
               cause: error.cause,
             })
-          : new AuthError({ message, cause: error.cause });
+          : AuthError.make({ message, cause: error.cause });
       }),
     );
 
@@ -331,11 +331,10 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function
           Effect.provideService(AuthProviders, registry),
           Effect.provideService(ProfileStore, profile),
           Effect.provideService(SuppressMissingProviderConfig, true),
-          Effect.catchTag("MissingProviderConfig", () => credentialsRequired(demand, profileName)),
-          Effect.catchTag(
-            "ProfileError",
-            (error) => new AuthError({ message: error.message, cause: error }),
-          ),
+          Effect.catchTags({
+            MissingProviderConfig: () => credentialsRequired(demand, profileName),
+            ProfileError: (error) => AuthError.make({ message: error.message, cause: error }),
+          }),
         );
         yield* resolved.resolve.pipe(attachDemandContext(demand));
       }),

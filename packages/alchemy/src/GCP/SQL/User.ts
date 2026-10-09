@@ -572,12 +572,16 @@ export const UserProvider = () =>
             Effect.flatMap((operation) =>
               waitForOperation(env.project, operation).pipe(Effect.as(true)),
             ),
-            Effect.catchTag("Conflict", (error) =>
-              recoverIfPresent(env.project, instance, userName, host, error).pipe(Effect.as(false)),
-            ),
-            Effect.catchTag("BadRequest", (error) =>
-              recoverIfPresent(env.project, instance, userName, host, error).pipe(Effect.as(false)),
-            ),
+            Effect.catchTags({
+              Conflict: (error) =>
+                recoverIfPresent(env.project, instance, userName, host, error).pipe(
+                  Effect.as(false),
+                ),
+              BadRequest: (error) =>
+                recoverIfPresent(env.project, instance, userName, host, error).pipe(
+                  Effect.as(false),
+                ),
+            }),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,

@@ -147,8 +147,10 @@ export const CustomDataIdentifierProvider = () =>
           // flagged `deleted: true`. Treat it (and a disabled Macie session)
           // as gone.
           Effect.map((d) => (d.deleted ? undefined : d)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.succeed(undefined),
+          }),
         );
 
       return {
@@ -243,8 +245,10 @@ export const CustomDataIdentifierProvider = () =>
           // Idempotent soft delete — the identifier may already be gone, or
           // Macie may already be disabled for the account.
           yield* macie2.deleteCustomDataIdentifier({ id: output.id }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("AccessDeniedException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              AccessDeniedException: () => Effect.void,
+            }),
           );
         }),
       };

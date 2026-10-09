@@ -27,7 +27,7 @@ export const toTagRecord = (
 export const readPipelineTags = Effect.fn(function* (arn: string) {
   const response = yield* osis
     .listTagsForResource({ Arn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

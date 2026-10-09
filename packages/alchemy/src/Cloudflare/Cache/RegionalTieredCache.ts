@@ -143,8 +143,10 @@ export const RegionalTieredCacheProvider = () =>
             }),
             Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Zone deleted out-of-band or plan-gated: skip it.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              InvalidRoute: () => Effect.succeed(undefined),
+              SettingUnavailableForPlan: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -210,8 +212,10 @@ export const RegionalTieredCacheProvider = () =>
       // Observe — if the zone itself is gone (or the plan was downgraded
       // so the setting no longer exists for the zone), nothing to restore.
       const observed = yield* cache.getRegionalTieredCache({ zoneId }).pipe(
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-        Effect.catchTag("SettingUnavailableForPlan", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          InvalidRoute: () => Effect.succeed(undefined),
+          SettingUnavailableForPlan: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

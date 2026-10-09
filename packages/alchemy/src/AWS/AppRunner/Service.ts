@@ -1495,9 +1495,11 @@ await bootstrap(entrypoint);
           const observed = yield* waitForSettled(output.serviceArn);
           if (observed !== undefined) {
             yield* apprunner.deleteService({ ServiceArn: output.serviceArn }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Already deleting — deletion is in progress.
-              Effect.catchTag("InvalidStateException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // Already deleting — deletion is in progress.
+                InvalidStateException: () => Effect.void,
+              }),
             );
             yield* waitUntilGone(output.serviceArn);
           }

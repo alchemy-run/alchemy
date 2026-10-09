@@ -158,9 +158,11 @@ export const DBProxyTargetGroupProvider = () =>
             TargetGroupName: targetGroupName,
           })
           .pipe(
-            Effect.catchTag("DBProxyTargetNotFoundFault", () => Effect.succeed(undefined)),
-            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.succeed(undefined)),
-            Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              DBProxyTargetNotFoundFault: () => Effect.succeed(undefined),
+              DBProxyTargetGroupNotFoundFault: () => Effect.succeed(undefined),
+              DBProxyNotFoundFault: () => Effect.succeed(undefined),
+            }),
           );
         const targets = response?.Targets ?? [];
         const observedClusters: string[] = [];
@@ -206,12 +208,11 @@ export const DBProxyTargetGroupProvider = () =>
                       Effect.map((chunk) =>
                         Array.from(chunk).flatMap((page) => page.TargetGroups ?? []),
                       ),
-                      Effect.catchTag("DBProxyNotFoundFault", () =>
-                        Effect.succeed([] as rds.DBProxyTargetGroup[]),
-                      ),
-                      Effect.catchTag("DBProxyTargetGroupNotFoundFault", () =>
-                        Effect.succeed([] as rds.DBProxyTargetGroup[]),
-                      ),
+                      Effect.catchTags({
+                        DBProxyNotFoundFault: () => Effect.succeed([] as rds.DBProxyTargetGroup[]),
+                        DBProxyTargetGroupNotFoundFault: () =>
+                          Effect.succeed([] as rds.DBProxyTargetGroup[]),
+                      }),
                     );
                   return yield* Effect.forEach(
                     groups,

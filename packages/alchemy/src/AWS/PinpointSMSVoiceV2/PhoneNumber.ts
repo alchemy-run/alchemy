@@ -166,11 +166,9 @@ const untilNotPending = <E, R>(
 const toAttrs = (info: smsvoice.PhoneNumberInformation) =>
   Effect.gen(function* () {
     if (info.PhoneNumberId === undefined) {
-      return yield* Effect.fail(
-        new SmsVoicePhoneNumberMissing({
-          message: `phone number '${info.PhoneNumberArn}' is missing its ID`,
-        }),
-      );
+      return yield* new SmsVoicePhoneNumberMissing({
+        message: `phone number '${info.PhoneNumberArn}' is missing its ID`,
+      });
     }
     return {
       phoneNumberId: info.PhoneNumberId,
@@ -255,20 +253,16 @@ export const PhoneNumberProvider = () =>
               })
               .pipe(retrySmsVoiceThrottled);
             if (requested.PhoneNumberId === undefined) {
-              return yield* Effect.fail(
-                new SmsVoicePhoneNumberMissing({
-                  message: "RequestPhoneNumber returned no PhoneNumberId",
-                }),
-              );
+              return yield* new SmsVoicePhoneNumberMissing({
+                message: "RequestPhoneNumber returned no PhoneNumberId",
+              });
             }
             observed = yield* getById(requested.PhoneNumberId).pipe(untilNotPending);
           }
           if (observed === undefined || observed.PhoneNumberId === undefined) {
-            return yield* Effect.fail(
-              new SmsVoicePhoneNumberMissing({
-                message: "phone number not observable after request",
-              }),
-            );
+            return yield* new SmsVoicePhoneNumberMissing({
+              message: "phone number not observable after request",
+            });
           }
           const phoneNumberId = observed.PhoneNumberId;
 
@@ -296,11 +290,9 @@ export const PhoneNumberProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getById(phoneNumberId);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new SmsVoicePhoneNumberMissing({
-                message: `phone number '${phoneNumberId}' vanished during reconcile`,
-              }),
-            );
+            return yield* new SmsVoicePhoneNumberMissing({
+              message: `phone number '${phoneNumberId}' vanished during reconcile`,
+            });
           }
           yield* session.note(final.PhoneNumberArn);
           return yield* toAttrs(final);

@@ -129,7 +129,7 @@ const connect = (to: Upstream) =>
     const failed = (cause: Error) =>
       resume(
         Effect.fail(
-          new SystemError({
+          SystemError.make({
             subtag: "WorkerProxyConnect",
             message: `Failed to reach the worker (upstream address: ${to.url})`,
             cause,
@@ -163,7 +163,7 @@ interface Relay {
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   let current = Deferred.makeUnsafe<Upstream, SystemError>();
-  const timedOut = new SystemError({
+  const timedOut = SystemError.make({
     subtag: "WorkerProxyUpstream",
     message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
   });
@@ -281,7 +281,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
-    yield* Effect.never;
+    return yield* Effect.never;
   });
 
   return {
@@ -289,8 +289,9 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // The connection lives exactly as long as the client socket: whatever
       // it is doing when the client closes is interrupted, and the scope
       // destroys both sockets.
-      const fiber = Effect.runFork(
-        Effect.race(connection(socket), closed(socket)).pipe(Effect.scoped),
+      const fiber = Effect.race(connection(socket), closed(socket)).pipe(
+        Effect.scoped,
+        Effect.runFork,
       );
       connections.add(fiber);
       fiber.addObserver(() => connections.delete(fiber));
@@ -314,7 +315,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }),
     fail: (message) =>
       settle((deferred) =>
-        Deferred.fail(deferred, new SystemError({ subtag: "WorkerProxyUpstream", message })),
+        Deferred.fail(deferred, SystemError.make({ subtag: "WorkerProxyUpstream", message })),
       ),
     close: Fiber.interruptAll(connections),
   };
@@ -328,12 +329,12 @@ const listen = (relay: Relay, host: string, port: number) =>
         resume(
           Effect.fail(
             error.code === "EADDRINUSE" || error.code === "EACCES"
-              ? new ConfigError({
+              ? ConfigError.make({
                   subtag: "AddressInUse",
                   message: `Address ${host}:${port} is already in use.`,
                   cause: error,
                 })
-              : new SystemError({
+              : SystemError.make({
                   subtag: "WorkerProxyListen",
                   message: `Failed to listen on ${host}:${port} for the worker proxy.`,
                   cause: error,

@@ -185,7 +185,7 @@ export const LogStreamProvider = () =>
             },
           );
           if (remaining !== undefined) {
-            yield* Effect.die(
+            return yield* Effect.die(
               new Error(
                 `CloudWatch log stream ${output.logGroupName}:${output.logStreamName} remained observable after delete`,
               ),
