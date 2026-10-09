@@ -8,7 +8,7 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "@/AlchemyContext";
 import * as Bundle from "@/Bundle/Bundle";
-import { ResourceFqn } from "@/ResourceFqn";
+import { ResourceContext } from "@/ResourceContext";
 import { StackContext } from "@/StackContext";
 
 /**
@@ -41,7 +41,12 @@ const inLifecycle =
       const path = yield* Path.Path;
       return yield* effect.pipe(
         Effect.provide([
-          Layer.succeed(ResourceFqn, fqn),
+          Layer.succeed(ResourceContext, {
+            logicalId: fqn.split("/").at(-1)!,
+            fqn,
+            instanceId: "00000000000000000000000000000000",
+            type: "Test.Bundle",
+          }),
           Layer.succeed(StackContext, {
             name: "BundleStack",
             stage: "test",

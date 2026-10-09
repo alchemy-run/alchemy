@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { encodeFqn } from "../FQN.ts";
-import { ResourceFqn } from "../ResourceFqn.ts";
+import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
@@ -243,7 +243,7 @@ export const outputDirectory = (resource: {
  *
  * - `dir` or `file` set by the caller: rolldown writes there, as configured.
  * - Otherwise, inside a resource lifecycle operation (the engine provides
- *   {@link ResourceFqn} and the stack): the resource's
+ *   {@link ResourceContext} and the stack): the resource's
  *   {@link outputDirectory}, cleared before each build so stale hashed
  *   chunks never pile up.
  * - Otherwise: the bundle stays in memory. Rolldown's default `dir` (`dist`,
@@ -256,14 +256,14 @@ const resolveOutputOptions = (outputOptions?: rolldown.OutputOptions) =>
   Effect.gen(function* () {
     const options = withDceDefault(outputOptions);
     if (hasOutputLocation(options)) return options;
-    const fqn = yield* Effect.serviceOption(ResourceFqn);
+    const resource = yield* Effect.serviceOption(ResourceContext);
     const stack = yield* Effect.serviceOption(StackContext);
     const path = yield* Effect.serviceOption(Path.Path);
-    if (Option.isNone(fqn) || Option.isNone(stack) || Option.isNone(path)) return options;
+    if (Option.isNone(resource) || Option.isNone(stack) || Option.isNone(path)) return options;
     const dir = yield* outputDirectory({
       stack: stack.value.name,
       stage: stack.value.stage,
-      fqn: fqn.value,
+      fqn: resource.value.fqn,
     }).pipe(Effect.provideService(Path.Path, path.value));
     return { ...options, dir, cleanDir: true } satisfies rolldown.OutputOptions;
   });

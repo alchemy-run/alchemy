@@ -11,7 +11,7 @@ import { InstanceId } from "../InstanceId.ts";
 import type { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
-import { ResourceFqn } from "../ResourceFqn.ts";
+import { ResourceContext } from "../ResourceContext.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
@@ -211,8 +211,18 @@ export const effect = <
                       Layer.succeed(Artifacts, makeScopedArtifacts(store, args[0].instanceId)),
                     )
                   : Layer.empty,
-                Predicate.hasProperty(args[0], "fqn") && Predicate.isString(args[0].fqn)
-                  ? layerFallback(ResourceFqn, args[0].fqn)
+                Predicate.hasProperty(args[0], "id") &&
+                  Predicate.isString(args[0].id) &&
+                  Predicate.hasProperty(args[0], "fqn") &&
+                  Predicate.isString(args[0].fqn) &&
+                  Predicate.hasProperty(args[0], "instanceId") &&
+                  Predicate.isString(args[0].instanceId)
+                  ? layerFallback(ResourceContext, {
+                      logicalId: args[0].id,
+                      fqn: args[0].fqn,
+                      instanceId: args[0].instanceId,
+                      type: cls.Type,
+                    })
                   : Layer.empty,
               );
               return result.pipe(

@@ -25,7 +25,7 @@ import {
   type ScopedPlanStatusSession,
 } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
-import { ResourceFqn } from "./ResourceFqn.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import {
   isActionState,
   State,
@@ -432,7 +432,7 @@ const instrumentLifecycle =
           Effect.provide([
             Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
             Layer.succeed(InstanceId, instanceId),
-            Layer.succeed(ResourceFqn, fqn),
+            Layer.succeed(ResourceContext, { logicalId, fqn, instanceId, type: resourceType }),
           ]),
           Effect.catchCauseIf(
             (cause: Cause.Cause<E>) => !Cause.hasInterruptsOnly(cause),

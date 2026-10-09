@@ -47,7 +47,7 @@ import {
 } from "./Report.ts";
 import type { ApplyStatus } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
-import { ResourceFqn } from "./ResourceFqn.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -92,17 +92,17 @@ interface ResourceTracker {
 }
 
 const provideLifecycleScope =
-  (fqn: string, instanceId: string) =>
+  (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          failCredentialsRequired(fqn),
+          failCredentialsRequired(resource.fqn),
           Effect.provide([
-            Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
-            Layer.succeed(InstanceId, instanceId),
-            Layer.succeed(ResourceFqn, fqn),
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.fqn)),
+            Layer.succeed(InstanceId, resource.instanceId),
+            Layer.succeed(ResourceContext, resource),
           ]),
         ),
       ),
@@ -122,7 +122,7 @@ const instrumentLifecycle =
   (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
-      provideLifecycleScope(fqn, instanceId),
+      provideLifecycleScope({ logicalId, fqn, instanceId, type: resourceType }),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
         attributes: {
