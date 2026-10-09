@@ -8,6 +8,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { encodeDurableObjectTags } from "@/Cloudflare/Workers/WorkerProvider.ts";
@@ -127,6 +128,37 @@ const deployWithMigrations = Effect.fn(function* (params: {
         `alchemy:id:${params.logicalId}`,
         ...encodeDurableObjectTags(params.bindings),
       ],
+    },
+    files: [new File([params.script], "main.js", { type: "application/javascript+module" })],
+  });
+  yield* workers.createScriptSubdomain({ accountId, scriptName: params.scriptName, enabled: true });
+  const { subdomain } = yield* workers.getSubdomain({ accountId });
+  return `https://${params.scriptName}.${subdomain}.workers.dev`;
+});
+
+/**
+ * Deploy a Worker the way Wrangler does with declarative `exports`: no
+ * `migrations` and no Alchemy tags, with its workers.dev URL enabled.
+ */
+const deployWithExports = Effect.fn(function* (params: {
+  scriptName: string;
+  script: string;
+  bindings: string[];
+  exports: workers.PutScriptRequest["metadata"]["exports"];
+}) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  yield* workers.putScript({
+    accountId,
+    scriptName: params.scriptName,
+    metadata: {
+      mainModule: "main.js",
+      compatibilityDate: "2026-08-31",
+      bindings: params.bindings.map((className) => ({
+        type: "durable_object_namespace",
+        name: className,
+        className,
+      })),
+      exports: params.exports,
     },
     files: [new File([params.script], "main.js", { type: "application/javascript+module" })],
   });
@@ -910,6 +942,177 @@ export default { fetch() { return new Response("canary"); } };
 
           yield* scratch.destroy();
           expect(yield* namespacesOf(scriptName)).toEqual({});
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "adopts a worker deployed with exports, then renames and deletes through exports",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const scriptName = scriptNameFor(scratch, "adopt-lifecycle");
+          yield* deleteScript(scriptName);
+
+          // A Wrangler-style exports deploy: no migrations, no Alchemy tags.
+          const url = yield* deployWithExports({
+            scriptName,
+            script: hostScript(["Counter", "Extra"]),
+            bindings: ["Counter", "Extra"],
+            exports: {
+              Counter: { type: "durable-object", storage: "sqlite" },
+              Extra: { type: "durable-object", storage: "sqlite" },
+            },
+          });
+          expect((yield* fetchJsonReady<{ value: number }>(`${url}/increment`)).value).toBe(1);
+          const before = yield* namespacesOf(scriptName);
+
+          yield* scratch
+            .deploy(
+              Cloudflare.Worker("AdoptLifecycle", {
+                name: scriptName,
+                script: hostScript(["Counter", "Extra"]),
+                env: {
+                  Counter: Cloudflare.DurableObject("Counter"),
+                  Extra: Cloudflare.DurableObject("Extra"),
+                },
+              }),
+            )
+            .pipe(adopt(true));
+          expect(yield* namespacesOf(scriptName)).toEqual(before);
+
+          // Rename Counter → CounterV2 and delete Extra in one deploy.
+          const changed = yield* scratch.deploy(
+            Cloudflare.Worker("AdoptLifecycle", {
+              name: scriptName,
+              script: hostScript(["CounterV2"]),
+              env: { Counter: Cloudflare.DurableObject("Counter", { className: "CounterV2" }) },
+            }),
+          );
+          expect(yield* namespacesOf(scriptName)).toEqual({ CounterV2: before.Counter });
+          expect((yield* fetchJsonReady<{ value: number }>(`${changed.url}/get`)).value).toBe(1);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(scriptName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "adopts a worker whose exports still carry stale tombstones",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const scriptName = scriptNameFor(scratch, "adopt-stale");
+          yield* deleteScript(scriptName);
+
+          // Old → New was renamed and Gone was deleted in earlier Wrangler
+          // deploys; the config still lists both tombstones.
+          yield* deployWithExports({
+            scriptName,
+            script: hostScript(["Old", "Gone"], "Old"),
+            bindings: ["Old", "Gone"],
+            exports: {
+              Old: { type: "durable-object", storage: "sqlite" },
+              Gone: { type: "durable-object", storage: "sqlite" },
+            },
+          });
+          const original = yield* namespacesOf(scriptName);
+          const url = yield* deployWithExports({
+            scriptName,
+            script: hostScript(["New"], "New"),
+            bindings: ["New"],
+            exports: {
+              Old: { type: "durable-object", state: "renamed", renamedTo: "New" },
+              New: { type: "durable-object", storage: "sqlite" },
+              Gone: { type: "durable-object", state: "deleted" },
+            },
+          });
+          expect((yield* fetchJsonReady<{ value: number }>(`${url}/increment`)).value).toBe(1);
+          // The same config again: both tombstones are now stale.
+          yield* deployWithExports({
+            scriptName,
+            script: hostScript(["New"], "New"),
+            bindings: ["New"],
+            exports: {
+              Old: { type: "durable-object", state: "renamed", renamedTo: "New" },
+              New: { type: "durable-object", storage: "sqlite" },
+              Gone: { type: "durable-object", state: "deleted" },
+            },
+          });
+          expect(yield* namespacesOf(scriptName)).toEqual({ New: original.Old });
+
+          // Alchemy declares only the live class; the stale tombstones drop out.
+          const adopted = yield* scratch
+            .deploy(
+              Cloudflare.Worker("AdoptStale", {
+                name: scriptName,
+                script: hostScript(["New"], "New"),
+                env: { New: Cloudflare.DurableObject("New") },
+              }),
+            )
+            .pipe(adopt(true));
+          expect(yield* namespacesOf(scriptName)).toEqual({ New: original.Old });
+          expect((yield* fetchJsonReady<{ value: number }>(`${adopted.url}/get`)).value).toBe(1);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(scriptName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "adopts a dispatch-namespace worker deployed with exports",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const namespaceName = scriptNameFor(scratch, "adopt-wfp-ns");
+          const scriptName = scriptNameFor(scratch, "adopt-wfp-user");
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* scratch.deploy(
+            Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", { name: namespaceName }),
+          );
+          yield* wfp.putDispatchNamespaceScript({
+            accountId,
+            dispatchNamespace: namespaceName,
+            scriptName,
+            metadata: {
+              mainModule: "main.js",
+              compatibilityDate: "2026-08-31",
+              bindings: [
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
+              ],
+              exports: { Counter: { type: "durable-object", storage: "sqlite" } },
+            },
+            files: [
+              new File([hostScript(["Counter"])], "main.js", {
+                type: "application/javascript+module",
+              }),
+            ],
+          });
+          const before = yield* namespacesOf(scriptName, namespaceName);
+          expect(Object.keys(before)).toEqual(["Counter"]);
+
+          const program = Effect.gen(function* () {
+            const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", {
+              name: namespaceName,
+            });
+            return yield* Cloudflare.Worker("User", {
+              name: scriptName,
+              namespace: namespace.name,
+              script: hostScript(["Counter"]),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            });
+          });
+          yield* scratch.deploy(program).pipe(adopt(true));
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual(before);
+
+          yield* scratch.deploy(program);
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual(before);
+
+          yield* scratch.destroy();
           expect(yield* namespacesOf(scriptName, namespaceName)).toEqual({});
         }).pipe(logLevel),
       { timeout: 300_000 },
