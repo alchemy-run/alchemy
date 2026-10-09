@@ -387,9 +387,13 @@ describe.concurrent(
                 script: hostScript(["Counter"]),
                 env: { Counter: Cloudflare.DurableObject("Counter") },
               });
+              // A version runs the parent's script, so it exports the
+              // parent's Durable Object class without binding it.
               const canary = yield* Cloudflare.Worker("VersionCanary", {
-                script: `${hostScript(["Counter"])}\n// canary\n`,
-                env: { Counter: Cloudflare.DurableObject("Counter", { scriptName }) },
+                script: `import { DurableObject } from "cloudflare:workers";
+export class Counter extends DurableObject {}
+export default { fetch() { return new Response("canary"); } };
+`,
                 version: { parent, traffic: 25 },
               });
               return { parent, canary };
