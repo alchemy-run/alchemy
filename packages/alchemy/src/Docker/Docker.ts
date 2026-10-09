@@ -145,6 +145,7 @@ export class Docker extends Context.Service<
         ref: string,
         platform?: string,
         context?: string,
+        session?: Pick<ScopedPlanStatusSession, "note">,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
@@ -160,6 +161,7 @@ export class Docker extends Context.Service<
         credentials: RegistryCredentials,
         platform?: string,
         context?: string,
+        session?: Pick<ScopedPlanStatusSession, "note">,
       ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
       /** Tags an image. */
       readonly tag: (
@@ -631,7 +633,7 @@ const makeDocker = (options: DockerOptions) =>
         if (Option.isNone(version)) return "legacy" as const;
         // Numeric template captures can consume version separators as decimals.
         const match =
-          /^github\.com\/docker\/buildx v(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
+          /^github\.com\/docker\/buildx v?(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
             version.value.stdout,
           );
         if (!match) return "load" as const;
@@ -640,6 +642,18 @@ const makeDocker = (options: DockerOptions) =>
         return major >= 1 || minor >= 26 ? ("export" as const) : ("load" as const);
       }),
     );
+
+    const outputTap = (session?: Pick<ScopedPlanStatusSession, "note">) =>
+      session
+        ? Stream.tapSink(
+            Sink.make<string>()(
+              flow(
+                Stream.splitLines,
+                Stream.runForEach((line) => session.note(line, { kind: "output" })),
+              ),
+            ),
+          )
+        : undefined;
 
     // `podman push` prints no `digest:` line, and Podman's RepoDigests can
     // list a source digest under the pushed name, so Podman pushes report the
@@ -652,7 +666,7 @@ const makeDocker = (options: DockerOptions) =>
     );
 
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
-      function* (ref, credentials, platform, context) {
+      function* (ref, credentials, platform, context, session) {
         // Write the registry credentials directly into an isolated docker config
         // as a plaintext `auths` entry and skip `docker login` entirely.
         //
@@ -680,12 +694,15 @@ const makeDocker = (options: DockerOptions) =>
         const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
         const result =
           platform === undefined
-            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], {
-                DOCKER_CONFIG: dir,
-              })
+            ? yield* run(
+                [...formatArgs({ context }), "push", ...digestArgs, ref],
+                { DOCKER_CONFIG: dir },
+                outputTap(session),
+              )
             : yield* run(
                 [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
                 { DOCKER_CONFIG: dir },
+                outputTap(session),
               ).pipe(
                 // Engines without the containerd image store reject `--platform`
                 // on push; their local tag is already narrowed to the requested
@@ -693,9 +710,11 @@ const makeDocker = (options: DockerOptions) =>
                 Effect.catchIf(
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
                   () =>
-                    run([...formatArgs({ context }), "push", ...digestArgs, ref], {
-                      DOCKER_CONFIG: dir,
-                    }),
+                    run(
+                      [...formatArgs({ context }), "push", ...digestArgs, ref],
+                      { DOCKER_CONFIG: dir },
+                      outputTap(session),
+                    ),
                 ),
               );
         if (digestArgs.length === 0) return result;
@@ -758,16 +777,7 @@ const makeDocker = (options: DockerOptions) =>
           session,
           registry,
         ) {
-          const tap = session
-            ? Stream.tapSink(
-                Sink.make<string>()(
-                  flow(
-                    Stream.splitLines,
-                    Stream.runForEach((line) => session.note(line, { kind: "output" })),
-                  ),
-                ),
-              )
-            : undefined;
+          const tap = outputTap(session);
           const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
@@ -805,20 +815,26 @@ const makeDocker = (options: DockerOptions) =>
           );
           const [tag, ...tags] =
             typeof options.tag === "string" ? ([options.tag] as const) : options.tag;
-          return yield* push(tag, registry, options.platform, engineContext).pipe(
+          return yield* push(tag, registry, options.platform, engineContext, session).pipe(
             Effect.tap(() =>
-              Effect.forEach(tags, (tag) => push(tag, registry, options.platform, engineContext)),
+              Effect.forEach(tags, (tag) =>
+                push(tag, registry, options.platform, engineContext, session),
+              ),
             ),
           );
         }),
-        pull: (ref, platform, context) =>
-          run([
-            ...formatArgs({ context }),
-            "image",
-            "pull",
-            ref,
-            ...(platform ? ["--platform", platform] : []),
-          ]),
+        pull: (ref, platform, context, session) =>
+          run(
+            [
+              ...formatArgs({ context }),
+              "image",
+              "pull",
+              ref,
+              ...(platform ? ["--platform", platform] : []),
+            ],
+            undefined,
+            outputTap(session),
+          ),
         inspect: (ref, context) =>
           runInspect<Docker.Image>([...formatArgs({ context }), "image", "inspect", ref]),
         remove: (ref, force, context) =>

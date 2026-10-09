@@ -124,7 +124,7 @@ export class DevBox extends Cloudflare.Container<
   {
     readFile: (path: string) => Effect.Effect<string>;
     writeFile: (path: string, contents: string) => Effect.Effect<void>;
-    exec: (command: string) => Effect.Effect<{
+    shell: (command: string) => Effect.Effect<{
       exitCode: number;
       stdout: string;
       stderr: string;
@@ -140,10 +140,25 @@ export default DevBox.make(
 );
 ```
 
-The `ReleaseVersion` DO provides
-`Cloudflare.Containers.layer(DevBox, { enableInternet: true })`, so
-tool layers like `WriteFileDevBox` resolve the container and call its
-typed methods directly. The other tools follow the same pattern with
+Tool layers like `WriteFileDevBox` `yield* DevBox` and start it before
+calling its typed methods:
+
+```typescript
+// src/tools/Fs.ts
+export const WriteFileDevBox = Layer.effect(
+  WriteFile,
+  Effect.gen(function* () {
+    const devBox = yield* DevBox;
+    const start = devBox.start({ enableInternet: true });
+
+    return ({ path, contents }) =>
+      start.pipe(Effect.andThen(devBox.writeFile(path, contents)), Effect.orDie);
+  }),
+);
+```
+
+`start` is a no-op once the container is running, so every tool can
+call it. The other tools follow the same pattern with
 different backends: `Sql` runs against the DO's own SQLite storage,
 and `Eval` sandboxes generated JavaScript in a dynamically loaded
 Worker via `Cloudflare.WorkerLoader`.
