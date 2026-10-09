@@ -1,5 +1,6 @@
 import type { WorkerEnv } from "../alchemy.run.ts";
 import { referenceDestination } from "./reference-links.ts";
+import { handleSearch, type ExecutionContext } from "./search-api.ts";
 import { SOCIAL_REDIRECTS } from "./social-redirects.ts";
 
 // Minimal `HTMLRewriter` shape — the workers runtime exposes it as a
@@ -239,9 +240,12 @@ const resolveRedirect = (url: URL): string | undefined => {
 };
 
 export default {
-  fetch: async (request: Request, env: WorkerEnv) => {
+  fetch: async (request: Request, env: WorkerEnv, ctx: ExecutionContext) => {
     const url = new URL(request.url);
     const canonical = url.host === CANONICAL_HOST;
+    if (url.pathname === "/api/search") {
+      return handleSearch(request, env, ctx, CANONICAL_ORIGIN);
+    }
     const redirect = resolveRedirect(url);
     if (redirect !== undefined) {
       return Response.redirect(new URL(redirect, request.url), 301);
@@ -334,12 +338,13 @@ const resolveV1Fallback = async (url: URL): Promise<string | undefined> => {
 };
 
 /**
- * `llms.txt` / `llms-full.txt` are generated at build time with absolute
- * canonical URLs, so a PR preview would hand agents an index that points back
+ * `llms.txt` / `llms-full.txt` (and the AI Search crawler's
+ * `search-sitemap.xml`) are generated at build time with absolute canonical
+ * URLs, so a PR preview would hand agents an index that points back
  * at production. Rewrite the baked origin to the request's own origin — the
  * same treatment `rewriteSocialCardHost` gives the OG tags.
  */
-const AGENT_TEXT_PATHS = new Set(["/llms.txt", "/llms-full.txt"]);
+const AGENT_TEXT_PATHS = new Set(["/llms.txt", "/llms-full.txt", "/search-sitemap.xml"]);
 
 const rewriteAgentTextOrigin = async (request: Request, res: Response): Promise<Response> => {
   const reqUrl = new URL(request.url);

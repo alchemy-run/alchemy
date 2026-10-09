@@ -1,0 +1,515 @@
+---
+/**
+ * Docs search: a ⌘K dialog with provider filter chips and a provider badge on
+ * every result.
+ *
+ * Queries `/api/search` (Cloudflare AI Search, see src/search-api.ts). When
+ * that's unavailable — `astro dev`, or production before its index exists —
+ * it falls back to the build's Pagefind index, filtered by the same
+ * `provider` facet.
+ *
+ * Self-contained styling (`--alc-*` tokens only): it renders on marketing
+ * pages too, where Starlight's CSS isn't loaded.
+ */
+import { SEARCH_PROVIDERS } from "../docs-search";
+---
+
+<docs-search class="alc-search">
+  <button type="button" data-open-modal aria-label="Search docs" aria-keyshortcuts="Control+K">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"></circle>
+      <path d="m20 20-3.5-3.5"></path>
+    </svg>
+    <span>Search</span>
+    <kbd><kbd data-modifier>Ctrl</kbd><kbd>K</kbd></kbd>
+  </button>
+
+  <dialog class="alc-search__dialog" aria-label="Search docs">
+    <div class="alc-search__frame">
+      <form class="alc-search__form" role="search" method="dialog">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input
+          type="search"
+          name="q"
+          placeholder="Search docs"
+          autocomplete="off"
+          spellcheck="false"
+          aria-controls="alc-search-results"
+          aria-autocomplete="list"
+        />
+        <button type="button" class="alc-search__close" data-close-modal>Esc</button>
+      </form>
+
+      <div class="alc-search__chips" role="radiogroup" aria-label="Filter by provider">
+        <button type="button" role="radio" aria-checked="true" data-provider="">All</button>
+        {
+          SEARCH_PROVIDERS.map((provider) => (
+            <button type="button" role="radio" aria-checked="false" data-provider={provider}>
+              {provider}
+            </button>
+          ))
+        }
+      </div>
+
+      <p class="alc-search__status" aria-live="polite"></p>
+      <ol class="alc-search__results" id="alc-search-results" role="listbox"></ol>
+
+      <footer class="alc-search__footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+        <span><kbd>↵</kbd> open</span>
+        <span><kbd>esc</kbd> close</span>
+      </footer>
+    </div>
+  </dialog>
+</docs-search>
+
+<script>
+  import type { SearchHit, SearchResponse } from "../docs-search";
+
+  interface PagefindResult {
+    data(): Promise<{
+      url: string;
+      excerpt: string;
+      meta: { title?: string };
+      filters: Record<string, string[]>;
+    }>;
+  }
+  interface Pagefind {
+    search(
+      query: string,
+      options?: { filters?: Record<string, string> },
+    ): Promise<{ results: PagefindResult[] }>;
+  }
+
+  const DEBOUNCE_MS = 200;
+  const MAX_HITS = 12;
+
+  let pagefind: Promise<Pagefind> | undefined;
+  const loadPagefind = () =>
+    (pagefind ??= import(/* @vite-ignore */ `${location.origin}/pagefind/pagefind.js`));
+
+  const searchApi = async (
+    query: string,
+    provider: string,
+    signal: AbortSignal,
+  ): Promise<SearchHit[]> => {
+    const params = new URLSearchParams({ q: query });
+    if (provider) params.set("provider", provider);
+    const res = await fetch(`/api/search?${params}`, { signal });
+    if (!res.ok) throw new Error(`search ${res.status}`);
+    return ((await res.json()) as SearchResponse).hits;
+  };
+
+  const searchPagefind = async (query: string, provider: string): Promise<SearchHit[]> => {
+    const index = await loadPagefind();
+    const { results } = await index.search(query, {
+      filters: provider ? { provider } : undefined,
+    });
+    const pages = await Promise.all(results.slice(0, MAX_HITS).map((result) => result.data()));
+    return pages.map((page) => ({
+      url: page.url,
+      title: (page.meta.title ?? page.url).replace(/\s*\|\s*Alchemy\s*$/, ""),
+      provider: page.filters.provider?.[0] ?? "Core",
+      section: page.url.startsWith("/providers/") ? "reference" : "guide",
+      snippet: page.excerpt.replace(/<[^>]+>/g, ""),
+    }));
+  };
+
+  const escapeHtml = (text: string) =>
+    text.replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+    );
+
+  /** Escape `text`, then wrap every query term in `<mark>`. */
+  const highlight = (text: string, query: string) => {
+    const terms = query
+      .split(/\s+/)
+      .filter((term) => term.length > 1)
+      .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const html = escapeHtml(text);
+    if (terms.length === 0) return html;
+    return html.replace(new RegExp(`(${terms.join("|")})`, "gi"), "<mark>$1</mark>");
+  };
+
+  /** `/aws/data/s3/` → `aws › data › s3` */
+  const breadcrumb = (url: string) =>
+    url.split(/[?#]/)[0]!.split("/").filter(Boolean).join(" › ");
+
+  class DocsSearch extends HTMLElement {
+    #dialog!: HTMLDialogElement;
+    #input!: HTMLInputElement;
+    #status!: HTMLElement;
+    #results!: HTMLOListElement;
+    #chips!: HTMLButtonElement[];
+    #provider = "";
+    #active = -1;
+    #timer: ReturnType<typeof setTimeout> | undefined;
+    #inflight: AbortController | undefined;
+
+    connectedCallback() {
+      this.#dialog = this.querySelector("dialog")!;
+      this.#input = this.querySelector("input")!;
+      this.#status = this.querySelector(".alc-search__status")!;
+      this.#results = this.querySelector(".alc-search__results")!;
+      this.#chips = [...this.querySelectorAll<HTMLButtonElement>("[data-provider]")];
+
+      if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+        this.querySelector("[data-modifier]")!.textContent = "⌘";
+        this.querySelector("[data-open-modal]")!.setAttribute("aria-keyshortcuts", "Meta+K");
+      }
+
+      this.querySelector("[data-open-modal]")!.addEventListener("click", () => this.open());
+      this.querySelector("[data-close-modal]")!.addEventListener("click", () => this.close());
+      // A click on the backdrop lands on the <dialog> itself.
+      this.#dialog.addEventListener("click", (event) => {
+        if (event.target === this.#dialog) this.close();
+      });
+      // Esc closes the dialog natively; restore page scroll however it closed.
+      this.#dialog.addEventListener("close", () => {
+        document.body.style.overflow = "";
+      });
+      this.#input.addEventListener("input", () => this.#schedule());
+      this.#input.addEventListener("keydown", (event) => this.#onKey(event));
+      for (const chip of this.#chips) {
+        chip.addEventListener("click", () => this.#select(chip.dataset.provider ?? ""));
+      }
+      window.addEventListener("keydown", this.#onGlobalKey);
+    }
+
+    disconnectedCallback() {
+      window.removeEventListener("keydown", this.#onGlobalKey);
+    }
+
+    open() {
+      if (this.#dialog.open) return;
+      this.#dialog.showModal();
+      document.body.style.overflow = "hidden";
+      this.#input.select();
+    }
+
+    close() {
+      this.#dialog.close();
+    }
+
+    #onGlobalKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? "");
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        this.#dialog.open ? this.close() : this.open();
+      } else if (event.key === "/" && !typing && !this.#dialog.open) {
+        event.preventDefault();
+        this.open();
+      }
+    };
+
+    #onKey(event: KeyboardEvent) {
+      const items = this.#results.querySelectorAll<HTMLAnchorElement>("a");
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (items.length === 0) return;
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        this.#setActive((this.#active + step + items.length) % items.length);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const target = items[Math.max(this.#active, 0)];
+        if (target) target.click();
+      }
+    }
+
+    #setActive(index: number) {
+      const items = this.#results.querySelectorAll<HTMLElement>("li");
+      items[this.#active]?.removeAttribute("aria-selected");
+      this.#active = index;
+      const item = items[index];
+      if (!item) return;
+      item.setAttribute("aria-selected", "true");
+      item.scrollIntoView({ block: "nearest" });
+    }
+
+    #select(provider: string) {
+      this.#provider = provider;
+      for (const chip of this.#chips) {
+        chip.setAttribute("aria-checked", String((chip.dataset.provider ?? "") === provider));
+      }
+      this.#input.focus();
+      void this.#run();
+    }
+
+    #schedule() {
+      clearTimeout(this.#timer);
+      this.#timer = setTimeout(() => void this.#run(), DEBOUNCE_MS);
+    }
+
+    async #run() {
+      const query = this.#input.value.trim();
+      const provider = this.#provider;
+      this.#inflight?.abort();
+      if (query.length < 2) {
+        this.#render([], "", "");
+        return;
+      }
+      const inflight = (this.#inflight = new AbortController());
+      this.#status.textContent = "Searching…";
+      let hits: SearchHit[];
+      try {
+        hits = await searchApi(query, provider, inflight.signal).catch((error) => {
+          if (inflight.signal.aborted) throw error;
+          return searchPagefind(query, provider);
+        });
+      } catch {
+        if (!inflight.signal.aborted) this.#status.textContent = "Search is unavailable.";
+        return;
+      }
+      if (inflight.signal.aborted) return;
+      this.#render(hits, query, provider);
+    }
+
+    #render(hits: SearchHit[], query: string, provider: string) {
+      this.#active = -1;
+      this.#results.innerHTML = hits
+        .map(
+          (hit, i) => `
+            <li role="option" id="alc-search-hit-${i}">
+              <a href="${escapeHtml(hit.url)}">
+                <span class="alc-search__hit-head">
+                  <span class="alc-search__hit-title">${highlight(hit.title, query)}</span>
+                  <span class="alc-search__badge">${escapeHtml(hit.provider)}</span>
+                  ${hit.section === "reference" ? `<span class="alc-search__badge alc-search__badge--muted">API</span>` : ""}
+                </span>
+                <span class="alc-search__hit-path">${escapeHtml(breadcrumb(hit.url))}</span>
+                ${hit.snippet ? `<span class="alc-search__hit-snippet">${highlight(hit.snippet, query)}</span>` : ""}
+              </a>
+            </li>`,
+        )
+        .join("");
+      for (const link of this.#results.querySelectorAll("a")) {
+        link.addEventListener("click", () => this.close());
+      }
+      const scope = provider ? ` in ${provider}` : "";
+      this.#status.textContent =
+        query === ""
+          ? ""
+          : hits.length === 0
+            ? `No results for “${query}”${scope}`
+            : `${hits.length} result${hits.length === 1 ? "" : "s"} for “${query}”${scope}`;
+    }
+  }
+
+  if (!customElements.get("docs-search")) customElements.define("docs-search", DocsSearch);
+</script>
+
+<style is:global>
+  docs-search {
+    display: block;
+    width: 100%;
+  }
+  .alc-search__dialog {
+    width: min(42rem, calc(100vw - 2rem));
+    max-height: min(40rem, calc(100dvh - 4rem));
+    margin: 4rem auto auto;
+    padding: 0;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 12px;
+    background: var(--alc-bg-elev-1);
+    color: var(--alc-fg-2);
+    font-family: var(--alc-font-sans);
+    box-shadow: 0 24px 64px rgba(42, 38, 32, 0.25);
+  }
+  .alc-search__dialog::backdrop {
+    background: rgba(42, 38, 32, 0.35);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .alc-search__frame {
+    display: flex;
+    flex-direction: column;
+    max-height: inherit;
+  }
+  .alc-search__form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--alc-hairline-2);
+  }
+  .alc-search__form svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--alc-fg-4);
+  }
+  .alc-search__form input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--alc-fg-1);
+    font: inherit;
+    font-size: 16px;
+  }
+  .alc-search__form input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .alc-search__close {
+    padding: 2px 8px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 6px;
+    background: var(--alc-bg-sunk);
+    color: var(--alc-fg-3);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .alc-search__chips {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--alc-hairline);
+  }
+  .alc-search__chips::-webkit-scrollbar {
+    display: none;
+  }
+  .alc-search__chips button {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--alc-fg-3);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .alc-search__chips button:hover {
+    color: var(--alc-fg-1);
+    border-color: var(--alc-fg-4);
+  }
+  .alc-search__chips button[aria-checked="true"] {
+    background: var(--alc-fg-1);
+    border-color: var(--alc-fg-1);
+    color: var(--alc-bg-elev-1);
+  }
+  .alc-search__status {
+    margin: 0;
+    padding: 10px 16px 4px;
+    font-size: 12px;
+    color: var(--alc-fg-3);
+  }
+  .alc-search__status:empty {
+    display: none;
+  }
+  .alc-search__results {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 6px 8px 8px;
+    overflow-y: auto;
+    list-style: none;
+  }
+  .alc-search__results li {
+    margin: 0;
+    border-radius: 8px;
+  }
+  .alc-search__results a {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 10px;
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .alc-search__results li[aria-selected="true"] a,
+  .alc-search__results a:hover,
+  .alc-search__results a:focus-visible {
+    outline: none;
+    background: var(--alc-accent-12);
+  }
+  .alc-search__hit-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .alc-search__hit-title {
+    overflow: hidden;
+    color: var(--alc-fg-1);
+    font-weight: 600;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .alc-search__badge {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 999px;
+    background: var(--alc-bg-sunk);
+    color: var(--alc-fg-2);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+  .alc-search__badge--muted {
+    color: var(--alc-fg-4);
+    font-family: var(--alc-font-mono);
+  }
+  .alc-search__hit-path {
+    color: var(--alc-fg-4);
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+  }
+  .alc-search__hit-snippet {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    margin-top: 2px;
+    color: var(--alc-fg-3);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .alc-search__results mark {
+    background: transparent;
+    color: var(--alc-accent-deep);
+    font-weight: 700;
+  }
+  .alc-search__footer {
+    display: flex;
+    gap: 16px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--alc-hairline);
+    color: var(--alc-fg-4);
+    font-size: 11px;
+  }
+  .alc-search__footer kbd {
+    margin-right: 2px;
+    padding: 0 4px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 4px;
+    font-family: var(--alc-font-mono);
+    font-size: 10px;
+  }
+  @media (max-width: 50rem) {
+    .alc-search__dialog {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100dvh;
+      max-height: 100dvh;
+      margin: 0;
+      border-radius: 0;
+    }
+    .alc-search__footer {
+      display: none;
+    }
+  }
+</style>

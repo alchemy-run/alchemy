@@ -24,8 +24,34 @@ const Website = Cloudflare.Website.StaticSite(
             ? "alchemy-website-prod"
             : undefined;
 
+    // Docs search: production owns one AI Search instance that crawls the
+    // live site. Every other stage proxies `/api/search` to production (see
+    // src/search-api.ts) rather than crawling and indexing its own copy.
+    const docsSearch =
+      stack.stage === "prod"
+        ? yield* Cloudflare.AI.Search("DocsSearch", {
+            source: "https://alchemy.run",
+            parse: {
+              type: "sitemap",
+              // Unlike sitemap-index.xml, lists the noindex API reference pages.
+              specificSitemaps: ["https://alchemy.run/search-sitemap.xml"],
+              contentSelector: [{ path: "**", selector: "main" }],
+            },
+            // Read from each page's <meta> tags (src/components/starlight/Head.astro).
+            customMetadata: [
+              { fieldName: "title", dataType: "text" },
+              { fieldName: "description", dataType: "text" },
+              { fieldName: "provider", dataType: "text" },
+              { fieldName: "section", dataType: "text" },
+            ],
+            syncInterval: 21600,
+            indexOnCreate: true,
+          })
+        : undefined;
+
     return {
       name,
+      env: docsSearch ? { DOCS_SEARCH: docsSearch } : undefined,
       command: "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",

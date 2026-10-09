@@ -16,6 +16,7 @@ import PostHog from "../analytics/PostHog.astro";
 import BrandIcons from "../../brand/Icons.astro";
 import StructuredData from "../StructuredData.astro";
 import { socialOrigin } from "../../social-origin";
+import { searchFacets } from "../../docs-search";
 
 // Starlight injects route data via Astro.locals at runtime; the public
 // types aren't ambient-declared in this project, so we cast through any.
@@ -26,6 +27,7 @@ const { id } = (Astro.locals as { starlightRoute: { id: string } })
 // Starlight normalizes the index entry's id to an empty string.
 const ogSlug = id === "" ? "index" : id;
 const ogImage = new URL(`/og/${ogSlug}.webp`, socialOrigin(Astro.site, Astro.url));
+const facets = searchFacets(Astro.url.pathname);
 ---
 
 <Default><slot /></Default>
@@ -44,6 +46,12 @@ const ogImage = new URL(`/og/${ogSlug}.webp`, socialOrigin(Astro.site, Astro.url
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:site" content="@alchemy_run" />
 <meta name="twitter:image" content={ogImage.href} />
+
+{/* Search facets. AI Search's crawler reads `<meta name>` tags into the
+    instance's custom metadata (see alchemy.run.ts); Pagefind reads the
+    `data-pagefind-filter` attribute for the fallback index. */}
+<meta name="provider" content={facets.provider} data-pagefind-filter="provider[content]" />
+<meta name="section" content={facets.section} />
 
 {/* Organization (sameAs → social profiles) + WebSite JSON-LD. */}
 <StructuredData />
