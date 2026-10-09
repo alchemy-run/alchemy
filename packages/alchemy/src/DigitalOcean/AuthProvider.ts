@@ -39,7 +39,7 @@ const firstTokenInEnvironment = Effect.fn(function* () {
     const apiToken = yield* getEnvRedacted(name);
     if (apiToken) return { name, apiToken };
   }
-  return yield* new AuthError({
+  return yield* AuthError.make({
     message: `DigitalOcean env credentials not found. Set ${TOKEN_ENV_NAMES.join(", ")}.`,
   });
 });

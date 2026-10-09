@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 /** Observes a resource that may not exist. */
 export const noneIfNotFound = <A, E, R>(read: Effect.Effect<A, E | NotFound, R>) =>
   read.pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeed(Option.none<A>())),
   );
 

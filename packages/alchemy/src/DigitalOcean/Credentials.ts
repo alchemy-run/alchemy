@@ -44,11 +44,10 @@ export const fromAuthProvider = () =>
               apiKey: creds.apiToken,
               apiBaseUrl: creds.apiBaseUrl,
             })),
-            Effect.mapError(
-              (e) =>
-                new ConfigError({
-                  message: `Failed to resolve DigitalOcean credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              ConfigError.make({
+                message: `Failed to resolve DigitalOcean credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),
