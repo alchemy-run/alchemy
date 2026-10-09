@@ -508,7 +508,6 @@ export const LocalWorkerProvider = () =>
           viteRootDir: props.vite?.rootDir,
           bundleOptions: {
             id,
-            fqn,
             main: props.main!,
             compatibility,
             entry: props.isExternal

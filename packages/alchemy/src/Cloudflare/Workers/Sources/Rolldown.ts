@@ -36,8 +36,6 @@ export interface WorkerBuildOptions extends Bundle.BundleConfig {
 
 export interface WorkerBundleOptions {
   id: string;
-  /** Namespace-qualified id; keys the Worker's bundle directory. */
-  fqn: string;
   main: string;
   compatibility: {
     date: string;
@@ -220,16 +218,6 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      ...(Bundle.hasOutputLocation(options.extraOptions?.output)
-        ? {}
-        : {
-            dir: yield* Bundle.outputDirectory({
-              stack: options.stack.name,
-              stage: options.stack.stage,
-              fqn: options.fqn,
-            }).pipe(Effect.provide(context)),
-            cleanDir: true,
-          }),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
@@ -331,7 +319,6 @@ ${[
 export const makeRolldownSource = (options: { main: string }): SourceProvider => {
   const bundleOptions = (ctx: SourceContext): WorkerBundleOptions => ({
     id: ctx.id,
-    fqn: ctx.fqn,
     main: options.main,
     compatibility: ctx.compatibility,
     entry: ctx.entry,

@@ -66,7 +66,6 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         const bundler = yield* WorkerBundle;
         const output = yield* bundler.build({
           id: "worker-bundle-require-events",
-          fqn: "worker-bundle-require-events",
           main: path.join(root, "worker.mjs"),
           compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
           entry: { kind: "external" },
@@ -112,7 +111,6 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         const bundler = yield* WorkerBundle;
         const output = yield* bundler.build({
           id: "worker-bundle-alias",
-          fqn: "worker-bundle-alias",
           main: path.join(root, "worker.mjs"),
           compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
           entry: { kind: "external" },
@@ -160,7 +158,6 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         for (const fsAlias of ["node:fs", "node:fs/*"]) {
           const output = yield* bundler.build({
             id: "worker-bundle-native-alias",
-            fqn: "worker-bundle-native-alias",
             main: path.join(root, "worker.mjs"),
             compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
             entry: { kind: "external" },
@@ -202,7 +199,6 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         const events = yield* bundler
           .watch({
             id: "worker-bundle-watch-alias",
-            fqn: "worker-bundle-watch-alias",
             main: path.join(root, "worker.mjs"),
             compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
             entry: { kind: "external" },
@@ -270,7 +266,6 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         const bundler = yield* WorkerBundle;
         const output = yield* bundler.build({
           id: "worker-bundle-worker-module",
-          fqn: "worker-bundle-worker-module",
           main: path.join(root, "worker.mjs"),
           compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
           entry: { kind: "external" },
