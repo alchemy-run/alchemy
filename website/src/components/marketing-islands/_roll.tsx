@@ -7,17 +7,20 @@ import "./HeroHosts.css";
  * deck's Roll does: a changed value slides up out of its slot while the new
  * one slides in, and the slot's width eases between the two. `segments` is
  * `template.split(/⟨(\d)⟩/)`; `n` bumps on every change to restart the roll.
+ * Changed slots stay lit; `lit` lights every slot, changed or not.
  */
 export function RollTemplate({
   segments,
   was,
   now,
   n,
+  lit = false,
 }: {
   segments: string[];
   was: readonly string[];
   now: readonly string[];
   n: number;
+  lit?: boolean;
 }) {
   return (
     <>
@@ -29,7 +32,7 @@ export function RollTemplate({
         return (
           <span
             key={`${i}-${n}`}
-            className={`hh-slot ${rolling ? "is-active is-rolling" : ""}`}
+            className={`hh-slot ${rolling || lit ? "is-active" : ""} ${rolling ? "is-rolling" : ""}`}
             style={
               {
                 "--from": `${was[k]!.length}ch`,
