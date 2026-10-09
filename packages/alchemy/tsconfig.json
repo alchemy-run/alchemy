@@ -16,6 +16,12 @@
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
   },
   "references": [
+    { "path": "../../submodules/distilled/packages/openrouter/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/opencode/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/openai/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/codex/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/anthropic/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/acp/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/doppler/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/infisical/tsconfig.json" },
     {

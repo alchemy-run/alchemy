@@ -14,8 +14,10 @@ import Stack from "./fixtures/stack.ts";
  * Artifacts ("Git for agents") is a beta product whose native Worker binding +
  * implicit-namespace REST surface require the account to be onboarded to the
  * beta. The standing test account IS entitled, so this suite runs live by
- * default (verified green: deploy → create/list/get/delete round-trip → destroy
- * for both the effect-native and async invocation styles).
+ * default: the effect-native worker drives the full namespace + repository
+ * surface (create / list / listAll / get / info / import / tokens / fork /
+ * log / readCommit / readTree / readBlob / readFile / delete) and the async
+ * worker a create / list / get / delete round-trip over the raw binding.
  *
  * If an account is NOT onboarded, repo creation is rejected at runtime; set
  * `CLOUDFLARE_TEST_ARTIFACTS=0` to skip the entire suite skip-clean on such an
@@ -43,6 +45,12 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   }
 }
 
+class RouteFailed extends Data.TaggedError("RouteFailed")<{ body: string }> {
+  override get message() {
+    return this.body;
+  }
+}
+
 // Bounded spaced schedule — caps total cold-start wait so a real failure
 // surfaces fast instead of riding to the test timeout. ~150s: fresh
 // workers.dev URLs 404 well past a minute under full-suite deploy load.
@@ -55,7 +63,15 @@ const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse,
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
+            Effect.flatMap((body) =>
+              // A typed binding error surfaced by the fixture's routes is a
+              // real failure — fail fast instead of riding the readiness retry.
+              Effect.fail<RouteFailed | WorkerNotReady>(
+                res.status === 500 && body.startsWith('{"error"')
+                  ? new RouteFailed({ body })
+                  : new WorkerNotReady({ status: res.status, body }),
+              ),
+            ),
           ),
     ),
     Effect.retry({
@@ -67,68 +83,148 @@ const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse,
 const body = <T>(res: HttpClientResponse.HttpClientResponse) =>
   res.json.pipe(Effect.map((b) => b as T));
 
-const createRepo = (base: string, name: string) =>
-  untilOk(
-    HttpClient.execute(HttpClientRequest.post(`${base}/create?name=${encodeURIComponent(name)}`)),
-  ).pipe(
-    Effect.flatMap(
-      body<{
-        name: string;
-        remote: string;
-        defaultBranch: string;
-        hasToken: boolean;
-      }>,
-    ),
+const call = <T>(base: string, method: "GET" | "POST" | "DELETE", path: string) =>
+  untilOk(HttpClient.execute(HttpClientRequest.make(method)(`${base}${path}`))).pipe(
+    Effect.flatMap((res) => body<T>(res)),
   );
 
-const listRepos = (base: string) =>
-  untilOk(HttpClient.get(`${base}/list`)).pipe(
-    Effect.flatMap(body<{ names: string[]; total: number }>),
-  );
+const q = (params: Record<string, string>) => `?${new URLSearchParams(params).toString()}`;
 
 const getRepo = (base: string, name: string) =>
-  untilOk(HttpClient.get(`${base}/get?name=${encodeURIComponent(name)}`)).pipe(
-    Effect.flatMap(body<{ found: boolean }>),
+  call<{ found: boolean; info?: { name: string; remote: string; defaultBranch: string } }>(
+    base,
+    "GET",
+    `/get${q({ name })}`,
   );
 
 const deleteRepo = (base: string, name: string) =>
-  untilOk(
-    HttpClient.execute(
-      HttpClientRequest.make("DELETE")(`${base}/delete?name=${encodeURIComponent(name)}`),
-    ),
-  ).pipe(Effect.flatMap(body<{ deleted: boolean }>));
+  call<{ deleted: boolean }>(base, "DELETE", `/delete${q({ name })}`);
+
+/** Delete a deterministic repo an interrupted earlier run may have leaked. */
+const preClean = (base: string, name: string) =>
+  Effect.gen(function* () {
+    if ((yield* getRepo(base, name)).found) yield* deleteRepo(base, name);
+  });
 
 /**
- * Drive the full client surface over one worker base URL: create a repo,
- * confirm it shows up in `list` and `get`, then `delete` it and confirm it is
- * gone. `label` namespaces the repo so the two style-runs stay independent
- * against the one shared namespace.
+ * The async worker only implements the original four routes (create / list /
+ * get / delete) over the raw runtime binding.
  */
-const exercise = (label: string, base: string) =>
+const exerciseAsync = (base: string) =>
   Effect.gen(function* () {
-    const repo = `${label}-repo`;
+    const repo = "async-repo";
+    const asyncGet = (name: string) => call<{ found: boolean }>(base, "GET", `/get${q({ name })}`);
+    if ((yield* asyncGet(repo)).found) yield* deleteRepo(base, repo);
 
-    // Pre-clean: an interrupted earlier run can leave the deterministic
-    // repo behind (Artifacts repos live outside the account nuke's view),
-    // and a leaked repo makes create fail "already exists" forever after.
-    // getRepo also rides out worker cold-start via its readiness retry.
-    if ((yield* getRepo(base, repo)).found) {
-      yield* deleteRepo(base, repo);
-    }
-
-    const created = yield* createRepo(base, repo);
+    const created = yield* call<{
+      name: string;
+      remote: string;
+      defaultBranch: string;
+      hasToken: boolean;
+    }>(base, "POST", `/create${q({ name: repo })}`);
     expect(created.name).toBe(repo);
     expect(created.defaultBranch).toBe("main");
     expect(created.remote).toContain("https://");
     expect(created.hasToken).toBe(true);
 
-    const listed = yield* listRepos(base);
+    const listed = yield* call<{ names: string[] }>(base, "GET", "/list");
     expect(listed.names).toContain(repo);
-
-    expect((yield* getRepo(base, repo)).found).toBe(true);
-
+    expect((yield* asyncGet(repo)).found).toBe(true);
     expect((yield* deleteRepo(base, repo)).deleted).toBe(true);
-    expect((yield* getRepo(base, repo)).found).toBe(false);
+    expect((yield* asyncGet(repo)).found).toBe(false);
+  });
+
+/**
+ * Drive the full Effect-native client surface: namespace create / list /
+ * listAll / get / import / delete, and repo info / createToken / listTokens /
+ * revokeToken / fork / log / readCommit / readTree / readBlob / readFile.
+ */
+const exerciseEffect = (base: string) =>
+  Effect.gen(function* () {
+    const repo = "effect-repo";
+    const imported = "effect-import";
+    const forked = "effect-fork";
+    yield* preClean(base, repo);
+    yield* preClean(base, imported);
+    yield* preClean(base, forked);
+
+    const created = yield* call<{
+      name: string;
+      remote: string;
+      defaultBranch: string;
+      hasToken: boolean;
+    }>(base, "POST", `/create${q({ name: repo })}`);
+    expect(created.name).toBe(repo);
+    expect(created.defaultBranch).toBe("main");
+    expect(created.hasToken).toBe(true);
+
+    const info = yield* getRepo(base, repo);
+    expect(info.found).toBe(true);
+    expect(info.info?.name).toBe(repo);
+    expect(info.info?.remote).toBe(created.remote);
+
+    const tokens = yield* call<{
+      scope: string;
+      hasPlaintext: boolean;
+      listed: boolean;
+      revoked: boolean;
+      revokedUnknown: boolean;
+    }>(base, "POST", `/tokens${q({ name: repo })}`);
+    expect(tokens).toEqual({
+      scope: "read",
+      hasPlaintext: true,
+      listed: true,
+      revoked: true,
+      revokedUnknown: false,
+    });
+
+    const imp = yield* call<{ name: string; remote: string }>(
+      base,
+      "POST",
+      `/import${q({ name: imported })}`,
+    );
+    expect(imp.name).toBe(imported);
+
+    const content = yield* call<{
+      empty: boolean;
+      head: string;
+      commitMatches: boolean;
+      entries: string[];
+      entry: string | undefined;
+      blobMatchesFile: boolean;
+      fileType: string | undefined;
+      missingCommit: unknown;
+    }>(base, "GET", `/content${q({ name: imported })}`);
+    expect(content.empty).toBe(false);
+    expect(content.head).toMatch(/^[0-9a-f]{40}$/);
+    expect(content.commitMatches).toBe(true);
+    expect(content.entries.length).toBeGreaterThan(0);
+    expect(content.entry).toBeDefined();
+    expect(content.blobMatchesFile).toBe(true);
+    expect(content.missingCommit).toBeNull();
+
+    const fork = yield* call<{ name: string }>(
+      base,
+      "POST",
+      `/fork${q({ name: imported, target: forked })}`,
+    );
+    expect(fork.name).toBe(forked);
+
+    const listed = yield* call<{
+      pageSize: number;
+      hasCursor: boolean;
+      total: number;
+      names: string[];
+    }>(base, "GET", "/list");
+    expect(listed.pageSize).toBe(1);
+    expect(listed.total).toBeGreaterThanOrEqual(3);
+    expect(listed.hasCursor).toBe(true);
+    expect(listed.names).toEqual(expect.arrayContaining([repo, imported, forked]));
+
+    for (const name of [forked, imported, repo]) {
+      expect((yield* deleteRepo(base, name)).deleted).toBe(true);
+      expect((yield* getRepo(base, name)).found).toBe(false);
+    }
   });
 
 // `beforeAll` has no `.skipIf`, so the deploy is gated inside the effect: when
@@ -145,10 +241,10 @@ afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(destroy(Stack), 
 
 // Effect-native worker: `Cloudflare.Artifacts.ReadWriteNamespace(Repos)` + `ReadWriteNamespaceBinding`.
 test.skipIf(!ARTIFACTS_ENABLED)(
-  "effect binding: create / list / get / delete round-trip",
+  "effect binding: full namespace + repository surface",
   Effect.gen(function* () {
     const out = yield* stack;
-    yield* exercise("effect", out.effectWorkerUrl);
+    yield* exerciseEffect(out.effectWorkerUrl);
   }).pipe(logLevel),
   {
     tags: [
@@ -166,7 +262,7 @@ test.skipIf(!ARTIFACTS_ENABLED)(
   "async binding: create / list / get / delete round-trip",
   Effect.gen(function* () {
     const out = yield* stack;
-    yield* exercise("async", out.asyncWorkerUrl);
+    yield* exerciseAsync(out.asyncWorkerUrl);
   }).pipe(logLevel),
   {
     tags: [

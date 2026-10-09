@@ -7,6 +7,7 @@ import { BranchProtection, BranchProtectionProvider } from "./BranchProtection.t
 import { Collaborator, CollaboratorProvider } from "./Collaborator.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
+import { DeployKey, DeployKeyProvider } from "./DeployKey.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Issue, IssueProvider } from "./Issue.ts";
 import { Label, LabelProvider } from "./Label.ts";
@@ -51,6 +52,7 @@ export const providers = (options?: ProvidersOptions) =>
       BranchProtection,
       Collaborator,
       Comment,
+      DeployKey,
       Environment,
       Label,
       Milestone,
@@ -71,6 +73,7 @@ export const providers = (options?: ProvidersOptions) =>
         BranchProtectionProvider(),
         CollaboratorProvider(),
         CommentProvider(),
+        DeployKeyProvider(),
         EnvironmentProvider(),
         LabelProvider(),
         MilestoneProvider(),

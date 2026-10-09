@@ -35,6 +35,10 @@
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
+    "./AI/Client": "./src/AI/Client.ts",
+    "./Anthropic": "./src/Anthropic/index.ts",
+    "./OpenAI": "./src/OpenAI/index.ts",
+    "./OpenCode": "./src/OpenCode/index.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
@@ -48,6 +52,7 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Docker": "./src/Docker/index.ts",
     "./Doppler": "./src/Doppler/index.ts",
+    "./FS": "./src/FS/index.ts",
     "./Git": "./src/Git/index.ts",
     "./Git/Hasher": "./src/Git/Hasher/index.ts",
     "./Http": "./src/Http/index.ts",
@@ -70,6 +75,7 @@
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
+    "./OpenRouter": "./src/OpenRouter/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./ACME": "./src/ACME/index.ts",
@@ -117,6 +123,26 @@
         "types": "./lib/AI/index.d.ts",
         "bun": "./src/AI/index.ts",
         "default": "./lib/AI/index.js"
+      },
+      "./AI/Client": {
+        "types": "./lib/AI/Client.d.ts",
+        "bun": "./src/AI/Client.ts",
+        "default": "./lib/AI/Client.js"
+      },
+      "./Anthropic": {
+        "types": "./lib/Anthropic/index.d.ts",
+        "bun": "./src/Anthropic/index.ts",
+        "default": "./lib/Anthropic/index.js"
+      },
+      "./OpenAI": {
+        "types": "./lib/OpenAI/index.d.ts",
+        "bun": "./src/OpenAI/index.ts",
+        "default": "./lib/OpenAI/index.js"
+      },
+      "./OpenCode": {
+        "types": "./lib/OpenCode/index.d.ts",
+        "bun": "./src/OpenCode/index.ts",
+        "default": "./lib/OpenCode/index.js"
       },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",
@@ -182,6 +208,11 @@
         "types": "./lib/Doppler/index.d.ts",
         "bun": "./src/Doppler/index.ts",
         "default": "./lib/Doppler/index.js"
+      },
+      "./FS": {
+        "types": "./lib/FS/index.d.ts",
+        "bun": "./src/FS/index.ts",
+        "default": "./lib/FS/index.js"
       },
       "./Git": {
         "types": "./lib/Git/index.d.ts",
@@ -292,6 +323,11 @@
         "types": "./lib/Neon/*/index.d.ts",
         "bun": "./src/Neon/*/index.ts",
         "default": "./lib/Neon/*/index.js"
+      },
+      "./OpenRouter": {
+        "types": "./lib/OpenRouter/index.d.ts",
+        "bun": "./src/OpenRouter/index.ts",
+        "default": "./lib/OpenRouter/index.js"
       },
       "./Hetzner": {
         "types": "./lib/Hetzner/index.d.ts",
@@ -416,9 +452,12 @@
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/acp": "workspace:*",
+    "@distilled.cloud/anthropic": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
+    "@distilled.cloud/codex": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/doppler": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
@@ -427,6 +466,9 @@
     "@distilled.cloud/iceberg": "workspace:*",
     "@distilled.cloud/infisical": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
+    "@distilled.cloud/openai": "workspace:*",
+    "@distilled.cloud/opencode": "workspace:*",
+    "@distilled.cloud/openrouter": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
@@ -452,6 +494,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "0.3.284",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "catalog:",
@@ -526,6 +569,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.284",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -598,6 +642,9 @@
       "optional": true
     },
     "ws": {
+      "optional": true
+    },
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     }
   }

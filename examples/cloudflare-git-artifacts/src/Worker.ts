@@ -44,7 +44,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
           const found = res.repos.find((r: { name: string }) => r.name === name);
           return found ? Effect.succeed(found) : Effect.fail(new RepoNotFound({ name }));
         }),
-        Effect.catchTag("ArtifactsError", () => Effect.fail(new RepoNotFound({ name }))),
+        Effect.catch(() => Effect.fail(new RepoNotFound({ name }))),
       );
 
     const handlers = HttpApiBuilder.group(RepoApi, "repos", (h) =>
@@ -71,9 +71,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
                     defaultBranch: c.defaultBranch,
                   }),
               ),
-              Effect.catchTag("ArtifactsError", (err) =>
-                Effect.fail(new RepoConflict({ message: err.message })),
-              ),
+              Effect.catch((err) => Effect.fail(new RepoConflict({ message: err.message }))),
             ),
         )
         .handle("getRepo", ({ params }) =>
@@ -91,8 +89,8 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
                         name: found.name,
                         description: found.description ?? null,
                         defaultBranch: found.defaultBranch,
-                        remote: found.remote,
-                        status: found.status,
+                        remote: found.remote ?? "",
+                        status: found.status ?? "ready",
                         readOnly: found.readOnly,
                         createdAt: found.createdAt,
                         updatedAt: found.updatedAt,
@@ -121,9 +119,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         .handle("deleteRepo", ({ params }) =>
           artifacts.delete(params.name).pipe(
             Effect.asVoid,
-            Effect.catchTag("ArtifactsError", () =>
-              Effect.fail(new RepoNotFound({ name: params.name })),
-            ),
+            Effect.catch(() => Effect.fail(new RepoNotFound({ name: params.name }))),
           ),
         )
         .handle("starRepo", ({ params }) =>
@@ -146,9 +142,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
                   expiresAt: t.expiresAt,
                 }),
             ),
-            Effect.catchTag("ArtifactsError", () =>
-              Effect.fail(new RepoNotFound({ name: params.name })),
-            ),
+            Effect.catch(() => Effect.fail(new RepoNotFound({ name: params.name }))),
           ),
         ),
     );

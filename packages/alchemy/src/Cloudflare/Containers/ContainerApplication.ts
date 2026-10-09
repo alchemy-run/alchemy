@@ -3,6 +3,7 @@ import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import type { ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
@@ -471,6 +472,11 @@ export interface AnyContainerApplicationProps extends Omit<
   images?: Record<string, ContainerImageProps>;
   imagePreparationTimeout?: Duration.Input;
   main?: string;
+  /**
+   * @internal Image layers contributed by bindings (folded in from the
+   * binding contract's `image` by the provider; never set by users).
+   */
+  imageLayers?: ImageLayer[];
   image?: string;
   context?: string;
   dockerfile?: string | InlineDockerfile;
@@ -875,6 +881,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       images?: Record<string, string>;
     };
     dev: DevContainerImage | undefined;
+    /**
+     * Under `alchemy dev`, when a binding asked for it (`devHost`): the URL
+     * of the container program running as a process on this machine
+     * instead of in Docker.
+     */
+    devHostUrl?: string;
   },
   {
     /**
@@ -887,6 +899,18 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Environment variables injected into the container runtime via the binding.
      */
     env?: Record<string, any>;
+    /**
+     * Dockerfile layers a binding installs into the container image (a
+     * mounted repository, a coding-agent CLI). Deduplicated by `id` across
+     * bindings and rendered between the base image and the program.
+     */
+    image?: ImageLayer[];
+    /**
+     * Under `alchemy dev`, run the container program as a process on this
+     * machine (reachable at the `devHostUrl` attribute) instead of in
+     * Docker. Set by `AI.LocalHarness`.
+     */
+    devHost?: boolean;
   },
   Providers
 > {

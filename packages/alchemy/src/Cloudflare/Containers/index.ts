@@ -21,3 +21,4 @@ export {
 export { ContainerPlatform } from "./ContainerPlatform.ts";
 export * from "./ContainerProvider.ts";
 export * from "./LocalContainerProvider.ts";
+export * from "./ContainerHarness.ts";

@@ -7,6 +7,8 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
+import { materializeImageContext } from "../../Docker/ImageContext.ts";
+import { dedupeImageLayers, renderImageLayers, type ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Stack } from "../../Stack.ts";
@@ -164,6 +166,41 @@ export const validateContainerImageProps = (
  * - neither → `undefined` (callers fall back to the runtime default base).
  */
 export const containerEnvPreamble = (
+  props: Pick<AnyContainerApplicationProps, "image" | "dockerfile" | "imageLayers" | "runtime">,
+): Effect.Effect<string | undefined> =>
+  baseEnvPreamble(props).pipe(
+    Effect.map((base) =>
+      props.imageLayers?.length
+        ? // Binding-contributed layers (environments, harness installs) sit
+          // between the base and the program layers.
+          renderImageLayers({
+            preamble: base ?? runtimeDefaultBase(props.runtime ?? "bun"),
+            layers: props.imageLayers,
+          })
+        : base,
+    ),
+  );
+
+/** The runtime's default `FROM` line for generated Dockerfiles. */
+const runtimeDefaultBase = (runtime: "bun" | "node") =>
+  runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim";
+
+/**
+ * Fold the image layers a Container's bindings contributed (the binding
+ * contract's `image`) into its props, so every Dockerfile-building path
+ * (live compute/build, local dev) sees them. Layers dedupe by id.
+ */
+export const withImageLayers = <P extends AnyContainerApplicationProps>(
+  props: P,
+  bindings: ReadonlyArray<{
+    readonly data?: { readonly image?: ReadonlyArray<ImageLayer>; readonly [key: string]: unknown };
+  }>,
+): P & { imageLayers?: ImageLayer[] } => {
+  const layers = dedupeImageLayers(bindings.flatMap((b) => b.data?.image ?? []));
+  return layers.length > 0 ? { ...props, imageLayers: layers } : props;
+};
+
+const baseEnvPreamble = (
   props: Pick<AnyContainerApplicationProps, "image" | "dockerfile">,
 ): Effect.Effect<string | undefined> => {
   const df = props.dockerfile;
@@ -210,7 +247,7 @@ export const buildFinalDockerfile = (
   external: string[] = [],
   autoInstallExternals = true,
 ): string => {
-  const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+  const base = envPreamble ?? runtimeDefaultBase(runtime);
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   const installCmd = runtime === "bun" ? "bun add" : "npm install";
   const installStep =
@@ -389,6 +426,13 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     news.external,
     news.autoInstallExternals,
   );
+  // Mounted sources (files, folders, git checkouts) contributed by bindings.
+  const materialized = yield* materializeImageContext({
+    context,
+    cacheDir: path.join(dotAlchemy, "git-cache"),
+    reposDir: path.join(dotAlchemy, "repos"),
+    sources: (news.imageLayers ?? []).flatMap((layer) => layer.context ?? []),
+  });
   const [bundle] = yield* Effect.all(
     [
       bundleContainerProgram({
@@ -412,9 +456,14 @@ export const prepareContainerBuildContext = Effect.fn(function* (
   return {
     context,
     dockerfile: path.join(context, "Dockerfile"),
+    /** Git mounts' prepared checkouts on this machine, by context target. */
+    prepared: materialized.prepared,
     hash: yield* sha256Object({
       bundle: bundle.hash,
       dockerfileContent,
+      ...(news.imageLayers?.some((layer) => layer.context?.length)
+        ? { contextDigest: materialized.digest }
+        : {}),
     }),
   };
 });

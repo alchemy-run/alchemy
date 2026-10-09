@@ -1,0 +1,120 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Streamdown renders markdown with Tailwind classes it ships in its bundle. */
+@source "../../node_modules/streamdown/dist/*.js";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Palette after T3 Code's dark theme. */
+:root {
+  --radius: 0.625rem;
+  --background: var(--color-neutral-950);
+  --foreground: var(--color-neutral-100);
+  --card: color-mix(in srgb, var(--color-neutral-950) 97%, white);
+  --card-foreground: var(--color-neutral-100);
+  --popover: color-mix(in srgb, var(--color-neutral-950) 94%, white);
+  --popover-foreground: var(--color-neutral-100);
+  --primary: oklch(0.571 0.21 264);
+  --primary-foreground: white;
+  --secondary: --alpha(white / 6%);
+  --secondary-foreground: var(--color-neutral-100);
+  --muted: --alpha(white / 3%);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, white);
+  --accent: --alpha(white / 5%);
+  --accent-foreground: var(--color-neutral-100);
+  --destructive: var(--color-red-500);
+  --border: --alpha(white / 7%);
+  --input: --alpha(white / 9%);
+  --ring: oklch(0.571 0.21 264);
+  --success: var(--color-emerald-400);
+  --warning: var(--color-amber-400);
+  --info: var(--color-blue-400);
+  --sidebar: color-mix(in srgb, var(--color-neutral-950) 97%, white);
+  --sidebar-foreground: var(--color-neutral-100);
+  --sidebar-accent: --alpha(white / 5%);
+  --sidebar-border: --alpha(white / 6%);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-size: 14px;
+  }
+}
+
+/* A running tool's label: a bright band sweeping across the text. */
+.live-tool-shine {
+  background: linear-gradient(
+      90deg,
+      var(--color-muted-foreground) 0%,
+      var(--color-muted-foreground) 40%,
+      var(--color-foreground) 50%,
+      var(--color-muted-foreground) 60%,
+      var(--color-muted-foreground) 100%
+    )
+    0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: live-tool-shine 2.2s linear infinite;
+}
+.live-tool-shine * {
+  color: transparent;
+}
+@keyframes live-tool-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-tool-shine {
+    animation: none;
+    color: var(--color-muted-foreground);
+  }
+}

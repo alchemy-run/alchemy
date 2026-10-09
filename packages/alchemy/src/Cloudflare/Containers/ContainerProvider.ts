@@ -32,6 +32,7 @@ import type {
 } from "./ContainerApplication.ts";
 import {
   buildFinalDockerfile,
+  withImageLayers,
   bundleContainerProgram,
   containerEnvPreamble,
   createContainerApplicationName,
@@ -1195,6 +1196,7 @@ export const LiveContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* Effect.logInfo(`Cloudflare Container update: preparing ${existing.applicationName}`);
+        news = withImageLayers(news, bindings);
         const env = makeContainerEnv(news, accountId, bindings);
         const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
         const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
@@ -1383,7 +1385,7 @@ export const LiveContainerProvider = () =>
 
           const { imageHash, dev } = yield* computeImage(
             id,
-            news,
+            withImageLayers(news, newBindings),
             makeContainerEnv(news, accountId, newBindings),
           );
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
@@ -1480,6 +1482,7 @@ export const LiveContainerProvider = () =>
             durableObjects === undefined &&
             bindings.some((binding) => binding.data.durableObjects !== undefined);
           const { accountId } = yield* yield* CloudflareEnvironment;
+          news = withImageLayers(news, bindings);
           const env = makeContainerEnv(news, accountId, bindings);
 
           // Observe — re-fetch the cached application to confirm it still

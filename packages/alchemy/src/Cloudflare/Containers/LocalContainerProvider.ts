@@ -1,7 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -11,7 +15,7 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { localAccountId } from "../LocalAccount.ts";
-import { generateLocalId, LOCAL_PROVIDERS_URL } from "../LocalRuntime.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type {
   AnyContainerApplicationProps,
   ContainerApplication,
@@ -23,6 +27,7 @@ import {
   makeContainerEnv,
   materializeInlineDockerfileContext,
   prepareContainerBuildContext,
+  withImageLayers,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import {
@@ -32,6 +37,7 @@ import {
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
+import { ensureHostProcess, hostProcessUrl, stopHostProcess } from "./HostProcess.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -66,6 +72,9 @@ export const LocalContainerProvider = () =>
       // `Output`s there and get skipped. Caching env here would freeze that
       // incomplete env and start the container without its bindings;
       // `makeAttributes` attaches the freshly-computed env instead.
+      const imageMemoKey = (id: string, news: AnyContainerApplicationProps) =>
+        `container-image:${id}${news.imageLayers?.length ? `:${news.imageLayers.map((l) => l.id).join(",")}` : ""}`;
+
       const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
           yield* validateContainerImageProps(news);
@@ -76,13 +85,20 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
-            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(id, news);
+            const { context, dockerfile, hash, prepared } = yield* prepareContainerBuildContext(
+              id,
+              news,
+            );
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: path.relative(context, dockerfile),
               } as DevContainerImage,
               hash,
+              // For running the program on this machine (`devHost`).
+              host: { context, prepared } as
+                | { readonly context: string; readonly prepared: ReadonlyMap<string, string> }
+                | undefined,
             };
           }
 
@@ -137,7 +153,12 @@ export const LocalContainerProvider = () =>
               dockerfile: dockerfileContent,
             }),
           };
-        }).pipe(Artifacts.cached(`container-image:${id}`));
+        }).pipe(
+          // Binding-contributed image layers are part of the key: `precreate`
+          // warms this cache before bindings resolve, and reconcile must not
+          // reuse that layer-less image.
+          Artifacts.cached(imageMemoKey(id, news)),
+        );
 
       /**
        * The props that decide what the dev IMAGE is, picked off the
@@ -224,6 +245,51 @@ export const LocalContainerProvider = () =>
           checks: props.checks,
         }) as ContainerApplication.Configuration;
 
+      /**
+       * Run the container's program as a process on this machine. Git mounts
+       * resolve to their prepared checkouts (`ALCHEMY_LOCAL_MOUNTS`), and
+       * each session gets a worktree under `ALCHEMY_WORKTREES`.
+       */
+      const runOnHost = (
+        id: string,
+        news: AnyContainerApplicationProps,
+        env: Record<string, string | Redacted.Redacted<string>>,
+        host: { readonly context: string; readonly prepared: ReadonlyMap<string, string> },
+        version: string,
+      ) =>
+        Effect.gen(function* () {
+          const { dotAlchemy } = yield* AlchemyContext;
+          const layers = news.imageLayers ?? [];
+          const mounts = Object.fromEntries(
+            layers.flatMap((layer) =>
+              (layer.context ?? []).flatMap((source) =>
+                source.kind === "git" && source.mountPath && host.prepared.has(source.target)
+                  ? [[source.mountPath, host.prepared.get(source.target)!]]
+                  : [],
+              ),
+            ),
+          );
+          return yield* ensureHostProcess({
+            id,
+            context: host.context,
+            runtime: news.runtime ?? "bun",
+            env: {
+              ...Object.fromEntries(
+                Object.entries(env).map(([k, v]) => [
+                  k,
+                  Redacted.isRedacted(v) ? String(Redacted.value(v)) : v,
+                ]),
+              ),
+              ALCHEMY_LOCAL_MOUNTS: JSON.stringify(mounts),
+              ALCHEMY_WORKTREES: path.resolve(dotAlchemy, "worktrees"),
+            },
+            appPackages: layers.flatMap((layer) =>
+              layer.npm?.into === "app" ? layer.npm.packages : [],
+            ),
+            version,
+          }).pipe(Effect.provide(FetchHttpClient.layer));
+        });
+
       const makeAttributes = Effect.fn(function* ({
         id,
         news,
@@ -254,7 +320,14 @@ export const LocalContainerProvider = () =>
           } satisfies ContainerApplication["Attributes"];
         }
         const env = makeContainerEnv(news, accountId, bindings);
-        const { dev, hash } = yield* prepareImage(id, news);
+        const layered = withImageLayers(news, bindings);
+        const prepared = yield* prepareImage(id, layered);
+        const { dev, hash } = prepared;
+        // `AI.LocalHarness` asked for the program to run on this machine.
+        const devHostUrl =
+          bindings.some((binding) => binding.data?.devHost) && "host" in prepared && prepared.host
+            ? yield* runOnHost(id, layered, env, prepared.host, hash)
+            : undefined;
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),
@@ -270,16 +343,40 @@ export const LocalContainerProvider = () =>
           version: 1,
           dev: { ...dev, env },
           hash: { image: hash },
+          ...(devHostUrl ? { devHostUrl } : {}),
         } satisfies ContainerApplication["Attributes"];
       });
 
+      const restartHosts = (dev: DevContainerImage | undefined) =>
+        Effect.gen(function* () {
+          if (dev === undefined || !("dockerfile" in dev)) return;
+          const state = yield* Effect.serviceOption(LocalRuntimeState);
+          if (state._tag === "None") return;
+          const context = path.resolve(process.cwd(), dev.context ?? ".");
+          const hosts = MutableHashMap.get(state.value.containerHosts, context);
+          if (hosts._tag === "None") return;
+          yield* Effect.forEach(
+            hosts.value,
+            (name) =>
+              MutableHashMap.get(state.value.workerRestarts, name).pipe(
+                Option.match({ onNone: () => Effect.void, onSome: (restart) => restart }),
+              ),
+            { discard: true },
+          );
+        });
+
       return {
         stables: ["accountId", "applicationId"],
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ id, news, output, newBindings }) {
           if (isResolved(news)) {
             yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           }
           if (!output) return { action: "update" };
+          // A program running on this machine (`devHost`) doesn't outlive
+          // the dev server: after a restart, start it again.
+          if (output.devHostUrl !== undefined && hostProcessUrl(id) !== output.devHostUrl) {
+            return { action: "update" };
+          }
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.
@@ -289,7 +386,7 @@ export const LocalContainerProvider = () =>
           // never "resolved", and requiring full resolution silently
           // disabled this check for every effectful container.
           const imageInputs = resolvedImageInputs(news);
-          if (imageInputs !== undefined) {
+          if (imageInputs !== undefined && isResolved(newBindings)) {
             if (isDurableObjectContainer(imageInputs)) {
               const artifacts = yield* Artifacts.Artifacts;
               for (const name of Object.keys(imageInputs.images ?? {})) {
@@ -306,8 +403,13 @@ export const LocalContainerProvider = () =>
             // this provider runs in the RPC sidecar, whose `ArtifactStore`
             // outlives every run, so without this eviction the FIRST run's
             // hash would be compared forever.
-            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
-            const input = yield* prepareImage(id, imageInputs);
+            //
+            // Bindings' image layers are part of the image: computing it
+            // without them would also rewrite the shared build context with
+            // a layer-less Dockerfile that the dev runtime then builds.
+            const withLayers = withImageLayers(imageInputs, newBindings);
+            yield* (yield* Artifacts.Artifacts).delete(imageMemoKey(id, withLayers));
+            const input = yield* prepareImage(id, withLayers);
             if (input.hash !== output.hash?.image || !output.dev) {
               return { action: "update" };
             }
@@ -333,9 +435,18 @@ export const LocalContainerProvider = () =>
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
-          return yield* makeAttributes({ id, news, bindings, output });
+          const attrs = yield* makeAttributes({ id, news, bindings, output });
+          // `precreate` built this image without its bindings' layers, and a
+          // Worker may already have started (and built its container image)
+          // from that. When the image changed, restart the Workers hosting
+          // this build context so they rebuild from the final one.
+          if (output?.hash?.image !== undefined && output.hash.image !== attrs.hash.image) {
+            yield* restartHosts(attrs.dev);
+          }
+          return attrs;
         }),
-        delete: Effect.fn(function* () {
+        delete: Effect.fn(function* ({ id }) {
+          yield* stopHostProcess(id);
           // Nothing to tear down: the build context lives under `.alchemy/tmp`
           // and is reused across runs; the running container is owned by the
           // worker runtime.
