@@ -1,6 +1,7 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -48,12 +49,16 @@ export const fromAuthProvider = () =>
       // layers never requires a configured profile. Only the lookup is
       // cached: distilled yields `Credentials` then the inner Effect on
       // every call so SA tokens can refresh from AuthProvider's cache.
+      // Each call reads through the ConfigProvider this layer was built
+      // under, the one the lookup checked the environment with.
       const lookup = yield* resolveProviderConfig<GcpAuthConfig, GcpResolvedCredentials>(
         GCP_AUTH_PROVIDER_NAME,
       ).pipe(deferUntilFirstUse, Effect.flatMap(Effect.cached));
+      const configProvider = yield* ConfigProvider.ConfigProvider;
       return lookup.pipe(
         Effect.flatMap(({ profileName, resolve }) =>
           resolve.pipe(
+            Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
             Effect.map((creds) => ({
               accessToken: creds.accessToken,
               project: creds.project,
