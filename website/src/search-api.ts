@@ -1,5 +1,6 @@
 import type { WorkerEnv } from "../alchemy.run.ts";
 import {
+  DOCS_SEARCH_INSTANCE,
   SEARCH_PROVIDERS,
   searchFacets,
   stripSiteTitle,
@@ -20,6 +21,9 @@ declare const caches: {
     put(request: Request, response: Response): Promise<void>;
   };
 };
+interface DocsSearchNamespaceBinding {
+  get(instance: string): DocsSearchBinding;
+}
 interface DocsSearchBinding {
   search(request: {
     query: string;
@@ -39,7 +43,7 @@ interface DocsSearchBinding {
 }
 
 /** Only production owns the AI Search instance (see alchemy.run.ts). */
-type SearchEnv = WorkerEnv & { DOCS_SEARCH?: DocsSearchBinding };
+type SearchEnv = WorkerEnv & { DOCS_SEARCH?: DocsSearchNamespaceBinding };
 
 const MAX_QUERY = 200;
 const MAX_HITS = 12;
@@ -70,8 +74,8 @@ export const handleSearch = async (
     return json({ query, provider, hits: [] } satisfies SearchResponse, 0);
   }
 
-  const search = env.DOCS_SEARCH;
-  if (search === undefined) {
+  const namespace = env.DOCS_SEARCH;
+  if (namespace === undefined) {
     if (url.origin === canonicalOrigin) {
       return new Response("Search unavailable", { status: 503 });
     }
@@ -91,7 +95,7 @@ export const handleSearch = async (
 
   let result: Awaited<ReturnType<DocsSearchBinding["search"]>>;
   try {
-    result = await search.search({
+    result = await namespace.get(DOCS_SEARCH_INSTANCE).search({
       query,
       ai_search_options: {
         retrieval: {

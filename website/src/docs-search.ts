@@ -9,6 +9,12 @@
  */
 import { activeTab, DOCS_TABS } from "./docs-tabs";
 
+/**
+ * AI Search instance name within the docs search namespace. The Worker binds
+ * the namespace and resolves the instance by this name (see alchemy.run.ts).
+ */
+export const DOCS_SEARCH_INSTANCE = "docs";
+
 export type SearchSection = "guide" | "reference" | "blog";
 
 export interface SearchFacets {
