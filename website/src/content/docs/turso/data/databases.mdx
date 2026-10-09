@@ -1,9 +1,9 @@
 ---
 title: Databases
-description: Create, configure, fork, and protect Turso databases.
+description: Create, copy, and protect Turso databases.
 ---
 
-A Turso database is a libSQL (SQLite-compatible) database inside a [group](/turso/data/groups).
+A Turso database is a SQLite database that lives in a [group](/turso/data/groups).
 
 ## Create a database
 
@@ -12,9 +12,9 @@ const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
 const db = yield* Turso.Database("Db", { group: group.name });
 ```
 
-`db.url` is the `libsql://` URL clients connect to. `db.hostname` and `db.httpUrl` are also available.
+`db.url` is the URL apps connect to. `db.hostname` and `db.httpUrl` are there too.
 
-Moving a database to another group replaces it.
+Moving a database to another group creates a new, empty one.
 
 ## Name it
 
@@ -22,7 +22,7 @@ Moving a database to another group replaces it.
 const db = yield* Turso.Database("Db", { group: group.name, name: "app" });
 ```
 
-Without `name`, Alchemy generates one per stage. Database names are unique within your organization.
+Without `name`, Alchemy picks one for each stage. Names must be unique in your organization.
 
 ## Apply migrations
 
@@ -35,7 +35,7 @@ const db = yield* Turso.Database("Db", {
 
 See [Migrations](/turso/data/migrations).
 
-## Fork another database
+## Copy another database
 
 ```typescript
 const preview = yield* Turso.Database("Preview", {
@@ -44,13 +44,13 @@ const preview = yield* Turso.Database("Preview", {
 });
 ```
 
-The new database starts as a copy of `db`, schema and rows. Add `timestamp` to fork from a point in time:
+The new database starts with all of `db`'s tables and rows. Add `timestamp` to copy it as it was at that time:
 
 ```typescript
 seed: { type: "database", name: db.name, timestamp: "2026-10-07T12:00:00Z" },
 ```
 
-`seed` only applies when the database is created.
+`seed` only matters when the database is first created.
 
 ## Block reads or writes
 
@@ -61,7 +61,7 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-Use `blockWrites` for a read-only maintenance window, and `blockReads` to take a database offline. Remove the prop and deploy to lift the block.
+`blockWrites` makes the database read-only. `blockReads` turns it off completely. Remove the prop and deploy to undo it.
 
 ## Protect it from deletion
 
@@ -72,9 +72,9 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-While protection is on, destroying the database fails. Set it to `false` and deploy first.
+While this is on, you can't destroy the database. Set it to `false` and deploy first.
 
-## Restrict network access
+## Limit who can connect
 
 ```typescript
 const db = yield* Turso.Database("Db", {
@@ -83,7 +83,7 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-`allowedIps` and `allowedAwsVpcIds` require a paid Turso plan.
+`allowedIps` and `allowedAwsVpcIds` need a paid Turso plan.
 
 ## Encrypt with your own key
 
@@ -97,7 +97,7 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-The key is base64: 32 bytes for `aes256gcm`. Changing `encryption` replaces the database. Encryption requires a Pro or Enterprise plan.
+The key is 32 random bytes, base64-encoded. Changing `encryption` creates a new database. Encryption needs a Pro or Enterprise plan.
 
 ## Where next
 

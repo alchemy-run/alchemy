@@ -189,9 +189,9 @@ export type Database = Resource<
 >;
 
 /**
- * A Turso database — a libSQL (SQLite-compatible) database hosted in a
- * {@link Group}. Connect from a Worker or Lambda with {@link Connect}, or
- * mint a standalone {@link DatabaseToken} for other clients.
+ * A Turso database: a SQLite database that lives in a {@link Group}.
+ * Connect to it from a Worker or Lambda with {@link Connect}, or create a
+ * {@link DatabaseToken} for other apps.
  * @see https://docs.turso.tech/concepts#databases
  *
  * ### Creating a Database
@@ -211,7 +211,7 @@ export type Database = Resource<
  * ```
  *
  * ### Branching
- * **Example:** Fork a database from an existing one
+ * **Example:** Copy an existing database
  * ```typescript
  * const preview = yield* Turso.Database("Preview", {
  *   group: group.name,

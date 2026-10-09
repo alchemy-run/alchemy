@@ -69,23 +69,22 @@ export type ApiToken = Resource<
 >;
 
 /**
- * A Turso Platform API token — a credential for managing groups and
- * databases through the Platform API (not for running SQL; that is
- * {@link DatabaseToken}). Restrict it to one group with `scopes` to hand a
- * service exactly the access it needs, e.g. creating per-tenant databases.
+ * A Turso API token. It lets an app create and delete groups and databases.
+ * To run SQL, use a {@link DatabaseToken} instead. Limit it to one group
+ * with `group` and `scopes` to give an app only the access it needs.
  *
- * The token value is only revealed when it is created, so it is kept in
- * resource state as a `Redacted`. Any prop change replaces the token, and
- * destroying the resource revokes it.
+ * Turso only shows the token once, when it's created, so Alchemy stores it
+ * in state as a `Redacted` value. Changing a prop creates a new token, and
+ * destroying it cancels the token.
  * @see https://docs.turso.tech/api-reference/tokens/create
  *
- * ### Minting a Token
- * **Example:** Organization-scoped token
+ * ### Creating a Token
+ * **Example:** Token for the whole organization
  * ```typescript
  * const token = yield* Turso.ApiToken("Ci", {});
  * ```
  *
- * **Example:** Group-scoped token that can create databases and mint SQL tokens
+ * **Example:** Token that can only create databases in one group
  * ```typescript
  * const token = yield* Turso.ApiToken("Tenants", {
  *   group: group.name,

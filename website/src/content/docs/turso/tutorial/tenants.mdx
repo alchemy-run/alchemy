@@ -1,11 +1,11 @@
 ---
 title: Create tenant databases from a Worker
-description: Bind ManageDatabases to a Worker and fork a database for each tenant.
+description: Let a Worker create a database for each tenant.
 ---
 
-Open `src/Api.ts`. The Worker creates, lists, and deletes tenant databases at request time.
+Open `src/Api.ts`. The Worker creates, lists, and deletes tenant databases while it runs.
 
-## Bind the group
+## Give the Worker the group
 
 ```diff lang="typescript"
 Effect.gen(function* () {
@@ -14,7 +14,7 @@ Effect.gen(function* () {
 }).pipe(Effect.provide(Turso.ManageDatabasesHttp))
 ```
 
-The Worker gets a Turso API token scoped to the `Tenants` group. It can create and delete databases there, and nowhere else in your organization.
+The Worker gets a Turso API token that only works on the `Tenants` group. It can create and delete databases there, and nowhere else.
 
 ## Read the template's name
 
@@ -27,9 +27,9 @@ Effect.gen(function* () {
 })
 ```
 
-`templateName` is an Effect that returns the template's name inside a request.
+`templateName` gives you the template's name inside a request.
 
-## Fork the template for a new tenant
+## Copy the template for a new tenant
 
 ```diff lang="typescript"
 case "POST": {
@@ -40,7 +40,7 @@ case "POST": {
 }
 ```
 
-`POST /tenants/acme` creates the `acme` database as a copy of the template. It starts with the `notes` table and no rows.
+`POST /tenants/acme` creates the `acme` database as a copy of the template. It has the `notes` table and no notes.
 
 ## List tenants
 
@@ -54,7 +54,7 @@ if (tenant === undefined || tenant === "") {
 }
 ```
 
-`list()` returns every database in the group. Filter out the template.
+`list()` returns every database in the group. Leave out the template.
 
 ## Delete a tenant
 
@@ -65,7 +65,7 @@ case "DELETE": {
 }
 ```
 
-Deleting a tenant deletes its database and its data.
+This deletes the tenant's database and all its notes.
 
 ## Add the Worker to the Stack
 

@@ -1,21 +1,21 @@
 ---
 title: libSQL
-description: SQL.LibSQL wraps a libSQL database such as Turso in an @effect/sql-libsql client — tagged-template queries with typed errors.
+description: Run SQL on a libSQL database, such as Turso, with Effect SQL.
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const deps = `@effect/sql-libsql`;
 
-`SQL.LibSQL` opens an `@effect/sql-libsql` client over a libSQL database, such as [Turso](/turso). Queries are Effects with `SqlError` in the error channel.
+`SQL.LibSQL` runs SQL on a libSQL database, such as [Turso](/turso). Queries are Effects, and failures are `SqlError`s.
 
-Install the driver — an optional peer of alchemy:
+Install the driver:
 
 <PackageManagers add={deps} />
 
 ## Connect
 
-Bind a Turso database with `Turso.Connect` and hand the client to `SQL.LibSQL`:
+Connect a Turso database with `Turso.Connect` and pass it to `SQL.LibSQL`:
 
 ```typescript
 // src/api.ts
@@ -43,7 +43,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The client opens on the first query of a request and closes when the request ends — see [Connection lifecycle](/sql/effect-sql/lifecycle).
+The connection opens on the first query and closes when the request ends. See [Connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Connect to any libSQL server
 
@@ -54,11 +54,11 @@ const sql = yield* SQL.LibSQL({
 });
 ```
 
-`url` and `authToken` accept plain values or Effects that return them.
+`url` and `authToken` can be plain values or Effects.
 
 ## Queries
 
-Interpolated values are parameters, never string concatenation:
+Values you put in `${}` are sent safely as parameters:
 
 ```typescript
 const user = yield* sql`SELECT * FROM users WHERE id = ${id}`;
@@ -66,7 +66,7 @@ const user = yield* sql`SELECT * FROM users WHERE id = ${id}`;
 yield* sql`INSERT INTO users ${sql.insert({ name, email })}`;
 ```
 
-Annotate the row type with `sql<{ id: number; name: string }>\`...\``.
+Set the row type with `sql<{ id: number; name: string }>\`...\``.
 
 ## Transactions
 
@@ -79,7 +79,7 @@ yield* sql.withTransaction(
 );
 ```
 
-If any statement fails, the transaction rolls back.
+If any statement fails, none of the changes are kept.
 
 ## Errors
 
@@ -91,7 +91,7 @@ const users = yield* sql`SELECT * FROM users`.pipe(
 
 ## Provide as a service
 
-Depend on the generic `SqlClient` and provide the database with `SQL.LibSQLLayer`:
+Write code against the generic `SqlClient`, then give it the database with `SQL.LibSQLLayer`:
 
 ```typescript
 import * as SqlClient from "effect/sql/SqlClient";
@@ -108,4 +108,4 @@ const users = yield* makeUsers.pipe(Effect.provide(SQL.LibSQLLayer(conn)));
 
 ## Where next
 
-[Turso connections](/turso/data/connections) covers binding a database. [Drizzle: libSQL](/sql/drizzle/libsql) adds typed schemas. [Migrations](/turso/data/migrations) applies SQL on deploy.
+[Turso connections](/turso/data/connections) shows how to connect a database. [Drizzle: libSQL](/sql/drizzle/libsql) adds typed schemas. [Migrations](/turso/data/migrations) runs SQL on deploy.

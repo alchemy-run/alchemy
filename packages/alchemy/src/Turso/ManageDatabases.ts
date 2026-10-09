@@ -53,13 +53,12 @@ export interface ManageDatabasesClient {
 }
 
 /**
- * Create, list, delete, and query databases inside a Turso {@link Group} at
- * runtime — the building block for database-per-tenant apps.
+ * Let a Worker create, list, delete, and query databases in one Turso
+ * {@link Group}. Use it to give each customer their own database.
  *
- * The binding mints a group-scoped Platform {@link ApiToken} (scopes
- * `read`, `db:create`, `db:delete`, `db:configure`) and a {@link GroupToken}
- * for SQL access, and binds both into the host. The runtime can only touch
- * databases in that one group; the deployer's credentials never reach it.
+ * The Worker gets an {@link ApiToken} that only works on that group, and a
+ * {@link GroupToken} for running SQL. It can't touch databases in any other
+ * group, and your own Turso API token stays on your machine.
  *
  * ### Database per tenant
  * **Example:** Create a tenant database on signup and query it

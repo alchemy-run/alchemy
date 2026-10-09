@@ -1,24 +1,24 @@
 ---
 title: Database per tenant
-description: Create, query, and delete a Turso database per customer from a Worker.
+description: Give each customer their own Turso database.
 ---
 
-Give each customer their own database. Their data stays isolated, and deleting a customer deletes their database.
+Give each customer their own database. Their data stays separate, and removing a customer is just deleting their database.
 
-The [tutorial](/turso/tutorial) builds this end to end.
+The [tutorial](/turso/tutorial) builds this step by step.
 
-## Bind a group
+## Give a Worker a group
 
 ```typescript
 const tenants = yield* Turso.ManageDatabases(Tenants);
 ```
 
-Provide `Turso.ManageDatabasesHttp` on the Worker. The Worker gets two tokens:
+Add `Turso.ManageDatabasesHttp` to the Worker. The Worker gets two tokens:
 
-- A Turso API token that can create, configure, and delete databases in `Tenants` only.
-- A SQL token that can query every database in `Tenants`.
+- An API token that can create and delete databases, but only in `Tenants`.
+- A database token that can run SQL on every database in `Tenants`.
 
-Your own Turso API token never reaches the Worker.
+Your own Turso API token stays on your machine.
 
 ## Create a tenant
 
@@ -26,7 +26,7 @@ Your own Turso API token never reaches the Worker.
 const acme = yield* tenants.create("acme");
 ```
 
-Database names are unique across your organization. Prefix them if several stages or apps share it.
+Names must be unique in your organization. Add a prefix if several stages or apps share it.
 
 ## Start every tenant from a template
 
@@ -36,7 +36,7 @@ const acme = yield* tenants.create("acme", {
 });
 ```
 
-Fork a migrated template so new tenants start with the current schema. See [Create the template database](/turso/tutorial/database/).
+Copy a template database so new tenants start with your tables. See [Create the template database](/turso/tutorial/database/).
 
 ## Query a tenant
 
@@ -55,13 +55,13 @@ const acme = yield* tenants.get("acme"); // undefined when missing
 yield* tenants.delete("acme");
 ```
 
-`delete` succeeds when the database is already gone.
+`delete` doesn't fail if the database is already gone.
 
-## Migrate existing tenants
+## Update existing tenants
 
-Deploying migrates the template, not the tenants already forked from it.
+New migrations run on the template, not on tenants you already created.
 
-When the tenants are known at deploy time, declare each one so every deploy migrates it:
+If you know your tenants ahead of time, create each one in the Stack so every deploy updates it:
 
 ```typescript
 for (const name of ["acme", "globex"]) {
@@ -69,7 +69,7 @@ for (const name of ["acme", "globex"]) {
 }
 ```
 
-For tenants created at runtime, apply new statements to each one from the Worker. Keep the statements safe to run twice:
+For tenants your app creates, run the change on each one from the Worker. Write it so running it twice is safe:
 
 ```typescript
 for (const { name } of yield* tenants.list()) {
@@ -80,7 +80,7 @@ for (const { name } of yield* tenants.list()) {
 
 ## Destroying the Stack
 
-Destroying the Stack deletes the group, which deletes every tenant database in it.
+Destroying the Stack deletes the group and every tenant database in it.
 
 ## Where next
 

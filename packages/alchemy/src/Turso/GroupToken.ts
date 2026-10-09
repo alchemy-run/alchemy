@@ -33,17 +33,15 @@ export type GroupToken = Resource<
 >;
 
 /**
- * A SQL auth token valid for every database in a Turso {@link Group} —
- * including databases created after the token. The natural fit for
- * database-per-tenant apps, where one token must reach many databases.
+ * A token that lets an app run SQL on every database in a Turso
+ * {@link Group}, even databases created later. Useful when each customer
+ * has their own database.
  *
- * Like {@link DatabaseToken}, group tokens are stateless JWTs that cannot be
- * revoked one at a time: a prop change mints a new token while the old one
- * stays valid until it expires, and destroying the resource does not
- * revoke it.
+ * Like {@link DatabaseToken}, you can't cancel a single group token. Changing
+ * a prop creates a new token, but the old one keeps working until it expires.
  * @see https://docs.turso.tech/api-reference/groups/create-token
  *
- * ### Minting a Token
+ * ### Creating a Token
  * **Example:** Full-access token for every database in a group
  * ```typescript
  * const token = yield* Turso.GroupToken("Token", {

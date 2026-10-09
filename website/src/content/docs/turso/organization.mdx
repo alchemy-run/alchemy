@@ -1,11 +1,11 @@
 ---
 title: Organization
-description: Invite teammates, manage member roles, and configure your Turso organization.
+description: Invite teammates and change your Turso organization's settings.
 ---
 
-These resources act on the organization your [credentials](/turso/setup) use.
+These work on the organization your [token](/turso/setup) belongs to.
 
-Invites and members need a team organization on a paid plan. The Starter plan rejects them.
+Invites and members need a team organization on a paid plan. The free plan doesn't allow them.
 
 ## Invite a teammate
 
@@ -16,7 +16,7 @@ yield* Turso.OrganizationInvite("Alice", {
 });
 ```
 
-`role` is `admin`, `member`, or `viewer`, and defaults to `member`. Changing it re-sends the invite. Destroying the resource withdraws a pending invite.
+`role` is `admin`, `member`, or `viewer`. The default is `member`. Changing it sends the invite again. Destroying it cancels the invite.
 
 ## Add an existing user
 
@@ -27,9 +27,9 @@ yield* Turso.OrganizationMember("Bob", {
 });
 ```
 
-Use this when the person already has a Turso account. Changing `role` updates it in place. Destroying the resource removes the member.
+Use this when the person already has a Turso account. You can change `role` later. Destroying it removes them.
 
-## Configure the organization
+## Change organization settings
 
 ```typescript
 yield* Turso.OrganizationSettings("Org", {
@@ -38,9 +38,9 @@ yield* Turso.OrganizationSettings("Org", {
 });
 ```
 
-Only the settings you set are managed. Destroying the resource restores the values the organization had before.
+Alchemy only touches the settings you list. Destroying it puts them back the way they were.
 
-`overages` lets usage beyond your plan's quota be billed. Turn it on deliberately.
+`overages` lets Turso bill you for usage past your plan's limits. Only turn it on if you mean to.
 
 ## Where next
 

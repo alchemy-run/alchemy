@@ -1,9 +1,9 @@
 ---
 title: Preview databases
-description: Give every pull request its own Turso database, forked from staging.
+description: Give every pull request its own copy of your staging database.
 ---
 
-Fork staging's database for every pull request. Each preview gets real data to test against and is deleted with its stage.
+Give every pull request a copy of your staging database. Each preview gets real data to test with, and is deleted when you're done.
 
 ## Read the stage
 
@@ -22,9 +22,9 @@ const group = preview
   : yield* Turso.Group("Group", { location: "aws-us-east-1" });
 ```
 
-`Turso.Group.ref` reads the group the `staging` stage deployed. Preview stages don't create or delete it.
+`Turso.Group.ref` uses the group from the `staging` stage. Previews never create or delete it.
 
-## Fork staging's database
+## Copy staging's database
 
 ```typescript
 const source = preview ? yield* Turso.Database.ref("Db", { stage: "staging" }) : undefined;
@@ -36,7 +36,7 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-Each preview stage creates its own copy of staging's database, then applies any migrations the pull request adds.
+Each preview gets its own copy of staging's database, then runs any new migrations from the pull request.
 
 ## Tear it down
 
@@ -44,9 +44,9 @@ Each preview stage creates its own copy of staging's database, then applies any 
 alchemy destroy --stage pr-42
 ```
 
-Destroying the preview stage deletes its database. Staging's group and database stay.
+This deletes the preview's database. Staging's group and database stay.
 
 ## Where next
 
-- [Databases](/turso/data/databases#fork-another-database)
+- [Databases](/turso/data/databases#copy-another-database)
 - [Migrations](/turso/data/migrations)

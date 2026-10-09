@@ -63,19 +63,17 @@ export type DatabaseToken = Resource<
 >;
 
 /**
- * A SQL auth token for one Turso database — what libSQL clients send to
- * query it. Prefer {@link Connect} for Workers and Lambdas, which mints and
- * binds a token for you; use `DatabaseToken` to hand a token to anything
- * else (a container, CI job, or third-party service).
+ * A token that lets an app run SQL on one Turso database. Workers and
+ * Lambdas should use {@link Connect}, which creates one for you. Use
+ * `DatabaseToken` for anything else, such as a container or a CI job.
  *
- * Turso tokens are stateless JWTs: they cannot be revoked one at a time.
- * Changing a prop mints a new token, but the previous one stays valid until
- * it expires (or until every token for the database is invalidated with
- * `turso db tokens invalidate`). Destroying the resource does not revoke it,
- * so prefer an `expiration` for tokens that leave your infrastructure.
+ * You can't cancel a single token. Changing a prop creates a new token, but
+ * the old one keeps working until it expires. Destroying the resource doesn't
+ * stop it either. Give tokens you share an `expiration`, or cancel every token
+ * for the database with `turso db tokens invalidate`.
  * @see https://docs.turso.tech/api-reference/databases/create-token
  *
- * ### Minting a Token
+ * ### Creating a Token
  * **Example:** Full-access token
  * ```typescript
  * const token = yield* Turso.DatabaseToken("Token", {

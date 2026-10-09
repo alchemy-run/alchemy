@@ -1,9 +1,9 @@
 ---
 title: Drizzle ORM with Turso
-description: A Drizzle schema, generated migrations, and typed queries over a Turso database from a Worker.
+description: Use Drizzle with a Turso database.
 ---
 
-Define the schema once. Alchemy generates migrations from it, applies them to the database, and your Worker queries it with typed Drizzle builders.
+Write your schema once. Alchemy turns it into migrations, runs them on the database, and your Worker queries it with Drizzle.
 
 ## Install
 
@@ -24,9 +24,9 @@ export const Users = sqliteTable("users", {
 });
 ```
 
-Turso is SQLite-compatible, so use `sqlite-core` columns.
+Turso databases are SQLite, so use `sqlite-core` columns.
 
-## Migrate the database from the schema
+## Update the database from the schema
 
 ```typescript
 // src/Db.ts
@@ -45,9 +45,9 @@ export const Db = Effect.gen(function* () {
 });
 ```
 
-Register `Drizzle.providers()` and `Turso.providers()` in your Stack. Commit the generated `./migrations` folder.
+Add `Drizzle.providers()` and `Turso.providers()` to your Stack. Commit the `./migrations` folder it creates.
 
-Prefer running `drizzle-kit generate` yourself? Pass the folder instead: `migrations: "./migrations"`.
+Rather run `drizzle-kit generate` yourself? Pass the folder instead: `migrations: "./migrations"`.
 
 ## Query from a Worker
 
@@ -78,9 +78,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-Queries are Effects. Pass `{ relations }` to `Drizzle.LibSQL` for the `db.query.*` API.
+Queries are Effects. Pass `{ relations }` to `Drizzle.LibSQL` to use `db.query`.
 
 ## Where next
 
-- [Drizzle: libSQL](/sql/drizzle/libsql) — queries, transactions, and errors
-- [The tutorial](/turso/tutorial) — Drizzle across many tenant databases
+- [Drizzle: libSQL](/sql/drizzle/libsql) — more about queries
+- [The tutorial](/turso/tutorial) — Drizzle with one database per customer

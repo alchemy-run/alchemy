@@ -1,6 +1,6 @@
 ---
 title: Groups
-description: Turso groups pin a location for their databases and scope tokens and permissions.
+description: Turso groups decide where your databases run.
 ---
 
 Every Turso database belongs to a group. The group decides where its databases run.
@@ -11,9 +11,9 @@ Every Turso database belongs to a group. The group decides where its databases r
 const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
 ```
 
-`location` defaults to `aws-us-east-1`. List the locations available to you with `turso db locations`.
+`location` defaults to `aws-us-east-1`. Run `turso db locations` to see the others.
 
-Changing `location` replaces the group and every database in it.
+Changing `location` creates a new group. The old group and its databases are deleted.
 
 ## Name it
 
@@ -24,7 +24,7 @@ const group = yield* Turso.Group("Group", {
 });
 ```
 
-Without `name`, Alchemy generates one per stage. Group names are unique within your organization.
+Without `name`, Alchemy picks one for each stage. Names must be unique in your organization.
 
 ## Enable extensions
 
@@ -32,7 +32,7 @@ Without `name`, Alchemy generates one per stage. Group names are unique within y
 const group = yield* Turso.Group("Group", { extensions: "all" });
 ```
 
-Pass `"all"` or a list of extension names. Changing `extensions` replaces the group.
+Pass `"all"` or a list of extension names. Changing `extensions` creates a new group.
 
 ## Protect it from deletion
 
@@ -40,18 +40,18 @@ Pass `"all"` or a list of extension names. Changing `extensions` replaces the gr
 const group = yield* Turso.Group("Group", { deleteProtection: true });
 ```
 
-While protection is on, destroying the group fails. Set it to `false` and deploy before you destroy.
+While this is on, you can't destroy the group. Set it to `false` and deploy first.
 
 ## Delete a group
 
-Destroying a group deletes every database in it, including databases created at runtime with [ManageDatabases](/turso/guides/database-per-tenant).
+Destroying a group deletes every database in it, including ones your app created with [ManageDatabases](/turso/guides/database-per-tenant).
 
 ## Replicas
 
-`replicas` adds read replicas in other locations. AWS-hosted groups do not support replication, so this only applies to organizations with legacy Fly-hosted groups.
+`replicas` adds read-only copies in other locations. Groups on AWS don't support this. It only works for older groups hosted on Fly.
 
 ## Where next
 
 - [Databases](/turso/data/databases)
-- [Tokens](/turso/data/tokens) — a [GroupToken](/turso/data/tokens#a-token-for-a-whole-group) reaches every database in a group
+- [Tokens](/turso/data/tokens) — a [GroupToken](/turso/data/tokens#a-token-for-a-whole-group) works for every database in a group
 - [Group reference](/providers/turso/reference/group)

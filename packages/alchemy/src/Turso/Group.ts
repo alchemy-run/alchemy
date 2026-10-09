@@ -78,9 +78,8 @@ export interface GroupAttributes {
 export type Group = Resource<"Turso.Group", GroupProps, GroupAttributes, never, Providers>;
 
 /**
- * A Turso group — a set of databases that share a primary location,
- * libSQL version, and (optionally) a group-wide auth token. Every Turso
- * database belongs to exactly one group.
+ * A Turso group. Every Turso database belongs to one group, and the group
+ * decides where its databases run.
  * @see https://docs.turso.tech/concepts#groups
  *
  * ### Creating a Group

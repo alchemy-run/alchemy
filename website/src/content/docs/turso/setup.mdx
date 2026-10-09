@@ -1,17 +1,17 @@
 ---
 title: Setup
-description: Connect Alchemy to Turso — API token, organization, and profiles.
+description: Give Alchemy a Turso API token.
 ---
 
-Sign up at [turso.tech](https://turso.tech), then mint a Platform API token with the [Turso CLI](https://docs.turso.tech/cli/introduction):
+Sign up at [turso.tech](https://turso.tech), then create an API token with the [Turso CLI](https://docs.turso.tech/cli/introduction):
 
 ```sh
 turso auth api-tokens mint alchemy
 ```
 
-Turso authenticates its Platform API with API tokens only. There is no OAuth sign-in.
+Turso only supports API tokens. There is no browser sign-in.
 
-## Register the provider
+## Add the provider
 
 Add `Turso.providers()` next to your cloud's providers:
 
@@ -28,25 +28,25 @@ providers: Layer.mergeAll(Cloudflare.providers(), Turso.providers()),
 alchemy profile edit --add Turso
 ```
 
-Paste the token when prompted. The organization is optional. Leave it blank to use the token's organization.
+Paste the token when asked. You can leave the organization blank.
 
-If your token can reach several organizations, enter the organization slug. Find it with `turso org list`.
+If you belong to more than one organization, enter its name. `turso org list` shows them.
 
-See [Profiles](/environments/profiles) for how credentials are stored and switched.
+See [Profiles](/environments/profiles) to learn how profiles work.
 
 ## Use environment variables in CI
 
-Set `TURSO_API_TOKEN` and Alchemy uses it instead of the profile:
+Set `TURSO_API_TOKEN` and Alchemy uses it instead of your profile:
 
 ```sh
 TURSO_API_TOKEN=... alchemy deploy
 ```
 
-`TURSO_API_KEY` works too. Set `TURSO_ORGANIZATION` when the token can reach more than one organization.
+`TURSO_API_KEY` works too. Set `TURSO_ORGANIZATION` if you belong to more than one organization.
 
-## Programmatic credentials
+## Pass a token in code
 
-Build the credentials from a token you already have, for example in tests:
+Use a token you already have, for example in tests:
 
 ```typescript
 Effect.provide(
@@ -57,7 +57,7 @@ Effect.provide(
 )
 ```
 
-`apiToken` accepts a plain string or a `Redacted` value.
+`apiToken` can be a string or a `Redacted` value.
 
 ## Next steps
 

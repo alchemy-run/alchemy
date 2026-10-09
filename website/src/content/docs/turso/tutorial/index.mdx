@@ -1,15 +1,15 @@
 ---
 title: Build a multi-tenant notes API
-description: Give every tenant its own Turso database, forked from a migrated template, behind a Cloudflare Worker.
+description: Build a Cloudflare Worker that gives every customer their own Turso database.
 ---
 
-Build a notes API where every tenant gets a private Turso database. A Worker creates each tenant's database by forking a migrated template, then queries it with Drizzle.
+Build a notes API where every customer (tenant) gets their own Turso database. A Worker creates each database by copying a template, then reads and writes notes with Drizzle.
 
-The complete source is in [`examples/cloudflare-turso-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-turso-drizzle). The following pages build it one step at a time.
+The finished code is in [`examples/cloudflare-turso-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-turso-drizzle). The next pages build it one step at a time.
 
 ## Prerequisites
 
-Complete [Turso setup](/turso/setup) and [Cloudflare setup](/cloudflare/setup). The tutorial fits in Turso's free Starter plan.
+Finish [Turso setup](/turso/setup) and [Cloudflare setup](/cloudflare/setup). Turso's free plan is enough.
 
 ## Open the example
 
@@ -23,7 +23,7 @@ Complete [Turso setup](/turso/setup) and [Cloudflare setup](/cloudflare/setup). 
 +pnpm alchemy deploy
 ```
 
-The Stack prints the Worker `url` and the `template` database name.
+Alchemy prints the Worker's `url` and the template database's name.
 
 ## Create two tenants
 
@@ -32,7 +32,7 @@ The Stack prints the Worker `url` and the `template` database name.
 +curl -X POST $URL/tenants/globex
 ```
 
-Each call creates a database named after the tenant. Database names are unique across your Turso organization, so pick names nobody else in it uses.
+Each call creates a database with the tenant's name. Names must be unique in your Turso organization.
 
 ## Write a note
 
@@ -41,13 +41,13 @@ Each call creates a database named after the tenant. Database names are unique a
 +curl $URL/tenants/acme/notes
 ```
 
-`acme` sees its note. `globex` has its own empty database:
+`acme` sees its note. `globex` has its own database, still empty:
 
 ```diff lang="sh"
 +curl $URL/tenants/globex/notes
 ```
 
-## Follow the implementation
+## Build it step by step
 
 1. [Create the template database](/turso/tutorial/database/)
 2. [Create tenant databases from a Worker](/turso/tutorial/tenants/)

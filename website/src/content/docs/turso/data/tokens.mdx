@@ -1,11 +1,11 @@
 ---
 title: Tokens
-description: Database tokens, group tokens, and Platform API tokens for clients outside your Stack.
+description: Create tokens for apps that run outside your Stack.
 ---
 
-Turso has two kinds of tokens. A SQL token lets a client query databases. A Platform API token lets a client manage groups and databases.
+Turso has two kinds of tokens. A database token lets an app run SQL. An API token lets an app create and delete databases.
 
-Workers bound with [Connect](/turso/data/connections) or [ManageDatabases](/turso/guides/database-per-tenant) get their tokens automatically. Mint one yourself when something outside your Stack needs access.
+Workers that use [Connect](/turso/data/connections) or [ManageDatabases](/turso/guides/database-per-tenant) get their tokens for you. Create one yourself when an app outside your Stack needs access.
 
 ## A token for one database
 
@@ -13,7 +13,7 @@ Workers bound with [Connect](/turso/data/connections) or [ManageDatabases](/turs
 const token = yield* Turso.DatabaseToken("Token", { database: db.name });
 ```
 
-Hand `db.url` and `token.token` to a libSQL client. `token.token` is `Redacted`.
+Give `db.url` and `token.token` to your app. `token.token` is `Redacted`, so it doesn't show up in logs.
 
 ## A read-only token that expires
 
@@ -25,7 +25,7 @@ const token = yield* Turso.DatabaseToken("Reader", {
 });
 ```
 
-An expired token is re-minted on the next deploy.
+When the token is about to expire, the next deploy makes a new one.
 
 ## A token for a whole group
 
@@ -33,23 +33,23 @@ An expired token is re-minted on the next deploy.
 const token = yield* Turso.GroupToken("Token", { group: group.name });
 ```
 
-A group token works for every database in the group, including databases created later.
+A group token works for every database in the group, even ones created later.
 
-## SQL tokens can't be revoked one at a time
+## You can't cancel one database token
 
-Changing a token's props mints a new token, but the old one keeps working until it expires. Destroying the resource doesn't revoke it either.
+Changing a token makes a new one, but the old one keeps working until it expires. Destroying it doesn't stop it either.
 
-Give tokens that leave your infrastructure an `expiration`. To cut off every token for a database at once, run `turso db tokens invalidate <database>`.
+So give tokens you share an `expiration`. To cancel every token for a database at once, run `turso db tokens invalidate <database>`.
 
-## A Platform API token
+## An API token
 
 ```typescript
 const token = yield* Turso.ApiToken("Ci", {});
 ```
 
-The token can manage everything in your organization. Destroying the resource revokes it.
+This token can change anything in your organization. Destroying it cancels it.
 
-## Scope it to one group
+## Limit it to one group
 
 ```typescript
 const token = yield* Turso.ApiToken("Provisioner", {
@@ -58,9 +58,9 @@ const token = yield* Turso.ApiToken("Provisioner", {
 });
 ```
 
-The token can only touch databases in `group`. `read-only` and `full-access` are shorthands for sets of scopes.
+This token only works on databases in `group`. `read-only` and `full-access` are shortcuts for common sets of scopes.
 
-Changing `group` or `scopes` replaces the token.
+Changing `group` or `scopes` creates a new token and cancels the old one.
 
 ## Where next
 

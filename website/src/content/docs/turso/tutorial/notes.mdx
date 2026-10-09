@@ -1,11 +1,11 @@
 ---
 title: Query a tenant's notes
-description: Connect Drizzle to a tenant's database and read and write its notes.
+description: Read and write a tenant's notes with Drizzle.
 ---
 
-Each request picks a tenant from the URL and queries only that tenant's database.
+Each request reads the tenant from the URL and only touches that tenant's database.
 
-## Install the libSQL driver
+## Install the driver
 
 ```diff lang="sh"
 +pnpm add drizzle-orm @effect/sql-libsql
@@ -21,7 +21,7 @@ if (resource === "notes") {
 }
 ```
 
-`tenants.connect(tenant)` returns the database URL and a token valid for every database in the group. The connection opens on the first query and closes when the request ends.
+`tenants.connect(tenant)` returns the database's URL and a token. The connection opens on the first query and closes when the request ends.
 
 ## List notes
 
@@ -42,7 +42,7 @@ case "POST": {
 }
 ```
 
-Notes written for `acme` never appear for `globex`. They live in different databases.
+Notes for `acme` never show up for `globex`. They are in different databases.
 
 ## Deploy and try it
 
@@ -62,8 +62,8 @@ Delete the tenants you created, then destroy the Stack:
 +pnpm alchemy destroy
 ```
 
-Destroying the Stack deletes the `Tenants` group. That also deletes any tenant database still in it.
+This deletes the `Tenants` group and any tenant databases still in it.
 
 :::note
-Change the schema later and deploy: the template migrates, but existing tenants do not. See [Database per tenant](/turso/guides/database-per-tenant#migrate-existing-tenants).
+If you change the schema later, the template gets the new migration but existing tenants don't. See [Database per tenant](/turso/guides/database-per-tenant#update-existing-tenants).
 :::

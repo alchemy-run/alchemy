@@ -1,9 +1,9 @@
 ---
 title: Migrations
-description: Apply SQL migrations and seed files to Turso databases on every deploy.
+description: Run SQL migrations and seed files on every deploy.
 ---
 
-Point `migrations` at a folder of `.sql` files. Every deploy applies the ones that haven't run yet, in order.
+Point `migrations` at a folder of `.sql` files. Each deploy runs the new ones, in order.
 
 ## Apply a folder
 
@@ -19,11 +19,11 @@ const db = yield* Turso.Database("Db", {
 CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 ```
 
-Each file runs in a transaction. If a statement fails, the file rolls back and the deploy fails.
+If any statement in a file fails, none of that file's changes are kept and the deploy fails.
 
-Alchemy records applied files in the database's `__alchemy_migrations` table.
+Alchemy keeps track of which files ran in the `__alchemy_migrations` table.
 
-## Generate migrations with Drizzle
+## Make migrations with Drizzle
 
 ```typescript
 const schema = yield* Drizzle.Schema("Schema", {
@@ -40,9 +40,9 @@ const db = yield* Turso.Database("Db", {
 
 `Drizzle.Schema` writes a migration when `src/schema.ts` changes. See [Drizzle ORM with Turso](/turso/guides/drizzle).
 
-A database migrated before with drizzle-kit keeps its history. Alchemy copies it into `__alchemy_migrations` on the first deploy.
+Already used drizzle-kit on this database? Alchemy picks up its history on the first deploy.
 
-## Use your own tracking table
+## Use a different tracking table
 
 ```typescript
 migrations: { dir: "./migrations", table: "schema_migrations" },
@@ -58,13 +58,13 @@ const db = yield* Turso.Database("Db", {
 });
 ```
 
-`importFiles` run after migrations. A file runs again only when its contents change.
+`importFiles` run after migrations. A file runs again only if you change it.
 
-## Don't edit applied migrations
+## Don't edit old migrations
 
-Changing or deleting a file that already ran fails the deploy. Add a new migration instead.
+Changing or deleting a file that already ran makes the deploy fail. Add a new file instead.
 
 ## Where next
 
-- [SQL migrations](/sql/effect-sql/migrations) — the shared rules for every database
-- [Database per tenant](/turso/guides/database-per-tenant#migrate-existing-tenants) — migrating many databases
+- [SQL migrations](/sql/effect-sql/migrations) — how migrations work for every database
+- [Database per tenant](/turso/guides/database-per-tenant#update-existing-tenants) — updating many databases

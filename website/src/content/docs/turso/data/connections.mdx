@@ -1,17 +1,17 @@
 ---
 title: Connections
-description: Query Turso from a Worker with Effect SQL, Drizzle, or @libsql/client.
+description: Query a Turso database from a Worker or Lambda.
 ---
 
-`Turso.Connect` binds a database's URL and a token into a Worker. The token is minted for that Worker. Your Turso API token never reaches it.
+`Turso.Connect` gives a Worker a database's URL and a token made just for that Worker. Your own Turso API token stays on your machine.
 
-## Bind the database
+## Connect the database
 
 ```typescript
 const conn = yield* Turso.Connect(Db);
 ```
 
-Provide the binding's implementation on the Worker:
+Add `Turso.ConnectHttp` to the Worker:
 
 ```typescript
 Effect.gen(function* () {
@@ -20,7 +20,7 @@ Effect.gen(function* () {
 }).pipe(Effect.provide(Turso.ConnectHttp))
 ```
 
-`conn.url` and `conn.authToken` are Effects that read the bound values at runtime.
+`conn.url` and `conn.authToken` give you the URL and token while the Worker runs.
 
 ## Query with Effect SQL
 
@@ -46,7 +46,7 @@ const users = yield* db.select().from(Users);
 
 See [Drizzle: libSQL](/sql/drizzle/libsql).
 
-Both install `@effect/sql-libsql`:
+Both need `@effect/sql-libsql`:
 
 ```sh
 pnpm add @effect/sql-libsql
@@ -54,7 +54,7 @@ pnpm add @effect/sql-libsql
 
 ## Connect from AWS Lambda
 
-`Turso.Connect` works the same in a Lambda. In Node, `@libsql/client` loads a native binary, so install it into the function:
+`Turso.Connect` works the same in a Lambda. Add `@libsql/client` to `build.install` so the Lambda gets the Linux version of the driver:
 
 ```typescript
 export default class Api extends Lambda.Function<Api>()(
@@ -78,7 +78,7 @@ export default class Api extends Lambda.Function<Api>()(
 const conn = yield* Turso.Connect(Db, { authorization: "read-only" });
 ```
 
-Writes through this connection fail.
+Writes on this connection fail.
 
 ## Use @libsql/client directly
 
@@ -92,14 +92,14 @@ const client = createClient({
 });
 ```
 
-Read `conn.url` and `conn.authToken` inside a request, not at Worker startup.
+Read `conn.url` and `conn.authToken` inside a request, not when the Worker starts.
 
-## Connect from outside your Stack
+## Connect from somewhere else
 
-Mint a [DatabaseToken](/turso/data/tokens) and hand `db.url` and the token to the client.
+Create a [DatabaseToken](/turso/data/tokens) and give `db.url` and the token to your app.
 
 ## Where next
 
 - [Tokens](/turso/data/tokens)
-- [Database per tenant](/turso/guides/database-per-tenant) — connect to databases created at runtime
+- [Database per tenant](/turso/guides/database-per-tenant) — connect to databases your app creates
 - [Connect reference](/providers/turso/reference/database#connect)

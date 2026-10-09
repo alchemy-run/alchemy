@@ -1,9 +1,9 @@
 ---
 title: Create the template database
-description: Declare a Turso group, a Drizzle schema, and a migrated template database.
+description: Create a Turso group, a Drizzle schema, and a template database.
 ---
 
-Start with `src/Db.ts`. Every tenant database will be a copy of the template you build here.
+Open `src/Db.ts`. Every tenant's database will be a copy of the template you make here.
 
 ## Create a group
 
@@ -11,7 +11,7 @@ Start with `src/Db.ts`. Every tenant database will be a copy of the template you
 +export const Tenants = Turso.Group("Tenants", { location: "aws-us-east-1" });
 ```
 
-A group pins the location of its databases. Every tenant database will live in this group.
+A group decides where its databases run. All tenant databases go in this group.
 
 ## Define the notes table
 
@@ -29,9 +29,9 @@ A group pins the location of its databases. Every tenant database will live in t
 +});
 ```
 
-Turso speaks SQLite, so use Drizzle's `sqlite-core` columns.
+Turso databases are SQLite, so use Drizzle's `sqlite-core` columns.
 
-## Generate migrations from the schema
+## Turn the schema into migrations
 
 ```diff lang="typescript"
 +export const Template = Effect.gen(function* () {
@@ -43,9 +43,9 @@ Turso speaks SQLite, so use Drizzle's `sqlite-core` columns.
 +});
 ```
 
-`Drizzle.Schema` writes a new migration to `./migrations` whenever `src/schema.ts` changes. Commit the folder.
+When `src/schema.ts` changes, `Drizzle.Schema` writes a new migration to `./migrations`. Commit that folder.
 
-## Declare the template database
+## Create the template database
 
 ```diff lang="typescript"
 export const Template = Effect.gen(function* () {
@@ -62,9 +62,9 @@ export const Template = Effect.gen(function* () {
 });
 ```
 
-Every deploy applies pending migrations to the template. It stays empty: tenants copy its schema, not its rows.
+Each deploy runs new migrations on the template. The template has tables but no rows, so each tenant starts empty.
 
-## Register the providers
+## Add the providers
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -81,6 +81,6 @@ export default Alchemy.Stack(
 );
 ```
 
-Deploy and Turso shows a migrated, empty `notes` table in the template.
+Deploy. The template now has an empty `notes` table.
 
 Continue with [Create tenant databases from a Worker](/turso/tutorial/tenants/).
