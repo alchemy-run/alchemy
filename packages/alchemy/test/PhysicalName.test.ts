@@ -1,10 +1,11 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { InstanceId } from "@/InstanceId.ts";
 import { createPhysicalName } from "@/PhysicalName.ts";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
+import { resourceContext } from "./Utils/ResourceContext.ts";
 
 type StackShape = Omit<StackSpec, "output">;
 
@@ -20,11 +21,11 @@ const environment = (spec: StackShape = stack, instanceId = "0123456789abcdef012
   Layer.mergeAll(
     Layer.succeed(Stack, spec),
     Layer.succeed(Stage, spec.stage),
-    Layer.succeed(InstanceId, instanceId),
+    Layer.succeed(ResourceContext, resourceContext(instanceId)),
   );
 
 const provide = <A, E>(
-  effect: Effect.Effect<A, E, Stack | Stage | InstanceId>,
+  effect: Effect.Effect<A, E, Stack | Stage | ResourceContext>,
   instanceId?: string,
 ) => effect.pipe(Effect.provide(environment(stack, instanceId)));
 
@@ -59,7 +60,7 @@ describe("createPhysicalName", { tags: ["unit", "local"] }, () => {
           // Pathological logical id: long enough that `${stack}-${id}-…` alone
           // exceeds IAM's 64-char role-name limit, so the distinguishing
           // `-task-role` / `-execution-role` tail falls entirely inside the
-          // truncated region. Both names share the same InstanceId (same
+          // truncated region. Both names share the same instance ID (same
           // resource), which is exactly the collision scenario.
           const longId = "my-very-long-container-platform-service-logical-id";
           const taskRole = yield* createPhysicalName({

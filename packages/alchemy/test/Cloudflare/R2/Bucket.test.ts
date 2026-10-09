@@ -20,13 +20,14 @@ import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import * as Drift from "@/Drift.ts";
-import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { type ResourceState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { resourceContext } from "../../Utils/ResourceContext.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -1217,7 +1218,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     ),
     Layer.succeed(Stack, testStack),
     Layer.succeed(Stage, testStack.stage),
-    Layer.succeed(InstanceId, INSTANCE_ID),
+    Layer.succeed(ResourceContext, resourceContext(INSTANCE_ID)),
     Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
     Layer.sync(ArtifactStore, createArtifactStore),
     NodeServices.layer,

@@ -421,7 +421,7 @@ export const EksKubernetesAdapter = () =>
       const context = yield* Effect.context<EksAdapterDeps>();
 
       // Discharge the layer-captured AWS services; per-resource engine
-      // services (InstanceId/Stack/Stage) stay ambient — they are provided
+      // services (ResourceContext/Stack/Stage) stay ambient — they are provided
       // by the invoking lifecycle operation, never captured here.
       const withAws =
         (region: string | undefined) =>
@@ -564,7 +564,7 @@ export const EksKubernetesAdapter = () =>
           typeof state?.repositoryName === "string"
             ? state.repositoryName
             : // Physical-name generation reads the resource's ambient
-              // InstanceId/Stack/Stage — do not shadow them with the
+              // ResourceContext/Stack/Stage — do not shadow them with the
               // layer-captured context.
               yield* createRepositoryName(options.id);
         const repositoryUri =
