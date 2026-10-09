@@ -16,7 +16,7 @@ import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { cacheControlOf, contentTypeOf } from "../../Website/assets.ts";
 import type { Bucket } from "../Bucket.ts";
-import { TigrisCredentialsMissing } from "../Errors.ts";
+import { TigrisCredentialsMissing, TigrisObjectsNotDeleted } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 const s3Concurrency = 16;
@@ -50,7 +50,9 @@ export interface AssetDeploymentProps {
    */
   prefix?: string;
   /**
-   * Delete observed keys under the prefix that are not in this deploy.
+   * Delete observed keys under the prefix that are not in this deploy, and
+   * every key under it on destroy. Keys Tigris refuses to delete fail the
+   * deploy or destroy with `Fly.TigrisObjectsNotDeleted`.
    * @default true
    */
   purge?: boolean;
@@ -177,7 +179,7 @@ const listObserved = (
       ),
   );
 
-const deleteObject = (
+const deleteKeys = (
   scope: {
     bucketName: string;
     accessKeyId: string;
@@ -185,15 +187,36 @@ const deleteObject = (
     endpoint: string;
     region: RegionName;
   },
-  key: string,
+  keys: string[],
 ) =>
   withTigris(
     scope,
-    s3.deleteObject({
-      Bucket: scope.bucketName,
-      Key: key,
+    Effect.gen(function* () {
+      const refused: TigrisObjectsNotDeleted["refused"] = [];
+      for (let i = 0; i < keys.length; i += 1000) {
+        const { Errors = [] } = yield* s3.deleteObjects({
+          Bucket: scope.bucketName,
+          Delete: {
+            Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        });
+        refused.push(
+          ...Errors.map(({ Key, Code, Message }) => ({
+            key: Key,
+            code: Code,
+            message: Message,
+          })),
+        );
+      }
+      if (refused.length > 0) {
+        return yield* new TigrisObjectsNotDeleted({
+          bucketName: scope.bucketName,
+          refused,
+        });
+      }
     }),
-  ).pipe(Effect.catchTag("NoSuchKey", () => Effect.void));
+  );
 
 export const AssetDeploymentProvider = () =>
   Provider.effect(
@@ -258,11 +281,9 @@ export const AssetDeploymentProvider = () =>
         );
 
         if (news.purge ?? true) {
-          yield* Effect.all(
-            [...observed.keys()]
-              .filter((key) => !desired.has(key))
-              .map((key) => deleteObject(scope, key)),
-            { concurrency: s3Concurrency },
+          yield* deleteKeys(
+            scope,
+            [...observed.keys()].filter((key) => !desired.has(key)),
           );
         }
 
@@ -283,10 +304,7 @@ export const AssetDeploymentProvider = () =>
           if (!(olds.purge ?? true)) return;
           const scope = yield* scopeOf(olds.bucket);
           const observed = yield* listObserved(scope, output.prefix);
-          yield* Effect.all(
-            [...observed.keys()].map((key) => deleteObject(scope, key)),
-            { concurrency: s3Concurrency },
-          );
+          yield* deleteKeys(scope, [...observed.keys()]);
         },
         Effect.catchTag("NoSuchBucket", () => Effect.void),
       ),
