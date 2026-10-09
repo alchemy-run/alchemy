@@ -36,7 +36,13 @@ node -v                                      # alchemy CLI needs >= 24.11.1 and 
 set -a; source .env; set +a                  # Cloudflare creds (pnpm download:env if missing)
 aws sso login                                # AWS live + nuke ride the SSO session
 mkdir -p /tmp/release
+pnpm exec tsc -b                             # REQUIRED before live runs: emits distilled lib/
 ```
+
+Runtime bundles (Lambda, Fly, Hetzner, Neon Functions) resolve distilled
+packages through their `lib/` build output, not `src/`. A fresh worktree has
+no `lib/` for most providers, so every deployed runtime would crash at boot
+with `Cannot find package '@distilled.cloud/…'`.
 
 Never set or unset `CI` for tests (a profile-store migration can wipe
 `~/.alchemy`). If an AWS run fails in ~100ms during setup, the SSO session has
