@@ -620,7 +620,8 @@ export const LocalWorkerProvider = () =>
       // entry, even when `runtime.start` is slow (container image builds).
       // Workers with containers are the exception: their previous instance
       // is retired after the images are ready but before the new workerd
-      // boots (see `beforeServe` in `serveWith`). Both instances use the same registry key; the registry's entry
+      // boots (see `beforeServe` in `serveWith`).
+      // Both instances use the same registry key; the registry's entry
       // removal is owner-aware, so closing the old scope after the
       // replacement has re-registered cannot delete the replacement's
       // registration.
