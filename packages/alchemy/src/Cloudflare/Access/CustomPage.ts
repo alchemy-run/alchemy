@@ -184,7 +184,7 @@ export const CustomPageProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findPageByName(acct, name);
                 if (existing && existing.uid) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );
@@ -238,7 +238,7 @@ const findPageByName = (acct: string, name: string) =>
     Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 const toAttrs = (observed: ObservedPage, accountId: string) => ({

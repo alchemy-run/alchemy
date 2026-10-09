@@ -330,7 +330,7 @@ export const EnvironmentProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* mwaa
           .listTagsForResource({ ResourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         const tags: Record<string, string> = {};
         for (const [key, value] of Object.entries(response?.Tags ?? {})) {
           if (value !== undefined) tags[key] = value;

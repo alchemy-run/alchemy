@@ -356,7 +356,7 @@ export const ResolverRuleProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) => page.ResolverRuleAssociations ?? []),
               ),
-              Effect.catch(() => Effect.succeed([] as r53r.ResolverRuleAssociation[])),
+              Effect.orElseSucceed(() => [] as r53r.ResolverRuleAssociation[]),
             );
           yield* Effect.forEach(
             associations,

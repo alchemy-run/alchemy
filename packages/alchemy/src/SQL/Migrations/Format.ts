@@ -34,6 +34,15 @@ export interface MigrationRecord {
  */
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
+  /** PostgreSQL targets without SERIAL can use UUID bookkeeping IDs. */
+  readonly migrationTableId?: "uuid";
+  /** False when DDL cannot commit atomically with history conversion. */
+  readonly transactionalDdl?: boolean;
+  /** Override atomic batches for targets requiring durable statement progress. */
+  readonly applyMigration?: (
+    record: MigrationRecord,
+    bookkeeping: string,
+  ) => Effect.Effect<void, MigrationError>;
   /**
    * Run a single query and return its rows as objects. `params` bind as
    * `?`/`$n` placeholders; adapters without native parameter support inline
@@ -80,4 +89,34 @@ export class MigrationHistoryConflictError extends Data.TaggedError(
   message: string;
 }> {}
 
-export type MigrationApplyError = MigrationError | MigrationHistoryConflictError;
+/**
+ * Already-applied migration files were edited or removed. History is
+ * forward-only: add a new migration instead of rewriting files that have
+ * already run. PlanetScale development branches replace rather than
+ * raising this; production branches (and in-place apply on any target)
+ * fail with it.
+ */
+export class RewrittenMigrationHistoryError extends Data.TaggedError(
+  "RewrittenMigrationHistoryError",
+)<{
+  changed: ReadonlyArray<string>;
+  removed: ReadonlyArray<string>;
+  message: string;
+}> {}
+
+/** Human-readable `changed X; removed Y` fragment for rewritten-history errors. */
+export const describeRewrittenHistory = (options: {
+  changed: ReadonlyArray<string>;
+  removed: ReadonlyArray<string>;
+}): string =>
+  [
+    options.changed.length > 0 ? `changed ${options.changed.join(", ")}` : undefined,
+    options.removed.length > 0 ? `removed ${options.removed.join(", ")}` : undefined,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join("; ");
+
+export type MigrationApplyError =
+  | MigrationError
+  | MigrationHistoryConflictError
+  | RewrittenMigrationHistoryError;

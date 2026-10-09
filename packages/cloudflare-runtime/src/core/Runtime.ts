@@ -103,7 +103,7 @@ export const RuntimeLive = Layer.effect(
       // containers). Upstream workers-sdk bails out on Windows for the same
       // reason, directing users to WSL.
       if (process.platform === "win32") {
-        return yield* new SystemError({
+        return yield* SystemError.make({
           subtag: "ContainersUnsupportedOnWindows",
           message: "Local development with containers is not supported on Windows.",
           hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",
@@ -136,20 +136,20 @@ export const RuntimeLive = Layer.effect(
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
             Effect.andThen(docker.validate(tag)),
-            Effect.tap(() => {
-              // Each start cleans up ONLY its own image tag when its scope
-              // closes. Do NOT prune other same-name tags as "stale" here: a
-              // dev session starts the worker more than once (precreate stub
-              // → reconcile), and a cleanup that guesses which sibling tags
-              // are dead can untag the tag a live workerd is about to
-              // `docker create` from — every container start then fails and
-              // the session serves 500s until redeploy.
-              return Effect.addFinalizer(() =>
+            // Each start cleans up ONLY its own image tag when its scope
+            // closes. Do NOT prune other same-name tags as "stale" here: a
+            // dev session starts the worker more than once (precreate stub
+            // → reconcile), and a cleanup that guesses which sibling tags
+            // are dead can untag the tag a live workerd is about to
+            // `docker create` from — every container start then fails and
+            // the session serves 500s until redeploy.
+            Effect.tap(() =>
+              Effect.addFinalizer(() =>
                 docker
                   .removeContainer(tag)
                   .pipe(Effect.andThen(docker.removeImageTag(tag)), Effect.ignore),
-              );
-            }),
+              ),
+            ),
             Effect.tap(() => registerImage(className, tag, container.env)),
           );
         },
@@ -172,6 +172,9 @@ export const RuntimeLive = Layer.effect(
         ] = yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
           concurrency: "unbounded",
         });
+        // Everything slow (image builds/pulls) is done; let the caller retire
+        // whatever must be gone before this workerd boots.
+        if (worker.beforeServe) yield* worker.beforeServe;
         const sockets: Array<WorkerdConfig.Socket> = [
           {
             name: SOCKET_USER_ENTRY,

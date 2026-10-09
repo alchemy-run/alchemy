@@ -49,6 +49,7 @@ interface Env {
 // Errors (`workers/stream/errors.ts`)
 // -----------------------------------------------------------------------------
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- workerd Stream binding error mirroring the workers-sdk protocol (`name`/`code`/`statusCode`) thrown to user code
 export class StreamBindingError extends Error implements StreamError {
   constructor(
     message: string,

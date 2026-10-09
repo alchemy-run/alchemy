@@ -717,8 +717,10 @@ export const RecordProvider = () =>
             })
             .pipe(
               Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-              Effect.catchTag("InvalidChangeBatch", () => Effect.void),
+              Effect.catchTags({
+                NoSuchHostedZone: () => Effect.void,
+                InvalidChangeBatch: () => Effect.void,
+              }),
             );
         }),
       };

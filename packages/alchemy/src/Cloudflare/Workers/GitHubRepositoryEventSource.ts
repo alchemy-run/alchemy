@@ -54,16 +54,16 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* Namespace.push(
           ctx.LogicalId,
-          Effect.gen(function* () {
-            yield* createWebhook(`${props.owner}/${props.repository}`, {
+          Effect.asVoid(
+            createWebhook(`${props.owner}/${props.repository}`, {
               owner: props.owner,
               repository: props.repository,
               url: Output.interpolate`${ctx.url}${path}`,
               events: [...(props.events ?? ["push"])],
               secret: props.secret,
               contentType: "json",
-            });
-          }),
+            }),
+          ),
         );
       }
 

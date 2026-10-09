@@ -321,8 +321,10 @@ export const SearchJobProvider = () =>
               SearchJobIdentifier: output.searchJobIdentifier,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("ConflictException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                ConflictException: () => Effect.void,
+              }),
             );
         }),
 

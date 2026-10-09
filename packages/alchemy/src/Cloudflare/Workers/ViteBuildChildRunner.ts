@@ -60,7 +60,7 @@ const program = Effect.gen(function* () {
 // config resolution) reaches the parent.
 runMain(
   program.pipe(
-    Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
+    Effect.tapCause((cause) => cause.pipe(Cause.pretty, Console.error)),
     Effect.provide(PlatformServices),
   ),
   { disableErrorReporting: true },

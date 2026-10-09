@@ -156,8 +156,8 @@ Building the layer binds each dataset's OTLP endpoint and the ingest
 token onto the Worker: the endpoints bind as `plain_text` vars, and
 the token's `Authorization` header — `Redacted` — binds as
 `secret_text`, so the bearer never appears in plaintext Worker
-config. Axiom routes ingest by an `X-Axiom-Dataset` header, which
-the layer composes per signal from each dataset's name.
+config. Axiom routes ingest by an `X-Axiom-Dataset` header (`X-Axiom-Metrics-Dataset`
+for metrics), which the layer composes per signal from each dataset's name.
 
 ## Alternative: let Cloudflare push it
 

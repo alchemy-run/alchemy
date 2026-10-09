@@ -7,7 +7,6 @@ import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
-import { InstanceId } from "@/InstanceId";
 import * as Output from "@/Output";
 import { createPhysicalName } from "@/PhysicalName";
 import type { App } from "@/Prisma/App";
@@ -35,8 +34,10 @@ import type {
   SourceRepository as ApiSourceRepository,
 } from "@/Prisma/Types";
 import * as Provider from "@/Provider";
+import { ResourceContext } from "@/ResourceContext.ts";
 import * as Test from "@/Test/Alchemy";
 import { PlatformServices } from "@/Util/PlatformServices";
+import { resourceContext } from "../Utils/ResourceContext.ts";
 import {
   conflict,
   data,
@@ -559,7 +560,7 @@ generatedProjectRecovery.test.provider(
       yield* stack.destroy();
       const instanceId = "00000000000000000000000000000000";
       const name = yield* createPhysicalName({ id: "Project" }).pipe(
-        Effect.provideService(InstanceId, instanceId),
+        Effect.provideService(ResourceContext, resourceContext(instanceId)),
       );
       generatedProjectRecoveryCloud.projects.set(
         "project-generated",
@@ -571,7 +572,7 @@ generatedProjectRecovery.test.provider(
         instanceId,
         olds: { createDatabase: false },
         output: undefined,
-      } as never).pipe(Effect.provideService(InstanceId, instanceId));
+      } as never).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
 
       expect(observed).toBeDefined();
       expect(Unowned.is(observed!)).toBe(false);
@@ -597,7 +598,7 @@ generatedProjectRecovery.test.provider(
           accelerateConnectionString: staleSecret,
           password: Redacted.make("old-password"),
         },
-      } as never).pipe(Effect.provideService(InstanceId, instanceId));
+      } as never).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect((switched as PrismaProject["Attributes"]).databaseId).toBe("database-new-default");
       expect((switched as PrismaProject["Attributes"]).directConnectionString).toBeUndefined();
       expect((switched as PrismaProject["Attributes"]).password).toBeUndefined();
@@ -610,7 +611,7 @@ generatedProjectRecovery.test.provider(
           output: switched,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)), Effect.result);
       expect(Result.isFailure(cannotDropAdoptedDefault)).toBe(true);
       if (Result.isFailure(cannotDropAdoptedDefault)) {
         expect(String(cannotDropAdoptedDefault.failure)).toContain("cannot be removed in place");
@@ -625,7 +626,7 @@ generatedProjectRecovery.test.provider(
           output: switched,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId));
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect(Redacted.value(recoveredSecrets.directConnectionString!)).toContain(
         "database-new-default",
       );
@@ -956,10 +957,15 @@ const apiDatabase = (
 const makeDatabaseCloud = () => {
   const databases = new Map<string, ApiDatabase>();
   const calls: Array<[string, unknown?]> = [];
+  const project = { defaultRegion: null as string | null };
   let nextId = 1;
   // The same in-memory cloud, served over the wire for the Database resource.
   const fake = makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (segments.length === 3 && segments[1] === "projects" && request.method === "GET") {
+      return data(toWireProject(apiProject(segments[2]!, "app", project.defaultRegion)));
+    }
 
     if (request.pathname === "/v1/databases" && request.method === "GET") {
       return page(Array.from(databases.values()).map(toWireDatabase));
@@ -1048,7 +1054,7 @@ const makeDatabaseCloud = () => {
     return unhandled(request);
   });
 
-  return { fake, calls, databases };
+  return { fake, calls, databases, project };
 };
 
 const generatedDatabaseRecoveryCloud = makeDatabaseCloud();
@@ -1064,7 +1070,7 @@ generatedDatabaseRecovery.test.provider(
       yield* stack.destroy();
       const instanceId = "00000000000000000000000000000000";
       const name = yield* createPhysicalName({ id: "Database" }).pipe(
-        Effect.provideService(InstanceId, instanceId),
+        Effect.provideService(ResourceContext, resourceContext(instanceId)),
       );
       generatedDatabaseRecoveryCloud.databases.set("database-generated", {
         ...apiDatabase("database-generated", { projectId: "project-1", name, isDefault: false }),
@@ -1076,7 +1082,7 @@ generatedDatabaseRecovery.test.provider(
         instanceId,
         olds: { project: "project-1", isDefault: false },
         output: undefined,
-      } as never).pipe(Effect.provideService(InstanceId, instanceId));
+      } as never).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
 
       expect(observed).toBeDefined();
       expect(Unowned.is(observed!)).toBe(false);
@@ -1103,7 +1109,7 @@ generatedDatabaseRecovery.test.provider(
           user: "postgres",
           password: Redacted.make("local-password"),
         },
-      } as never).pipe(Effect.provideService(InstanceId, instanceId));
+      } as never).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect((fromDev as PrismaDatabase["Attributes"]).databaseId).toBe("database-generated");
       expect((fromDev as PrismaDatabase["Attributes"]).directConnectionString).toBeUndefined();
       expect((fromDev as PrismaDatabase["Attributes"]).password).toBeUndefined();
@@ -1118,7 +1124,7 @@ generatedDatabaseRecovery.test.provider(
           output: observed,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId));
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect(Redacted.value(recovered.directConnectionString!)).toContain("database-generated");
       expect(generatedDatabaseRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
@@ -1139,7 +1145,7 @@ generatedDatabaseRecovery.test.provider(
         instanceId,
         olds: { project: "project-1", name: "explicit", isDefault: false },
         output: undefined,
-      } as never).pipe(Effect.provideService(InstanceId, instanceId));
+      } as never).pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect(Unowned.is(adoptionObserved!)).toBe(true);
       const wrongRegion = yield* provider
         .reconcile({
@@ -1150,7 +1156,7 @@ generatedDatabaseRecovery.test.provider(
           output: adoptionObserved,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)), Effect.result);
       expect(Result.isFailure(wrongRegion)).toBe(true);
       if (Result.isFailure(wrongRegion)) {
         expect(String(wrongRegion.failure)).toContain("immutable region");
@@ -1164,7 +1170,7 @@ generatedDatabaseRecovery.test.provider(
           output: adoptionObserved,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)), Effect.result);
       expect(Result.isFailure(cannotPromoteAdopted)).toBe(true);
       if (Result.isFailure(cannotPromoteAdopted)) {
         expect(String(cannotPromoteAdopted.failure)).toContain("cannot manage a default database");
@@ -1178,7 +1184,7 @@ generatedDatabaseRecovery.test.provider(
           output: adoptionObserved,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId));
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect(adopted.directConnectionString).toBeUndefined();
       expect(
         generatedDatabaseRecoveryCloud.calls.filter(
@@ -1201,7 +1207,7 @@ generatedDatabaseRecovery.test.provider(
           output: adoptionObserved,
           bindings: [],
         } as never)
-        .pipe(Effect.provideService(InstanceId, instanceId));
+        .pipe(Effect.provideService(ResourceContext, resourceContext(instanceId)));
       expect(Redacted.value(adoptedWithRotation.directConnectionString!)).toContain(
         "database-explicit",
       );
@@ -1258,7 +1264,7 @@ const inheritedRegionCloud = makeDatabaseCloud();
 const inheritedRegion = Test.make({ providers: databaseLayer(inheritedRegionCloud.fake) });
 
 inheritedRegion.test.provider(
-  "Database region inherit is stable and follows the project default region",
+  "Database region inherit falls back to the default database region",
   (stack) =>
     Effect.gen(function* () {
       inheritedRegionCloud.databases.clear();

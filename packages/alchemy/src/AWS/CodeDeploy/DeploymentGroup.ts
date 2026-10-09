@@ -264,7 +264,7 @@ export const DeploymentGroupProvider = () =>
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codedeploy
           .listTagsForResource({ ResourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         const { removed, upsert } = diffTags(toTagRecord(observed?.Tags), desiredTags);
         if (upsert.length > 0) {
           yield* codedeploy.tagResource({ ResourceArn: arn, Tags: upsert });
@@ -308,7 +308,7 @@ export const DeploymentGroupProvider = () =>
           };
           const tags = yield* codedeploy.listTagsForResource({ ResourceArn: arn }).pipe(
             Effect.map((res) => toTagRecord(res.Tags)),
-            Effect.catch(() => Effect.succeed({})),
+            Effect.orElseSucceed(() => ({})),
           );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),

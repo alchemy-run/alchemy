@@ -215,13 +215,11 @@ export const AdminReservationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* retryInUse(
-        ignoreMissing(
-          pubsublite.deleteAdminProjectsLocationsReservations({
-            name: output.name,
-          }),
-        ),
-      );
+      yield* pubsublite
+        .deleteAdminProjectsLocationsReservations({
+          name: output.name,
+        })
+        .pipe(ignoreMissing, retryInUse);
       yield* waitUntilGone(getReservation(output.name));
     }),
   });

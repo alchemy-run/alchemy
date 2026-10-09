@@ -9,9 +9,11 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import {
-  diffMigrations,
+  classifyMigrationHistory,
+  describeRewrittenHistory,
   migrationsAttrs,
   migrationsInputOf,
+  RewrittenMigrationHistoryError,
   stampedOf,
   type MigrationRun,
   type MigrationsInput,
@@ -67,6 +69,11 @@ export interface BaseBranchProps {
    * a `Drizzle.Schema` resource, or `{ dir, table? }`. Bookkeeping lives
    * in Alchemy's `__alchemy_migrations` table; drizzle/prisma history is
    * converted one-way on first deploy.
+   *
+   * Adding a file is an in-place update. Editing or removing an
+   * already-applied file replaces a non-production branch (re-forked from
+   * its parent) and fails on a current or desired production branch — add
+   * a forward migration instead.
    */
   migrations?: MigrationsInput;
 
@@ -93,7 +100,11 @@ export interface BaseBranchAttributes {
   production: boolean;
   /** Time at which the branch was created (ISO 8601). */
   createdAt: string;
-  /** Time at which the branch was last updated (ISO 8601). */
+  /**
+   * Time at which the branch was last updated (ISO 8601), as observed by the
+   * last deploy. PlanetScale bumps this timestamp on its own, so it is not
+   * refreshed by drift detection.
+   */
   updatedAt: string;
   /** HTML URL for accessing the branch in the dashboard. */
   htmlUrl: string;
@@ -300,7 +311,30 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      if (yield* diffMigrations({ news, output })) {
+      const migrationChange = yield* classifyMigrationHistory({
+        news,
+        output,
+      });
+      if (migrationChange.kind === "rewritten") {
+        // Editing or deleting an already-applied file cannot be replayed
+        // in place (apply is name-keyed). Development branches re-fork
+        // from the parent and apply from scratch; production must add a
+        // forward migration instead.
+        const production = output?.production === true || news.isProduction === true;
+        if (production) {
+          return yield* new RewrittenMigrationHistoryError({
+            changed: migrationChange.changed,
+            removed: migrationChange.removed,
+            message:
+              `Cannot rewrite applied migration history on production PlanetScale branch ` +
+              `"${output?.name ?? news.name ?? "unknown"}" ` +
+              `(${describeRewrittenHistory(migrationChange)}). ` +
+              "Add a new forward migration instead of editing or deleting already-applied files.",
+          });
+        }
+        return { action: "replace" } as const;
+      }
+      if (migrationChange.kind === "pending") {
         return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
@@ -320,7 +354,11 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         return { action: "update", stables } as const;
       }
 
-      return undefined;
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }: any) {
@@ -355,7 +393,12 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               parentBranch: data.parent_branch ?? "main",
               production: data.production,
               createdAt: data.created_at,
-              updatedAt: data.updated_at,
+              // PlanetScale bumps `updated_at` asynchronously (e.g. seconds
+              // after a deploy, on role creation, maintenance) without any
+              // config change, so the observed value is volatile. Keep the
+              // value recorded by the last reconcile so drift detection only
+              // flags real configuration changes (#1955).
+              updatedAt: output?.updatedAt ?? data.updated_at,
               htmlUrl: data.html_url,
               region: { slug: data.region.slug },
               migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
@@ -433,15 +476,13 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       }
 
       if (current.kind !== opts.expectedKind) {
-        return yield* Effect.fail(
-          new PlanetscaleConflict({
-            message:
-              `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
-              `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
-              `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
-              `resource instead.`,
-          }),
-        );
+        return yield* new PlanetscaleConflict({
+          message:
+            `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
+            `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
+            `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
+            `resource instead.`,
+        });
       }
 
       yield* waitForBranchReady(organization, databaseName, current.name, session);

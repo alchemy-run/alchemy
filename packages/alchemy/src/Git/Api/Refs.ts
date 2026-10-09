@@ -54,7 +54,7 @@ export const UpdateRef = HttpApiEndpoint.put("update", "/repos/:owner/:repo/ref"
      * CAS token: current oid the ref must hold. `null` = the ref must
      * not exist (create). Absent = unconditional write.
      */
-    expectedOid: Schema.optional(Schema.NullOr(Oid)),
+    expectedOid: Oid.pipe(Schema.NullOr, Schema.optional),
   }),
   success: Ref,
   error: [PushDenied, RepoNotFound, RefConflict, ObjectNotFound, ReadOnlyRepo],

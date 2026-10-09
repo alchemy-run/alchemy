@@ -16,7 +16,7 @@ export const toTagRecord = (tags: frauddetector.Tag[] | undefined): Record<strin
 export const readFraudDetectorTags = Effect.fn(function* (arn: string) {
   const response = yield* frauddetector
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

@@ -368,7 +368,7 @@ export const QueueProvider = () =>
                   Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 );
               if (described !== undefined) {
-                return yield* Effect.fail(new QueueStillExists({ queueId: output.queueId }));
+                return yield* new QueueStillExists({ queueId: output.queueId });
               }
             }),
           ).pipe(

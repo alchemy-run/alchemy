@@ -729,7 +729,7 @@ export const RedisProvider = () =>
         } else {
           current = yield* findRedisAddOn({ name });
           if (current === undefined) {
-            return yield* Effect.fail(created.failure);
+            return yield* created.failure;
           }
         }
       }
@@ -811,7 +811,7 @@ export const RedisProvider = () =>
       if (Result.isFailure(deleted)) {
         const still = yield* findRedisAddOn({ id: redisId, name });
         if (still !== undefined) {
-          return yield* Effect.fail(deleted.failure);
+          return yield* deleted.failure;
         }
         return;
       }

@@ -163,7 +163,7 @@ export const WarpConnectorProvider = () =>
         observed,
         (t) =>
           toAttributes(t, accountId).pipe(
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.catchTag("TunnelNotFound", () =>
               Effect.succeed(Option.none<WarpConnectorAttributes>()),
             ),

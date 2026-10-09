@@ -22,7 +22,7 @@ export const detectLayout = (dir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const exists = (p: string) => fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
+    const exists = (p: string) => fs.exists(p).pipe(Effect.orElseSucceed(() => false));
 
     if (yield* exists(path.join(dir, "meta", "_journal.json"))) {
       return yield* new DrizzleV0LayoutError({
@@ -33,9 +33,7 @@ export const detectLayout = (dir: string) =>
       });
     }
 
-    const entries = yield* fs
-      .readDirectory(dir)
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+    const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => [] as string[]));
     for (const entry of entries) {
       if (!DRIZZLE_DIR_PATTERN.test(entry)) continue;
       if (yield* exists(path.join(dir, entry, "migration.sql"))) {

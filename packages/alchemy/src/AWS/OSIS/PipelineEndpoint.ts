@@ -210,12 +210,10 @@ export const PipelineEndpointProvider = () =>
             );
           }
           if (observed.Status === "CREATE_FAILED") {
-            return yield* Effect.fail(
-              new PipelineEndpointCreateFailed({
-                endpointId: observed.EndpointId ?? "",
-                status: observed.Status,
-              }),
-            );
+            return yield* new PipelineEndpointCreateFailed({
+              endpointId: observed.EndpointId ?? "",
+              status: observed.Status,
+            });
           }
 
           yield* session.note(observed.EndpointId ?? "");

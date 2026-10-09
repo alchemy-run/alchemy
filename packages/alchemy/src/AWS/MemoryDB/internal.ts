@@ -25,7 +25,7 @@ export const toTagRecord = (
 export const readMemoryDbTags = Effect.fn(function* (arn: string) {
   const response = yield* memorydb
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.TagList);
 });
 
