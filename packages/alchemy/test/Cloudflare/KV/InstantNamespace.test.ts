@@ -14,14 +14,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-// Live Instant KV incurs $0.10 per put/delete/list; storage billing granularity is unverified.
-// Require an explicit cost opt-in (unset, "0", and "false" all skip).
-// Beta access does not imply permission to incur charges: opt in for each live run.
-const liveTest = test.provider.skipIf(process.env.CLOUDFLARE_TEST_KV_INSTANT !== "1");
-
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-liveTest(
+test.provider(
   "create and delete namespace with default props",
   (stack) =>
     Effect.gen(function* () {
@@ -52,7 +47,7 @@ liveTest(
   { retry: 0, timeout: 120_000, tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
-liveTest(
+test.provider(
   "create, update, delete namespace",
   (stack) =>
     Effect.gen(function* () {
@@ -102,7 +97,7 @@ liveTest(
 // namespace, resolve the provider from context via `findProviderByType`,
 // call `list()`, and assert the deployed namespace appears in the
 // exhaustively-paginated result.
-liveTest(
+test.provider(
   "list separates classic and instant namespaces",
   (stack) =>
     Effect.gen(function* () {
@@ -133,7 +128,7 @@ liveTest(
 // adoption. The test wipes local state mid-run while leaving the namespace
 // on Cloudflare — this simulates a fresh state store seeing an existing
 // resource with the same physical name.
-liveTest(
+test.provider(
   "existing namespace (matching title) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
@@ -207,7 +202,7 @@ class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
 // One successful execution performs 1 put + 1 list + 1 delete ($0.30), plus reads/storage.
 // Never reuse the 1,001-key local fixture here. Do not retry this whole test.
-liveTest(
+test.provider(
   "Instant client: put, get, list all keys, and delete from an Action",
   (stack) =>
     Effect.gen(function* () {
@@ -288,7 +283,7 @@ liveTest(
   },
 );
 
-liveTest(
+test.provider(
   "switching namespace modes replaces storage while reusing an explicit title",
   (stack) =>
     Effect.gen(function* () {
