@@ -49,6 +49,8 @@ export interface SearchHit {
   /** Site-relative URL, so results link within the current deployment. */
   url: string;
   title: string;
+  /** Heading of the matched section when {@link url} deep-links to it. */
+  heading?: string;
   provider: string;
   section: SearchSection;
   /** Plain-text excerpt (no markup). */
@@ -64,10 +66,29 @@ export interface SearchResponse {
 /** Starlight titles render as `Page | Alchemy`. */
 export const stripSiteTitle = (title: string) => title.replace(/\s*\|\s*Alchemy\s*$/, "");
 
+/**
+ * Starlight renders every heading with a screen-reader anchor link, which the
+ * crawler keeps as `[Section titled “Heading”](#heading)`.
+ */
+const SECTION_ANCHOR = /\[Section titled “([^”]*)”\]\(#([^)\s]+)\)/g;
+
+/**
+ * The section a chunk belongs to, when the chunk starts at a heading (a
+ * heading further down would only own the chunk's tail).
+ */
+export const chunkSection = (text: string): { heading: string; anchor: string } | undefined => {
+  if (!/^\s*#{1,6}\s/.test(text)) return undefined;
+  const match = new RegExp(SECTION_ANCHOR.source).exec(text);
+  return match ? { heading: match[1]!, anchor: match[2]! } : undefined;
+};
+
 /** Markdown-ish chunk text → one line of readable prose. */
 export const toSnippet = (text: string, max = 220): string => {
   const plain = text
     .replace(/^---[\s\S]*?---/, "")
+    // A leading heading is shown as the hit's title (see chunkSection).
+    .replace(/^\s*#{1,6}\s[^\n]*\n/, "")
+    .replace(SECTION_ANCHOR, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/<[^>]+>/g, " ")

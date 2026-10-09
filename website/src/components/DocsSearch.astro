@@ -124,15 +124,23 @@ import { SEARCH_PROVIDERS } from "../docs-search";
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
     );
 
-  /** Escape `text`, then wrap every query term in `<mark>`. */
+  const STOPWORDS = new Set(
+    "a an and are as at be by do does for from how i in is it my of on or the to with".split(" "),
+  );
+
+  /**
+   * Escape `text`, then wrap every query term in `<mark>` — only at the start
+   * of a word (`work` marks "Workers", `to` never marks "into").
+   */
   const highlight = (text: string, query: string) => {
     const terms = query
+      .toLowerCase()
       .split(/\s+/)
-      .filter((term) => term.length > 1)
+      .filter((term) => term.length > 1 && !STOPWORDS.has(term))
       .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     const html = escapeHtml(text);
     if (terms.length === 0) return html;
-    return html.replace(new RegExp(`(${terms.join("|")})`, "gi"), "<mark>$1</mark>");
+    return html.replace(new RegExp(`(?<![\\p{L}\\p{N}])(${terms.join("|")})`, "giu"), "<mark>$1</mark>");
   };
 
   /** `/aws/data/s3/` → `aws › data › s3` */
@@ -278,7 +286,7 @@ import { SEARCH_PROVIDERS } from "../docs-search";
             <li role="option" id="alc-search-hit-${i}">
               <a href="${escapeHtml(hit.url)}">
                 <span class="alc-search__hit-head">
-                  <span class="alc-search__hit-title">${highlight(hit.title, query)}</span>
+                  <span class="alc-search__hit-title">${highlight(hit.title, query)}${hit.heading ? `<span class="alc-search__hit-heading"> › ${highlight(hit.heading, query)}</span>` : ""}</span>
                   <span class="alc-search__badge">${escapeHtml(hit.provider)}</span>
                   ${hit.section === "reference" ? `<span class="alc-search__badge alc-search__badge--muted">API</span>` : ""}
                 </span>
@@ -451,6 +459,10 @@ import { SEARCH_PROVIDERS } from "../docs-search";
     font-size: 15px;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .alc-search__hit-heading {
+    color: var(--alc-fg-2);
+    font-weight: 500;
   }
   .alc-search__badge {
     flex-shrink: 0;

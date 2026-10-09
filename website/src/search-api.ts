@@ -1,5 +1,6 @@
 import type { WorkerEnv } from "../alchemy.run.ts";
 import {
+  chunkSection,
   DOCS_SEARCH_INSTANCE,
   SEARCH_PROVIDERS,
   searchFacets,
@@ -214,9 +215,12 @@ const toHits = (chunks: Awaited<ReturnType<DocsSearchBinding["search"]>>["chunks
     if (existing && existing.score >= chunk.score) continue;
     const metadata = chunk.item.metadata ?? {};
     const facets = searchFacets(pathname);
+    // Deep-link to the matched section when the chunk starts at a heading.
+    const section = chunkSection(chunk.text);
     pages.set(pathname, {
-      url: pathname,
+      url: section ? `${pathname}#${section.anchor}` : pathname,
       title: stripSiteTitle(str(metadata.title) ?? titleFromPath(pathname)),
+      heading: section?.heading,
       provider: str(metadata.provider) ?? facets.provider,
       section: (str(metadata.section) as SearchSection | undefined) ?? facets.section,
       snippet: toSnippet(chunk.text),
