@@ -1967,6 +1967,16 @@ export const LiveWorkerProvider = () =>
         if (params.sources.length === 0) {
           return undefined;
         }
+        // The class already lives here — e.g. a transfer committed by an
+        // earlier deploy that stopped before its final upload. Nothing to
+        // move.
+        if (
+          params.observedNamespaces.some(
+            (ns) => ns.script === params.selfScriptName && ns.class === params.className,
+          )
+        ) {
+          return undefined;
+        }
         const observedScripts = yield* workers.listScripts
           .items({ accountId: params.accountId })
           .pipe(Stream.runCollect);
@@ -2059,13 +2069,18 @@ export const LiveWorkerProvider = () =>
               // namespace (left dangling once the new host is deleted), but the
               // former host's tags are only rewritten on its next deploy. Such a
               // script no longer hosts the class — it is not a transfer source.
+              // Under `exports` the binding keeps its class name and is
+              // repointed at the new host instead.
               Effect.catchTag("MissingDurableObjects", (error) =>
                 localBinding === undefined &&
                 settings.bindings?.some(
                   (binding) =>
                     binding.type === "durable_object_namespace" &&
-                    !binding.className &&
-                    (binding.scriptName == null || binding.scriptName === script),
+                    ((!binding.className &&
+                      (binding.scriptName == null || binding.scriptName === script)) ||
+                      (binding.className === params.className &&
+                        binding.scriptName != null &&
+                        binding.scriptName !== script)),
                 )
                   ? Effect.succeed(undefined)
                   : Effect.fail(error),

@@ -99,6 +99,8 @@ const scriptNameFor = (scratch: Scratch, suffix: string) =>
  */
 const deployWithMigrations = Effect.fn(function* (params: {
   scratch: Scratch;
+  /** Owning stack, when it is not the test's own (a cross-stack former host). */
+  stackName?: string;
   logicalId: string;
   scriptName: string;
   script: string;
@@ -119,7 +121,7 @@ const deployWithMigrations = Effect.fn(function* (params: {
       })),
       migrations: params.migrations,
       tags: [
-        `alchemy:stack:${params.scratch.name}`,
+        `alchemy:stack:${params.stackName ?? params.scratch.name}`,
         `alchemy:stage:${params.scratch.stage}`,
         `alchemy:id:${params.logicalId}`,
         ...encodeDurableObjectTags(params.bindings),
@@ -147,6 +149,69 @@ const namespacesOf = Effect.fn(function* (scriptName: string) {
     Stream.runCollect,
   );
   return Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id]));
+});
+
+/**
+ * The state a transfer leaves behind when the deploy dies after its first
+ * step: the new host declares the class `expecting-transfer`, without the
+ * binding or the `alchemy:dos:` entry for it.
+ */
+const stageTransfer = Effect.fn(function* (params: {
+  scratch: Scratch;
+  logicalId: string;
+  scriptName: string;
+  fromScript: string;
+  className: string;
+}) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  yield* workers.putScript({
+    accountId,
+    scriptName: params.scriptName,
+    metadata: {
+      mainModule: "main.js",
+      compatibilityDate: "2026-08-31",
+      exports: {
+        [params.className]: {
+          type: "durable-object",
+          storage: "sqlite",
+          state: "expecting-transfer",
+          transferFrom: params.fromScript,
+        },
+      },
+      tags: [
+        `alchemy:stack:${params.scratch.name}`,
+        `alchemy:stage:${params.scratch.stage}`,
+        `alchemy:id:${params.logicalId}`,
+      ],
+    },
+    files: [
+      new File([hostScript([params.className])], "main.js", {
+        type: "application/javascript+module",
+      }),
+    ],
+  });
+});
+
+/** Commit a staged transfer on the former host, as the second step does. */
+const commitTransfer = Effect.fn(function* (params: {
+  fromScript: string;
+  toScript: string;
+  className: string;
+}) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  yield* workers.patchScriptScriptAndVersionSetting({
+    accountId,
+    scriptName: params.fromScript,
+    settings: {
+      exports: {
+        [params.className]: {
+          type: "durable-object",
+          state: "transferred",
+          transferred_to: params.toScript,
+        },
+      },
+    },
+  });
 });
 
 describe.concurrent(
@@ -450,6 +515,247 @@ export default { fetch() { return new Response("canary"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 300_000 },
+    );
+
+    test.provider(
+      "keeps a provisioned class the earlier release never bound",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const scriptName = scriptNameFor(scratch, "unbound");
+          yield* deleteScript(scriptName);
+
+          // `Unbound` is exported and provisioned but has no binding: the
+          // earlier release only tracked `Counter`.
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* workers.putScript({
+            accountId,
+            scriptName,
+            metadata: {
+              mainModule: "main.js",
+              compatibilityDate: "2026-08-31",
+              bindings: [
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
+              ],
+              migrations: { newSqliteClasses: ["Counter", "Unbound"] },
+              tags: [
+                `alchemy:stack:${scratch.name}`,
+                `alchemy:stage:${scratch.stage}`,
+                "alchemy:id:Unbound",
+                ...encodeDurableObjectTags([{ logicalId: "Counter", className: "Counter" }]),
+              ],
+            },
+            files: [
+              new File([hostScript(["Counter", "Unbound"])], "main.js", {
+                type: "application/javascript+module",
+              }),
+            ],
+          });
+          const before = yield* namespacesOf(scriptName);
+          expect(Object.keys(before).sort()).toEqual(["Counter", "Unbound"]);
+
+          yield* scratch.deploy(
+            Cloudflare.Worker("Unbound", {
+              name: scriptName,
+              script: hostScript(["Counter", "Unbound"]),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            }),
+          );
+          expect(yield* namespacesOf(scriptName)).toEqual(before);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(scriptName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "transfers a class from a former host still on migrations",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const sourceName = scriptNameFor(scratch, "xfer-src");
+          const targetName = scriptNameFor(scratch, "xfer-dst");
+          yield* deleteScript(sourceName);
+          yield* deleteScript(targetName);
+
+          // A former host in another stack, still deployed by the earlier
+          // release, hosting the moving class and one that stays.
+          const sourceUrl = yield* deployWithMigrations({
+            scratch,
+            stackName: "other-stack",
+            logicalId: "Source",
+            scriptName: sourceName,
+            script: hostScript(["Counter", "Stays"]),
+            bindings: [
+              { logicalId: "Counter", className: "Counter" },
+              { logicalId: "Stays", className: "Stays" },
+            ],
+            migrations: { newSqliteClasses: ["Counter", "Stays"] },
+          });
+          expect((yield* fetchJsonReady<{ value: number }>(`${sourceUrl}/increment`)).value).toBe(
+            1,
+          );
+          const before = yield* namespacesOf(sourceName);
+
+          const target = yield* scratch.deploy(
+            Cloudflare.Worker("Target", {
+              name: targetName,
+              script: hostScript(["Counter"]),
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", { transferredFrom: sourceName }),
+              },
+            }),
+          );
+          // The namespace moved with its data; the other class stayed put.
+          expect(target.durableObjectNamespaces.Counter).toBe(before.Counter);
+          expect(yield* namespacesOf(targetName)).toEqual({ Counter: before.Counter });
+          expect(yield* namespacesOf(sourceName)).toEqual({ Stays: before.Stays });
+          expect((yield* fetchJsonReady<{ value: number }>(`${target.url}/get`)).value).toBe(1);
+
+          yield* scratch.destroy();
+          yield* deleteScript(sourceName);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "finishes a transfer that crashed before the former host committed it",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const sourceName = scriptNameFor(scratch, "crash1-src");
+          const targetName = scriptNameFor(scratch, "crash1-dst");
+          yield* deleteScript(sourceName);
+          yield* deleteScript(targetName);
+
+          const sourceUrl = yield* deployWithMigrations({
+            scratch,
+            stackName: "other-stack",
+            logicalId: "Source",
+            scriptName: sourceName,
+            script: hostScript(["Counter"]),
+            bindings: [{ logicalId: "Counter", className: "Counter" }],
+            migrations: { newSqliteClasses: ["Counter"] },
+          });
+          expect((yield* fetchJsonReady<{ value: number }>(`${sourceUrl}/increment`)).value).toBe(
+            1,
+          );
+          const before = yield* namespacesOf(sourceName);
+
+          yield* stageTransfer({
+            scratch,
+            logicalId: "Target",
+            scriptName: targetName,
+            fromScript: sourceName,
+            className: "Counter",
+          });
+
+          const target = yield* scratch.deploy(
+            Cloudflare.Worker("Target", {
+              name: targetName,
+              script: hostScript(["Counter"]),
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", { transferredFrom: sourceName }),
+              },
+            }),
+          );
+          expect(target.durableObjectNamespaces.Counter).toBe(before.Counter);
+          expect((yield* fetchJsonReady<{ value: number }>(`${target.url}/get`)).value).toBe(1);
+
+          yield* scratch.destroy();
+          yield* deleteScript(sourceName);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "finishes a transfer that crashed after the former host committed it",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const sourceName = scriptNameFor(scratch, "crash2-src");
+          const targetName = scriptNameFor(scratch, "crash2-dst");
+          yield* deleteScript(sourceName);
+          yield* deleteScript(targetName);
+
+          const sourceUrl = yield* deployWithMigrations({
+            scratch,
+            stackName: "other-stack",
+            logicalId: "Source",
+            scriptName: sourceName,
+            script: hostScript(["Counter"]),
+            bindings: [{ logicalId: "Counter", className: "Counter" }],
+            migrations: { newSqliteClasses: ["Counter"] },
+          });
+          expect((yield* fetchJsonReady<{ value: number }>(`${sourceUrl}/increment`)).value).toBe(
+            1,
+          );
+          const before = yield* namespacesOf(sourceName);
+
+          yield* stageTransfer({
+            scratch,
+            logicalId: "Target",
+            scriptName: targetName,
+            fromScript: sourceName,
+            className: "Counter",
+          });
+          yield* commitTransfer({
+            fromScript: sourceName,
+            toScript: targetName,
+            className: "Counter",
+          });
+          expect(yield* namespacesOf(targetName)).toEqual({ Counter: before.Counter });
+
+          const target = yield* scratch.deploy(
+            Cloudflare.Worker("Target", {
+              name: targetName,
+              script: hostScript(["Counter"]),
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", { transferredFrom: sourceName }),
+              },
+            }),
+          );
+          expect(target.durableObjectNamespaces.Counter).toBe(before.Counter);
+          expect((yield* fetchJsonReady<{ value: number }>(`${target.url}/get`)).value).toBe(1);
+
+          yield* scratch.destroy();
+          yield* deleteScript(sourceName);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "removing a binding whose class is still in the code keeps the namespace",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const scriptName = scriptNameFor(scratch, "keep");
+          yield* deleteScript(scriptName);
+
+          const program = (bindExtra: boolean) =>
+            Cloudflare.Worker("Keep", {
+              name: scriptName,
+              script: hostScript(["Counter", "Extra"]),
+              env: bindExtra
+                ? {
+                    Counter: Cloudflare.DurableObject("Counter"),
+                    Extra: Cloudflare.DurableObject("Extra"),
+                  }
+                : { Counter: Cloudflare.DurableObject("Counter") },
+            });
+
+          yield* scratch.deploy(program(true));
+          const before = yield* namespacesOf(scriptName);
+
+          // `Extra` is still exported, so Cloudflare refuses to delete it.
+          const refused = yield* scratch.deploy(program(false)).pipe(Effect.flip);
+          expect(String(refused)).toContain("tombstone_delete_class_still_in_code");
+          expect(yield* namespacesOf(scriptName)).toEqual(before);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 240_000 },
     );
   },
 );
