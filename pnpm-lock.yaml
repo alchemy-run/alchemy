@@ -310,7 +310,7 @@ catalogs:
       specifier: 8.0.0-rc.11
       version: 8.0.0-rc.11
     '@prisma/orm-postgres':
-      specifier: 8.0.0-rc.11
+      specifier: ^8.0.0-rc.11
       version: 8.0.0-rc.11
     '@puppeteer/browsers':
       specifier: ^3.2.0
@@ -562,7 +562,7 @@ catalogs:
       specifier: ^8.4.49
       version: 8.5.26
     prisma:
-      specifier: 8.0.0-rc.15
+      specifier: ^8.0.0-rc.15
       version: 8.0.0-rc.15
     react:
       specifier: ^19.3.0
