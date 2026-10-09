@@ -3,12 +3,13 @@ import * as ai from "@distilled.cloud/cloudflare/ai";
 import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../src/docs-search.ts";
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, sectionRowid } from "../src/docs-search.ts";
 import { extractSections, type DocSection } from "./extract.ts";
 
 /**
@@ -18,16 +19,19 @@ import { extractSections, type DocSection } from "./extract.ts";
  *   filterable metadata.
  * - `DocsText` holds its text in an FTS5 table (keyword search).
  *
- * Both are filled by {@link IndexDocs} at deploy time — no crawler.
+ * Both are filled by {@link IndexDocs} at deploy time — no crawler. They are
+ * declared inside the Website, which production retains; the index is fully
+ * rebuildable, so it opts back into deletion — a replaced index (e.g. after
+ * an embedding model change) must not linger.
  */
 export const DocsVectors = Cloudflare.Vectorize.Index("DocsSearchVectors", {
   dimensions: EMBEDDING_DIMENSIONS,
   metric: "cosine",
-});
+}).pipe(RemovalPolicy.destroy());
 
 export const DocsText = Cloudflare.D1.Database("DocsSearchText", {
   migrations: "./search/migrations",
-});
+}).pipe(RemovalPolicy.destroy());
 
 /** Lets a query filter vectors by provider; must exist before vectors are written. */
 export const DocsProviderIndex = Effect.flatMap(DocsVectors, (vectors) =>
@@ -35,15 +39,15 @@ export const DocsProviderIndex = Effect.flatMap(DocsVectors, (vectors) =>
     indexName: vectors.indexName,
     propertyName: "provider",
     indexType: "string",
-  }),
+  }).pipe(RemovalPolicy.destroy()),
 );
 
 /**
  * Workers AI takes at most 32 documents per embedding call, and rejects a
  * call whose total input is too large ("input too big").
  */
-const EMBED_BATCH = 32;
-const EMBED_BATCH_CHARS = 24_000;
+const EMBED_BATCH = 50;
+const EMBED_BATCH_CHARS = 100_000;
 /** Embedding calls in flight; each takes ~1–3s. */
 const EMBED_CONCURRENCY = 16;
 /** Statements per D1 batch — each insert carries a whole section body. */
@@ -149,13 +153,18 @@ export const IndexDocs = Alchemy.Action(
               db.batch(
                 rows.flatMap((row) => [
                   ...(existing.has(row.id)
-                    ? [db.prepare("DELETE FROM sections WHERE id = ?").bind(row.id)]
+                    ? [
+                        db
+                          .prepare("DELETE FROM sections WHERE rowid = ?")
+                          .bind(sectionRowid(row.id)),
+                      ]
                     : []),
                   db
                     .prepare(
-                      "INSERT INTO sections (id, hash, path, anchor, provider, section, title, heading, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      "INSERT INTO sections (rowid, id, hash, path, anchor, provider, section, title, heading, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     )
                     .bind(
+                      sectionRowid(row.id),
                       row.id,
                       row.hash,
                       row.path,
@@ -179,7 +188,9 @@ export const IndexDocs = Alchemy.Action(
           Effect.gen(function* () {
             yield* vectors.deleteByIds(ids);
             yield* db.batch(
-              ids.map((id) => db.prepare("DELETE FROM sections WHERE id = ?").bind(id)),
+              ids.map((id) =>
+                db.prepare("DELETE FROM sections WHERE rowid = ?").bind(sectionRowid(id)),
+              ),
             );
           }),
         { discard: true },
@@ -198,9 +209,9 @@ export const IndexDocs = Alchemy.Action(
 const embeddingText = (section: DocSection) =>
   [`${section.title}${section.heading ? ` › ${section.heading}` : ""}`, section.body]
     .join("\n\n")
-    // A section's start says what it's about (and its tail is mostly code);
-    // keyword search still covers the full body.
-    .slice(0, 2_500);
+    // ~512 tokens, the model's input limit. A section's start says what it's
+    // about (its tail is mostly code); keyword search covers the full body.
+    .slice(0, 1_800);
 
 /**
  * Stable id per (page, anchor) — Vectorize ids max out at 64 bytes — and a

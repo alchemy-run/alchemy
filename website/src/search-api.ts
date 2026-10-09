@@ -1,5 +1,6 @@
 import {
   EMBEDDING_MODEL,
+  sectionRowid,
   SEARCH_PROVIDERS,
   toSnippet,
   type SearchHit,
@@ -19,7 +20,7 @@ declare const caches: {
   };
 };
 interface WorkersAI {
-  run(model: string, input: { queries: string[] }): Promise<{ data: number[][] }>;
+  run(model: string, input: { text: string[] }): Promise<{ data: number[][] }>;
 }
 interface VectorIndex {
   query(
@@ -102,7 +103,7 @@ export const handleSearch = async (
     })}`,
   );
   const started = Date.now();
-  const log = (fields: Pick<QueryEvent, "status" | "cached" | "hits">) =>
+  const log = (fields: Pick<QueryEvent, "status" | "cached" | "hits" | "timings">) =>
     logQuery(env, ctx, {
       query,
       provider: provider ?? "All",
@@ -120,18 +121,21 @@ export const handleSearch = async (
     return cached;
   }
 
+  const timings: Timings = {};
   let sections: ScoredSection[];
   try {
-    sections = await retrieve({ AI, DOCS_VECTORS, DOCS_TEXT }, query, provider);
+    sections = await retrieve({ AI, DOCS_VECTORS, DOCS_TEXT }, query, provider, timings);
   } catch (error) {
     console.error("docs search failed", error);
-    log({ status: "error", cached: false, hits: [] });
+    log({ status: "error", cached: false, hits: [], timings });
     return new Response("Search failed", { status: 502 });
   }
 
   const hits = toHits(sections, query);
-  log({ status: "ok", cached: false, hits });
+  timings.total = Date.now() - started;
+  log({ status: "ok", cached: false, hits, timings });
   const res = json({ query, provider, hits } satisfies SearchResponse, CACHE_SECONDS);
+  res.headers.set("server-timing", serverTiming(timings));
   ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
   return res;
 };
@@ -145,6 +149,8 @@ interface QueryEvent {
   cached: boolean;
   hits: SearchHit[];
   latencyMs: number;
+  /** Per-step wall time (ms) of an uncached search. */
+  timings?: Timings;
   /** Docs page the search was made from (Referer path). */
   page: string | undefined;
   /** Deployment the search was made on (`alchemy.run`, a preview, …). */
@@ -208,67 +214,115 @@ interface ScoredSection extends SectionRow {
 
 /** Candidates taken from each retriever (Vectorize's topK max). */
 const CANDIDATES = 100;
-/** Reciprocal-rank-fusion damping. */
-const RRF_K = 60;
+/** Weight of semantic over keyword relevance when blending the two. */
+const SEMANTIC_WEIGHT = 2;
 const COLUMNS = "id, path, anchor, title, heading, provider, section";
 
 /**
- * Hybrid retrieval over docs sections: semantic (embed the query, nearest
- * neighbours in Vectorize) and keyword (FTS5 BM25, title and heading
- * weighted above body), fused by reciprocal rank.
+ * Hybrid retrieval over docs sections, as two parallel branches:
+ *
+ * - semantic: embed the query → nearest sections in Vectorize → their rows
+ *   (by rowid)
+ * - keyword: FTS5 BM25, title and heading weighted above body
+ *
+ * Each branch's scores are min-max normalized and blended, semantic
+ * weighted {@link SEMANTIC_WEIGHT}× — the best of the fusions tried on the
+ * docs eval set.
  */
 const retrieve = async (
   env: Required<Pick<SearchEnv, "AI" | "DOCS_VECTORS" | "DOCS_TEXT">>,
   query: string,
   provider: string | undefined,
+  timings: Timings,
 ): Promise<ScoredSection[]> => {
   const match = words(query)
     .filter((word) => !STOPWORDS.has(word))
     .map((word) => `"${word}"`)
     .join(" OR ");
-  const [semantic, keyword] = await Promise.all([
-    env.AI.run(EMBEDDING_MODEL, { queries: [query] })
-      .then(({ data }) =>
-        env.DOCS_VECTORS.query(data[0]!, {
-          topK: CANDIDATES,
-          filter: provider ? { provider } : undefined,
-        }),
+
+  const semantic = async () => {
+    const { data } = await timed(timings, "embed", env.AI.run(EMBEDDING_MODEL, { text: [query] }));
+    const { matches } = await timed(
+      timings,
+      "vectors",
+      env.DOCS_VECTORS.query(data[0]!, {
+        topK: CANDIDATES,
+        filter: provider ? { provider } : undefined,
+      }),
+    );
+    if (matches.length === 0) return [];
+    const { results } = await timed(
+      timings,
+      "rows",
+      env.DOCS_TEXT.prepare(
+        `SELECT ${COLUMNS}, substr(body, 1, 600) AS snippet FROM sections
+           WHERE rowid IN (${matches.map(() => "?").join(", ")})`,
       )
-      .then(({ matches }) => matches.map((match) => match.id)),
-    match
-      ? env.DOCS_TEXT.prepare(
-          `SELECT ${COLUMNS}, snippet(sections, 8, '', '', '…', 40) AS snippet FROM sections
-             WHERE sections MATCH ?1 AND (?2 IS NULL OR provider = ?2)
-             ORDER BY bm25(sections, 0, 0, 0, 0, 0, 0, 10.0, 5.0, 1.0) LIMIT ?3`,
-        )
-          .bind(match, provider ?? null, CANDIDATES)
-          .all<SectionRow>()
-          .then(({ results }) => results)
-      : Promise.resolve([]),
-  ]);
+        .bind(...matches.map((match) => sectionRowid(match.id)))
+        .all<SectionRow>(),
+    );
+    const rows = new Map(results.map((row) => [row.id, row]));
+    return matches.flatMap((match) => {
+      const row = rows.get(match.id);
+      return row ? [{ row, relevance: match.score }] : [];
+    });
+  };
 
-  const rows = new Map(keyword.map((row) => [row.id, row]));
-  const missing = semantic.filter((id) => !rows.has(id));
-  if (missing.length > 0) {
-    const { results } = await env.DOCS_TEXT.prepare(
-      `SELECT ${COLUMNS}, substr(body, 1, 600) AS snippet FROM sections
-         WHERE id IN (${missing.map(() => "?").join(", ")})`,
-    )
-      .bind(...missing)
-      .all<SectionRow>();
-    for (const row of results) rows.set(row.id, row);
-  }
+  const keyword = async () => {
+    if (!match) return [];
+    const { results } = await timed(
+      timings,
+      "keyword",
+      env.DOCS_TEXT.prepare(
+        `SELECT ${COLUMNS}, snippet(sections, 8, '', '', '…', 40) AS snippet,
+                bm25(sections, 0, 0, 0, 0, 0, 0, 10.0, 5.0, 1.0) AS rank
+           FROM sections
+           WHERE sections MATCH ?1 AND (?2 IS NULL OR provider = ?2)
+           ORDER BY rank LIMIT ?3`,
+      )
+        .bind(match, provider ?? null, CANDIDATES)
+        .all<SectionRow & { rank: number }>(),
+    );
+    // BM25 ranks are negative: lower is better.
+    return results.map(({ rank, ...row }) => ({ row, relevance: -rank }));
+  };
 
-  const fused = new Map<string, number>();
-  for (const ids of [semantic, keyword.map((row) => row.id)]) {
-    ids.forEach((id, rank) => fused.set(id, (fused.get(id) ?? 0) + 1 / (RRF_K + rank + 1)));
+  const [semanticHits, keywordHits] = await Promise.all([semantic(), keyword()]);
+  const sections = new Map<string, ScoredSection>();
+  // Keyword first, so a section found by both keeps the keyword row (its
+  // snippet is centred on the match).
+  for (const [hits, weight] of [
+    [keywordHits, 1],
+    [semanticHits, SEMANTIC_WEIGHT],
+  ] as const) {
+    const relevances = hits.map((hit) => hit.relevance);
+    const lo = Math.min(...relevances);
+    const span = Math.max(...relevances) - lo || 1;
+    for (const { row, relevance } of hits) {
+      const score = (sections.get(row.id)?.score ?? 0) + (weight * (relevance - lo)) / span;
+      sections.set(row.id, { ...(sections.get(row.id) ?? row), score });
+    }
   }
-  const best = Math.max(0, ...fused.values());
-  return [...fused].flatMap(([id, score]) => {
-    const row = rows.get(id);
-    return row ? [{ ...row, score: score / best }] : [];
-  });
+  const best = Math.max(0, ...[...sections.values()].map((section) => section.score)) || 1;
+  return [...sections.values()].map((section) => ({ ...section, score: section.score / best }));
 };
+
+/** Wall time (ms) per retrieval step, reported as `Server-Timing` and to Axiom. */
+type Timings = Record<string, number>;
+
+const timed = async <A>(timings: Timings, step: string, work: Promise<A>): Promise<A> => {
+  const started = Date.now();
+  try {
+    return await work;
+  } finally {
+    timings[step] = Date.now() - started;
+  }
+};
+
+const serverTiming = (timings: Timings) =>
+  Object.entries(timings)
+    .map(([step, ms]) => `${step};dur=${ms}`)
+    .join(", ");
 
 /** Weight of a query-term match in the page title or a matched heading. */
 const TITLE_BONUS = 1.0;

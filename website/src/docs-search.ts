@@ -9,12 +9,19 @@
 import { activeTab, DOCS_TABS } from "./docs-tabs";
 
 /**
- * Workers AI model that embeds docs sections at deploy time (as `documents`)
- * and search input at request time (as `queries`, which adds a retrieval
- * instruction). Changing it re-embeds every section on the next deploy.
+ * Workers AI model that embeds docs sections at deploy time and search input
+ * at request time. Chosen on the docs eval set: bge-base beat qwen3-0.6b and
+ * bge-m3 on ranking, and answers in ~0.3s where qwen3 often took seconds.
+ * Changing it re-embeds every section on the next deploy.
  */
-export const EMBEDDING_MODEL = "@cf/qwen/qwen3-embedding-0.6b";
-export const EMBEDDING_DIMENSIONS = 1024;
+export const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
+export const EMBEDDING_DIMENSIONS = 768;
+
+/**
+ * FTS5 rowid of a section, derived from its Vectorize id (52 bits of the hex
+ * id) so a vector match resolves to its row by primary key, not a table scan.
+ */
+export const sectionRowid = (id: string) => Number.parseInt(id.slice(0, 13), 16);
 
 export type SearchSection = "guide" | "reference" | "blog";
 
