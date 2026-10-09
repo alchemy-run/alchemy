@@ -34,6 +34,7 @@ export type DataQualitySpec = dataplex.GoogleCloudDataplexV1DataQualitySpec;
 export type DataProfileSpec = dataplex.GoogleCloudDataplexV1DataProfileSpec;
 export type DataDiscoverySpec = dataplex.GoogleCloudDataplexV1DataDiscoverySpec;
 export type DataDocumentationSpec = dataplex.GoogleCloudDataplexV1DataDocumentationSpec;
+export type UnstructuredDataProfileSpec = dataplex.GoogleCloudDataplexV1UnstructuredDataProfileSpec;
 
 export type DataScanProps = {
   /**
@@ -92,6 +93,10 @@ export type DataScanProps = {
    * Data documentation scan settings.
    */
   dataDocumentationSpec?: DataDocumentationSpec;
+  /**
+   * Unstructured data profile scan settings.
+   */
+  unstructuredDataProfileSpec?: UnstructuredDataProfileSpec;
 };
 
 export type DataScan = Resource<
@@ -128,6 +133,8 @@ export type DataScan = Resource<
     dataDiscoverySpec: DataDiscoverySpec | undefined;
     /** Data documentation spec, if any. */
     dataDocumentationSpec: DataDocumentationSpec | undefined;
+    /** Unstructured data profile spec, if any. */
+    unstructuredDataProfileSpec: UnstructuredDataProfileSpec | undefined;
     /** System uid. */
     uid: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -188,6 +195,7 @@ const toAttrs = (scan: dataplex.GoogleCloudDataplexV1DataScan, project: string) 
     dataProfileSpec: scan.dataProfileSpec,
     dataDiscoverySpec: scan.dataDiscoverySpec,
     dataDocumentationSpec: scan.dataDocumentationSpec,
+    unstructuredDataProfileSpec: scan.unstructuredDataProfileSpec,
     uid: scan.uid,
     createTime: scan.createTime,
     updateTime: scan.updateTime,
@@ -288,6 +296,7 @@ export const DataScanProvider = () =>
               dataProfileSpec: news.dataProfileSpec,
               dataDiscoverySpec: news.dataDiscoverySpec,
               dataDocumentationSpec: news.dataDocumentationSpec,
+              unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
             },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -316,6 +325,9 @@ export const DataScanProvider = () =>
         fingerprint(current.dataDiscoverySpec) !== fingerprint(news.dataDiscoverySpec);
       const documentationChanged =
         fingerprint(current.dataDocumentationSpec) !== fingerprint(news.dataDocumentationSpec);
+      const unstructuredChanged =
+        fingerprint(current.unstructuredDataProfileSpec) !==
+        fingerprint(news.unstructuredDataProfileSpec);
 
       if (
         labelsChanged ||
@@ -325,7 +337,8 @@ export const DataScanProvider = () =>
         qualityChanged ||
         profileChanged ||
         discoveryChanged ||
-        documentationChanged
+        documentationChanged ||
+        unstructuredChanged
       ) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsDataScans({
@@ -339,6 +352,7 @@ export const DataScanProvider = () =>
               profileChanged ? "dataProfileSpec" : undefined,
               discoveryChanged ? "dataDiscoverySpec" : undefined,
               documentationChanged ? "dataDocumentationSpec" : undefined,
+              unstructuredChanged ? "unstructuredDataProfileSpec" : undefined,
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
@@ -352,6 +366,7 @@ export const DataScanProvider = () =>
               dataProfileSpec: news.dataProfileSpec,
               dataDiscoverySpec: news.dataDiscoverySpec,
               dataDocumentationSpec: news.dataDocumentationSpec,
+              unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
             },
           }),
         );
