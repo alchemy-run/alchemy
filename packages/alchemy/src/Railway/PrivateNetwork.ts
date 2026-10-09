@@ -117,8 +117,10 @@ const waitForNetworkConfig = (
     ),
     Effect.retry({
       while: (error) => error._tag === "Railway.PrivateNetworkConfigPending",
-      schedule: Schedule.spaced("1 second"),
-      times: 8,
+      // Committed patches usually apply in ~4s but stall for 10s+ while the
+      // environment is applying an earlier change.
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
     }),
   );
 
@@ -470,9 +472,18 @@ export const PrivateNetworkProvider = () =>
             commitMessage: "Restore private networking setting",
             patch: { privateNetworkDisabled: true },
           });
+          // Since 2026-10 Railway commits `privateNetworkDisabled: true` but
+          // never applies it (config stays `false`). That refusal is terminal,
+          // so failing here would only block the environment's own delete.
           yield* waitForNetworkConfig(
             output.environmentId,
             (observed) => observed.privateNetworkDisabled === true,
+          ).pipe(
+            Effect.catchTag("Railway.PrivateNetworkConfigPending", () =>
+              Effect.logWarning(
+                `Railway kept private networking enabled for environment ${output.environmentId}; it could not be restored to disabled.`,
+              ),
+            ),
           );
         }),
       ).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
@@ -748,8 +759,10 @@ const waitUntilEndpointNamed = (input: {
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PrivateNetworkEndpointNotCreated",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // DNS renames are observed through the endpoint and can lag the config
+      // commit by 10s+.
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
     }),
   );
 
@@ -949,8 +962,11 @@ export const PrivateNetworkEndpointProvider = () =>
         output.environmentId,
         Effect.gen(function* () {
           const config = yield* readNetworkConfig(output.environmentId);
-          const configuredPrefix =
-            config.services?.[output.serviceId]?.networking?.privateNetworkEndpoint;
+          const serviceConfig = config.services?.[output.serviceId];
+          // The service instance is gone from the environment: its endpoint
+          // went with it and there is no DNS override left to restore.
+          if (serviceConfig == null) return;
+          const configuredPrefix = serviceConfig.networking?.privateNetworkEndpoint;
           if (
             (configuredPrefix ?? null) !== managedPrefix ||
             (configuredPrefix ?? null) === previousDnsPrefix

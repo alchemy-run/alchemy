@@ -532,8 +532,10 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
         Effect.orElseSucceed(() => ""),
       );
 
-// Railway builds can outlast a 50-second poll window. Allow up to 90 seconds
-// while bounding both the retry count and time spent in API requests.
+// Railway builds routinely take 60–90s and exceed 90s when its build queue is
+// busy (observed 2026-10: a small bundled service stuck BUILDING past 90s), so
+// a 90s cap failed healthy deploys. Allow up to 150 seconds while bounding
+// both the retry count and time spent in API requests.
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
     const instance = yield* getInstance(environmentId, serviceId);
@@ -550,11 +552,11 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 15,
+      schedule: Schedule.spaced("10 seconds"),
     }),
     Effect.timeoutOrElse({
-      duration: "90 seconds",
+      duration: "150 seconds",
       orElse: () => Effect.fail(new ServiceDeployPending({ serviceId, status: "pending" })),
     }),
   );
@@ -635,13 +637,13 @@ const waitForDeploymentById = (input: {
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 15,
+      schedule: Schedule.spaced("10 seconds"),
     }),
     // Surface the budget as a pending deploy so the final check below still
     // reports a ready instance, or a failed deploy with its logs.
     Effect.timeoutOrElse({
-      duration: "90 seconds",
+      duration: "150 seconds",
       orElse: () =>
         Effect.fail(new ServiceDeployPending({ serviceId: input.serviceId, status: "pending" })),
     }),
