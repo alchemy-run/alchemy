@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
@@ -39,19 +40,21 @@ const inLifecycle =
     Effect.gen(function* () {
       const path = yield* Path.Path;
       return yield* effect.pipe(
-        Effect.provideService(ResourceFqn, fqn),
-        Effect.provideService(StackContext, {
-          name: "BundleStack",
-          stage: "test",
-          resources: {},
-          bindings: {},
-          actions: {},
-        }),
-        Effect.provideService(AlchemyContext, {
-          dotAlchemy: path.join(root, ".alchemy"),
-          dev: false,
-          adopt: false,
-        }),
+        Effect.provide([
+          Layer.succeed(ResourceFqn, fqn),
+          Layer.succeed(StackContext, {
+            name: "BundleStack",
+            stage: "test",
+            resources: {},
+            bindings: {},
+            actions: {},
+          }),
+          Layer.succeed(AlchemyContext, {
+            dotAlchemy: path.join(root, ".alchemy"),
+            dev: false,
+            adopt: false,
+          }),
+        ]),
       );
     });
 
