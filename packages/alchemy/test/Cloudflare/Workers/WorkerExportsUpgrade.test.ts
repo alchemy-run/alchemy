@@ -1,5 +1,6 @@
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -141,11 +142,16 @@ const deleteScript = Effect.fn(function* (scriptName: string) {
     .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
 });
 
-/** The script's Durable Object namespaces as `{ className: namespaceId }`. */
-const namespacesOf = Effect.fn(function* (scriptName: string) {
+/**
+ * The script's Durable Object namespaces as `{ className: namespaceId }`,
+ * in the account (default) or in a dispatch namespace.
+ */
+const namespacesOf = Effect.fn(function* (scriptName: string, dispatchNamespace?: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
-    Stream.filter((ns) => ns.script === scriptName),
+    Stream.filter(
+      (ns) => ns.script === scriptName && (ns.dispatchNamespace ?? undefined) === dispatchNamespace,
+    ),
     Stream.runCollect,
   );
   return Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id]));
@@ -756,6 +762,157 @@ export default { fetch() { return new Response("canary"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 240_000 },
+    );
+
+    test.provider(
+      "upgrades a dispatch-namespace worker deployed with migrations",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const namespaceName = scriptNameFor(scratch, "wfp-ns");
+          const scriptName = scriptNameFor(scratch, "wfp-user");
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          const program = Effect.gen(function* () {
+            const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", {
+              name: namespaceName,
+            });
+            const user = yield* Cloudflare.Worker("User", {
+              name: scriptName,
+              namespace: namespace.name,
+              script: hostScript(["Counter"]),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            });
+            return { namespace, user };
+          });
+
+          // The namespace first, then the user script the way the earlier
+          // release uploaded it.
+          yield* scratch.deploy(
+            Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", { name: namespaceName }),
+          );
+          yield* wfp.putDispatchNamespaceScript({
+            accountId,
+            dispatchNamespace: namespaceName,
+            scriptName,
+            metadata: {
+              mainModule: "main.js",
+              compatibilityDate: "2026-08-31",
+              bindings: [
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
+              ],
+              migrations: { newSqliteClasses: ["Counter"] },
+              tags: [
+                `alchemy:stack:${scratch.name}`,
+                `alchemy:stage:${scratch.stage}`,
+                "alchemy:id:User",
+                ...encodeDurableObjectTags([{ logicalId: "Counter", className: "Counter" }]),
+              ],
+            },
+            files: [
+              new File([hostScript(["Counter"])], "main.js", {
+                type: "application/javascript+module",
+              }),
+            ],
+          });
+          const before = yield* namespacesOf(scriptName, namespaceName);
+          expect(Object.keys(before)).toEqual(["Counter"]);
+
+          const upgraded = yield* scratch.deploy(program);
+          expect(upgraded.user.workerName).toBe(scriptName);
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual(before);
+
+          // The upload moved to exports: a later migrations upload is refused.
+          const reverted = yield* wfp
+            .putDispatchNamespaceScript({
+              accountId,
+              dispatchNamespace: namespaceName,
+              scriptName,
+              metadata: {
+                mainModule: "main.js",
+                compatibilityDate: "2026-08-31",
+                migrations: { newTag: "v2" },
+              },
+              files: [
+                new File([hostScript(["Counter"])], "main.js", {
+                  type: "application/javascript+module",
+                }),
+              ],
+            })
+            .pipe(Effect.flip);
+          expect(String(reverted)).toContain("declarative `exports` flow");
+
+          // A routine redeploy is steady.
+          yield* scratch.deploy(program);
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual(before);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "an account worker ignores a dispatch worker with the same script name",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const namespaceName = scriptNameFor(scratch, "twin-ns");
+          const scriptName = scriptNameFor(scratch, "twin");
+
+          // The same script name in two contexts, hosting different classes.
+          const deployed = yield* scratch.deploy(
+            Effect.gen(function* () {
+              const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", {
+                name: namespaceName,
+              });
+              yield* Cloudflare.Worker("DispatchTwin", {
+                name: scriptName,
+                namespace: namespace.name,
+                script: hostScript(["Dispatched"], "Dispatched"),
+                env: { Dispatched: Cloudflare.DurableObject("Dispatched") },
+              });
+              return yield* Cloudflare.Worker("AccountTwin", {
+                name: scriptName,
+                script: hostScript(["Counter"]),
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+            }),
+          );
+          expect(Object.keys(yield* namespacesOf(scriptName))).toEqual(["Counter"]);
+          expect(Object.keys(yield* namespacesOf(scriptName, namespaceName))).toEqual([
+            "Dispatched",
+          ]);
+
+          // Redeploying each one keeps them apart.
+          yield* scratch.deploy(
+            Effect.gen(function* () {
+              const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Ns", {
+                name: namespaceName,
+              });
+              yield* Cloudflare.Worker("DispatchTwin", {
+                name: scriptName,
+                namespace: namespace.name,
+                script: `${hostScript(["Dispatched"], "Dispatched")}\n// v2\n`,
+                env: { Dispatched: Cloudflare.DurableObject("Dispatched") },
+              });
+              return yield* Cloudflare.Worker("AccountTwin", {
+                name: scriptName,
+                script: `${hostScript(["Counter"])}\n// v2\n`,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+            }),
+          );
+          expect(Object.keys(yield* namespacesOf(scriptName))).toEqual(["Counter"]);
+          expect(
+            (yield* fetchJsonReady<{ value: number }>(`${deployed.url}/increment`)).value,
+          ).toBe(1);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(scriptName)).toEqual({});
+          expect(yield* namespacesOf(scriptName, namespaceName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
   },
 );

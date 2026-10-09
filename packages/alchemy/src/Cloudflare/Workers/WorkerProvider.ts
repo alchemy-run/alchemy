@@ -2684,7 +2684,7 @@ export const LiveWorkerProvider = () =>
               ...new Set([...hostedClasses.map((c) => c.className), ...exportedClasses]),
             ].join(
               ", ",
-            )}): class migrations apply to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
+            )}): Durable Object and Workflow classes belong to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
           });
         }
       });
@@ -3417,14 +3417,6 @@ export const LiveWorkerProvider = () =>
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
         );
 
-        // Parse alchemy:migration-tag:{version}
-        const oldMigrationTag = oldTags.flatMap((tag) =>
-          tag.startsWith("alchemy:migration-tag:")
-            ? [tag.slice("alchemy:migration-tag:".length)]
-            : [],
-        )[0];
-        const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
-
         // Compute delete-class candidates. Candidates are validated against
         // observed namespace ownership below — a class may already have been
         // transferred to another script by its new host's deploy.
@@ -3491,12 +3483,11 @@ export const LiveWorkerProvider = () =>
               binding.scriptName === name),
         );
         const observedNamespaces =
-          !dispatchNamespace &&
-          (deletedClassCandidates.length > 0 ||
-            mayTransferIn ||
-            currentDoBindings.length > 0 ||
-            hostedDurableObjectsBefore)
-            ? yield* listDurableObjectNamespaces(accountId)
+          deletedClassCandidates.length > 0 ||
+          mayTransferIn ||
+          currentDoBindings.length > 0 ||
+          hostedDurableObjectsBefore
+            ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
             : [];
         const hosts = (
           namespaces: readonly { script: string; class: string }[],
@@ -3535,7 +3526,7 @@ export const LiveWorkerProvider = () =>
             // Absence from an account listing does not prove a transfer.
             const namespace =
               findNamespace(observedNamespaces) ??
-              (yield* listDurableObjectNamespaces(accountId).pipe(
+              (yield* listDurableObjectNamespaces(accountId, dispatchNamespace).pipe(
                 Effect.flatMap((namespaces) => {
                   const namespace = findNamespace(namespaces);
                   return namespace
@@ -3562,7 +3553,7 @@ export const LiveWorkerProvider = () =>
               (ns) =>
                 ns.id === namespaceId && ns.script === targetScriptName && ns.class === className,
             );
-          const namespaces = yield* listDurableObjectNamespaces(accountId).pipe(
+          const namespaces = yield* listDurableObjectNamespaces(accountId, dispatchNamespace).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (observed) =>
@@ -3688,25 +3679,9 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        const alchemyTags = [
-          ...createAlchemyWorkerTags(id),
-          ...alchemyDoTags,
-          ...(dispatchNamespace && newMigrationTag
-            ? [`alchemy:migration-tag:${newMigrationTag}`]
-            : []),
-        ];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
-
-        const migrations = {
-          oldTag: oldMigrationTag,
-          newTag: newMigrationTag,
-          newClasses,
-          deletedClasses,
-          renamedClasses,
-          transferredClasses,
-          newSqliteClasses,
-        };
 
         // Cloudflare's declarative `exports` map: the complete Durable Object
         // lifecycle of this script. Every namespace Cloudflare reports for
@@ -3746,9 +3721,7 @@ export const LiveWorkerProvider = () =>
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
-          migrations: dispatchNamespace ? migrations : undefined,
-          exports:
-            dispatchNamespace || Object.keys(exportsMap).length === 0 ? undefined : exportsMap,
+          exports: Object.keys(exportsMap).length === 0 ? undefined : exportsMap,
           observability,
           placement: news.placement,
           tags: metadataTags,
@@ -3781,11 +3754,11 @@ export const LiveWorkerProvider = () =>
           !dispatchNamespace
         ) {
           const migratedClasses = [
-            ...migrations.newClasses,
-            ...migrations.newSqliteClasses,
-            ...migrations.deletedClasses,
-            ...migrations.renamedClasses.map((r) => r.to),
-            ...migrations.transferredClasses.map((t) => t.to),
+            ...newClasses,
+            ...newSqliteClasses,
+            ...deletedClasses,
+            ...renamedClasses.map((r) => r.to),
+            ...transferredClasses.map((t) => t.to),
           ];
           if (migratedClasses.length > 0) {
             return yield* new WorkerVersionConfigError({
@@ -3916,56 +3889,18 @@ export const LiveWorkerProvider = () =>
               });
             }
           }
-          worker = yield* putWorkerScriptWithMigrationRecovery({
-            ...metadata,
-            exports: metadata.exports && settleTransfers(metadata.exports),
-          });
-        }
-
-        function putWorkerScriptWithMigrationRecovery(
-          metadata: workers.PutScriptRequest["metadata"],
-        ) {
-          const upload = putWorkerScript({
+          worker = yield* putWorkerScript({
             accountId,
             scriptName: name,
             dispatchNamespace,
-            metadata,
+            metadata: {
+              ...metadata,
+              exports: metadata.exports && settleTransfers(metadata.exports),
+            },
             files: bundle.files,
           });
-          // `exports` uploads carry no migration tag to recover.
-          if (metadata.migrations === undefined) return upload;
-          return upload.pipe(
-            Effect.catch((err) => {
-              // When adopting a Worker managed by Wrangler (or after a previous
-              // deploy with mismatched migrations), the old_tag precondition
-              // fails. The only way to discover the actual tag is through the
-              // error message — getScriptSettings is meant to return it but
-              // doesn't at runtime.
-              const msg = String(
-                typeof err === "object" && err !== null && "message" in err ? err.message : err,
-              );
-              const expectedTag = msg.match(/when expected tag is ['"]?([^'"]+)['"]?/)?.[1];
-              if (expectedTag) {
-                return putWorkerScript({
-                  accountId,
-                  scriptName: name,
-                  dispatchNamespace,
-                  metadata: {
-                    ...metadata,
-                    migrations: {
-                      ...migrations,
-                      oldTag: expectedTag,
-                      newTag: bumpMigrationTagVersion(expectedTag),
-                    },
-                  },
-                  files: bundle.files,
-                });
-              }
-              // @effect-diagnostics-next-line anyUnknownInErrorContext:off
-              return Effect.fail(err as any);
-            }),
-          );
         }
+
         const { settings, durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
           name,
           expectedDurableObjectClassNames,
@@ -4886,27 +4821,14 @@ export const LiveWorkerProvider = () =>
                 compatibilityFlags: compatibility.flags,
                 containers,
                 // A fresh script: every hosted class is new and SQLite-backed.
-                // Dispatch-namespace uploads don't accept `exports`.
                 exports:
-                  !dispatchNamespace && doClasses.length > 0
+                  doClasses.length > 0
                     ? Object.fromEntries(
                         doClasses.map((className) => [
                           className,
                           { type: "durable-object", storage: "sqlite" },
                         ]),
                       )
-                    : undefined,
-                migrations:
-                  dispatchNamespace && doClasses.length > 0
-                    ? {
-                        oldTag: undefined,
-                        newTag: undefined,
-                        newClasses: [],
-                        deletedClasses: [],
-                        renamedClasses: [],
-                        transferredClasses: [],
-                        newSqliteClasses: doClasses,
-                      }
                     : undefined,
                 observability: resolveObservability(news, bindings),
                 tags,
@@ -5521,12 +5443,14 @@ const contentTypeFromExtension = (extension: string) => {
  * it is about to delete has already been transferred away. Missing records
  * are inconclusive because pagination is not an atomic account snapshot.
  */
-const listDurableObjectNamespaces = (accountId: string) =>
+const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
   durableObjectsApi.listNamespaces.items({ accountId }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
-        ns.script && ns.class
+        // Only namespaces in the caller's context: an account-level script
+        // and a dispatch-namespace script may share a name.
+        ns.script && ns.class && (ns.dispatchNamespace ?? undefined) === dispatchNamespace
           ? [
               {
                 id: ns.id,
