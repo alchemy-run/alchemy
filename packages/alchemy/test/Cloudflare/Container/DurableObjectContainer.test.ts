@@ -383,9 +383,11 @@ for (const dev of [true, false]) {
               yield* stack.destroy();
 
               /**
-               * Exec and lifecycle routes are safe to repeat. A fresh workers.dev
-               * route can briefly 404 or drop a request while it settles, so
-               * each attempt is bounded and retried.
+               * Exec and lifecycle routes are safe to repeat. Right after a deploy,
+               * a workers.dev route can 404 or drop a request, and a Durable Object
+               * can still be served the pre-create placeholder ("Alchemy worker is
+               * being deployed") until the new version reaches it. Each attempt is
+               * bounded and retried for up to two minutes.
                */
               const call = <A>(url: string, path: string) =>
                 getJson<A>(url, path).pipe(
@@ -394,10 +396,10 @@ for (const dev of [true, false]) {
                     Effect.logWarning(`${url}${path} attempt failed`, error),
                   ),
                   Effect.retry({
-                    schedule: Schedule.spaced("1 second"),
-                    times: 8,
+                    schedule: Schedule.spaced("2 seconds"),
+                    times: 40,
                   }),
-                  within(`${url}${path}`, "45 seconds"),
+                  within(`${url}${path}`, "120 seconds"),
                 );
               const exec = (url: string, path: string) => call<ExecResult>(url, path);
 
@@ -567,7 +569,7 @@ for (const dev of [true, false]) {
                 }
               }
             }),
-          { timeout: 180_000, retry: 0 },
+          { timeout: 300_000, retry: 0 },
         );
       }
     },
