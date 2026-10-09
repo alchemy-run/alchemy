@@ -135,7 +135,26 @@ export interface BunHttpServerOptions {
    * @default "0.0.0.0"
    */
   hostname?: string;
+  /**
+   * Largest request body, in bytes, the Bun server accepts. Bun refuses a
+   * larger body with `413 Payload Too Large`, whether the size is declared
+   * by `Content-Length` or only discovered while a chunked body streams in.
+   *
+   * Container bootstraps call `BunHttpServer()` without options, so a
+   * `{ fetch }` service sets this through the `MAX_REQUEST_BODY_SIZE`
+   * environment variable instead (read the same way as `PORT`). An explicit
+   * option wins over the variable.
+   *
+   * @default Bun's default (128 MiB)
+   */
+  maxRequestBodySize?: number;
 }
+
+/** Resolves the Bun body limit: explicit option, then `MAX_REQUEST_BODY_SIZE`. */
+export const resolveMaxRequestBodySize = (options: { maxRequestBodySize?: number } | undefined) =>
+  options?.maxRequestBodySize !== undefined
+    ? Effect.succeed(options.maxRequestBodySize)
+    : Config.Number("MAX_REQUEST_BODY_SIZE").pipe(Config.option, Config.map(Option.getOrUndefined));
 
 export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
   Layer.effect(
@@ -148,9 +167,11 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
+            const maxRequestBodySize = yield* resolveMaxRequestBodySize(serverOptions);
             const server = yield* BunHttpServerPlatform.make({
               port,
               hostname: serverOptions?.hostname ?? "0.0.0.0",
+              ...(maxRequestBodySize !== undefined ? { maxRequestBodySize } : {}),
             });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
