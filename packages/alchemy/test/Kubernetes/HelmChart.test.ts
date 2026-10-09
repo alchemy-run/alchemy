@@ -18,7 +18,6 @@ import {
   KindTestCluster,
   kubectl,
   kubectlGet,
-  kindAvailable,
   type KindCluster,
 } from "./fixtures/kind.ts";
 
@@ -445,7 +444,7 @@ test.provider(
 const kindStack = Core.scratchStack(testOptions, "KubernetesHelmChartKind");
 
 // Creates a real kind cluster (~30s); needs Docker, kind, kubectl, and helm.
-suite.skipIf(!kindAvailable)(
+suite(
   "Kubernetes HelmChart on kind",
   {
     tags: [

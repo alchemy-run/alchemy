@@ -27,7 +27,6 @@ import {
   removeRbac,
   restrictedConnection,
   updateRole,
-  kindAvailable,
   type KindCluster,
 } from "./fixtures/kind.ts";
 
@@ -198,7 +197,7 @@ test.provider(
 const kindStack = Core.scratchStack(testOptions, "KubernetesManifestKind");
 
 // Creates a real kind cluster (~30s); needs Docker, kind, and kubectl.
-describe.skipIf(!kindAvailable)(
+describe(
   "Kubernetes Manifest on kind",
   { tags: [...tags, "provider:kubernetes:localcluster", "live"] },
   () => {

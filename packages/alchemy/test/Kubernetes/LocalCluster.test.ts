@@ -16,7 +16,6 @@ import { imagePlatformOf } from "@/Kubernetes/internal/workload.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import { kindAvailable } from "./fixtures/kind.ts";
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
@@ -154,7 +153,7 @@ const stack = Core.scratchStack(testOptions, "LocalClusterE2E");
 
 // Creates a real kind cluster (~30s) and builds images with Docker; needs
 // Docker and the kind CLI.
-describe.skipIf(!kindAvailable)("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
+describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
   let cluster: Kubernetes.LocalCluster["Attributes"];
   let jobName: string;
 
