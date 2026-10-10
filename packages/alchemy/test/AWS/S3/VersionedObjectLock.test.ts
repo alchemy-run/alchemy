@@ -111,10 +111,11 @@ const assertPermissions = Effect.gen(function* () {
     .pipe(Stream.runCollect);
   expect(
     attached.flatMap((page) => page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
-  ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
+  ).toEqual([]);
   const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
-    pages.flatMap((page) => page.PolicyNames),
+    // Skip the function's baseline logging policy; only binding grants count.
+    pages.flatMap((page) => page.PolicyNames).filter((name) => name !== "AlchemyLambdaExecution"),
     (PolicyName) =>
       Effect.gen(function* () {
         const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });

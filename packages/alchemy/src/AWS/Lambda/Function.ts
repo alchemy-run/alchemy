@@ -314,10 +314,12 @@ export interface FunctionCommonProps extends PlatformProps {
   /**
    * Retention for the function's CloudWatch log group
    * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
-   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
-   * log group so the policy applies before the first invocation, and
-   * deletes it with the function. When omitted the log group is left to
-   * Lambda, which creates it on first invoke with no expiry.
+   * `{ retention: "forever" }`. Alchemy always creates (or adopts) this log
+   * group before the function can be invoked and deletes it with the
+   * function; the execution role may write to it but cannot create log
+   * groups, so logs flushed after destroy are dropped rather than leaving a
+   * re-created group behind. When omitted the group's retention is left
+   * untouched (new groups never expire).
    */
   logging?: LogRetentionConfig;
 }
@@ -1246,6 +1248,12 @@ export const FunctionProvider = () =>
       });
 
       const xrayWriteAccessPolicyArn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+      const basicExecutionPolicyArn =
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole";
+      const vpcAccessExecutionPolicyArn =
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
+      /** Inline policy holding the role's baseline (logs + ENI) permissions. */
+      const executionPolicyName = "AlchemyLambdaExecution";
 
       /**
        * Converge the X-Ray write managed policy on the execution role with
@@ -1281,11 +1289,9 @@ export const FunctionProvider = () =>
       const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
-        vpc,
       }: {
         id: string;
         roleName: string;
-        vpc?: FunctionProps["vpc"];
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
@@ -1324,25 +1330,126 @@ export const FunctionProvider = () =>
             );
         }
 
-        yield* Effect.logDebug(`attaching policy ${id}`);
-        yield* iam
-          .attachRolePolicy({
-            RoleName: roleName,
-            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-          })
-          .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
-
-        if (vpc) {
-          yield* iam
-            .attachRolePolicy({
-              RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-            })
-            .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
-        }
-
-        yield* Effect.logDebug(`attached policy ${id}`);
         return role;
+      });
+
+      /**
+       * Converge the execution role's baseline permissions: an inline policy
+       * that lets the function write to ITS log group, plus the Hyperplane
+       * ENI actions for VPC-attached functions.
+       *
+       * Deliberately NOT the AWS managed `AWSLambdaBasicExecutionRole` /
+       * `AWSLambdaVPCAccessExecutionRole` policies: both grant
+       * `logs:CreateLogGroup` on `*`. Alchemy creates and owns
+       * `/aws/lambda/<name>` (see {@link ensureLogGroup}), so the function
+       * never needs to create it — and without that permission Lambda's
+       * asynchronous flush of an invocation that ran just before
+       * `deleteFunction` is dropped instead of silently re-creating the
+       * just-deleted group. That is what lets `delete` remove the group once
+       * instead of waiting out a ~40s flush window.
+       *
+       * Roles deployed before this change carry the managed policies; they
+       * are swapped for the inline policy here (the role is the function's
+       * own deterministic, Alchemy-created role, so any attachment of these
+       * two policies is ours). The ENI grant is sticky: once the function has
+       * been VPC-attached it is kept, since Lambda may still be releasing
+       * Hyperplane ENIs after the VPC config is removed (matching the prior
+       * behaviour of never detaching the managed VPC policy).
+       */
+      const syncExecutionPolicy = Effect.fn(function* ({
+        roleName,
+        functionName,
+        vpc,
+      }: {
+        roleName: string;
+        functionName: string;
+        vpc: boolean;
+      }) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        const attached = (
+          (yield* iam.listAttachedRolePolicies({ RoleName: roleName })).AttachedPolicies ?? []
+        ).flatMap((policy) => (policy.PolicyArn ? [policy.PolicyArn] : []));
+        const current = yield* iam
+          .getRolePolicy({ RoleName: roleName, PolicyName: executionPolicyName })
+          .pipe(
+            Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          );
+        const eni =
+          vpc ||
+          attached.includes(vpcAccessExecutionPolicyArn) ||
+          (current?.includes("ec2:CreateNetworkInterface") ?? false);
+        const document = {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Sid: "FunctionLogs",
+              Effect: "Allow",
+              Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+            },
+            ...(eni
+              ? [
+                  {
+                    Sid: "VpcNetworkInterfaces",
+                    Effect: "Allow",
+                    // AWSLambdaVPCAccessExecutionRole minus the logs actions.
+                    Action: [
+                      "ec2:CreateNetworkInterface",
+                      "ec2:DescribeNetworkInterfaces",
+                      "ec2:DescribeSubnets",
+                      "ec2:DeleteNetworkInterface",
+                      "ec2:AssignPrivateIpAddresses",
+                      "ec2:UnassignPrivateIpAddresses",
+                    ],
+                    Resource: "*",
+                  },
+                ]
+              : []),
+          ],
+        } satisfies IAM.PolicyDocument;
+        const observed =
+          current === undefined
+            ? undefined
+            : yield* Effect.try(() => JSON.parse(current) as unknown).pipe(
+                Effect.orElseSucceed(() => undefined),
+              );
+        if (!deepEqual(observed, document)) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: executionPolicyName,
+            PolicyDocument: JSON.stringify(document),
+          });
+        }
+        for (const legacy of [basicExecutionPolicyArn, vpcAccessExecutionPolicyArn]) {
+          if (attached.includes(legacy)) {
+            yield* iam
+              .detachRolePolicy({ RoleName: roleName, PolicyArn: legacy })
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+          }
+        }
+      });
+
+      /**
+       * Create (or adopt) the function's `/aws/lambda/<name>` log group
+       * before the function can be invoked. The execution role cannot create
+       * log groups (see {@link syncExecutionPolicy}), so this group is the
+       * only one the function ever writes to.
+       */
+      const ensureLogGroup = Effect.fn(function* ({
+        id,
+        functionName,
+        retention,
+      }: {
+        id: string;
+        functionName: string;
+        retention: LogRetentionConfig["retention"];
+      }) {
+        const logGroupName = `/aws/lambda/${functionName}`;
+        yield* logs
+          .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
+          .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+        yield* syncLogGroupRetention({ logGroupName, retention });
       });
 
       const withNodeSourceMaps = (
@@ -2219,11 +2326,9 @@ export const FunctionProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(id, news.functionName);
 
-          const role = yield* createRoleIfNotExists({
-            id,
-            roleName,
-            vpc: news.vpc,
-          });
+          const role = yield* createRoleIfNotExists({ id, roleName });
+          yield* syncExecutionPolicy({ roleName, functionName, vpc: news.vpc !== undefined });
+          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           const prepared = yield* preparePrecreatedFunctionCode({
             id,
@@ -2271,11 +2376,7 @@ export const FunctionProvider = () =>
           // deterministic role before syncing binding policies so reconcile
           // can recover from that partial state instead of failing the first
           // `putRolePolicy` with `NoSuchEntityException`.
-          const ensuredRole = yield* createRoleIfNotExists({
-            id,
-            roleName,
-            vpc: news.vpc,
-          });
+          const ensuredRole = yield* createRoleIfNotExists({ id, roleName });
           const roleArn = ensuredRole.Role.Arn ?? output?.roleArn;
 
           const {
@@ -2311,13 +2412,13 @@ export const FunctionProvider = () =>
           // The role may predate the VPC request (precreate stub, or a
           // binding newly asking for attachment) — the ENI permissions must
           // be on the role before the function config references the VPC.
-          // Attaching is idempotent.
-          if (vpc) {
-            yield* iam.attachRolePolicy({
-              RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-            });
-          }
+          // Also migrates roles that still carry the managed execution
+          // policies (which grant logs:CreateLogGroup) to the inline policy.
+          yield* syncExecutionPolicy({ roleName, functionName, vpc: vpc !== undefined });
+
+          // Alchemy owns the log group: it must exist before the function
+          // can be invoked, since the role cannot create it.
+          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           yield* syncTracingPolicy({
             roleName,
@@ -2438,17 +2539,6 @@ export const FunctionProvider = () =>
             config: news.eventInvokeConfig,
           });
 
-          // Lambda only auto-creates the log group on first invoke and with
-          // no expiry, so create (or adopt) it here to give the retention
-          // policy a group to attach to. The delete path already reaps it.
-          if (news.logging?.retention !== undefined) {
-            const logGroupName = `/aws/lambda/${functionName}`;
-            yield* logs
-              .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
-              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
-            yield* syncLogGroupRetention({ logGroupName, retention: news.logging.retention });
-          }
-
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.functionUrl,
@@ -2523,13 +2613,9 @@ export const FunctionProvider = () =>
             yield* functionImage.deleteRepository(output.code.image.repositoryName);
           }
 
-          // Release the execution role before the auxiliary CloudWatch Logs
-          // reap below. A recently invoked function can keep that reap alive
-          // for ~40 seconds while Lambda flushes its final log batches; if the
-          // process is interrupted during that window, leaving role deletion
-          // until afterwards strands the deterministic role. IAM can briefly
-          // report the just-detached role as still in use, so retry those
-          // eventual-consistency conflicts on a bounded schedule.
+          // IAM can briefly report the just-detached role as still in use,
+          // so retry those eventual-consistency conflicts on a bounded
+          // schedule.
           yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
             Effect.retry({
@@ -2541,104 +2627,17 @@ export const FunctionProvider = () =>
             }),
           );
 
-          // The floci emulator serves CloudWatch Logs but never recreates a
-          // group after the function is gone, so there is no flush window to
-          // watch. One bounded delete is enough; the live reap below (flush
-          // watch + observe→delete) would only add minutes of waiting.
-          if (yield* AWSEnvironment.isLocalEmulator) {
-            yield* logs.deleteLogGroup({ logGroupName: `/aws/lambda/${output.functionName}` }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.timeoutOrElse({
-                duration: "5 seconds",
-                orElse: () => Effect.void,
-              }),
-            );
-            return null as any;
-          }
-
-          // Lambda auto-creates /aws/lambda/{name} on the first invoke and
-          // deleteFunction does NOT remove it — without this every deleted
-          // function leaks an orphaned log group. Worse, the Lambda service
-          // flushes the final log batch asynchronously (observed up to ~35s
-          // after the last invoke, even after BOTH the function and its role
-          // are already deleted), silently re-creating a just-deleted group.
-          // The only reliable reap is a bounded watch over that flush window.
-          // There is NO cheap quiescence shortcut: the group's
-          // lastIngestionTime only reflects batches that have ALREADY been
-          // flushed, so an idle-looking group (last ingestion minutes ago)
-          // can still be recreated seconds later by an invocation that ran
-          // just before deleteFunction and has not flushed yet (observed
-          // live: invokes at t-8s/t-1s, group recreated at t+1s after a
-          // single-shot reap). Always watch the window.
+          // deleteFunction does NOT remove /aws/lambda/<name>. One delete is
+          // enough: the execution role has no logs:CreateLogGroup (see
+          // `syncExecutionPolicy`), so Lambda's asynchronous flush of an
+          // invocation that ran just before deleteFunction is dropped rather
+          // than re-creating the group — there is no flush window to wait
+          // out. (A role last deployed by an older Alchemy still held the
+          // managed AWSLambdaBasicExecutionRole until the detach above; such
+          // a function invoked within ~40s of its destroy can leave an empty
+          // re-created group behind, which the account census reaps.)
           const logGroupName = `/aws/lambda/${output.functionName}`;
-          const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            // CloudWatch Logs can sit in its SDK retry path for minutes
-            // under a full parallel sweep. Log-group cleanup is auxiliary
-            // to the already-completed Lambda delete, so bound each reap
-            // attempt while preserving the t=0/20/40 flush watch below.
-            Effect.timeoutOrElse({
-              duration: "5 seconds",
-              orElse: () => Effect.logWarning(`Timed out reaping Lambda log group ${logGroupName}`),
-            }),
-          );
-          // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
-          yield* reapLogGroup.pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("20 seconds"),
-              times: 2,
-            }),
-          );
-
-          // A timed-out delete attempt above is not deletion proof, and the
-          // Lambda service keeps flushing buffered logs AFTER the function is
-          // deleted (typically ~35s, occasionally much longer), silently
-          // re-creating a just-deleted group. Converge with a bounded
-          // observe→delete loop: any reappearance is simply deleted again
-          // (every delete is idempotent — ResourceNotFoundException means
-          // done). A recreation we deleted counts as gone; a flush landing
-          // after our final check is inherently unobservable and the next
-          // nuke census is the backstop. We only fail loudly if the group is
-          // still observable at budget exhaustion AND a final delete attempt
-          // did not remove it — i.e. the group is genuinely undeletable.
-          const describeLogGroup = logs
-            .describeLogGroups({
-              logGroupNamePrefix: logGroupName,
-              limit: 1,
-            })
-            .pipe(
-              Effect.map((response) =>
-                (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
-              ),
-            );
-
-          // Loop observation: a describe that can't complete in time (API
-          // throttling under a busy account / saturated test run) is NOT
-          // deletion proof — assume the group is still present and let the
-          // bounded loop keep converging instead of dying on a slow read.
-          const observeLogGroup = describeLogGroup.pipe(
-            Effect.timeoutOrElse({
-              duration: "30 seconds",
-              orElse: () =>
-                Effect.logWarning(
-                  `Timed out observing Lambda log group ${logGroupName} — assuming still present`,
-                ).pipe(Effect.as(true)),
-            }),
-          );
-
-          // Final authoritative observation: here a timeout must fail loudly,
-          // since we are about to declare the delete converged.
-          const observeLogGroupOrDie = describeLogGroup.pipe(
-            Effect.timeoutOrElse({
-              duration: "30 seconds",
-              orElse: () =>
-                Effect.die(
-                  new Error(`Timed out confirming Lambda log group deletion: ${logGroupName}`),
-                ),
-            }),
-          );
-
-          const deleteLogGroupAgain = logs.deleteLogGroup({ logGroupName }).pipe(
+          yield* logs.deleteLogGroup({ logGroupName }).pipe(
             Effect.retry({
               while: (error) =>
                 error._tag === "OperationAbortedException" ||
@@ -2652,36 +2651,6 @@ export const FunctionProvider = () =>
                 Effect.die(new Error(`Timed out deleting Lambda log group ${logGroupName}`)),
             }),
           );
-
-          const reapIfObserved = Effect.gen(function* () {
-            const present = yield* observeLogGroup;
-            if (present) {
-              yield* deleteLogGroupAgain;
-            }
-            return present;
-          });
-
-          // Happy path (no reappearance): a single describe, done. On a
-          // post-delete flush recreation: delete and re-check every 5s for
-          // up to ~90s after the last reappearance-free observation.
-          const observedAtBudgetEnd = yield* reapIfObserved.pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("5 seconds"),
-              until: (present) => !present,
-              times: 18,
-            }),
-          );
-
-          // Budget exhausted with the group still reappearing: the last loop
-          // iteration already issued a delete. One final authoritative
-          // observation decides — absent means our delete of the latest
-          // recreation stuck (gone); present means the group survives its own
-          // deletion (denied/undeletable) and must fail loudly.
-          if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
-            return yield* Effect.die(
-              new Error(`Lambda log group ${logGroupName} remained observable after delete`),
-            );
-          }
 
           return null as any;
         }),

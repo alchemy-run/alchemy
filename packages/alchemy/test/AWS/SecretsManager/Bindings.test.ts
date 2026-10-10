@@ -53,7 +53,8 @@ const policyDocument = Schema.fromJsonString(
 const secretRolePermissions = Effect.fn(function* (roleName: string) {
   const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
-    pages.flatMap((page) => page.PolicyNames),
+    // Skip the function's baseline logging policy; only binding grants count.
+    pages.flatMap((page) => page.PolicyNames).filter((name) => name !== "AlchemyLambdaExecution"),
     Effect.fn(function* (PolicyName) {
       const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });
       const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));
@@ -293,7 +294,7 @@ describe.sequential(
               attached.flatMap((page) =>
                 (page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
               ),
-            ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
+            ).toEqual([]);
           }),
         { tags: ["provider:aws:iam"], timeout: 120_000 },
       );

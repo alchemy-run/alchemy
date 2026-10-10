@@ -246,6 +246,115 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 360_000 },
 );
 
+// Alchemy owns `/aws/lambda/<name>` and the execution role can write to it
+// but cannot create log groups, so destroy deletes the group exactly once:
+// Lambda's asynchronous flush of an invocation that ran right before the
+// delete is dropped instead of silently recreating the group.
+test.provider(
+  "destroy right after an invoke removes the log group for good",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("FlushFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: false,
+        }),
+      );
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const describeGroup = Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
+        Effect.map((r) => (r.logGroups ?? []).find((g) => g.logGroupName === logGroupName)),
+      );
+
+      // Created by Alchemy before any invocation.
+      expect(yield* describeGroup).toBeDefined();
+
+      // No managed policy (AWSLambdaBasicExecutionRole grants
+      // logs:CreateLogGroup on *); logging rides an inline policy scoped to
+      // this function's group.
+      const attached = yield* iam.listAttachedRolePolicies({ RoleName: fn.roleName });
+      expect(attached.AttachedPolicies ?? []).toEqual([]);
+      const { PolicyDocument } = yield* iam.getRolePolicy({
+        RoleName: fn.roleName,
+        PolicyName: "AlchemyLambdaExecution",
+      });
+      const document = JSON.parse(decodeURIComponent(PolicyDocument)) as {
+        Statement: { Action: string[]; Resource: string }[];
+      };
+      expect(document.Statement).toHaveLength(1);
+      expect(document.Statement[0]!.Action).toEqual(["logs:CreateLogStream", "logs:PutLogEvents"]);
+      expect(document.Statement[0]!.Resource).toMatch(
+        new RegExp(`:log-group:${logGroupName.replaceAll("/", "\\/")}:\\*$`),
+      );
+
+      // Invocations whose log batches are still in flight at delete time.
+      for (let i = 0; i < 3; i++) {
+        const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
+        expect(response.FunctionError).toBeUndefined();
+      }
+
+      const [elapsed] = yield* Effect.timed(stack.destroy());
+      yield* Effect.logInfo(`destroy took ${Duration.format(elapsed)}`);
+      // No flush window to wait out (previously ~40s+).
+      expect(Duration.toSeconds(elapsed)).toBeLessThan(30);
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+      expect(yield* describeGroup).toBeUndefined();
+
+      // Lambda flushes the final batches up to ~35s after the last invoke;
+      // without logs:CreateLogGroup they are dropped and the group stays gone.
+      yield* Effect.sleep("60 seconds");
+      expect(yield* describeGroup).toBeUndefined();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 180_000 },
+);
+
+// Roles deployed by older Alchemy versions carry the managed
+// AWSLambdaBasicExecutionRole (logs:CreateLogGroup on *); the next deploy
+// swaps it for the scoped inline policy.
+test.provider(
+  "migrates a legacy managed execution policy to the inline policy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (marker: string) =>
+        stack.deploy(
+          AWS.Lambda.Function("LegacyRoleFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            env: { MARKER: marker },
+          }),
+        );
+      const fn = yield* deploy("v1");
+
+      // Recreate the pre-migration role shape out-of-band.
+      yield* iam.attachRolePolicy({
+        RoleName: fn.roleName,
+        PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      });
+      yield* iam.deleteRolePolicy({ RoleName: fn.roleName, PolicyName: "AlchemyLambdaExecution" });
+
+      // Any update runs reconcile, which converges the role.
+      yield* deploy("v2");
+
+      const attached = yield* iam.listAttachedRolePolicies({ RoleName: fn.roleName });
+      expect(attached.AttachedPolicies ?? []).toEqual([]);
+      const { PolicyNames } = yield* iam.listRolePolicies({ RoleName: fn.roleName });
+      expect(PolicyNames).toContain("AlchemyLambdaExecution");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"], timeout: 120_000 },
+);
+
 test.provider(
   "installs explicit external packages into the deployment artifact",
   (stack) =>
