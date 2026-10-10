@@ -264,14 +264,18 @@ describe(
 // ---------------------------------------------------------------------------
 // Full runtime fixture: a Lambda bound to all twenty-three bindings against a
 // live Developer-edition index + S3 data source. An index takes ~20-30
-// minutes to provision and bills hourly once ACTIVE, so this is gated behind
-// AWS_TEST_SLOW=1 (same gate as the Index lifecycle test) and always destroys
-// what it created.
+// minutes to provision and bills hourly once ACTIVE. Amazon Kendra is also
+// closed to new customers ("Amazon Kendra is no longer accepting new
+// customers. For more information, see
+// https://docs.aws.amazon.com/kendra/latest/dg/kendra-availability-change.html",
+// typed KendraClosedToNewCustomers — probed in SearchIndex.test.ts), so this
+// is gated behind AWS_TEST_SLOW=1 AND AWS_TEST_KENDRA=1 (same gate as the
+// Index lifecycle test) and always destroys what it created.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "KendraBindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!process.env.AWS_TEST_SLOW || !process.env.AWS_TEST_KENDRA)(
   "all bindings against a live index + data source",
   () =>
     Effect.gen(function* () {

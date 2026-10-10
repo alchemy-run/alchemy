@@ -121,6 +121,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDHSM)(
       const observed = described.Clusters?.[0];
       expect(observed?.ClusterId).toBe(cluster.clusterId);
       expect(observed?.HsmType).toBe("hsm2m.medium");
+      expect(observed?.Mode).toBe("FIPS");
       expect(
         observed?.TagList?.some((tag) => tag.Key === "fixture" && tag.Value === "cloudhsm-cluster"),
       ).toBe(true);

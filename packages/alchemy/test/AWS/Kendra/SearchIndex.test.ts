@@ -8,11 +8,17 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// Kendra is reachable but an index takes ~20-30 minutes to provision and
-// bills hourly once ACTIVE (Developer edition included after free tier).
-// The ungated probes assert the distilled wiring surfaces the typed
-// not-found errors the provider's read/delete paths depend on; the full
-// lifecycle is gated behind AWS_TEST_SLOW=1.
+// Amazon Kendra is closed to new customers: CreateIndex on an account that
+// never used it fails with "Amazon Kendra is no longer accepting new
+// customers. For more information, see
+// https://docs.aws.amazon.com/kendra/latest/dg/kendra-availability-change.html"
+// (wire NotAuthorizedException, typed as KendraClosedToNewCustomers). The
+// ungated probes assert the typed not-found errors the provider's read/delete
+// paths depend on, and the typed closed-to-new-customers rejection. The full
+// lifecycle (an index takes ~20-30 minutes to provision and bills hourly once
+// ACTIVE) is gated behind AWS_TEST_SLOW=1 AND AWS_TEST_KENDRA=1 for an
+// account that is still an existing Kendra customer.
+const kendraLifecycleGated = !process.env.AWS_TEST_SLOW || !process.env.AWS_TEST_KENDRA;
 describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "live"] }, () => {
   test.provider(
     "describeIndex on a nonexistent id yields a typed ResourceNotFoundException",
@@ -41,7 +47,26 @@ describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "li
     { timeout: 60_000 },
   );
 
-  test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+  // Fails before anything is created: the closed-to-new-customers check
+  // precedes role validation. If this ever starts failing with a different
+  // tag, the account can create indexes again — run with AWS_TEST_KENDRA=1.
+  test.provider(
+    "createIndex is rejected with a typed KendraClosedToNewCustomers",
+    (_stack) =>
+      Effect.gen(function* () {
+        const error = yield* kendra
+          .createIndex({
+            Name: "alchemy-closed-probe",
+            Edition: "DEVELOPER_EDITION",
+            RoleArn: "arn:aws:iam::123456789012:role/alchemy-kendra-probe-nonexistent",
+          })
+          .pipe(Effect.flip);
+        expect(error._tag).toBe("KendraClosedToNewCustomers");
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider.skipIf(kendraLifecycleGated)(
     "create developer index + S3 data source, update, destroy, verify gone",
     (stack) =>
       Effect.gen(function* () {
