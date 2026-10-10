@@ -92,7 +92,10 @@ export interface EventSourceMappingProps {
   tumblingWindow?: Duration.Input;
   /**
    * A list of current response type enums applied to the event source mapping.
-   * @default ["ReportBatchItemFailures"]
+   * Defaults to `["ReportBatchItemFailures"]` for SQS, Kinesis and DynamoDB
+   * Streams sources, and for other sources (e.g. Kafka/MSK) only when
+   * `provisionedPollerConfig.MinimumPollers` is set — they reject it otherwise.
+   * @default ["ReportBatchItemFailures"] (SQS, Kinesis, DynamoDB Streams)
    */
   functionResponseTypes?: FunctionResponseType[];
   /**
@@ -112,8 +115,10 @@ export interface EventSourceMappingProps {
    */
   kmsKeyArn?: string;
   /**
-   * Metrics configuration for the event source mapping.
-   * @default { Metrics: ["EventCount"] }
+   * Metrics configuration for the event source mapping. Defaulted only for
+   * SQS, Kinesis and DynamoDB Streams sources, or other sources (Kafka/MSK)
+   * with `provisionedPollerConfig.MinimumPollers` set.
+   * @default { Metrics: ["EventCount"] } (where supported)
    */
   metricsConfig?: lambda.EventSourceMappingMetricsConfig;
   /**
@@ -509,6 +514,23 @@ export const EventSourceMappingProvider = () =>
         };
       });
 
+      // ReportBatchItemFailures and MetricsConfig are only accepted for
+      // SQS / Kinesis / DynamoDB Streams, or for other sources (Kafka/MSK)
+      // in provisioned-poller mode — MSK rejects them otherwise ("... is only
+      // available for provisioned mode"). Only default them where valid.
+      const supportsDefaults = (props: EventSourceMappingProps): boolean =>
+        /^arn:[^:]+:(sqs|kinesis|dynamodb):/.test(String(props.eventSourceArn)) ||
+        props.provisionedPollerConfig?.MinimumPollers !== undefined;
+      const defaultFunctionResponseTypes = (
+        props: EventSourceMappingProps,
+      ): FunctionResponseType[] | undefined =>
+        props.functionResponseTypes ??
+        (supportsDefaults(props) ? ["ReportBatchItemFailures"] : undefined);
+      const defaultMetricsConfig = (
+        props: EventSourceMappingProps,
+      ): lambda.EventSourceMappingMetricsConfig | undefined =>
+        props.metricsConfig ?? (supportsDefaults(props) ? { Metrics: ["EventCount"] } : undefined);
+
       const toCreateRequest = (
         props: EventSourceMappingProps,
         tags: Record<string, string>,
@@ -525,12 +547,12 @@ export const EventSourceMappingProvider = () =>
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? ["ReportBatchItemFailures"],
+        FunctionResponseTypes: defaultFunctionResponseTypes(props),
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
-        MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
+        MetricsConfig: defaultMetricsConfig(props),
         ProvisionedPollerConfig: props.provisionedPollerConfig,
         AmazonManagedKafkaEventSourceConfig: props.amazonManagedKafkaEventSourceConfig,
         SelfManagedKafkaEventSourceConfig: props.selfManagedKafkaEventSourceConfig,
@@ -542,6 +564,15 @@ export const EventSourceMappingProvider = () =>
         LoggingConfig: props.loggingConfig,
         Tags: tags,
       });
+
+      const withoutConsumerGroupId = <
+        C extends { ConsumerGroupId?: string; SchemaRegistryConfig?: unknown },
+      >(
+        config: C | undefined,
+      ): C | undefined =>
+        config?.SchemaRegistryConfig === undefined
+          ? undefined
+          : ({ ...config, ConsumerGroupId: undefined } as C);
 
       const toUpdateRequest = (
         uuid: string,
@@ -556,15 +587,21 @@ export const EventSourceMappingProvider = () =>
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? ["ReportBatchItemFailures"],
+        FunctionResponseTypes: defaultFunctionResponseTypes(props),
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
-        MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
+        MetricsConfig: defaultMetricsConfig(props),
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        AmazonManagedKafkaEventSourceConfig: props.amazonManagedKafkaEventSourceConfig,
-        SelfManagedKafkaEventSourceConfig: props.selfManagedKafkaEventSourceConfig,
+        // ConsumerGroupId is create-only — UpdateEventSourceMapping rejects it
+        // ("Unsupported '...consumerGroupId' parameter"); changing it replaces.
+        AmazonManagedKafkaEventSourceConfig: withoutConsumerGroupId(
+          props.amazonManagedKafkaEventSourceConfig,
+        ),
+        SelfManagedKafkaEventSourceConfig: withoutConsumerGroupId(
+          props.selfManagedKafkaEventSourceConfig,
+        ),
         SourceAccessConfigurations: props.sourceAccessConfigurations,
         DocumentDBEventSourceConfig: props.documentDBEventSourceConfig,
         LoggingConfig: props.loggingConfig,
@@ -595,6 +632,14 @@ export const EventSourceMappingProvider = () =>
             return { action: "replace" } as const;
           }
           if (!deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)) {
+            return { action: "replace" } as const;
+          }
+          if (
+            news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+              olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId ||
+            news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+              olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId
+          ) {
             return { action: "replace" } as const;
           }
         }),
