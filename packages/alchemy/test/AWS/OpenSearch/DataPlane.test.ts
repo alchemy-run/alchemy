@@ -25,7 +25,9 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 }> {}
 
 // Retry only transient 5xx (cold re-init, IAM propagation on the freshly
-// attached es:ESHttp* policy); a genuine 4xx surfaces immediately.
+// attached es:ESHttp* policy); a genuine 4xx surfaces immediately. Bounded
+// well under the 120s test timeout (~31s total) so a persistent fixture
+// failure surfaces its body instead of a bare timeout.
 const send = (request: HttpClientRequest.HttpClientRequest) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
@@ -39,7 +41,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
