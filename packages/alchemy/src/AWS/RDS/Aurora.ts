@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import type { MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -178,6 +179,8 @@ export interface AuroraProps {
     | "dbParameterGroupName"
     | "vpcSecurityGroupIds"
     | "tags"
+    | "migrations"
+    | "migrationsSecretArn"
   > & {
     tags?: Record<string, Input<string>>;
   };
@@ -186,6 +189,18 @@ export interface AuroraProps {
    * @default true
    */
   dataApi?: boolean;
+  /**
+   * SQL migrations to apply to `databaseName` on deploy, over the Data API
+   * once the writer is available. Accepts a directory path, a
+   * `Drizzle.Schema` resource, or `{ dir, table? }`. Requires `dataApi`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy. The Data API runs one statement per
+   * call: put each statement in its own file or separate statements with
+   * `--> statement-breakpoint` (drizzle-kit's default).
+   */
+  migrations?: MigrationsInput;
   /**
    * Backup retention period (e.g. `"7 days"`), forwarded to the cluster.
    */
@@ -336,6 +351,16 @@ const inferProxyEngineFamily = (engine: string) => {
  * });
  * ```
  *
+ * ### Migrations
+ * **Example:** Apply migrations once the writer is up
+ * ```typescript
+ * const db = yield* AWS.RDS.Aurora("AppDb", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   securityGroupIds: [databaseSecurityGroup.groupId],
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
  * ### Querying from a Function
  * **Example:** Query over the Data API
  * ```typescript
@@ -354,6 +379,11 @@ export const Aurora = (id: string, props: AuroraProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
+      if (props.migrations && props.dataApi === false) {
+        return yield* Effect.die(
+          `Aurora '${id}': "migrations" are applied over the Data API and require "dataApi" to be enabled.`,
+        );
+      }
       const engine = props.engine ?? "aurora-postgresql";
       const engineVersion = props.engineVersion;
       const databaseName = props.databaseName ?? "app";
@@ -505,6 +535,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
           props.instance?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
+        migrations: props.migrations,
+        migrationsSecretArn: props.migrations ? secret.secretArn : undefined,
       });
 
       const readers = yield* Effect.all(

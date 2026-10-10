@@ -1,11 +1,14 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as rds from "@distilled.cloud/aws/rds";
+import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +18,7 @@ import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
+import { Aurora } from "@/AWS/RDS/Aurora.ts";
 import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Drift from "@/Drift";
@@ -2402,4 +2406,75 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+);
+
+// An Aurora cluster plus writer takes ~15+ minutes to create and delete,
+// far beyond the default test budget.
+test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "Aurora writer applies migrations over the Data API, then only pending ones",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-aurora-migrations-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_users.sql"),
+        "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
+      );
+      const deployDb = stack.deploy(
+        Effect.gen(function* () {
+          const net = yield* Network("MigrationsNet", { cidrBlock: "10.44.0.0/16" });
+          const securityGroup = yield* SecurityGroup("MigrationsDbSecurityGroup", {
+            vpcId: net.vpcId,
+            description: "alchemy Aurora migrations test",
+          });
+          const db = yield* Aurora("MigrationsDb", {
+            subnetIds: net.privateSubnetIds,
+            securityGroupIds: [securityGroup.groupId],
+            migrations: migrationsDir,
+          });
+          return {
+            clusterArn: db.cluster.dbClusterArn,
+            secretArn: db.secret.secretArn,
+            writer: db.writer,
+          };
+        }),
+      );
+
+      yield* stack.destroy();
+
+      const created = yield* deployDb;
+      expect(created.writer.migrationsTable).toEqual("__alchemy_migrations");
+      expect(Object.keys(created.writer.migrationsHashes)).toEqual(["0001_users.sql"]);
+
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0002_posts.sql"),
+        "CREATE TABLE posts (id SERIAL PRIMARY KEY, title TEXT NOT NULL);",
+      );
+      const updated = yield* deployDb;
+      expect(updated.clusterArn).toEqual(created.clusterArn);
+      expect(updated.writer.dbiResourceId).toEqual(created.writer.dbiResourceId);
+      expect(Object.keys(updated.writer.migrationsHashes).sort()).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+
+      // Out-of-band: the bookkeeping rows via the Data API.
+      const applied = yield* rdsdata.executeStatement({
+        resourceArn: created.clusterArn,
+        secretArn: created.secretArn,
+        database: "app",
+        sql: "SELECT name FROM __alchemy_migrations ORDER BY id;",
+        formatRecordsAs: "JSON",
+      });
+      expect(JSON.parse(applied.formattedRecords ?? "[]")).toEqual([
+        { name: "0001_users.sql" },
+        { name: "0002_posts.sql" },
+      ]);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"], timeout: 2_400_000 },
 );
