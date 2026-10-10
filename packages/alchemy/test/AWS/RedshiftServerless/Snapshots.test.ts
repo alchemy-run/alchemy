@@ -44,10 +44,10 @@ const SNAPSHOT_NAME = "alchemy-test-rssnap-snapshot";
 
 let baseUrl: string;
 
-// The full lifecycle deploys a Redshift Serverless namespace (no workgroup,
-// so no RPU billing floor — but namespace + snapshot provisioning still takes
-// minutes), so it is gated behind AWS_TEST_REDSHIFT=1 and destroys everything
-// in afterAll.
+// The full lifecycle deploys a Redshift Serverless namespace + workgroup
+// (CreateSnapshot requires the namespace to have a workgroup; it bills an RPU
+// floor while it exists, ~1-2 min to provision), so it is gated behind
+// AWS_TEST_REDSHIFT=1 and destroys everything in afterAll.
 describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
   "RedshiftServerless Snapshot Bindings",
   { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:redshiftserverless", "live"] },
@@ -68,7 +68,7 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         yield* Effect.logInfo(`Snapshot bindings setup: function URL ready (${functionUrl})`);
       }),
-      // namespace (~1 min) + Lambda deploy.
+      // namespace (~1 min) + workgroup (~1-2 min) + Lambda deploy.
       { timeout: 600_000 },
     );
 
@@ -94,11 +94,10 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
           // Create — retried while the fresh function URL warms up.
           const created = (yield* json(
             HttpClientRequest.post(`${baseUrl}/snapshot?name=${SNAPSHOT_NAME}`),
-          ).pipe(
-            Effect.retry({
-              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
-            }),
-          )) as { snapshotName?: string; status?: string };
+          ).pipe(Effect.retry({ schedule: Schedule.exponential("1 second"), times: 6 }))) as {
+            snapshotName?: string;
+            status?: string;
+          };
           expect(created.snapshotName).toBe(SNAPSHOT_NAME);
 
           // Poll via GetSnapshot until the snapshot settles to AVAILABLE.
