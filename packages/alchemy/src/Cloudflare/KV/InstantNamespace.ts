@@ -1,7 +1,6 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -10,14 +9,17 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localAccountId } from "../LocalAccount.ts";
-import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { isInstantNamespaceLocalId } from "./InstantNamespaceLocal.ts";
+import {
+  createInstantNamespaceLocalId,
+  isInstantNamespaceLocalId,
+} from "./InstantNamespaceLocal.ts";
+import { NamespaceModeMismatch } from "./NamespaceTypes.ts";
 
-export const isNamespace = (value: unknown): value is Namespace =>
-  isResourceOfType(value, "Cloudflare.KV.Namespace");
+export const isInstantNamespace = (value: unknown): value is InstantNamespace =>
+  isResourceOfType(value, "Cloudflare.KV.InstantNamespace");
 
-export type NamespaceProps = {
+export type InstantNamespaceProps = {
   /**
    * A human-readable string name for the namespace.
    * If omitted, a unique name will be generated.
@@ -26,13 +28,19 @@ export type NamespaceProps = {
   title?: string;
 };
 
-export type Namespace = Resource<
-  "Cloudflare.KV.Namespace",
-  NamespaceProps,
+export type InstantNamespace = Resource<
+  "Cloudflare.KV.InstantNamespace",
+  InstantNamespaceProps,
   {
+    /** Namespace storage mode, fixed at creation. */
+    mode: "instant";
+    /** Human-readable namespace title. */
     title: string;
+    /** Cloudflare namespace identifier, stable across title updates. */
     namespaceId: string;
+    /** Whether keys written in URLs are URL-decoded before storage. */
     supportsUrlEncoding: boolean | undefined;
+    /** Account that owns the namespace. */
     accountId: string;
   },
   never,
@@ -40,49 +48,57 @@ export type Namespace = Resource<
 >;
 
 /**
- * A Cloudflare Workers KV namespace for key-value storage at the edge.
+ * A Cloudflare Workers KV Instant namespace, powered by Quicksilver.
  *
- * KV provides eventually-consistent, low-latency reads with global
- * replication. Create a namespace as a resource, then bind it to a Worker
- * to get/put values at runtime.
- * ### Creating a Namespace
- * **Example:** Basic KV namespace
+ * Requires private beta access. Uses the same Worker binding as classic KV,
+ * with fast global replication and no cold reads. Namespace mode is fixed at
+ * creation; switching between Namespace and InstantNamespace replaces it.
+ *
+ * Metadata is unsupported. Use get instead of getWithMetadata, and do not
+ * pass metadata to put. Listing returns all matching keys without pagination.
+ * The beta limits namespaces to 1 MB and 10,000 pairs, keys to 300 bytes,
+ * and writes to one per namespace per second.
+ *
+ * Storage and put/delete/list operations cost substantially more than classic
+ * KV; reads cost less. See https://blog.cloudflare.com/workers-kv-instant/
+ * for pricing and private beta availability.
+ *
+ * ### Creating an Instant Namespace
+ * **Example:** Application configuration
  * ```typescript
- * const kv = yield* Cloudflare.KV.Namespace("MyKV");
+ * const config = yield* Cloudflare.KV.InstantNamespace("Config");
  * ```
  *
  * ### Binding to a Worker
- * **Example:** Using KV inside a Worker
+ * **Example:** Read configuration using the existing KV binding
  * ```typescript
- * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
- *
- * // Read a value
- * const value = yield* kv.get("my-key");
- *
- * // Write a value
- * yield* kv.put("my-key", "hello world");
+ * const client = yield* Cloudflare.KV.ReadNamespace(config);
+ * const enabled = yield* client.get("feature-enabled");
  * ```
  *
- * Provide `Cloudflare.KV.ReadWriteNamespaceBinding` (native Worker
- * binding) or `Cloudflare.KV.ReadWriteNamespaceHttp` (scoped HTTP
- * token) in the worker's runtime layer. Use `Cloudflare.KV.ReadNamespace`
- * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
- * write-only access.
+ * Provide ReadNamespaceBinding on the Worker runtime. WriteNamespace and
+ * ReadWriteNamespace also accept Instant namespaces, as do their Http and
+ * Local capability implementations.
+ *
+ * During `alchemy dev`, the namespace uses persistent local KV storage without
+ * cloud credentials or beta access. Local mode rejects metadata and lists all
+ * matching keys in one response. Local keys are limited to 300 UTF-8 bytes.
+ * Namespace storage quotas, key-count limits, global replication, billing,
+ * and write throttling are not emulated. Use Alchemy.remote()
+ * to opt into a live namespace during development (requires beta access).
  *
  * @resource
  * @product KV
  * @category Storage & Databases
  */
-export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
-  aliases: ["Cloudflare.KVNamespace"],
-});
+export const InstantNamespace = Resource<InstantNamespace>("Cloudflare.KV.InstantNamespace");
 
-export const ProviderLive = () =>
-  Provider.succeed(Namespace, {
+const ProviderLive = () =>
+  Provider.succeed(InstantNamespace, {
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output && "mode" in output && output.mode === "instant") {
+      if (output && output.mode !== "instant") {
         return {
           action: "replace",
           // Titles are unique across modes; an unresolved title may also reuse it.
@@ -104,7 +120,7 @@ export const ProviderLive = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const title = yield* createTitle(id, news.title);
+      const title = news.title ?? output?.title ?? (yield* createTitle(id, undefined));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached namespace; fall back to a title
@@ -115,6 +131,7 @@ export const ProviderLive = () =>
             id: string;
             title: string;
             supportsUrlEncoding?: boolean | null | undefined;
+            mode?: "instant" | null;
           }
         | undefined;
       if (output?.namespaceId) {
@@ -134,46 +151,23 @@ export const ProviderLive = () =>
           .createNamespace({
             accountId: acct,
             title,
+            mode: "instant",
           })
           .pipe(
-            Effect.catchTag("NamespaceTitleAlreadyExists", () =>
+            Effect.catchTag("NamespaceTitleAlreadyExists", (error) =>
               Effect.gen(function* () {
                 const match = yield* findNamespaceByTitle(title);
                 if (match) {
                   return match;
                 }
-                return yield* Effect.die(
-                  `Namespace with title "${title}" already exists but could not be found`,
-                );
+                return yield* Effect.fail(error);
               }),
             ),
-            // A freshly created namespace is visible to the control plane
-            // immediately, but the KV value API can answer
-            // `NamespaceNotFound` (code 10013) for a short window — under
-            // load long enough that a consumer writing right after deploy
-            // (an Action, a Worker's first request) fails. Wait until a
-            // value read reaches the namespace (`KeyNotFound` for a sentinel
-            // key proves it exists on the data plane).
-            Effect.tap((created) =>
-              kv
-                .getNamespaceMetadata({
-                  accountId: acct,
-                  namespaceId: created.id,
-                  keyName: "__alchemy_namespace_ready__",
-                })
-                .pipe(
-                  Effect.asVoid,
-                  Effect.catchTag("KeyNotFound", () => Effect.void),
-                  Effect.retry({
-                    while: (e) => e._tag === "NamespaceNotFound",
-                    schedule: Schedule.exponential("250 millis", 1.5),
-                    times: 10,
-                  }),
-                  // Readiness is best-effort: never fail the deploy on it.
-                  Effect.catchTag("NamespaceNotFound", () => Effect.void),
-                ),
-            ),
           );
+      }
+
+      if (observed.mode !== "instant") {
+        return yield* new NamespaceModeMismatch({ namespaceId: observed.id, expected: "instant" });
       }
 
       // Sync — KV's only mutable property is the title. Rename only
@@ -194,6 +188,7 @@ export const ProviderLive = () =>
       }
 
       return {
+        mode: "instant" as const,
         title: resolvedTitle,
         namespaceId,
         supportsUrlEncoding,
@@ -215,8 +210,9 @@ export const ProviderLive = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
-              .filter((ns) => ns.mode !== "instant")
+              .filter((ns) => ns.mode === "instant")
               .map((ns) => ({
+                mode: "instant" as const,
                 title: ns.title,
                 namespaceId: ns.id,
                 supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
@@ -235,12 +231,19 @@ export const ProviderLive = () =>
             namespaceId: output.namespaceId,
           })
           .pipe(
-            Effect.map((namespace) => ({
-              title: namespace.title,
-              namespaceId: namespace.id,
-              supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-              accountId: output.accountId,
-            })),
+            Effect.flatMap((namespace) =>
+              namespace.mode !== "instant"
+                ? Effect.fail(
+                    new NamespaceModeMismatch({ namespaceId: namespace.id, expected: "instant" }),
+                  )
+                : Effect.succeed({
+                    mode: "instant" as const,
+                    title: namespace.title,
+                    namespaceId: namespace.id,
+                    supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
+                    accountId: output.accountId,
+                  }),
+            ),
             Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
           );
       }
@@ -248,6 +251,7 @@ export const ProviderLive = () =>
       const match = yield* findNamespaceByTitle(title);
       if (match) {
         return {
+          mode: "instant" as const,
           title: match.title,
           namespaceId: match.id,
           supportsUrlEncoding: match.supportsUrlEncoding ?? undefined,
@@ -258,47 +262,37 @@ export const ProviderLive = () =>
     }),
   });
 
-/**
- * Local (dev) provider — the namespace is purely virtual: a `dev:` id keyed
- * into the local workerd KV simulator. `toRuntimeBinding` lowers a
- * `kv_namespace` binding whose id is `dev:`-prefixed onto the local KV
- * service; data persists under `.alchemy/local/kv`.
- */
-export const ProviderLocal = () =>
-  Provider.succeed(Namespace, {
-    stables: ["accountId"],
-    diff: Effect.fn(function* ({ news = {}, output }) {
+/** Persistent local workerd namespace; no Cloudflare API calls. */
+const ProviderLocal = () =>
+  Provider.succeed(InstantNamespace, {
+    stables: ["namespaceId", "accountId"],
+    diff: Effect.fn(function* ({ output }) {
       const accountId = yield* localAccountId;
-      if (!output?.namespaceId) return { action: "update" } as const;
-      if (isInstantNamespaceLocalId(output.namespaceId)) return { action: "replace" } as const;
-      if (!isResolved(news)) return undefined;
-      if (output.accountId !== accountId) {
+      if (output && !isInstantNamespaceLocalId(output.namespaceId)) {
         return { action: "replace" } as const;
       }
-      // Fall through to the engine's default prop diff (title renames
-      // update in place).
+      if (output && output.accountId !== accountId) return { action: "replace" } as const;
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const accountId = yield* localAccountId;
       return {
-        title: yield* createTitle(id, news.title),
-        namespaceId: output?.namespaceId ?? generateLocalId(),
+        mode: "instant" as const,
+        title: news.title ?? output?.title ?? (yield* createTitle(id, undefined)),
+        namespaceId: output?.namespaceId ?? createInstantNamespaceLocalId(),
         supportsUrlEncoding: true,
         accountId: output?.accountId ?? accountId,
       };
     }),
     delete: Effect.fn(function* () {
-      // The simulator's on-disk data is keyed by the dev id; dropping the
-      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+      // Matches classic local KV: orphaned storage is reclaimed with .alchemy.
     }),
   });
 
-export const NamespaceProvider = () =>
-  ProviderLayer.dual(Namespace, {
+export const InstantNamespaceProvider = () =>
+  ProviderLayer.dual(InstantNamespace, {
     local: () => ProviderLocal(),
     live: () => ProviderLive(),
   });
@@ -315,7 +309,7 @@ const createTitle = (id: string, title: string | undefined) =>
 const findNamespaceByTitle = Effect.fn(function* (title: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* kv.listNamespaces.items({ accountId }).pipe(
-    Stream.filter((ns) => ns.title === title && ns.mode !== "instant"),
+    Stream.filter((ns) => ns.title === title && ns.mode === "instant"),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );

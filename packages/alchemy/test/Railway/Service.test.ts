@@ -480,6 +480,78 @@ test.provider(
   },
 );
 
+test.provider(
+  "deleting one environment's service keeps its instances in other environments",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Railway keeps one service per project with an instance per
+      // environment. A second Service with the same name attaches to it.
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const staging = yield* Railway.Environment("Staging", { project });
+          const prod = yield* Railway.Service("WebProd", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+          });
+          const stage = yield* Railway.Service("WebStaging", {
+            project,
+            environment: staging,
+            name: prod.name,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+          });
+          return { prod, stage };
+        }),
+      );
+      expect(created.stage.serviceId).toEqual(created.prod.serviceId);
+      expect(created.stage.environmentId).not.toEqual(created.prod.environmentId);
+
+      // Dropping the staging Service must only delete its instance.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          yield* Railway.Environment("Staging", { project });
+          const prod = yield* Railway.Service("WebProd", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+            publicDomain: false,
+          });
+          return { prod };
+        }),
+      );
+
+      const service = yield* readService(created.prod.serviceId);
+      expect(service.deletedAt).toBeNull();
+      const prodInstance = yield* readServiceInstance(
+        created.prod.environmentId,
+        created.prod.serviceId,
+      );
+      expect(prodInstance.serviceId).toEqual(created.prod.serviceId);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.prod.serviceId)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);
+
 const localContextDir = `${import.meta.dirname}/fixtures/local-context`;
 
 test.provider(

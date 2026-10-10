@@ -146,7 +146,7 @@ export const KvNamespaceLive = Layer.effect(
 export const local = (props: KvNamespaceProps): BindingHook<KvNamespace> =>
   Plugin.use(KvNamespace, (kv) =>
     Effect.map(
-      kv.api.register({ namespaceId: props.id ?? props.binding }),
+      kv.api.register({ namespaceId: props.id ?? props.binding, mode: props.mode }),
       (service): WorkerdConfig.Worker_Binding => ({
         name: props.binding,
         kvNamespace: service,
