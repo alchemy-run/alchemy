@@ -63,7 +63,15 @@ describe.sequential(
           const get = (path: string) =>
             HttpClient.get(`${baseUrl}${path}`).pipe(
               Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
-              Effect.flatMap((res) => res.json),
+              Effect.flatMap((res) =>
+                res.status === 200
+                  ? res.json
+                  : res.text.pipe(
+                      Effect.flatMap((body) =>
+                        Effect.die(new Error(`GET ${path} -> ${res.status}: ${body}`)),
+                      ),
+                    ),
+              ),
             );
 
           const brokers = (yield* get("/brokers")) as { saslIam?: string };
@@ -79,8 +87,15 @@ describe.sequential(
           expect(connect.bootstrapServers).toContain(":9098");
           expect(connect.clusterArn).toBe(cluster.clusterArn);
 
-          const topics = (yield* get("/topics")) as { topics: string[] };
-          expect(Array.isArray(topics.topics)).toBe(true);
+          const topics = (yield* get("/topics")) as { topics?: string[]; error?: string };
+          // MSK Serverless rejects the topic control plane with the typed
+          // `ServerlessUnsupported` ("Topic APIs are not supported on
+          // serverless clusters.") — either branch proves the grant works.
+          if (topics.error === undefined) {
+            expect(Array.isArray(topics.topics)).toBe(true);
+          } else {
+            expect(["BadRequestException", "ServerlessUnsupported"]).toContain(topics.error);
+          }
 
           const roundtrip = (yield* get("/topics/roundtrip")) as {
             created: boolean;
