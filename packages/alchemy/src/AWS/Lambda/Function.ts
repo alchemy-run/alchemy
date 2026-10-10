@@ -1384,7 +1384,7 @@ export const FunctionProvider = () =>
           Statement: [
             {
               Sid: "FunctionLogs",
-              Effect: "Allow",
+              Effect: "Allow" as const,
               Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
               Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
             },
@@ -1392,7 +1392,7 @@ export const FunctionProvider = () =>
               ? [
                   {
                     Sid: "VpcNetworkInterfaces",
-                    Effect: "Allow",
+                    Effect: "Allow" as const,
                     // AWSLambdaVPCAccessExecutionRole minus the logs actions.
                     Action: [
                       "ec2:CreateNetworkInterface",
