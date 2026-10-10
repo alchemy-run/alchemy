@@ -115,7 +115,7 @@ export const ContextProvider = () =>
           if (output) return attrs;
           return attrs;
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           if (!isResolved(news)) return undefined;
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
@@ -132,6 +132,10 @@ export const ContextProvider = () =>
           }
 
           if (!Equal.equals(oldDesired, newDesired)) {
+            return { action: "update" as const };
+          }
+
+          if (output && !(yield* inspect(output.id))) {
             return { action: "update" as const };
           }
 

@@ -39,6 +39,55 @@ describe(
       }),
     );
 
+    test.provider("plans an image whose context is missing from the local docker", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-docker-missing-context-",
+        });
+        yield* fs.writeFileString(
+          path.join(root, "Dockerfile"),
+          "FROM scratch\nLABEL alchemy.test=missing-context\n",
+        );
+
+        const endpoint = (yield* docker.run([
+          "context",
+          "inspect",
+          "--format",
+          "{{.Endpoints.docker.Host}}",
+        ])).stdout.trim();
+
+        const program = Effect.gen(function* () {
+          const context = yield* Docker.Context("machine-local-context", {
+            docker: `host=${endpoint}`,
+          });
+          const image = yield* Docker.Image("machine-local-image", {
+            tag: "latest",
+            context,
+            build: { context: root },
+          });
+          return { context, image };
+        });
+
+        yield* stack.destroy();
+        const first = yield* stack.deploy(program);
+        yield* docker.context.remove(first.context.name, true);
+
+        const plan = yield* stack.plan(program);
+        expect(plan.resources["machine-local-context"]).toMatchObject({ action: "update" });
+        expect(plan.resources["machine-local-image"]).toMatchObject({ action: "update" });
+
+        const second = yield* stack.deploy(program);
+        expect(second.image.imageRef).toBe(first.image.imageRef);
+        const live = yield* docker.context.inspect(first.context.name);
+        expect(live.Name).toBe(first.context.name);
+
+        yield* stack.destroy();
+      }),
+    );
+
     test.provider("builds a tiny Dockerfile with an auto-generated name", (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
