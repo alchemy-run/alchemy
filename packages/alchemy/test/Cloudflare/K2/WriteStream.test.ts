@@ -148,7 +148,9 @@ test.provider(
 );
 
 // WriteStreamHttp / StreamSinkHttp mint a scoped `K2 Produce` API token;
-// set CLOUDFLARE_TEST_K2_HTTP=1 with credentials that can create API tokens.
+// set CLOUDFLARE_TEST_K2_HTTP=1 with credentials carrying the K2 permission
+// groups (K2 Config Read/Write, K2 Consume, K2 Produce). Without them even the
+// stream read fails with `Unauthorized: Authentication error` (code 10000).
 // The HTTP client path itself is covered through the `*Local` layers in
 // ReadSubscription.test.ts.
 test.provider.skipIf(!process.env.CLOUDFLARE_TEST_K2_HTTP)(

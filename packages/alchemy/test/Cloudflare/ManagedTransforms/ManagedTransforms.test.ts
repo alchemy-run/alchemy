@@ -10,13 +10,6 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-// The account-wide `list` test intermittently fails with a `Forbidden`
-// (fresh-token 403 blip) because — unlike every other call in this suite —
-// `provider.list()` is not wrapped in a `Forbidden` retry. Skipped by default;
-// set RUN_MANAGED_TRANSFORMS_LIST_TEST=1 to run it. (Alternatively it could be
-// fixed by retrying the typed `Forbidden` around `provider.list()`.)
-const runManagedTransformsListTest = !!process.env.RUN_MANAGED_TRANSFORMS_LIST_TEST;
-
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
@@ -256,24 +249,30 @@ describe.sequential(
     // API for the managed-transforms catalog, so `list()` enumerates every zone
     // via `listAllZones` and reads the singleton in each. Assert the result is
     // non-empty and contains the standing test zone.
-    test.provider.skipIf(!runManagedTransformsListTest)(
-      "list enumerates managed transforms across all zones",
-      (stack) =>
-        Effect.gen(function* () {
-          const zoneId = yield* resolveZoneId;
+    test.provider("list enumerates managed transforms across all zones", (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.ManagedTransforms.ManagedTransforms,
-          );
-          const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ManagedTransforms.ManagedTransforms,
+        );
+        // A freshly minted scoped token intermittently 403s — ride out the
+        // typed `Forbidden` blips like every other call in this suite.
+        const all = yield* provider.list().pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+        );
 
-          expect(all.length).toBeGreaterThan(0);
-          expect(all.some((t) => t.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((t) => t.zoneId === zoneId)).toBe(true);
 
-          // `stack` is unused here (the singleton always exists on every zone),
-          // but keep the destroy bookend so the harness state stays clean.
-          yield* stack.destroy();
-        }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
     );
   },
 );

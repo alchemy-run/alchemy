@@ -10,8 +10,9 @@
  * rules, catch-alls, destination addresses, sending subdomains) against the
  * standing test zone, so all of them need the scope.
  *
- * Set `CLOUDFLARE_TEST_EMAIL_ROUTING=1` with an API-token credential that
- * carries `Zone.Email Routing Rules` (edit) plus account-level
- * `Email Routing Addresses` to run them.
+ * The standing testing credential (an API token carrying `Zone.Email Routing
+ * Rules` (edit) plus account-level `Email Routing Addresses`) has the scope,
+ * so the suites run by default. Set `CLOUDFLARE_TEST_EMAIL_ROUTING=0` to skip
+ * them skip-clean under a credential without it (e.g. Cloudflare OAuth).
  */
-export const emailRoutingScoped = !!process.env.CLOUDFLARE_TEST_EMAIL_ROUTING;
+export const emailRoutingScoped = process.env.CLOUDFLARE_TEST_EMAIL_ROUTING !== "0";

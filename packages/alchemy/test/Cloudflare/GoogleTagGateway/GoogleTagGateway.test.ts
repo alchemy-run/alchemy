@@ -280,22 +280,7 @@ describe.sequential(
     // enumerates every zone via `listAllZones` and reads each one, skipping
     // zones that have never configured the feature. Deploy a config on the
     // standing test zone and assert it shows up in the enumeration.
-    //
-    // SKIP REASON (distilled core schema-decode bug): for a zone that has never
-    // configured Google Tag Gateway the API returns `{"result":null,...}`. The
-    // distilled core client coerces a null `result` to `{}` before decoding
-    // (packages/core/src/client.ts:826 — `responsePath === "result" && nested
-    // === null ? {} : nested`). `GetConfigResponse` is `Union([Struct, Null])`,
-    // so `{}` matches neither branch and the op fails with an untyped, uncatchable
-    //   CloudflareHttpError: {"result":null,"success":true,"errors":[],"messages":[]}
-    //   status: 200, statusText: 'Schema decode failed'
-    // Because this is a *success-response* decode failure (not an error response),
-    // the per-service error-patch system can't convert it to a typed tag — the fix
-    // must be in distilled core: only coerce null `result` to `{}` when the output
-    // schema does NOT accept null (e.g. `if (!Schema.is(outputSchema)(null)) …`).
-    // Until that lands, any account with at least one unconfigured zone breaks
-    // enumeration. Run with CLOUDFLARE_TEST_GTG_LIST=1 once distilled is fixed.
-    test.provider.skipIf(!process.env.CLOUDFLARE_TEST_GTG_LIST)(
+    test.provider(
       "list enumerates configured zones",
       (stack) =>
         Effect.gen(function* () {

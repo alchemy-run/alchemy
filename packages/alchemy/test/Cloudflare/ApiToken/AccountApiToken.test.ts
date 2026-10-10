@@ -13,7 +13,7 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-describe.skip(
+describe(
   "AccountApiToken",
   { tags: ["provider:cloudflare", "provider:cloudflare:apitoken", "live"] },
   () => {
