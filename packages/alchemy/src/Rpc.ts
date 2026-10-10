@@ -1,13 +1,14 @@
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Option from "effect/Option";
+import * as Pull from "effect/Pull";
 import * as Result from "effect/Result";
-import * as Sink from "effect/Sink";
+import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "./Http.ts";
@@ -291,32 +292,44 @@ const appendStreamErrors = <R>(s: Stream.Stream<string, unknown, R>) =>
   s.pipe(Stream.catchCause((cause) => cause.pipe(encodeStreamErrorMarker, Stream.succeed)));
 
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const [head, rest] = yield* Stream.peel(stream, Sink.head());
+  Effect.gen(function* () {
+    // The stream runs in this scope. The envelope's body is read after this
+    // effect returns, so the scope stays open until the body is drained or
+    // cancelled; closing it on return would release the stream's resources
+    // (and end the body) after the first element.
+    const scope = yield* Scope.make();
+    const pull = yield* Stream.toPull(stream).pipe(Scope.provide(scope));
+    // Peek at the whole first chunk to pick the encoding, then send it ahead of
+    // the rest; peeking a single element would drop the chunk's others.
+    const first = yield* pull.pipe(
+      Pull.catchDone(() => Effect.succeed(undefined)),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+    );
+    const body = (
+      first === undefined
+        ? Stream.empty
+        : Stream.fromArray(first).pipe(Stream.concat(pull.pipe(Effect.succeed, Stream.fromPull)))
+    ).pipe(Stream.ensuring(Scope.close(scope, Exit.void)));
 
-      if (Option.isSome(head) && head.value instanceof Uint8Array) {
-        return {
-          _tag: StreamTag,
-          encoding: "bytes",
-          body: Stream.toReadableStream(rest.pipe(Stream.prepend([head.value]))),
-        } satisfies RpcStreamEnvelope;
-      }
-
-      const body = Option.isSome(head) ? rest.pipe(Stream.prepend([head.value])) : rest;
-
+    if (first !== undefined && first[0] instanceof Uint8Array) {
       return {
         _tag: StreamTag,
-        encoding: "jsonl",
-        body: body.pipe(
-          Stream.map((value) => JSON.stringify(value) + "\n"),
-          appendStreamErrors,
-          Stream.encodeText,
-          Stream.toReadableStream(),
-        ),
+        encoding: "bytes",
+        body: Stream.toReadableStream(body),
       } satisfies RpcStreamEnvelope;
-    }),
-  ).pipe(
+    }
+
+    return {
+      _tag: StreamTag,
+      encoding: "jsonl",
+      body: body.pipe(
+        Stream.map((value) => JSON.stringify(value) + "\n"),
+        appendStreamErrors,
+        Stream.encodeText,
+        Stream.toReadableStream(),
+      ),
+    } satisfies RpcStreamEnvelope;
+  }).pipe(
     Effect.catchCause((cause) => {
       const failReason = cause.reasons.find(Cause.isFailReason);
       if (failReason) {
