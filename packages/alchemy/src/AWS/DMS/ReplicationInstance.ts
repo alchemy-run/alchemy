@@ -19,7 +19,7 @@ export interface ReplicationInstanceProps {
    */
   replicationInstanceIdentifier?: string;
   /**
-   * Compute and memory class, e.g. `"dms.t3.micro"`, `"dms.c5.large"`.
+   * Compute and memory class, e.g. `"dms.t3.small"`, `"dms.c5.large"`.
    */
   replicationInstanceClass: string;
   /**
@@ -92,7 +92,7 @@ export interface ReplicationInstance extends Resource<
     replicationInstanceIdentifier: string;
     /** The ARN of the replication instance. */
     replicationInstanceArn: string;
-    /** The compute class of the instance, e.g. `dms.t3.micro`. */
+    /** The compute class of the instance, e.g. `dms.t3.small`. */
     replicationInstanceClass: string;
     /** The current status of the instance, e.g. `available`. */
     status: string | undefined;
@@ -118,7 +118,7 @@ export interface ReplicationInstance extends Resource<
  * **Example:** Small Instance in a Subnet Group
  * ```typescript
  * const instance = yield* ReplicationInstance("Migration", {
- *   replicationInstanceClass: "dms.t3.micro",
+ *   replicationInstanceClass: "dms.t3.small",
  *   allocatedStorage: 50,
  *   replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
  *   publiclyAccessible: false,
@@ -357,19 +357,39 @@ export const ReplicationInstanceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Deletion of an instance mid-create/modify is rejected with
-          // InvalidResourceStateFault — deletion is already impossible until it
-          // settles, so treat that (and NotFound) as success/in-progress.
-          yield* dms
-            .deleteReplicationInstance({
-              ReplicationInstanceArn: output.replicationInstanceArn,
-            })
-            .pipe(
-              Effect.catchTags({
-                ResourceNotFoundFault: () => Effect.void,
-                InvalidResourceStateFault: () => Effect.void,
-              }),
+          // Converge to "gone", not just "delete requested": a `deleting`
+          // instance still holds its replication subnet group, so deleting
+          // the group right after fails with InvalidResourceStateFault
+          // ("Cannot delete the subnet group ... because at least one
+          // replication instance ... is using it"). Each attempt observes the
+          // instance; a mid-create/modify instance rejects deletion with
+          // InvalidResourceStateFault until it settles, so retry then too.
+          // Instance deletion takes ~5-10 minutes; budget ~15 min (15s x 60).
+          yield* Effect.gen(function* () {
+            const instance = yield* findInstance(output.replicationInstanceIdentifier);
+            if (instance === undefined) return;
+            if (instance.ReplicationInstanceStatus !== "deleting") {
+              yield* dms
+                .deleteReplicationInstance({
+                  ReplicationInstanceArn: output.replicationInstanceArn,
+                })
+                .pipe(
+                  Effect.catchTags({
+                    ResourceNotFoundFault: () => Effect.void,
+                    InvalidResourceStateFault: () => Effect.void,
+                  }),
+                );
+            }
+            return yield* Effect.fail(
+              new Error(
+                `DMS replication instance '${output.replicationInstanceIdentifier}' still exists (status: ${instance.ReplicationInstanceStatus})`,
+              ),
             );
+          }).pipe(
+            Effect.retry({
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
+            }),
+          );
         }),
 
         list: () =>
