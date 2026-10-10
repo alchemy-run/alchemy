@@ -555,10 +555,7 @@ export const ContainerProvider = () =>
           }
           const live = yield* inspect(newArgs.name, dockerContextName(news.context));
           if (!live) return { action: "update" as const };
-          const statusAction = containerRuntimeStatusAction(
-            live.State.Status,
-            news.start ?? false,
-          );
+          const statusAction = containerRuntimeStatusAction(live.State.Status, news.start ?? false);
           if (statusAction === "replace") {
             return { action: "replace" as const, deleteFirst: true };
           }

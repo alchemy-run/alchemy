@@ -2,18 +2,18 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { Action } from "@/Action";
 import * as Docker from "@/Docker";
-import type { Docker as DockerApi } from "@/Docker/Docker";
 import {
   containerRuntimeStatusAction,
   ContainerRemovalTimeout,
   removeDockerContainer,
   waitForContainerRemoval,
 } from "@/Docker/Container";
+import type { Docker as DockerApi } from "@/Docker/Docker";
 import { healthcheckCommand, isHealthcheckDisabled } from "@/Docker/HealthcheckCommand";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
