@@ -17,6 +17,14 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = !process.env.FAST;
 
+// CloudFront itself bounds these lifecycles: a create waits ~5 min for
+// `Deployed`, a config update up to several more, and delete must disable
+// the distribution and wait for `Deployed` again (~3–5 min) before the
+// DeleteDistribution call. Under a loaded full-suite run create+update+delete
+// measured ~570s — right at the old 600s cap, so attempts timed out
+// mid-teardown. 15 min covers the platform floor with headroom.
+const DEPLOY_DELETE_TIMEOUT = 900_000;
+
 describe(
   "AWS.CloudFront.Distribution",
   { tags: ["provider:aws", "provider:aws:cloudfront", "live"] },
@@ -102,7 +110,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Fast probe (read-only): CloudFront `list()` exhaustively paginates
@@ -170,7 +178,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
     // Exercises the newly-exposed config gaps: geo restriction + custom error
     // responses. Creates with a whitelist + a custom 404, updates the geo
@@ -261,7 +269,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Regression for the UpdateDistribution full-config-replacement failure:
@@ -346,7 +354,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { timeout: 900_000 },
+      { timeout: DEPLOY_DELETE_TIMEOUT },
     );
   },
 );

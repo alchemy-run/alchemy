@@ -1,6 +1,8 @@
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -352,6 +354,15 @@ export const CertificatePackProvider = () =>
       // its packs, restricting to `advanced` packs (the only kind this
       // resource manages — universal/total_tls packs are not orderable).
       const zones = yield* listAllZones(accountId);
+      // Cloudflare auto-orders an `advanced` pack for every Worker custom
+      // domain (hosts `[apex, host, *.host]`) and owns its lifecycle — the
+      // domain's `certId` is that pack's id. Those packs are not ours to
+      // enumerate (deleting one strips TLS from a live custom domain), so
+      // exclude them.
+      const workerManaged = yield* workers.listDomains.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((domains) => new Set(Array.from(domains, (d) => d.certId))),
+      );
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
@@ -360,7 +371,10 @@ export const CertificatePackProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
-                  .filter((pack) => pack.type === "advanced")
+                  .filter(
+                    (pack) =>
+                      pack.type === "advanced" && !isTombstone(pack) && !workerManaged.has(pack.id),
+                  )
                   .map((pack) => toAttributes(zone.id, pack)),
               ),
             ),
@@ -376,16 +390,28 @@ export const CertificatePackProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Observe first — deleting an already-gone pack answers 404 (code
-      // 1408); treat missing as done so delete stays idempotent.
-      const observed = yield* getPack(output.zoneId, output.certificatePackId);
-      if (!observed) return;
-      yield* ssl
-        .deleteCertificatePack({
-          zoneId: output.zoneId,
-          certificatePackId: output.certificatePackId,
-        })
-        .pipe(Effect.catchTag("CertificatePackNotFound", () => Effect.void));
+      const { zoneId, certificatePackId } = output;
+      yield* Effect.gen(function* () {
+        // Observe first — a missing pack (404, code 1408), a `deleted`
+        // tombstone, or a pack Cloudflare is already deleting are all done.
+        const observed = yield* getPack(zoneId, certificatePackId);
+        if (!observed || observed.status === "pending_deletion") return;
+        yield* ssl
+          .deleteCertificatePack({ zoneId, certificatePackId })
+          .pipe(Effect.catchTag("CertificatePackNotFound", () => Effect.void));
+      }).pipe(
+        // Cloudflare's certificate service answers a code-less 400 "Bad
+        // response certificate service" while it is mid-transition on the
+        // pack (observed on a just-deleted tombstone). Re-observe on a short
+        // bounded schedule — the next pass usually sees the tombstone and
+        // returns. If the pack is still live after ~50s, fail honestly
+        // rather than report a delete that did not happen.
+        Effect.retry({
+          while: (e) => e._tag === "CertificatePackNotDeletable",
+          schedule: Schedule.spaced("5 seconds"),
+          times: 10,
+        }),
+      );
     }),
   });
 
@@ -400,13 +426,23 @@ type ObservedPack =
   | ssl.ListCertificatePacksResponse["result"][number];
 
 /**
+ * A deleted pack lingers for a minute or two as a `status: "deleted"`
+ * tombstone (still returned by get and by list with `status=all`). It is
+ * gone for every purpose: it cannot be patched, and deleting it again fails
+ * with `CertificatePackNotDeletable`.
+ */
+const isTombstone = (pack: { status: string }) => pack.status === "deleted";
+
+/**
  * Read a pack by id, mapping "gone" (`CertificatePackNotFound`, Cloudflare
- * error code 1408 / HTTP 404) and a deleted zone (`InvalidRoute`, code
- * 7003) to `undefined`.
+ * error code 1408 / HTTP 404, or a `deleted` tombstone) and a deleted zone
+ * (`InvalidRoute`, code 7003) to `undefined`.
  */
 const getPack = (zoneId: string, certificatePackId: string) =>
   ssl.getCertificatePack({ zoneId, certificatePackId }).pipe(
-    Effect.map((pack): ssl.GetCertificatePackResponse | undefined => pack),
+    Effect.map((pack): ssl.GetCertificatePackResponse | undefined =>
+      isTombstone(pack) ? undefined : pack,
+    ),
     Effect.catchTag(["CertificatePackNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
   );
 
@@ -419,7 +455,9 @@ const findByHosts = (zoneId: string, hosts: string[]) =>
   ssl.listCertificatePacks.items({ zoneId, status: "all" }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find((pack) => pack.type === "advanced" && sameHosts(pack.hosts, hosts)),
+      Array.from(chunk).find(
+        (pack) => pack.type === "advanced" && !isTombstone(pack) && sameHosts(pack.hosts, hosts),
+      ),
     ),
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
   );

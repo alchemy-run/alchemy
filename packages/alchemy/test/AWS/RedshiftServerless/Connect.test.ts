@@ -72,11 +72,13 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
               Effect.flatMap((res) =>
                 res.status === 200
                   ? Effect.succeed(res)
-                  : Effect.fail(new Error(`info returned ${res.status}`)),
+                  : Effect.flatMap(res.text, (body) =>
+                      Effect.fail(new Error(`info returned ${res.status}: ${body}`)),
+                    ),
               ),
-              Effect.retry({
-                schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
-              }),
+              // Bounded (~1 min) — covers function-URL warm-up and IAM
+              // propagation without masking a deterministic failure.
+              Effect.retry({ schedule: Schedule.exponential("1 second"), times: 6 }),
               Effect.flatMap((res) => res.json),
             );
 

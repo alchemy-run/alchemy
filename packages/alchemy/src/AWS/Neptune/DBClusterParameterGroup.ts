@@ -330,6 +330,8 @@ export const DBClusterParameterGroupProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBClusterParameterGroups ?? []).flatMap((group) =>
                   group.DBClusterParameterGroupName &&
+                  // `default.<family>` groups are AWS-managed and undeletable.
+                  !group.DBClusterParameterGroupName.startsWith("default.") &&
                   group.DBParameterGroupFamily?.startsWith("neptune")
                     ? [
                         {

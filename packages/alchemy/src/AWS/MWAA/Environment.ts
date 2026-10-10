@@ -434,36 +434,48 @@ export const EnvironmentProvider = () =>
           //    role, etc.) propagate so misconfiguration surfaces directly
           //    rather than as a confusing "not found" after the wait below.
           if (observed === undefined) {
-            yield* mwaa.createEnvironment({
-              Name: name,
-              ExecutionRoleArn: props.executionRoleArn,
-              SourceBucketArn: props.sourceBucketArn,
-              DagS3Path: props.dagS3Path,
-              NetworkConfiguration: {
-                SubnetIds: props.subnetIds,
-                SecurityGroupIds: props.securityGroupIds,
-              },
-              AirflowVersion: props.airflowVersion,
-              EnvironmentClass: props.environmentClass,
-              MaxWorkers: props.maxWorkers,
-              MinWorkers: props.minWorkers,
-              MaxWebservers: props.maxWebservers,
-              MinWebservers: props.minWebservers,
-              Schedulers: props.schedulers,
-              WebserverAccessMode: props.webserverAccessMode,
-              WeeklyMaintenanceWindowStart: props.weeklyMaintenanceWindowStart,
-              KmsKey: props.kmsKey,
-              EndpointManagement: props.endpointManagement,
-              AirflowConfigurationOptions: props.airflowConfigurationOptions,
-              PluginsS3Path: props.pluginsS3Path,
-              PluginsS3ObjectVersion: props.pluginsS3ObjectVersion,
-              RequirementsS3Path: props.requirementsS3Path,
-              RequirementsS3ObjectVersion: props.requirementsS3ObjectVersion,
-              StartupScriptS3Path: props.startupScriptS3Path,
-              StartupScriptS3ObjectVersion: props.startupScriptS3ObjectVersion,
-              LoggingConfiguration: toLoggingInput(props.loggingConfiguration),
-              Tags: desiredTags,
-            });
+            yield* mwaa
+              .createEnvironment({
+                Name: name,
+                ExecutionRoleArn: props.executionRoleArn,
+                SourceBucketArn: props.sourceBucketArn,
+                DagS3Path: props.dagS3Path,
+                NetworkConfiguration: {
+                  SubnetIds: props.subnetIds,
+                  SecurityGroupIds: props.securityGroupIds,
+                },
+                AirflowVersion: props.airflowVersion,
+                EnvironmentClass: props.environmentClass,
+                MaxWorkers: props.maxWorkers,
+                MinWorkers: props.minWorkers,
+                MaxWebservers: props.maxWebservers,
+                MinWebservers: props.minWebservers,
+                Schedulers: props.schedulers,
+                WebserverAccessMode: props.webserverAccessMode,
+                WeeklyMaintenanceWindowStart: props.weeklyMaintenanceWindowStart,
+                KmsKey: props.kmsKey,
+                EndpointManagement: props.endpointManagement,
+                AirflowConfigurationOptions: props.airflowConfigurationOptions,
+                PluginsS3Path: props.pluginsS3Path,
+                PluginsS3ObjectVersion: props.pluginsS3ObjectVersion,
+                RequirementsS3Path: props.requirementsS3Path,
+                RequirementsS3ObjectVersion: props.requirementsS3ObjectVersion,
+                StartupScriptS3Path: props.startupScriptS3Path,
+                StartupScriptS3ObjectVersion: props.startupScriptS3ObjectVersion,
+                LoggingConfiguration: toLoggingInput(props.loggingConfiguration),
+                Tags: desiredTags,
+              })
+              .pipe(
+                // A freshly created execution role is not yet assumable by
+                // airflow-env.amazonaws.com (IAM eventual consistency) —
+                // CreateEnvironment rejects it with "Failed to assume role" for
+                // several seconds. Retry bounded.
+                Effect.retry({
+                  while: (e) => e._tag === "MwaaExecutionRoleNotAssumable",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 10,
+                }),
+              );
           }
 
           // Provisioning and in-flight modifications both surface as a

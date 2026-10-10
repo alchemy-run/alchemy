@@ -116,7 +116,7 @@ const assertClusterDeleting = (identifier: string) =>
     Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
-// A Neptune cluster + instance take ~10 minutes to provision and bill per
+// A Neptune cluster + instance take ~15-30 minutes to provision and bill per
 // instance-hour while they exist. The full lifecycle is gated behind
 // AWS_TEST_SLOW=1 and always destroys what it created.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
@@ -183,9 +183,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertClusterDeleting(cluster.dbClusterIdentifier);
     }),
-  // cluster + instance create (~10 min) + delete initiation, one test.
+  // cluster create (~5-10 min) + serverless instance create (10-20 min) +
+  // instance/cluster delete-until-gone, one test.
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:neptune", "live"],
-    timeout: 1_500_000,
+    timeout: 2_700_000,
   },
 );

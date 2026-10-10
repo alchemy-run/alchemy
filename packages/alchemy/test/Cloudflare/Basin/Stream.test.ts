@@ -112,5 +112,8 @@ test.provider(
         "field 'value' is a union of different types",
       );
     }).pipe(logLevel),
-  { tags: ["provider:cloudflare", "provider:cloudflare:pipelines"], timeout: 60_000 },
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:pipelines", "local"],
+    timeout: 60_000,
+  },
 );

@@ -84,6 +84,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
                 InstanceType: "ml.t3.medium",
                 InstanceCount: 1,
                 ExecutionRole: role.roleArn,
+                // HyperPod provisions new Slurm clusters in Continuous mode,
+                // which rejects a cluster with no instance group carrying a
+                // SlurmConfig ("has no InstanceGroup with SlurmConfig which is
+                // required for Continuous Node Provisioning Mode clusters").
+                SlurmConfig: { NodeType: "Controller" },
                 LifeCycleConfig: {
                   // bucketName is the deterministic string computed above —
                   // interpolating bucket.bucketName here would coerce an

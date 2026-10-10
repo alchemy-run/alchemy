@@ -164,7 +164,8 @@ describe.sequential(
 // Data-plane binding (Connect + mongo) needs a real DocumentDB cluster +
 // instance (~15 min to provision, billed per instance-hour) and a Secrets
 // Manager VPC interface endpoint (the VPC-attached Lambda has no internet
-// path) — gated behind AWS_TEST_SLOW=1 like the DBCluster lifecycle test.
+// path; deployed and destroyed with the stack) — gated behind AWS_TEST_SLOW=1
+// like the DBCluster lifecycle test.
 // ---------------------------------------------------------------------------
 
 const slowStack = Core.scratchStack(testOptions, "DocDBSlowBindings");
@@ -200,59 +201,14 @@ const defaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.vpcId, subnetIds, securityGroupIds: [securityGroupId] };
 });
 
-// The VPC-attached Lambda resolves the master secret through a Secrets
-// Manager interface endpoint. Managed out-of-band (create-if-missing, keep
-// across runs — recreating interface endpoints costs ~2 min per run).
-const ensureSecretsManagerEndpoint = (network: {
-  vpcId: string;
-  subnetIds: string[];
-  securityGroupIds: string[];
-}) =>
-  Effect.gen(function* () {
-    // `Region`'s service value is itself an Effect — resolve twice.
-    const region = yield* yield* Region;
-    const serviceName = `com.amazonaws.${region}.secretsmanager`;
-    const existing = yield* EC2.describeVpcEndpoints({
-      Filters: [
-        { Name: "vpc-id", Values: [network.vpcId] },
-        { Name: "service-name", Values: [serviceName] },
-      ],
-    });
-    if ((existing.VpcEndpoints ?? []).length > 0) return;
-    yield* EC2.createVpcEndpoint({
-      VpcId: network.vpcId as `vpc-${string}`,
-      ServiceName: serviceName,
-      VpcEndpointType: "Interface",
-      SubnetIds: network.subnetIds as `subnet-${string}`[],
-      SecurityGroupIds: network.securityGroupIds as `sg-${string}`[],
-      PrivateDnsEnabled: true,
-      TagSpecifications: [
-        { ResourceType: "vpc-endpoint", Tags: [{ Key: "alchemy-test", Value: "docdb-bindings" }] },
-      ],
-    });
-    // Bounded readiness wait for the endpoint's private DNS to serve.
-    yield* EC2.describeVpcEndpoints({
-      Filters: [
-        { Name: "vpc-id", Values: [network.vpcId] },
-        { Name: "service-name", Values: [serviceName] },
-      ],
-    }).pipe(
-      Effect.flatMap((r) =>
-        r.VpcEndpoints?.[0]?.State === "available"
-          ? Effect.void
-          : Effect.fail(new Error("secretsmanager endpoint not available")),
-      ),
-      Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(24)]) }),
-    );
-  });
-
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "connect + mongo data plane against a live cluster",
   () =>
     Effect.gen(function* () {
       yield* slowStack.destroy();
       const network = yield* defaultNetwork;
-      yield* ensureSecretsManagerEndpoint(network);
+      // `Region`'s service value is itself an Effect — resolve twice.
+      const region = yield* yield* Region;
 
       // The fixture's init Effect runs in this process — pass the resolved
       // network through env (the module cannot look it up itself).
@@ -264,18 +220,40 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* Effect.gen(function* () {
         const { functionUrl } = yield* slowStack.deploy(
           Effect.gen(function* () {
+            // The VPC-attached Lambda resolves the master secret through a
+            // Secrets Manager interface endpoint. It is part of the stack
+            // (created and destroyed with the test) — an interface endpoint
+            // bills per AZ-hour, so it must never outlive the run.
+            yield* AWS.EC2.VpcEndpoint("SecretsManagerEndpoint", {
+              vpcId: network.vpcId as `vpc-${string}`,
+              serviceName: `com.amazonaws.${region}.secretsmanager`,
+              vpcEndpointType: "Interface",
+              subnetIds: network.subnetIds as `subnet-${string}`[],
+              securityGroupIds: network.securityGroupIds as `sg-${string}`[],
+              privateDnsEnabled: true,
+            });
             return yield* DocDBSlowTestFunction;
           }).pipe(Effect.provide(DocDBSlowTestFunctionLive)),
         );
         expect(functionUrl).toBeTruthy();
         const slowBaseUrl = functionUrl!.replace(/\/+$/, "");
 
+        // A non-200 is a test failure carrying the status — the fixture
+        // answers an empty 500 on a defect, which `r.json` decodes to null.
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
               schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
             }),
-            Effect.flatMap((r) => r.json),
+            Effect.flatMap((r) =>
+              r.status === 200
+                ? r.json
+                : r.text.pipe(
+                    Effect.flatMap((body) =>
+                      Effect.fail(new Error(`${path} returned ${r.status}: ${body}`)),
+                    ),
+                  ),
+            ),
           );
 
         // Connection info resolves from the runtime attributes, the secret,

@@ -80,6 +80,8 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
+  /** `LastUpdateStatusReasonCode` (or `StateReasonCode` for a failed create). */
+  reasonCode?: string;
 }> {
   override get message() {
     return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
@@ -1395,6 +1397,10 @@ export const FunctionProvider = () =>
             return yield* new FunctionUpdateFailed({
               functionName,
               reason: configuration.LastUpdateStatusReason ?? configuration.StateReason,
+              reasonCode:
+                configuration.LastUpdateStatus === "Failed"
+                  ? configuration.LastUpdateStatusReasonCode
+                  : configuration.StateReasonCode,
             });
           }
           if (
@@ -2385,9 +2391,31 @@ export const FunctionProvider = () =>
                   ? []
                   : undefined,
             session,
-          });
-
-          yield* waitForFunctionUpdate(functionName, session, vpc !== undefined);
+          }).pipe(
+            Effect.andThen(waitForFunctionUpdate(functionName, session, vpc !== undefined)),
+            // The create/update call can succeed while Lambda's ASYNC
+            // provisioning (VPC ENIs, EFS mounts) still fails with
+            // `InsufficientRolePermissions` — "The function's execution role
+            // doesn't have permission to perform this operation." — because
+            // the just-attached AWSLambdaVPCAccessExecutionRole /
+            // EFS client policy has not propagated yet. That is IAM eventual
+            // consistency, not a misconfiguration: re-apply the function
+            // (the create path falls through to update on conflict, which
+            // re-triggers provisioning) and wait again, bounded.
+            Effect.tapError((e) =>
+              e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions"
+                ? session.note(
+                    `Waiting for Lambda execution role permissions to propagate: ${functionName}`,
+                  )
+                : Effect.void,
+            ),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 6,
+            }),
+          );
 
           const previousImage = output?.code.image;
           const nextImage = "image" in prepared.attributes ? prepared.attributes.image : undefined;
@@ -2535,12 +2563,13 @@ export const FunctionProvider = () =>
           // after the last invoke, even after BOTH the function and its role
           // are already deleted), silently re-creating a just-deleted group.
           // The only reliable reap is a bounded watch over that flush window.
-          // A provably-quiescent group (last ingestion > 2 minutes ago —
-          // every pending flush has long since landed) deletes in a single
-          // call, so routine deletes of idle functions stay fast; a group
-          // with recent ingestion — or one that does not exist yet, where a
-          // first flush may still be in flight — is re-reaped on a short
-          // bounded schedule.
+          // There is NO cheap quiescence shortcut: the group's
+          // lastIngestionTime only reflects batches that have ALREADY been
+          // flushed, so an idle-looking group (last ingestion minutes ago)
+          // can still be recreated seconds later by an invocation that ran
+          // just before deleteFunction and has not flushed yet (observed
+          // live: invokes at t-8s/t-1s, group recreated at t+1s after a
+          // single-shot reap). Always watch the window.
           const logGroupName = `/aws/lambda/${output.functionName}`;
           const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -2553,40 +2582,13 @@ export const FunctionProvider = () =>
               orElse: () => Effect.logWarning(`Timed out reaping Lambda log group ${logGroupName}`),
             }),
           );
-          const lastIngestion = yield* logs
-            .describeLogStreams({
-              logGroupName,
-              orderBy: "LastEventTime",
-              descending: true,
-              limit: 1,
-            })
-            .pipe(
-              Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-              Effect.timeoutOrElse({
-                duration: "5 seconds",
-                orElse: () =>
-                  Effect.gen(function* () {
-                    yield* Effect.logWarning(
-                      `Timed out inspecting Lambda log group ${logGroupName}`,
-                    );
-                    return undefined;
-                  }),
-              }),
-            );
-          const now = yield* Effect.sync(() => Date.now());
-          const quiescent = lastIngestion !== undefined && now - lastIngestion > 120_000;
-          if (quiescent) {
-            yield* reapLogGroup;
-          } else {
-            // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
-            yield* reapLogGroup.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("20 seconds"),
-                times: 2,
-              }),
-            );
-          }
+          // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
+          yield* reapLogGroup.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 seconds"),
+              times: 2,
+            }),
+          );
 
           // A timed-out delete attempt above is not deletion proof, and the
           // Lambda service keeps flushing buffered logs AFTER the function is

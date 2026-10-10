@@ -40,8 +40,9 @@ export interface DbInstanceProps {
   vpcSecurityGroupIds: string[];
   /**
    * The initial InfluxDB admin password. Stored in AWS Secrets Manager by
-   * Timestream; supplied only at creation. Pass a redacted value, e.g.
-   * `Redacted.make("super-secret-password")`.
+   * Timestream; supplied only at creation. Must be alphanumeric
+   * (`[a-zA-Z0-9]+`, 8-64 characters). Pass a redacted value, e.g.
+   * `Redacted.make("SuperSecretPassword1")`.
    */
   password: Redacted.Redacted<string>;
   /**
@@ -170,7 +171,7 @@ export interface DbInstance extends Resource<
  *   allocatedStorage: 20,
  *   vpcSubnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   vpcSecurityGroupIds: [securityGroup.groupId],
- *   password: Redacted.make("super-secret-password"),
+ *   password: Redacted.make("SuperSecretPassword1"),
  * });
  * ```
  *

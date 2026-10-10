@@ -485,43 +485,54 @@ export const ClusterProvider = () =>
           let clusterId = observed?.Id;
           if (clusterId === undefined) {
             const instances = props.instances ?? {};
-            const created = yield* emr.runJobFlow({
-              Name: name,
-              ReleaseLabel: props.releaseLabel,
-              Applications: (props.applications ?? []).map((Name) => ({
-                Name,
-              })),
-              Instances: {
-                InstanceGroups: buildInstanceGroups(props.instances),
-                Ec2SubnetId: instances.ec2SubnetId,
-                Ec2KeyName: instances.ec2KeyName,
-                KeepJobFlowAliveWhenNoSteps: instances.keepJobFlowAliveWhenNoSteps ?? true,
-                TerminationProtected: instances.terminationProtected ?? false,
-                UnhealthyNodeReplacement: instances.unhealthyNodeReplacement,
-                EmrManagedMasterSecurityGroup: instances.emrManagedMasterSecurityGroup,
-                EmrManagedSlaveSecurityGroup: instances.emrManagedSlaveSecurityGroup,
-                AdditionalMasterSecurityGroups: instances.additionalMasterSecurityGroups,
-                AdditionalSlaveSecurityGroups: instances.additionalSlaveSecurityGroups,
-              },
-              ServiceRole: props.serviceRole,
-              JobFlowRole: props.jobFlowRole,
-              LogUri: props.logUri,
-              SecurityConfiguration: props.securityConfiguration,
-              Configurations: props.configurations,
-              VisibleToAllUsers: props.visibleToAllUsers ?? true,
-              EbsRootVolumeSize: props.ebsRootVolumeSize,
-              CustomAmiId: props.customAmiId,
-              StepConcurrencyLevel: props.stepConcurrencyLevel,
-              AutoTerminationPolicy: props.autoTerminationPolicy
-                ? {
-                    IdleTimeout: toWireSeconds(props.autoTerminationPolicy.idleTimeout),
-                  }
-                : undefined,
-              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            });
+            const created = yield* emr
+              .runJobFlow({
+                Name: name,
+                ReleaseLabel: props.releaseLabel,
+                Applications: (props.applications ?? []).map((Name) => ({
+                  Name,
+                })),
+                Instances: {
+                  InstanceGroups: buildInstanceGroups(props.instances),
+                  Ec2SubnetId: instances.ec2SubnetId,
+                  Ec2KeyName: instances.ec2KeyName,
+                  KeepJobFlowAliveWhenNoSteps: instances.keepJobFlowAliveWhenNoSteps ?? true,
+                  TerminationProtected: instances.terminationProtected ?? false,
+                  UnhealthyNodeReplacement: instances.unhealthyNodeReplacement,
+                  EmrManagedMasterSecurityGroup: instances.emrManagedMasterSecurityGroup,
+                  EmrManagedSlaveSecurityGroup: instances.emrManagedSlaveSecurityGroup,
+                  AdditionalMasterSecurityGroups: instances.additionalMasterSecurityGroups,
+                  AdditionalSlaveSecurityGroups: instances.additionalSlaveSecurityGroups,
+                },
+                ServiceRole: props.serviceRole,
+                JobFlowRole: props.jobFlowRole,
+                LogUri: props.logUri,
+                SecurityConfiguration: props.securityConfiguration,
+                Configurations: props.configurations,
+                VisibleToAllUsers: props.visibleToAllUsers ?? true,
+                EbsRootVolumeSize: props.ebsRootVolumeSize,
+                CustomAmiId: props.customAmiId,
+                StepConcurrencyLevel: props.stepConcurrencyLevel,
+                AutoTerminationPolicy: props.autoTerminationPolicy
+                  ? {
+                      IdleTimeout: toWireSeconds(props.autoTerminationPolicy.idleTimeout),
+                    }
+                  : undefined,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                // A freshly created EC2 instance profile is not yet visible to
+                // EMR (IAM eventual consistency) — RunJobFlow rejects it with
+                // "Invalid InstanceProfile" for several seconds. Retry bounded.
+                Effect.retry({
+                  while: (e) => e._tag === "EmrInstanceProfileNotReady",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 10,
+                }),
+              );
             if (!created.JobFlowId) {
               return yield* Effect.fail(
                 new Error(`RunJobFlow for '${name}' returned no JobFlowId`),

@@ -74,10 +74,31 @@ export const repeatUntilDomainState = <E extends { readonly _tag: string }, R>(
     until: done,
   });
 
-/** A domain is active once created and no config change is being applied. */
+/**
+ * The domain's search/HTTP endpoint: the public `Endpoint` (IPv4), else the
+ * dual-stack `EndpointV2`, else the VPC endpoint from the `Endpoints` map.
+ */
+export const domainEndpoint = (domain: opensearch.DomainStatus): string | undefined =>
+  domain.Endpoint ??
+  domain.EndpointV2 ??
+  domain.Endpoints?.vpc ??
+  Object.values(domain.Endpoints ?? {}).find((value) => value !== undefined);
+
+/**
+ * A domain is active once created, no config change is being applied, and
+ * its endpoint has been published. `Processing` can flip to `false` before
+ * creation has fully finished (`DomainProcessingStatus` still `"Creating"`,
+ * no `Endpoint` yet), so the processing status and the endpoint are both
+ * required — otherwise the reconciler returns `endpoint: undefined` and every
+ * data-plane binding resolves an empty endpoint.
+ */
 export const isDomainActive = (domain: opensearch.DomainStatus | undefined): boolean =>
   domain === undefined ||
-  (domain.Created === true && domain.Processing !== true && domain.Deleted !== true);
+  (domain.Created === true &&
+    domain.Processing !== true &&
+    domain.Deleted !== true &&
+    (domain.DomainProcessingStatus === undefined || domain.DomainProcessingStatus === "Active") &&
+    domainEndpoint(domain) !== undefined);
 
 /** A domain can be deleted once it is no longer applying a config change. */
 export const isDomainDeletable = (domain: opensearch.DomainStatus | undefined): boolean =>

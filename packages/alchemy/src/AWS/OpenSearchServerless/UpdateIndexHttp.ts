@@ -8,6 +8,6 @@ export const UpdateIndexHttp = Layer.effect(
   makeAossCollectionHttpBinding({
     tag: "AWS.OpenSearchServerless.UpdateIndex",
     operation: aoss.updateIndex,
-    actions: ["aoss:APIAccessAll"],
+    actions: ["aoss:UpdateIndex", "aoss:APIAccessAll"],
   }),
 );

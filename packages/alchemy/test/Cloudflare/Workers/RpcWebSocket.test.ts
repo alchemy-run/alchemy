@@ -153,6 +153,16 @@ const rawConnect = Effect.fn(
   }),
 );
 
+/**
+ * Name Durable Objects per test attempt. The deployed Worker is shared across
+ * runner retries, so a fixed name would reuse an activation whose in-memory
+ * `opened`/`closed`/`cleanupStarted` state an earlier attempt already filled.
+ */
+const freshObjects = Effect.sync(() => {
+  const suffix = crypto.randomUUID();
+  return (name: string) => `${name}-${suffix}`;
+});
+
 const readStats = Effect.fn(function* (url: string) {
   const response = yield* requestWorker(HttpClientRequest.get(url));
   if (response.status !== 200) {
@@ -234,7 +244,8 @@ describe.concurrent.each([
       "typed unary, failure, streaming, and HTTP clients share one object",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const { client } = yield* connect(`${url}/rpc/roundtrip`);
+        const object = yield* freshObjects;
+        const { client } = yield* connect(`${url}/rpc/${object("roundtrip")}`);
         const greeting = yield* client.greet({ name: "Sam" });
         expect(greeting).toBeInstanceOf(Greeting);
         expect(greeting.message).toBe("Hello, Sam!");
@@ -243,7 +254,9 @@ describe.concurrent.each([
         expect(yield* client.numbers({ count: 40 }).pipe(Stream.runCollect)).toEqual(
           Array.from({ length: 40 }, (_, i) => i + 1),
         );
-        const response = yield* requestWorker(HttpClientRequest.get(`${url}/stats/roundtrip`));
+        const response = yield* requestWorker(
+          HttpClientRequest.get(`${url}/stats/${object("roundtrip")}`),
+        );
         expect(response.status).toBe(200);
         expect(yield* response.json).toMatchObject({ count: 1 });
       }).pipe(Effect.scoped),
@@ -254,7 +267,8 @@ describe.concurrent.each([
       "a Layer shares one actual socket for concurrent callers without a caller scope and closes normally",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/layer-client`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("layer-client")}`;
         const observed = yield* observeSockets;
         const program: Effect.Effect<readonly number[], ClientLayerError> = Effect.gen(
           function* () {
@@ -278,7 +292,7 @@ describe.concurrent.each([
           Array.from({ length: 40 }, (_, i) => i + 1),
         );
         yield* observed.assertClosed;
-        expect((yield* readStats(`${url}/stats/layer-client`)).count).toBe(40);
+        expect((yield* readStats(`${url}/stats/${object("layer-client")}`)).count).toBe(40);
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
     );
@@ -287,7 +301,8 @@ describe.concurrent.each([
       "a Layer closes its actual socket with code 1000 on application failure",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/layer-failure`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("layer-failure")}`;
         const observed = yield* observeSockets;
         const program: Effect.Effect<never, Rejected | ClientLayerError> = Effect.gen(function* () {
           const client = yield* SocketClient;
@@ -296,7 +311,7 @@ describe.concurrent.each([
         }).pipe(Effect.provide(observed.layer(endpoint)));
         expect(yield* program.pipe(Effect.flip)).toBeInstanceOf(Rejected);
         yield* observed.assertClosed;
-        expect((yield* readStats(`${url}/stats/layer-failure`)).count).toBe(1);
+        expect((yield* readStats(`${url}/stats/${object("layer-failure")}`)).count).toBe(1);
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
     );
@@ -305,7 +320,8 @@ describe.concurrent.each([
       "interrupting a Layer closes its actual socket with code 1000 and releases the handler",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/layer-interruption`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("layer-interruption")}`;
         const observed = yield* observeSockets;
         const started = yield* Deferred.make<void>();
         const program: Effect.Effect<void, ClientLayerError> = Effect.gen(function* () {
@@ -320,10 +336,10 @@ describe.concurrent.each([
         yield* Fiber.interrupt(fiber);
         expect(Exit.hasInterrupts(yield* Fiber.await(fiber))).toBe(true);
         yield* observed.assertClosed;
-        const status = yield* readStats(`${url}/stats/layer-interruption`).pipe(
+        const status = yield* readStats(`${url}/stats/${object("layer-interruption")}`).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("100 millis"),
-            times: 10,
+            schedule: Schedule.spaced("250 millis"),
+            times: 40,
             until: (state) => state.closed.includes("layer-interruption"),
           }),
         );
@@ -337,7 +353,8 @@ describe.concurrent.each([
       "ManagedRuntime.dispose closes the shared actual socket with code 1000",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/layer-managed`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("layer-managed")}`;
         const observed = yield* observeSockets;
         const runtime = yield* Effect.acquireRelease(
           Effect.sync(() => ManagedRuntime.make(observed.layer(endpoint))),
@@ -358,7 +375,7 @@ describe.concurrent.each([
         expect(observed.sockets[0]!.socket.readyState).toBe(WebSocket.OPEN);
         yield* Effect.promise(() => runtime.dispose());
         yield* observed.assertClosed;
-        expect((yield* readStats(`${url}/stats/layer-managed`)).count).toBe(8);
+        expect((yield* readStats(`${url}/stats/${object("layer-managed")}`)).count).toBe(8);
       }).pipe(Effect.scoped),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
     );
@@ -367,7 +384,8 @@ describe.concurrent.each([
       "a queue subscription owns a separate scope without closing the Layer socket",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/layer-queue`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("layer-queue")}`;
         const observed = yield* observeSockets;
         const program: Effect.Effect<void, ClientLayerError | Done> = Effect.gen(function* () {
           const client = yield* SocketClient;
@@ -381,10 +399,10 @@ describe.concurrent.each([
         }).pipe(Effect.provide(observed.layer(endpoint)));
         yield* program;
         yield* observed.assertClosed;
-        const status = yield* readStats(`${url}/stats/layer-queue`).pipe(
+        const status = yield* readStats(`${url}/stats/${object("layer-queue")}`).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("100 millis"),
-            times: 10,
+            schedule: Schedule.spaced("250 millis"),
+            times: 40,
             until: (state) => state.closed.includes("queue"),
           }),
         );
@@ -398,13 +416,14 @@ describe.concurrent.each([
       "multiplexes concurrent calls without crossing instance state",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const { client } = yield* connect(`${url}/rpc/concurrent`);
+        const object = yield* freshObjects;
+        const { client } = yield* connect(`${url}/rpc/${object("concurrent")}`);
         const results = yield* Effect.all(
           Array.from({ length: 40 }, () => client.increment()),
           { concurrency: "unbounded" },
         );
         expect(results.sort((a, b) => a - b)).toEqual(Array.from({ length: 40 }, (_, i) => i + 1));
-        const other = yield* connect(`${url}/rpc/isolated`);
+        const other = yield* connect(`${url}/rpc/${object("isolated")}`);
         expect((yield* other.client.stats()).count).toBe(0);
       }).pipe(Effect.scoped),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
@@ -414,7 +433,8 @@ describe.concurrent.each([
       "stream interruption closes its scope and keeps the socket usable",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const { client, raw } = yield* connect(`${url}/rpc/interruption`);
+        const object = yield* freshObjects;
+        const { client, raw } = yield* connect(`${url}/rpc/${object("interruption")}`);
         const scope = yield* Scope.make();
         const values = yield* client
           .watch({ key: "cancel" }, { asQueue: true })
@@ -423,8 +443,8 @@ describe.concurrent.each([
         yield* Scope.close(scope, Exit.void);
         const status = yield* client.stats().pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("100 millis"),
-            times: 10,
+            schedule: Schedule.spaced("250 millis"),
+            times: 40,
             until: (state) => state.closed.includes("cancel"),
           }),
         );
@@ -439,7 +459,8 @@ describe.concurrent.each([
       "socket disconnect interrupts active handler resources",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const connection = yield* rawConnect(`${url}/rpc/disconnect`);
+        const object = yield* freshObjects;
+        const connection = yield* rawConnect(`${url}/rpc/${object("disconnect")}`);
         yield* connection.send({
           _tag: "Request",
           id: "1",
@@ -450,12 +471,14 @@ describe.concurrent.each([
         expect(yield* connection.receive).toMatchObject({ _tag: "Chunk", values: [1] });
         yield* Effect.sync(() => connection.socket.close());
         yield* connection.closed;
-        const status = yield* requestWorker(HttpClientRequest.get(`${url}/stats/disconnect`)).pipe(
+        const status = yield* requestWorker(
+          HttpClientRequest.get(`${url}/stats/${object("disconnect")}`),
+        ).pipe(
           Effect.flatMap((response) => response.json),
           Effect.map((state) => state as { closed: string[] }),
           Effect.repeat({
-            schedule: Schedule.spaced("100 millis"),
-            times: 10,
+            schedule: Schedule.spaced("250 millis"),
+            times: 40,
             until: (state) => state.closed.includes("disconnect"),
           }),
         );
@@ -471,7 +494,8 @@ describe.concurrent.each([
           : "disconnect before any output retains the activation until deferred cleanup finishes",
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const name = `cleanup-${mode}`;
+          const object = yield* freshObjects;
+          const name = object(`cleanup-${mode}`);
           const connection = yield* rawConnect(`${url}/rpc/${name}`);
           const before = yield* readStats(`${url}/stats/${name}`);
           yield* Effect.gen(function* () {
@@ -491,8 +515,8 @@ describe.concurrent.each([
             } else {
               const entered = yield* readStats(`${url}/stats/${name}`).pipe(
                 Effect.repeat({
-                  schedule: Schedule.spaced("100 millis"),
-                  times: 10,
+                  schedule: Schedule.spaced("250 millis"),
+                  times: 40,
                   until: (state) => state.opened.includes(mode),
                 }),
               );
@@ -506,8 +530,8 @@ describe.concurrent.each([
             }
             const started = yield* readStats(`${url}/stats/${name}`).pipe(
               Effect.repeat({
-                schedule: Schedule.spaced("100 millis"),
-                times: 10,
+                schedule: Schedule.spaced("250 millis"),
+                times: 40,
                 until: (state) => state.cleanupStarted.includes(mode),
               }),
             );
@@ -546,8 +570,8 @@ describe.concurrent.each([
             }
             const completed = yield* readStats(`${url}/stats/${name}`).pipe(
               Effect.repeat({
-                schedule: Schedule.spaced("100 millis"),
-                times: 10,
+                schedule: Schedule.spaced("250 millis"),
+                times: 40,
                 until: (state) => state.cleanupCompleted[mode] !== undefined,
               }),
             );
@@ -570,7 +594,8 @@ describe.concurrent.each([
       "the same Layer-owned socket survives real hibernation and serves a new RPC",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const endpoint = `${url}/rpc/idle`;
+        const object = yield* freshObjects;
+        const endpoint = `${url}/rpc/${object("idle")}`;
         const observed = yield* observeSockets;
         yield* Effect.gen(function* () {
           const client = yield* SocketClient;
@@ -597,17 +622,18 @@ describe.concurrent.each([
       "hibernation resets an actual socket with an incompatible serializer attachment",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const connection = yield* rawConnect(`${url}/rpc/serialization-reset`);
-        const before = yield* readStats(`${url}/stats/serialization-reset`);
+        const object = yield* freshObjects;
+        const connection = yield* rawConnect(`${url}/rpc/${object("serialization-reset")}`);
+        const before = yield* readStats(`${url}/stats/${object("serialization-reset")}`);
         const response = yield* requestWorker(
-          HttpClientRequest.post(`${url}/serialization/serialization-reset`),
+          HttpClientRequest.post(`${url}/serialization/${object("serialization-reset")}`),
         );
         expect(response.status).toBe(200);
         expect(yield* response.json).toEqual({ changed: 1 });
         expect(connection.socket.readyState).toBe(WebSocket.OPEN);
         const after = yield* Effect.gen(function* () {
           yield* Effect.sleep("15 seconds");
-          return yield* readStats(`${url}/stats/serialization-reset`);
+          return yield* readStats(`${url}/stats/${object("serialization-reset")}`);
         }).pipe(Effect.repeat({ times: 2, until: (state) => state.boots > before.boots }));
         expect(after.boots).toBeGreaterThan(before.boots);
         expect(yield* connection.closed).toEqual({
@@ -616,7 +642,7 @@ describe.concurrent.each([
         });
         expect(connection.socket.readyState).toBe(WebSocket.CLOSED);
         expect(yield* connection.buffered).toBe(0);
-        const replacement = yield* connect(`${url}/rpc/serialization-reset`);
+        const replacement = yield* connect(`${url}/rpc/${object("serialization-reset")}`);
         expect((yield* replacement.client.greet({ name: "compatible" })).message).toBe(
           "Hello, compatible!",
         );
@@ -629,7 +655,8 @@ describe.concurrent.each([
       "native abort fails an active stream without replaying its request",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const connection = yield* rawConnect(`${url}/rpc/lost-stream`);
+        const object = yield* freshObjects;
+        const connection = yield* rawConnect(`${url}/rpc/${object("lost-stream")}`);
         yield* connection.send({
           _tag: "Request",
           id: "1",
@@ -639,11 +666,11 @@ describe.concurrent.each([
         });
         expect(yield* connection.receive).toMatchObject({ _tag: "Chunk", values: [1] });
         yield* connection.send({ _tag: "Ack", requestId: "1" });
-        const before = yield* readStats(`${url}/stats/lost-stream`);
+        const before = yield* readStats(`${url}/stats/${object("lost-stream")}`);
         expect(before.invocations).toEqual({ lost: 1 });
         expect(before.opened).toEqual(["lost"]);
         const response = yield* requestWorker(
-          HttpClientRequest.post(`${url}/abort/lost-stream`),
+          HttpClientRequest.post(`${url}/abort/${object("lost-stream")}`),
         ).pipe(Effect.timeout("15 seconds"));
         expect(response.status).toBe(200);
         expect(yield* response.json).toEqual({ aborted: true });
@@ -651,7 +678,7 @@ describe.concurrent.each([
         expect(connection.socket.readyState).toBe(WebSocket.CLOSED);
         expect(yield* connection.buffered).toBe(0);
 
-        const replacement = yield* connect(`${url}/rpc/lost-stream`);
+        const replacement = yield* connect(`${url}/rpc/${object("lost-stream")}`);
         const status = yield* replacement.client.stats();
         expect(status.boots).toBeGreaterThan(before.boots);
         expect(status.invocations).toEqual({ lost: 1 });
@@ -668,7 +695,8 @@ describe.concurrent.each([
       "schema and unknown-method failures leave the connection usable",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const connection = yield* rawConnect(`${url}/rpc/invalid-requests`);
+        const object = yield* freshObjects;
+        const connection = yield* rawConnect(`${url}/rpc/${object("invalid-requests")}`);
         for (const [id, tag, payload] of [
           ["1", "greet", { name: 42 }],
           ["2", "missing", {}],
@@ -700,10 +728,11 @@ describe.concurrent.each([
       "malformed frames close the offending connection",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const connection = yield* rawConnect(`${url}/rpc/malformed`);
+        const object = yield* freshObjects;
+        const connection = yield* rawConnect(`${url}/rpc/${object("malformed")}`);
         yield* Effect.sync(() => connection.socket.send("not json"));
         expect((yield* connection.closed).code).toBeGreaterThanOrEqual(1002);
-        const healthy = yield* connect(`${url}/rpc/malformed`);
+        const healthy = yield* connect(`${url}/rpc/${object("malformed")}`);
         expect((yield* healthy.client.greet({ name: "healthy" })).message).toBe("Hello, healthy!");
       }).pipe(Effect.scoped),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },

@@ -14,8 +14,10 @@ export interface ResourcePolicyProps {
   resourceArn: string;
   /**
    * The IAM resource-based policy document (JSON) that grants other
-   * principals or accounts access to the resource (e.g. `osis:Ingest`,
-   * `osis:CreatePipelineEndpoint`). Updated in place.
+   * accounts access to the resource. OSIS only accepts
+   * `osis:CreatePipelineEndpoint` grants whose principals are 12-digit
+   * account IDs (ARN principals are rejected as "Invalid resource policy.").
+   * Updated in place.
    */
   policy: string;
 }
@@ -39,23 +41,23 @@ export interface ResourcePolicy extends Resource<
 
 /**
  * The resource-based policy of an Amazon OpenSearch Ingestion (OSIS)
- * pipeline — grants cross-account principals access to the pipeline, e.g.
- * `osis:Ingest` for cross-account ingestion or
- * `osis:CreatePipelineEndpoint` so another account can attach a VPC
- * endpoint. A resource has at most one.
+ * VPC pipeline — grants other accounts `osis:CreatePipelineEndpoint` so they
+ * can attach a pipeline endpoint from their own VPC (cross-account
+ * ingestion). Principals must be 12-digit account IDs, not ARNs. A resource
+ * has at most one.
  *
  * ### Creating a Resource Policy
- * **Example:** Allow Another Account to Ingest
+ * **Example:** Allow Another Account to Attach a Pipeline Endpoint
  * ```typescript
- * const policy = yield* OSIS.ResourcePolicy("CrossAccountIngest", {
+ * const policy = yield* OSIS.ResourcePolicy("CrossAccountEndpoint", {
  *   resourceArn: pipeline.pipelineArn,
  *   policy: Output.interpolate`{
  *     "Version": "2012-10-17",
  *     "Statement": [
  *       {
  *         "Effect": "Allow",
- *         "Principal": { "AWS": "arn:aws:iam::123456789012:root" },
- *         "Action": ["osis:Ingest"],
+ *         "Principal": { "AWS": ["123456789012"] },
+ *         "Action": "osis:CreatePipelineEndpoint",
  *         "Resource": "${pipeline.pipelineArn}"
  *       }
  *     ]

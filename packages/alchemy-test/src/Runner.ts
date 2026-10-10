@@ -381,6 +381,11 @@ const hookChain = (test: TestCase, kind: "beforeEach" | "afterEach"): Array<Hook
   return kind === "afterEach" ? flat.reverse() : flat;
 };
 
+/**
+ * Run hooks in order, each bounded by {@link runWithDeadline}: a hook that
+ * outlives its timeout (`hook.timeout`, else the test/file default) fails
+ * and is abandoned after the teardown grace, exactly like a test body.
+ */
 const runHooks = (
   hooks: ReadonlyArray<Hook>,
   defaultTimeout: number,
@@ -388,8 +393,8 @@ const runHooks = (
   Effect.forEach(
     hooks,
     (hook) =>
-      Effect.suspend(hook.body).pipe(
-        Effect.timeout(Duration.millis(hook.timeout ?? defaultTimeout)),
+      runWithDeadline(hook.body, hook.timeout ?? defaultTimeout, "hook").pipe(
+        Effect.flatMap((exit) => exit),
       ),
     { discard: true },
   );
@@ -431,30 +436,50 @@ const hookError = (attempt: TestAttempt): string | undefined => {
 };
 
 /**
- * How long a timed-out test body's interruption (finalizers included) may
- * run before the runner abandons the fiber and reports the timeout anyway.
- * Without this bound, a finalizer blocked on the same wedged machinery the
- * timeout just interrupted (e.g. a `test.provider` scratch destroy against
- * a hung dev deploy) swallows the report entirely — the test never finishes
- * and the run dies at the wall clock with no error attribution.
+ * How long a timed-out test body's or hook's interruption (finalizers
+ * included) may run before the runner abandons the fiber and reports the
+ * timeout anyway. Without this bound, a finalizer blocked on the same wedged
+ * machinery the timeout just interrupted (e.g. a `test.provider` scratch
+ * destroy against a hung dev deploy) — or simply an uninterruptible region —
+ * swallows the report entirely: the test/hook never finishes and the run
+ * (or the `--plan` phase) never advances.
+ *
+ * Overridable via `ALCHEMY_TEST_TEARDOWN_GRACE_MS` (used by the runner's own
+ * regression tests to keep them fast).
  */
-const INTERRUPT_GRACE_MS = 10_000;
+const INTERRUPT_GRACE_MS = (() => {
+  const raw = Number(process.env.ALCHEMY_TEST_TEARDOWN_GRACE_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 10_000;
+})();
 
 /**
- * Run a test body with a timeout that cannot be swallowed by hung
- * finalizers: on timeout the body fiber is interrupted, its finalizers get
- * {@link INTERRUPT_GRACE_MS} to settle, and then the fiber is abandoned
- * (it dies with the run) and the timeout is reported.
+ * Run `body` with a deadline that can NEVER be outlived. Used for every test
+ * body and every hook (beforeAll / beforeEach / afterEach / afterAll).
+ *
+ * `Effect.timeout` is not enough: it interrupts the loser and AWAITS its
+ * interruption, which never completes when the work is in an uninterruptible
+ * region or a finalizer hangs. Instead the work runs in a detached fiber; on
+ * timeout it is interrupted fire-and-forget, given {@link INTERRUPT_GRACE_MS}
+ * to settle, and then abandoned (it dies with the process) while the timeout
+ * is reported. Wall time is therefore bounded by `timeoutMs + grace`.
+ *
+ * If the caller itself is interrupted (TUI kill, SIGINT/SIGTERM shutdown) the
+ * detached fiber is interrupted too — without awaiting it, for the same
+ * reason.
  */
-const runBodyWithTimeout = Effect.fn(function* (
+const runWithDeadline = Effect.fnUntraced(function* (
   body: () => Effect.Effect<unknown, unknown>,
   timeoutMs: number,
+  label: "test" | "hook",
 ) {
-  // Detached: a timed-out body whose teardown never settles must not block
-  // the attempt fiber's own completion (a supervised child would).
+  // Detached: work whose teardown never settles must not block the caller
+  // fiber's own completion (a supervised child would).
   const fiber = yield* Effect.forkDetach(Effect.suspend(body), { startImmediately: true });
-  const awaited = yield* Fiber.await(fiber).pipe(Effect.timeoutOption(Duration.millis(timeoutMs)));
-  if (Option.isSome(awaited)) return awaited.value;
+  const awaited = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(timeoutMs)),
+    Effect.onInterrupt(() => Effect.sync(() => fiber.interruptUnsafe())),
+  );
+  if (Option.isSome(awaited)) return awaited.value as Exit.Exit<unknown, unknown>;
   // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
   // hung finalizer never provides. Fire it, then give teardown a bounded
   // grace before abandoning the fiber (it dies with the process).
@@ -465,8 +490,8 @@ const runBodyWithTimeout = Effect.fn(function* (
   return Exit.fail(
     new Error(
       Option.isNone(settled)
-        ? `test timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
-        : `test timed out after ${timeoutMs}ms`,
+        ? `${label} timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
+        : `${label} timed out after ${timeoutMs}ms`,
     ),
   ) as Exit.Exit<unknown, unknown>;
 });
@@ -498,7 +523,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     return Effect.gen(function* () {
       const beforeExit = yield* runHooks(before, timeoutMs).pipe(Effect.exit);
       const bodyExit = Exit.isSuccess(beforeExit)
-        ? yield* runBodyWithTimeout(test.body!, timeoutMs)
+        ? yield* runWithDeadline(test.body!, timeoutMs, "test")
         : undefined;
       return { beforeEach: beforeExit, body: bodyExit };
     }).pipe(
@@ -692,10 +717,7 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   // provider sidecar, which registers last and would otherwise leak the
   // sidecar for the rest of the process. Failures aggregate.
   const afterAllRun = Effect.forEach(suite.afterAll, (hook) =>
-    Effect.suspend(hook.body).pipe(
-      Effect.timeout(Duration.millis(hook.timeout ?? ctx.options.timeout)),
-      Effect.exit,
-    ),
+    runWithDeadline(hook.body, hook.timeout ?? ctx.options.timeout, "hook"),
   );
   const exits = yield* ctx.lock
     .withPermits(hookPermits(suite.afterAll))(afterAllRun)

@@ -14,7 +14,13 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-describe.skip(
+
+// User-owned tokens need the user-level `API Tokens Write` permission. The
+// standing testing credential is an account-scoped API token without it (even
+// `API Tokens Read` is refused with the typed `Unauthorized: Unauthorized to
+// access requested resource` — pinned by the probe below), so the lifecycle is
+// gated behind CLOUDFLARE_TEST_USER_TOKENS for a user-API-key credential.
+describe.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
   "UserApiToken",
   { tags: ["provider:cloudflare", "provider:cloudflare:apitoken", "live"] },
   () => {

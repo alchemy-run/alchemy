@@ -132,8 +132,9 @@ describe.concurrent(
       { timeout: 120_000 },
     );
 
-    const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-    test.provider.skipIf(!customDomainZone)(
+    const customDomainZone =
+      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+    test.provider(
       "redirect hostnames 301 to the canonical name and stay out of urls",
       (stack) =>
         Effect.gen(function* () {
@@ -214,7 +215,7 @@ describe.concurrent(
       { tags: ["provider:cloudflare:ruleset", "provider:cloudflare:zone"], timeout: 540_000 },
     );
 
-    test.provider.skipIf(!customDomainZone)(
+    test.provider(
       "domain string shorthand resolves to { name }",
       (stack) =>
         Effect.gen(function* () {

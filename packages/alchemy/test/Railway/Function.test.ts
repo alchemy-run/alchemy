@@ -367,5 +367,15 @@ test.provider(
       const gone = yield* waitUntilGone(created.ping.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:function",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -41,9 +41,9 @@ interface Deployment {
 let deployed: Deployment | undefined;
 let queueUrl: string | undefined;
 
-// Cold Docker/ECR/Fargate startup can exceed 120s; opt in with warm build
-// caches and an existing public default VPC. There is no ALB or HTTP probe.
-describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
+// Docker/ECR/Fargate startup (deploy ~55s, destroy ~105s observed on the
+// account's default VPC) — skipped under --fast. There is no ALB or HTTP probe.
+describe.skipIf(!!process.env.FAST).concurrent(
   "S3 Server/SQS event source on ECS",
   {
     tags: [

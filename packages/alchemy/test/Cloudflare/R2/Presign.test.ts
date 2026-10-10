@@ -98,7 +98,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker"],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -155,7 +155,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker"],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -172,5 +172,5 @@ it(
       "com.cloudflare.edge.r2.bucket.acct_fedramp_gov": "*",
     });
   },
-  { tags: ["unit", "provider:cloudflare"] },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:r2", "local"] },
 );

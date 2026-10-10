@@ -13,7 +13,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Magic WAN sites (and their WANs) are entitlement-gated. On the standard
 // testing account every site call fails with the typed `MagicWanUnauthorized`
-// error (Cloudflare code 1025) or `Forbidden` (403) depending on token scope.
+// error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled").
 // The deploy+list lifecycle test below is gated behind an explicit opt-in env
 // flag for entitled accounts; the read-only list probe always runs and asserts
 // a well-typed array (empty on unentitled accounts).
@@ -28,7 +29,7 @@ test.provider(
       const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteWan);
       const all = yield* provider.list();
 
-      // Unentitled accounts surface MagicWanUnauthorized/Forbidden, which list()
+      // Unentitled accounts surface MagicWanUnauthorized/MagicWanNotEnabled, which list()
       // maps to []. Either way the result is a well-typed array, never a throw.
       expect(Array.isArray(all)).toBe(true);
       for (const wan of all) {

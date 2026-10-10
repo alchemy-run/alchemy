@@ -199,9 +199,10 @@ export const DBInstanceProvider = () =>
 
       // Bounded readiness wait. Gate on `DBInstanceStatus === "available"` so a
       // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
-      // Budgets ~10 min (60 * 10s) for slow provisioning.
+      // Neptune instances (serverless in particular) routinely take 10-20
+      // minutes to leave `creating`; budget ~25 min (100 * 15s).
       const waitForInstance = Effect.fn(function* (instanceId: string) {
-        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(100)]);
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {

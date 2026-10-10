@@ -1,9 +1,12 @@
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
@@ -122,6 +125,83 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:ssl", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "list excludes Worker custom-domain packs and their deleted tombstones",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zoneId = yield* resolveZoneId(zoneName);
+      // Deterministic per-stage hostname on the standing test zone.
+      const hostname = `certpack-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${zoneName}`;
+      const provider = yield* Provider.findProvider(Cloudflare.Ssl.CertificatePack);
+
+      yield* stack.destroy();
+
+      // A Worker custom domain makes Cloudflare auto-order an `advanced`
+      // pack it manages itself (the domain's `certId`).
+      yield* stack.deploy(
+        Cloudflare.Worker("CertPackDomainWorker", {
+          script: `export default { fetch() { return new Response("ok"); } };`,
+          workersDev: false,
+          domain: hostname,
+        }),
+      );
+
+      const domain = yield* workers.listDomains
+        .items({ accountId, hostname })
+        .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+      expect(domain?.certId).toBeTruthy();
+      const certId = domain!.certId;
+
+      const managed = yield* getPack(zoneId, certId);
+      expect(managed?.type).toEqual("advanced");
+      expect(managed?.hosts).toContain(hostname);
+
+      // ...but it is not ours: list() must not surface it (nuke would
+      // otherwise strip TLS from a live custom domain).
+      const whileAttached = yield* provider.list();
+      expect(whileAttached.some((p) => p.certificatePackId === certId)).toBe(false);
+
+      // Detaching the domain leaves a `status: "deleted"` tombstone for a
+      // minute or two. It is still returned by get / list?status=all, and
+      // deleting it fails with the typed CertificatePackNotDeletable
+      // ("Bad response certificate service") — it must not be listed.
+      yield* stack.destroy();
+
+      const after = yield* getPack(zoneId, certId).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (p) => p === undefined || p.status === "deleted",
+          times: 15,
+        }),
+      );
+      if (after?.status === "deleted") {
+        const tombstoneListed = yield* provider.list();
+        expect(tombstoneListed.some((p) => p.certificatePackId === certId)).toBe(false);
+
+        const error = yield* ssl
+          .deleteCertificatePack({ zoneId, certificatePackId: certId })
+          .pipe(Effect.flip);
+        // A purge racing this call answers 404 instead.
+        expect(["CertificatePackNotDeletable", "CertificatePackNotFound"]).toContain(error._tag);
+      } else {
+        expect(after).toBeUndefined();
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ssl",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
     timeout: 120_000,
   },
 );

@@ -66,9 +66,13 @@ test.provider(
       );
       expect(verifiedAfter).toBe(false);
 
+      // A cancelled session no longer exists: consume rejects it with the
+      // typed RailwayLoginSessionNotFound (BAD_USER_INPUT "does not exist").
       const consumedAfter = yield* Railway.provideAnonymousRailway(
         consumeLoginSession(code).pipe(
-          Effect.catchTag("RailwayNotFound", () => Effect.succeed(null)),
+          Effect.catchTag(["RailwayNotFound", "RailwayLoginSessionNotFound"], () =>
+            Effect.succeed(null),
+          ),
         ),
       );
       expect(consumedAfter).toBeNull();

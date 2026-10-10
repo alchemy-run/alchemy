@@ -213,16 +213,7 @@ test.provider(
 // provider with the typed `Provider.findProvider` helper, then assert the
 // deployed variant appears in the exhaustively-enumerated result. Bracketed by
 // `stack.destroy()` at both ends so the suite leaves no residue.
-//
-// SKIP-GATED on `CLOUDFLARE_TEST_IMAGES_LIST` until a distilled patch lands.
-// distilled mis-types the list-variants response as a single variant, but the
-// real body is a keyed `variants` map, so the strict decode fails and the GET
-// surfaces a `CloudflareHttpError` (status 200, statusText "Schema decode
-// failed"). Recovering from that catch-all is forbidden by the Typed Error
-// Doctrine, so the fix is the distilled response-schema patch in the agent
-// report. Once applied (and distilled `lib` rebuilt) this passes unchanged;
-// set `CLOUDFLARE_TEST_IMAGES_LIST=1` to run it.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_LIST)(
+test.provider(
   "list enumerates the deployed variant",
   (stack) =>
     Effect.gen(function* () {

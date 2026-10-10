@@ -132,6 +132,10 @@ test.provider(
       expect(found?.active).toEqual(true);
 
       yield* stack.destroy();
+
+      // Deactivated codes are effectively deleted and must not re-enter nuke.
+      const after = yield* provider.list();
+      expect(after.find((item) => item.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:coupon", "provider:stripe:promotioncode", "live"],

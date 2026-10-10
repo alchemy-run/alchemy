@@ -110,7 +110,9 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:glue", "provider:aws:iam", "provider:aws:s3", "live"] },
 );
 
-// A live crawl takes ~2-4 minutes end to end — gated behind AWS_TEST_SLOW=1.
+// A live crawl takes ~1-4 minutes end to end, but under concurrent load it
+// has not reached SUCCEEDED within 5 minutes (2026-10-09) — gated behind
+// AWS_TEST_SLOW=1.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "run a live crawl that populates the catalog",
   (stack) =>

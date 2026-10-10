@@ -14,8 +14,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Magic WAN sites (and their LANs / WANs / ACLs) are entitlement-gated.
 // On the standard testing account every site call fails with the typed
-// `MagicWanUnauthorized` error (Cloudflare code 1025) or `Forbidden`
-// (403) depending on token scope. The lifecycle test below is gated
+// `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). The lifecycle test below is gated
 // behind an explicit opt-in env flag for entitled accounts; the probe
 // test always runs and pins the typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
@@ -35,7 +35,7 @@ const expectGone = (accountId: string, siteId: string) =>
   );
 
 test.provider(
-  "unentitled accounts surface the typed MagicWanUnauthorized error",
+  "unentitled accounts surface the typed Magic WAN entitlement error",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -44,7 +44,9 @@ test.provider(
 
       const canList = yield* magicTransit.listSites({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () => Effect.succeed(false)),
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
+          Effect.succeed(false),
+        ),
       );
       if (canList) {
         // Entitled account — the gated lifecycle test covers real behavior.
@@ -54,12 +56,12 @@ test.provider(
 
       // The typed tag — not UnknownCloudflareError, not a status check.
       const error = yield* magicTransit.listSites({ accountId }).pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(error._tag);
 
       const createError = yield* magicTransit
         .createSite({ accountId, name: "alchemy-site-probe" })
         .pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(createError._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(createError._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -73,7 +75,7 @@ test.provider(
 // account-scoped, so `list()` paginates the account-wide sites API and
 // hydrates each into the `read` Attributes shape. On unentitled accounts
 // enumeration is rejected with the typed `MagicWanUnauthorized` (1025) or
-// `Forbidden` (403) and `list()` returns a well-typed `[]`. On entitled
+// `MagicWanNotEnabled` (1101) and `list()` returns a well-typed `[]`. On entitled
 // accounts (CLOUDFLARE_TEST_MAGIC_WAN=1) we deploy a site and assert it
 // appears in the exhaustively-paginated result.
 test.provider(

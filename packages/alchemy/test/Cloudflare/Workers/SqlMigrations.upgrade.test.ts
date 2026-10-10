@@ -2,12 +2,13 @@ import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import UpgradeWorker from "./fixtures/sql-migrations-upgrade/worker.ts";
 
 type State = { id: string; count: number; rows: { value: string }[] };
@@ -50,9 +51,11 @@ for (const dev of [true, false]) {
               )
               .pipe(Effect.provideService(ConfigProvider.ConfigProvider, config));
             const first = yield* deploy;
-            const client = yield* HttpClient.HttpClient;
+            // Fresh and updated workers.dev hosts can answer Cloudflare's 404
+            // placeholder before the script reaches them; requestWorker retries
+            // only that pre-invocation placeholder.
             const read = (url: string) =>
-              client.get(url).pipe(
+              requestWorker(HttpClientRequest.get(url)).pipe(
                 Effect.flatMap((response) =>
                   Effect.gen(function* () {
                     if (response.status !== 200)
@@ -65,24 +68,35 @@ for (const dev of [true, false]) {
                 Effect.map((value) => value as State),
                 Effect.timeout("5 seconds"),
               );
+            // A redeploy reaches a busy live Durable Object only once it goes
+            // idle: Worker `exports` deploys carry no migration, so Cloudflare
+            // keeps an activation that receives a request every few seconds on
+            // the previous version indefinitely. Leave an idle gap between
+            // probes so the object restarts on the new code.
+            const probe = {
+              schedule: Schedule.spaced(dev ? "3 seconds" : "15 seconds"),
+              times: dev ? 10 : 5,
+            };
             const ready = (url: string, count: number) =>
               read(url).pipe(
                 Effect.filterOrFail(
                   (state) => state.count === count,
                   () => new Error("Migration version not ready"),
                 ),
-                Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
-                Effect.timeout("45 seconds"),
+                Effect.retry(probe),
+                Effect.timeout("90 seconds"),
               );
             const original = yield* ready(first.url, 1);
             expect(original.rows).toEqual([{ value: "seed" }]);
-            yield* client.post(first.url).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+            yield* requestWorker(HttpClientRequest.post(first.url)).pipe(
+              Effect.flatMap(HttpClientResponse.filterStatusOk),
+            );
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('must-rollback'); INSERT INTO missing_table VALUES (1);",
             );
             const broken = yield* deploy;
-            const failed = yield* client.get(broken.url).pipe(
+            const failed = yield* requestWorker(HttpClientRequest.get(broken.url)).pipe(
               Effect.flatMap((response) =>
                 response.text.pipe(Effect.map((body) => ({ status: response.status, body }))),
               ),
@@ -91,10 +105,9 @@ for (const dev of [true, false]) {
                 until: (response) =>
                   response.status === 500 &&
                   response.body.includes("Failed to apply SQL migration"),
-                schedule: Schedule.spaced("3 seconds"),
-                times: 10,
+                ...probe,
               }),
-              Effect.timeout("45 seconds"),
+              Effect.timeout("90 seconds"),
             );
             expect(failed.status).toBe(500);
             expect(failed.body).toContain("Failed to apply SQL migration");
@@ -116,7 +129,7 @@ for (const dev of [true, false]) {
             expect(yield* ready(third.url, 2)).toEqual(upgraded);
             yield* stack.destroy();
           }),
-        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 240_000 },
       );
     },
   );

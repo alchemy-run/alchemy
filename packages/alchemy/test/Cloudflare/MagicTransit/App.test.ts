@@ -14,8 +14,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Magic WAN custom apps are entitlement-gated. On the standard testing
 // account every app call fails with the typed `MagicWanUnauthorized`
-// error (Cloudflare code 1025) or `Forbidden` (403) depending on token
-// scope. The lifecycle test below is gated behind an explicit opt-in env
+// error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). The lifecycle test below is gated behind an explicit opt-in env
 // flag for entitled accounts; the probe test always runs and pins the
 // typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
@@ -43,7 +43,7 @@ const expectGone = (accountId: string, appId: string) =>
   );
 
 test.provider(
-  "unentitled accounts surface the typed MagicWanUnauthorized error",
+  "unentitled accounts surface the typed Magic WAN entitlement error",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -52,7 +52,9 @@ test.provider(
 
       const canList = yield* magicTransit.listApps({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () => Effect.succeed(false)),
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
+          Effect.succeed(false),
+        ),
       );
       if (canList) {
         // Entitled account — the gated lifecycle test covers real behavior.
@@ -62,7 +64,7 @@ test.provider(
 
       // The typed tag — not UnknownCloudflareError, not a status check.
       const error = yield* magicTransit.listApps({ accountId }).pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(error._tag);
 
       const createError = yield* magicTransit
         .createApp({
@@ -72,7 +74,7 @@ test.provider(
           hostnames: ["probe.alchemy.test"],
         })
         .pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(createError._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(createError._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -136,7 +138,7 @@ test.provider.skipIf(!entitled)(
 
 // Read-only list assertion. Always safe: on an unentitled account the
 // account-scoped apps list rejects with the typed `MagicWanUnauthorized` /
-// `Forbidden`, which `list()` maps to a well-typed empty array.
+// `MagicWanNotEnabled`, which `list()` maps to a well-typed empty array.
 test.provider(
   "list enumerates account apps (well-typed [] when unentitled)",
   (stack) =>

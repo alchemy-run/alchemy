@@ -1,6 +1,8 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as glue from "@distilled.cloud/aws/glue";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { diffTags } from "../../Tags.ts";
 
 /** ARN partition — the testing account is on the standard AWS partition. */
@@ -148,4 +150,54 @@ export const cleanMap = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+
+/**
+ * Glue writes crawler and job-run logs into SHARED, service-managed log
+ * groups (`/aws-glue/crawlers`, `/aws-glue/python-jobs/output`, …) that it
+ * auto-creates on first use. The groups belong to the Glue service, not to
+ * any one crawler/job, so a provider must never delete them — it reaps only
+ * the streams it owns (named after the crawler, or prefixed by a run id).
+ *
+ * Best-effort and bounded: log cleanup is auxiliary to the already-completed
+ * resource delete, so a missing group/stream is success and a slow API only
+ * logs a warning.
+ */
+export const reapGlueLogStreams = (
+  logGroupNames: readonly string[],
+  streamPrefixes: readonly string[],
+  options: { exact?: boolean } = {},
+) =>
+  Effect.forEach(
+    logGroupNames.flatMap((logGroupName) =>
+      streamPrefixes.map((prefix) => ({ logGroupName, prefix })),
+    ),
+    ({ logGroupName, prefix }) =>
+      logs.describeLogStreams.items({ logGroupName, logStreamNamePrefix: prefix }).pipe(
+        Stream.mapEffect(
+          (stream) =>
+            stream.logStreamName === undefined ||
+            (options.exact === true && stream.logStreamName !== prefix)
+              ? Effect.void
+              : logs.deleteLogStream({ logGroupName, logStreamName: stream.logStreamName }).pipe(
+                  Effect.retry({
+                    while: (e) =>
+                      e._tag === "OperationAbortedException" ||
+                      e._tag === "ServiceUnavailableException",
+                    schedule: Schedule.exponential("250 millis"),
+                    times: 6,
+                  }),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                ),
+          { concurrency: 5 },
+        ),
+        Stream.runDrain,
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.timeoutOrElse({
+          duration: "30 seconds",
+          orElse: () =>
+            Effect.logWarning(`Timed out reaping Glue log streams ${logGroupName}/${prefix}*`),
+        }),
+      ),
+    { concurrency: 5, discard: true },
   );

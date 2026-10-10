@@ -272,14 +272,17 @@ export const ConfigProvider = () =>
     }),
     delete: Effect.fn(function* ({ output, olds }) {
       if (olds.delete !== true) return;
-      const defaults = yield* zaraz.getDefault({ zoneId: output.zoneId });
-      yield* zaraz.putConfig(toPutConfig(output.zoneId, defaults));
+      // Restore real-time first: in `preview` mode a config PUT is staged
+      // rather than published, so resetting the config before switching the
+      // workflow back would leave the published config untouched.
       if (olds.workflow !== undefined) {
         yield* zaraz.putZaraz({
           zoneId: output.zoneId,
           workflow: "realtime",
         });
       }
+      const defaults = yield* zaraz.getDefault({ zoneId: output.zoneId });
+      yield* zaraz.putConfig(toPutConfig(output.zoneId, defaults));
     }),
   });
 

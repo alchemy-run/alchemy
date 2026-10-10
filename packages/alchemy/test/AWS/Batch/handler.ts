@@ -24,7 +24,13 @@ export default BatchTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const unmanagedServiceRole = process.env.AWS_TEST_SLOW
+    // The default run uses a managed Fargate CE so the SUCCEEDED round-trip in
+    // Bindings.test.ts can actually run a job. Under --fast (FAST=1) the
+    // capability tests only need jobs to reach RUNNABLE, so an unmanaged CE
+    // with no VPC resources is enough. Bindings.test.ts gates SUCCEEDED on the
+    // same predicate: an unmanaged CE has no instances, so jobs never leave RUNNABLE.
+    const fargate = !process.env.FAST;
+    const unmanagedServiceRole = fargate
       ? undefined
       : yield* IAM.Role("BatchServiceRole", {
           assumeRolePolicyDocument: {
@@ -40,10 +46,7 @@ export default BatchTestFunction.make(
           managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole"],
         });
 
-    // Fast capability tests only need jobs to reach RUNNABLE, so use an
-    // unmanaged CE without VPC resources. The slow SUCCEEDED round-trip keeps
-    // the managed Fargate path and its stack-owned network.
-    const computeEnvironment = process.env.AWS_TEST_SLOW
+    const computeEnvironment = fargate
       ? yield* Effect.gen(function* () {
           const network = yield* BatchTestNetwork;
           return yield* Batch.ComputeEnvironment("TestCE", {
@@ -76,8 +79,8 @@ export default BatchTestFunction.make(
       image: "public.ecr.aws/docker/library/busybox:latest",
       command: ["echo", "hello-from-batch"],
       executionRoleArn: executionRole.roleArn,
-      platformCapabilities: process.env.AWS_TEST_SLOW ? ["FARGATE"] : ["EC2"],
-      vcpus: process.env.AWS_TEST_SLOW ? 0.25 : 1,
+      platformCapabilities: fargate ? ["FARGATE"] : ["EC2"],
+      vcpus: fargate ? 0.25 : 1,
       timeout: Duration.minutes(5),
     });
 

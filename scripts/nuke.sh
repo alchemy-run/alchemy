@@ -32,6 +32,9 @@ fi
 # when enumerated), so the census would flag them forever.
 # Cloudflare.AI.Gateway "default": auto-provisioned by Cloudflare when an AI Search
 # instance is created; recreated on demand, so deleting it just churns.
+# AWS.Logs.LogGroup /aws-glue/*: shared, service-managed groups Glue auto-creates
+# for every crawler/job in the account. Glue Crawler/Job providers reap only
+# their own streams in them; the empty groups themselves are spared.
 # Cloudflare.Email.Address alchemy-list-test@: standing test address — Cloudflare
 # refuses to delete an address for ~15 min after creation (code 2032), so the
 # EmailAddress test retains and re-adopts it instead of create/destroy churn.
@@ -69,5 +72,6 @@ bun alchemy unsafe nuke --config ./stacks/nuke.ts  \
   --filter 'resource.Type === "Cloudflare.AI.Gateway" && resource.gatewayId === "default"' \
   --filter 'resource.Type === "Cloudflare.Email.Address" && resource.email === "alchemy-list-test@alchemy-test-2.us"' \
   --filter 'String(resource.logGroupName).startsWith("/aws/vendedlogs/b2bi/")' \
+  --filter 'resource.Type === "AWS.Logs.LogGroup" && String(resource.logGroupName).startsWith("/aws-glue/")' \
   --filter 'resource.Type === "Fly.Bucket" && resource.name === "fly-buovnrccm7qpb3be3utsdvlj6x"' \
   "$@"

@@ -251,11 +251,26 @@ const deleteSnapshot = (snapshotArn: string) =>
     }),
   );
 
+// Snapshots outlive their cluster, so one left behind by an interrupted run
+// makes the fixture's CreateClusterSnapshot fail with ConflictException ("A
+// snapshot already exists with given name"). Clear it by name up front.
+const deleteSnapshotsNamed = (name: string) =>
+  docdbelastic.listClusterSnapshots({}).pipe(
+    Effect.flatMap((r) =>
+      Effect.forEach(
+        (r.snapshots ?? []).filter((s) => s.snapshotName === name),
+        (s) => deleteSnapshot(s.snapshotArn),
+        { discard: true },
+      ),
+    ),
+  );
+
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "snapshot + stop + start bindings against a live elastic cluster",
   () =>
     Effect.gen(function* () {
       yield* slowStack.destroy();
+      yield* deleteSnapshotsNamed(SLOW_SNAPSHOT_NAME);
       const network = yield* defaultNetwork;
       yield* Effect.sync(() => {
         process.env[SUBNETS_ENV] = JSON.stringify(network.subnetIds);
@@ -273,12 +288,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(functionUrl).toBeTruthy();
         const slowBaseUrl = functionUrl!.replace(/\/+$/, "");
 
+        // A non-200 is a test failure carrying the status — the fixture
+        // answers an empty 500 on a defect, which `r.json` decodes to null.
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
               schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
-            Effect.flatMap((r) => r.json),
+            Effect.flatMap((r) =>
+              r.status === 200 ? r.json : Effect.fail(new Error(`${path} returned ${r.status}`)),
+            ),
           );
 
         // Take an on-demand snapshot of the live cluster.
@@ -289,16 +308,20 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(snapshot.snapshotArn).toContain(":cluster-snapshot/");
         snapshotArn = snapshot.snapshotArn;
 
-        // Wait (bounded) for the snapshot to become AVAILABLE so the stop
-        // call below does not conflict with the in-flight snapshot.
-        yield* docdbelastic.getClusterSnapshot({ snapshotArn: snapshot.snapshotArn }).pipe(
-          Effect.map((r) => r.snapshot.status),
-          Effect.repeat({
-            schedule: Schedule.spaced("10 seconds"),
-            until: (status): boolean => status === "AVAILABLE",
-            times: 60,
-          }),
-        );
+        // Wait (bounded) for the snapshot to become ACTIVE (the elastic
+        // API's ready status) so the stop call below does not conflict with
+        // the in-flight snapshot.
+        const snapshotStatus = yield* docdbelastic
+          .getClusterSnapshot({ snapshotArn: snapshot.snapshotArn })
+          .pipe(
+            Effect.map((r) => r.snapshot.status),
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              until: (status): boolean => status === "ACTIVE",
+              times: 60,
+            }),
+          );
+        expect(snapshotStatus).toBe("ACTIVE");
 
         // Stop the cluster (compute billing pauses).
         const stop = (yield* get("/stop")) as { status: string };
@@ -319,7 +342,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         ),
       );
     }),
-  // cluster create (~10 min) + snapshot + stop + destroy in one test.
+  // cluster create (~10-15 min) + snapshot + stop + destroy in one test.
+  // Destroy is slow by necessity: a STOPPING cluster takes ~11 min to reach
+  // STOPPED, and only an ACTIVE cluster is deletable, so the provider starts
+  // it again (~10 min) before DeleteCluster.
   {
     tags: [
       "provider:aws",
@@ -328,6 +354,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       "provider:aws:lambda",
       "live",
     ],
-    timeout: 2_400_000,
+    timeout: 3_600_000,
   },
 );

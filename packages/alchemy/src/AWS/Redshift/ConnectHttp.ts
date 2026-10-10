@@ -47,7 +47,12 @@ export const ConnectHttp = Layer.effect(
           const database = options.database ?? cluster.dbName;
           const dbNameArn = Output.interpolate`${arnBase}:dbname:${cluster.clusterIdentifier}/${database}`;
           const prefix = connectEnvPrefix(cluster.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.Redshift.Connect(${cluster}))`({
+          // The binding id must be unique per credential strategy: a Function
+          // that connects to the same cluster both as its IAM identity and as
+          // a named database user needs BOTH policy statements, and binds that
+          // share an id collapse into one (the last one wins).
+          const strategy = options.dbUser !== undefined ? `, ${options.dbUser}` : "";
+          yield* host.bind`Allow(${host}, AWS.Redshift.Connect(${cluster}${strategy}))`({
             policyStatements:
               options.dbUser !== undefined
                 ? [

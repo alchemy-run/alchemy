@@ -41,10 +41,10 @@ const trustPolicy = (service: string) =>
 // `list()`, and assert the deployed stream appears in the exhaustively
 // paginated result.
 //
-// Gated off by default (AWS_TEST_METRICSTREAM=1): the live setup provisions a
-// Firehose delivery stream (CREATING -> ACTIVE can take a couple of minutes) and
-// depends on fresh-IAM-role propagation, which is too slow/flaky for default CI.
-test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
+// The live setup provisions a Firehose delivery stream (CREATING -> ACTIVE can
+// take a couple of minutes; ~55s observed) and depends on fresh-IAM-role
+// propagation, so it is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed metric stream",
   (stack) =>
     Effect.gen(function* () {

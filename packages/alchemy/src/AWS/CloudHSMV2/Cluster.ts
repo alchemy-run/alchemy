@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 import { findClusterById, sameStringSet, toTagRecord } from "./internal.ts";
 
@@ -37,8 +38,10 @@ export interface ClusterProps {
    */
   networkType?: cloudhsm.NetworkType;
   /**
-   * Whether the cluster runs in `"FIPS"` or `"NON_FIPS"` mode. Changing the
-   * mode replaces the cluster.
+   * Whether the cluster runs in `"FIPS"` or `"NON_FIPS"` mode. Required by
+   * AWS for `hsm2m.*` HSM types, so Alchemy sends `"FIPS"` when omitted
+   * (legacy `hsm1.*` clusters are FIPS-only and omit it). Changing the mode
+   * replaces the cluster.
    * @default "FIPS"
    */
   mode?: cloudhsm.ClusterMode;
@@ -293,7 +296,10 @@ export const ClusterProvider = () =>
               SubnetIds: props.subnetIds,
               SourceBackupId: props.sourceBackupId,
               NetworkType: props.networkType,
-              Mode: props.mode,
+              // hsm2m.* types require an explicit Mode ("Mode is a required
+              // argument for this hsm type"); default to FIPS as documented.
+              // Legacy hsm1.* types predate the parameter and are FIPS-only.
+              Mode: props.mode ?? (props.hsmType.startsWith("hsm1") ? undefined : "FIPS"),
               BackupRetentionPolicy:
                 backupRetentionDays !== undefined
                   ? { Type: "DAYS", Value: String(backupRetentionDays) }
@@ -361,6 +367,17 @@ export const ClusterProvider = () =>
             }),
             Effect.catchTag("CloudHsmResourceNotFoundException", () => Effect.void),
           );
+          // CloudHSM writes audit logs to `/aws/cloudhsm/<clusterId>` and
+          // never deletes the group. Wait (bounded) for the deletion to
+          // finish so no late flush recreates it, then reap it.
+          yield* findClusterById(clusterId).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
+              until: (cluster) => cluster === undefined || cluster.State === "DELETED",
+            }),
+            Effect.catch(() => Effect.void),
+          );
+          yield* reapLogGroupsByPrefix(`/aws/cloudhsm/${clusterId}`);
         }),
 
         list: () =>

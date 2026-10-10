@@ -13,12 +13,16 @@ import type { Providers } from "../Providers.ts";
 import {
   crawlerArn,
   fetchObservedTags,
+  reapGlueLogStreams,
   retryCrawlerDelete,
   retryWhileCrawlerTargetNotReady,
   retryWhileCrawlerRunning,
   retryWhileRoleNotAssumable,
   syncTags,
 } from "./internal.ts";
+
+/** Shared, service-managed log group Glue writes every crawl to. */
+const GLUE_CRAWLER_LOG_GROUP = "/aws-glue/crawlers";
 
 export interface CrawlerS3Target {
   /** S3 path to crawl, e.g. `s3://my-bucket/data/`. */
@@ -363,47 +367,57 @@ export const CrawlerProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           const name = output.crawlerName;
-          let crawler = yield* observe(name);
-          if (crawler === undefined) return;
+          // Crawler teardown first; the early returns only skip the
+          // crawler steps so the log reap below still runs on a retried
+          // delete whose crawler is already gone.
+          yield* Effect.gen(function* () {
+            let crawler = yield* observe(name);
+            if (crawler === undefined) return;
 
-          if (crawler.State === "RUNNING") {
-            yield* glue
-              .stopCrawler({ Name: name })
-              .pipe(
-                Effect.catchTag(
-                  [
-                    "CrawlerNotRunningException",
-                    "CrawlerStoppingException",
-                    "EntityNotFoundException",
-                  ],
-                  () => Effect.void,
-                ),
-              );
-          }
+            if (crawler.State === "RUNNING") {
+              yield* glue
+                .stopCrawler({ Name: name })
+                .pipe(
+                  Effect.catchTag(
+                    [
+                      "CrawlerNotRunningException",
+                      "CrawlerStoppingException",
+                      "EntityNotFoundException",
+                    ],
+                    () => Effect.void,
+                  ),
+                );
+            }
 
-          // Stop is asynchronous. Wait for READY (deletable) or absence;
-          // interrupted deletes can resume from RUNNING/STOPPING safely.
-          crawler = yield* Effect.repeat(observe(name), {
-            schedule: Schedule.fixed("2 seconds"),
-            until: (current) => current === undefined || current.State === "READY",
-            times: 15,
-          });
-          if (crawler === undefined) return;
-
-          yield* retryCrawlerDelete(glue.deleteCrawler({ Name: name })).pipe(
-            Effect.catchTag("EntityNotFoundException", () => Effect.void),
-          );
-
-          const remaining = yield* Effect.repeat(observe(name), {
-            schedule: Schedule.fixed("2 seconds"),
-            until: (current) => current === undefined,
-            times: 15,
-          });
-          if (remaining !== undefined) {
-            return yield* glue.OperationTimeoutException.make({
-              message: `crawler ${name} remained visible after delete for 30 seconds`,
+            // Stop is asynchronous. Wait for READY (deletable) or absence;
+            // interrupted deletes can resume from RUNNING/STOPPING safely.
+            crawler = yield* Effect.repeat(observe(name), {
+              schedule: Schedule.fixed("2 seconds"),
+              until: (current) => current === undefined || current.State === "READY",
+              times: 15,
             });
-          }
+            if (crawler === undefined) return;
+
+            yield* retryCrawlerDelete(glue.deleteCrawler({ Name: name })).pipe(
+              Effect.catchTag("EntityNotFoundException", () => Effect.void),
+            );
+
+            const remaining = yield* Effect.repeat(observe(name), {
+              schedule: Schedule.fixed("2 seconds"),
+              until: (current) => current === undefined,
+              times: 15,
+            });
+            if (remaining !== undefined) {
+              return yield* glue.OperationTimeoutException.make({
+                message: `crawler ${name} remained visible after delete for 30 seconds`,
+              });
+            }
+          });
+
+          // Glue logs every crawl to the stream `<crawlerName>` in the shared,
+          // service-managed `/aws-glue/crawlers` group. deleteCrawler leaves
+          // it behind, so reap our stream (never the shared group).
+          yield* reapGlueLogStreams([GLUE_CRAWLER_LOG_GROUP], [name], { exact: true });
         }),
       });
     }),

@@ -135,14 +135,50 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               },
             },
           });
+          // Pipeline endpoints only attach to VPC pipelines ("The pipeline is
+          // not configured for VPC."), must live in a DIFFERENT VPC than the
+          // pipeline ("Creating a pipeline endpoint in the same VPC as the
+          // pipeline is not supported."), and every VPC involved needs DNS
+          // support + hostnames enabled.
+          const network = (name: string, octet: number) =>
+            Effect.gen(function* () {
+              const vpc = yield* AWS.EC2.Vpc(`${name}Vpc`, {
+                cidrBlock: `10.${octet}.0.0/16`,
+                enableDnsSupport: true,
+                enableDnsHostnames: true,
+              });
+              const subnet = yield* AWS.EC2.Subnet(`${name}Subnet`, {
+                vpcId: vpc.vpcId,
+                cidrBlock: `10.${octet}.1.0/24`,
+                availabilityZone: `${region}a`,
+              });
+              const securityGroup = yield* AWS.EC2.SecurityGroup(`${name}SG`, {
+                vpcId: vpc.vpcId,
+                description: `osis ${name} fixture`,
+                ingress: [
+                  { ipProtocol: "tcp", fromPort: 443, toPort: 443, cidrIpv4: `10.${octet}.0.0/16` },
+                ],
+              });
+              return {
+                subnetIds: [subnet.subnetId],
+                securityGroupIds: [securityGroup.groupId],
+              };
+            });
+          const pipelineNetwork = yield* network("Pipeline", 42);
+          const endpointNetwork = yield* network("Endpoint", 43);
+
           const pipeline = yield* AWS.OSIS.Pipeline("Logs", {
             minUnits: 1,
             maxUnits: 1,
             pipelineConfigurationBody: pipelineConfig(role.roleArn, bucket.bucketName, region),
+            vpcOptions: pipelineNetwork,
             tags: { fixture: "osis-pipeline" },
           });
 
-          // Resource-based policy: allow this account root to ingest.
+          // Resource-based policy: OSIS only accepts `osis:CreatePipelineEndpoint`
+          // grants to 12-digit account IDs (an `arn:aws:iam::…:root`
+          // principal or `osis:Ingest` is rejected as "Invalid resource
+          // policy.").
           const policy = yield* AWS.OSIS.ResourcePolicy("IngestPolicy", {
             resourceArn: pipeline.pipelineArn,
             policy: Output.interpolate`{
@@ -150,8 +186,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               "Statement": [
                 {
                   "Effect": "Allow",
-                  "Principal": { "AWS": "arn:aws:iam::${accountId}:root" },
-                  "Action": ["osis:Ingest"],
+                  "Principal": { "AWS": ["${accountId}"] },
+                  "Action": "osis:CreatePipelineEndpoint",
                   "Resource": "${pipeline.pipelineArn}"
                 }
               ]
@@ -159,19 +195,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           });
 
           // VPC pipeline endpoint: private ingest into the pipeline.
-          const vpc = yield* AWS.EC2.Vpc("EndpointVpc", { cidrBlock: "10.42.0.0/16" });
-          const subnet = yield* AWS.EC2.Subnet("EndpointSubnet", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.42.1.0/24",
-            availabilityZone: `${region}a`,
-          });
-          const securityGroup = yield* AWS.EC2.SecurityGroup("EndpointSG", {
-            vpcId: vpc.vpcId,
-            description: "osis pipeline endpoint fixture",
-          });
           const endpoint = yield* AWS.OSIS.PipelineEndpoint("Private", {
             pipelineArn: pipeline.pipelineArn,
-            vpcOptions: { subnetIds: [subnet.subnetId], securityGroupIds: [securityGroup.groupId] },
+            vpcOptions: endpointNetwork,
           });
 
           return { pipeline, policy, endpoint };
@@ -194,10 +220,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Resource policy: attached and readable out-of-band.
       expect(policy.resourceArn).toBe(pipeline.pipelineArn);
       const readPolicy = yield* osis.getResourcePolicy({ ResourceArn: pipeline.pipelineArn });
-      expect(readPolicy.Policy).toContain("osis:Ingest");
+      expect(readPolicy.Policy).toContain("osis:CreatePipelineEndpoint");
 
       // VPC pipeline endpoint: created and visible out-of-band.
-      expect(endpoint.endpointId).toMatch(/^pe-/);
+      // Endpoint ids are opaque (e.g. "a8Wl1Q8FKm1WXWrrY5fD"), not `pe-` prefixed.
+      expect(endpoint.endpointId).toBeTruthy();
       expect(endpoint.pipelineArn).toBe(pipeline.pipelineArn);
       expect(endpoint.status).toBe("ACTIVE");
       const endpoints = yield* osis.listPipelineEndpoints({});

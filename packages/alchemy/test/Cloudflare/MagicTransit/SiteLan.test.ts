@@ -13,8 +13,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Magic WAN sites (and their LANs) are entitlement-gated. On the standard
 // testing account every Magic Transit call fails with the typed
-// `MagicWanUnauthorized` error (Cloudflare code 1025) or `Forbidden` (403)
-// depending on token scope. `list()` catches `MagicWanUnauthorized` and
+// `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). `list()` catches both tags and
 // returns `[]`, so the read-only list assertion below always runs; the live
 // deploy+enumerate case is gated behind an explicit opt-in env flag for
 // entitled accounts.

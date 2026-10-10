@@ -7,7 +7,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import Valkey from "iovalkey";
 import * as AWS from "@/AWS";
-import { getProvisionedNetwork } from "./ProvisionedFixture.ts";
+import { getProvisionedNetwork } from "./ProvisionedNetwork.ts";
 
 export class ProvisionedCacheDataPlaneFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "ProvisionedCacheDataPlaneFunction",

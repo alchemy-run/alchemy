@@ -75,7 +75,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             subnetIds: [subnetA.subnetId, subnetB.subnetId],
           });
           const instance = yield* ReplicationInstance("Instance", {
-            replicationInstanceClass: "dms.t3.micro",
+            replicationInstanceClass: "dms.t3.small",
             allocatedStorage: 20,
             replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
             publiclyAccessible: false,
@@ -86,7 +86,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       );
 
       expect(instance.replicationInstanceArn).toContain(":rep:");
-      expect(instance.replicationInstanceClass).toBe("dms.t3.micro");
+      expect(instance.replicationInstanceClass).toBe("dms.t3.small");
       expect(instance.status).toBe("available");
 
       const observed = yield* findInstance(instance.replicationInstanceIdentifier);

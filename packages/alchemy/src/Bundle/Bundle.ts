@@ -1,4 +1,6 @@
 import assert from "node:assert";
+import { existsSync } from "node:fs";
+import * as nodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -179,6 +181,67 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
 };
 
 /**
+ * The package root of a bare specifier (`@scope/pkg/sub` → `@scope/pkg`), or
+ * `undefined` for relative, absolute, builtin-prefixed, or virtual ids.
+ */
+const bareSpecifierRoot = (specifier: string): string | undefined => {
+  if (/^[./\\\0]/.test(specifier) || specifier.includes(":")) return undefined;
+  const segments = specifier.split("/");
+  if (specifier.startsWith("@")) {
+    return segments.length >= 2 ? `${segments[0]}/${segments[1]}` : undefined;
+  }
+  return segments[0] || undefined;
+};
+
+/** The `node_modules/<root>` directory visible from `fromDir`, if any. */
+const findInstalledPackageDir = (root: string, fromDir: string): string | undefined => {
+  let dir = fromDir;
+  while (true) {
+    const candidate = nodePath.join(dir, "node_modules", root);
+    if (existsSync(nodePath.join(candidate, "package.json"))) return candidate;
+    const parent = nodePath.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+};
+
+/**
+ * Rolldown only WARNS when an import cannot be resolved and leaves it
+ * external. For a package that is not installed at all that is the intended
+ * escape hatch (optional dependencies), but a package that IS installed and
+ * still fails to resolve means its entry for the bundle's conditions does
+ * not exist — most often an unbuilt workspace package whose `exports` point
+ * at a missing `lib/`. Externalizing it ships a bundle whose deployed
+ * runtime dies at boot with `Cannot find package`, so fail the build with
+ * the cause instead. Every other log goes to the caller's `onLog` (or
+ * rolldown's default handling).
+ */
+const failOnUnresolvedInstalledPackage =
+  (inputOptions: rolldown.InputOptions): NonNullable<rolldown.InputOptions["onLog"]> =>
+  (level, log, handler) => {
+    if (log.code === "UNRESOLVED_IMPORT" && log.exporter !== undefined) {
+      const root = bareSpecifierRoot(log.exporter);
+      const fromDir =
+        log.id !== undefined && nodePath.isAbsolute(log.id)
+          ? nodePath.dirname(log.id)
+          : nodePath.resolve(inputOptions.cwd ?? process.cwd());
+      const installed = root === undefined ? undefined : findInstalledPackageDir(root, fromDir);
+      if (installed !== undefined) {
+        return handler("error", {
+          ...log,
+          message:
+            `"${log.exporter}" is installed at ${installed} but cannot be resolved` +
+            (log.id === undefined ? "" : ` from ${log.id}`) +
+            ": none of its package.json entry points exist for the bundle's conditions. " +
+            "If it is a workspace package, build it first (its `exports` likely point at missing build output).",
+        });
+      }
+    }
+    if (inputOptions.onLog !== undefined) return inputOptions.onLog(level, log, handler);
+    return handler(level, log);
+  };
+
+/**
  * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
  * framework flags win over any caller-provided keys) and
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
@@ -186,6 +249,7 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
  */
 const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
+  onLog: failOnUnresolvedInstalledPackage(inputOptions),
   transform: {
     ...inputOptions.transform,
     define: {
