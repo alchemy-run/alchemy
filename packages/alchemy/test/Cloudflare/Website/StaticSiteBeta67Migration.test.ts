@@ -119,102 +119,123 @@ test.provider.skipIf(!!process.env.FAST)(
       const readRow = (fqn: string) =>
         fs.readFileString(stateFile(fqn)).pipe(Effect.map((raw) => JSON.parse(raw)));
 
-      // ── Fixture ─────────────────────────────────────────────────────────
-      yield* fs.writeFileString(
-        path.join(dir, "package.json"),
-        JSON.stringify(
-          {
-            name: "b67-migration-fixture",
-            private: true,
-            dependencies: {
-              alchemy: "2.0.0-beta.67",
-              // Match the beta.67 release lockfile, independently of the
-              // current workspace's Effect version.
-              effect: "4.0.0-beta.100",
-              "@effect/platform-node": "4.0.0-beta.100",
-              "@effect/platform-bun": "4.0.0-beta.100",
-            },
-            // Prerelease ranges otherwise pull newer adapters that import
-            // APIs absent from the legacy Effect runtime (e.g. ByteSize).
-            overrides: {
-              effect: "4.0.0-beta.100",
-              "@effect/platform-node": "4.0.0-beta.100",
-              "@effect/platform-bun": "4.0.0-beta.100",
-              "@effect/platform-node-shared": "4.0.0-beta.100",
-              "@effect/sql-d1": "4.0.0-beta.100",
-              "@effect/vitest": "4.0.0-beta.100",
-            },
-          },
-          null,
-          2,
-        ),
-      );
-      yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>b67-migration</h1>");
-      yield* fs.writeFileString(
-        path.join(dir, "build.sh"),
-        "mkdir -p dist && cp index.html dist/index.html",
-      );
-      // beta.67 entry: resolves `alchemy` from the temp node_modules.
-      yield* fs.writeFileString(
-        path.join(dir, "alchemy.run.ts"),
-        stackProgram("alchemy", "alchemy/Cloudflare"),
-      );
-      // Current-version entry: resolves the WORKSPACE sources directly, so
-      // no linking dance is needed and `effect` is the workspace instance.
-      yield* fs.writeFileString(
-        path.join(dir, "alchemy.current.run.ts"),
-        stackProgram(
-          pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
-          pathe.join(repoRoot, "packages/alchemy/src/Cloudflare/index.ts"),
-        ),
-      );
-
-      // ── Phase 1: deploy with the published beta.67 ──────────────────────
-      yield* run({ cmd: "bun", args: ["install"], cwd: dir });
-      yield* run({
-        cmd: "bun",
-        args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
-        cwd: dir,
-        env: legacyCliEnv,
-      });
-
-      // beta.67 persisted the Worker at the legacy `Site/Worker` FQN.
-      const before = yield* readRow("Site__Worker");
-      const workerName: string = before.attr.workerName;
-      expect(before.fqn).toEqual("Site/Worker");
-      expect(workerName).toBeDefined();
-      yield* expectWorkerExists(workerName, accountId);
-
-      // ── Phase 2: re-deploy with the CURRENT workspace version ───────────
-      const output = yield* run({
-        cmd: "bun",
-        args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
-        cwd: dir,
-      });
-
-      // The plan surfaced the migration and never planned a create/delete.
-      expect(output).toContain("renamed from Site/Worker");
-      expect(output).not.toContain("to create");
-      expect(output).not.toContain("to delete");
-
-      // The row moved: same instanceId, same physical worker, new FQN.
-      const after = yield* readRow("Site");
-      expect(after.instanceId).toEqual(before.instanceId);
-      expect(after.attr.workerName).toEqual(workerName);
-      expect(after.logicalId).toEqual("Site");
-      expect(yield* fs.exists(stateFile("Site__Worker"))).toBe(false);
-
-      // THE assertion: the worker survived the upgrade.
-      yield* expectWorkerExists(workerName, accountId);
-
-      // ── Cleanup ─────────────────────────────────────────────────────────
-      yield* run({
+      // Destroy whatever this attempt deployed even when an assertion (or a
+      // CLI step) fails: the state lives in this attempt's temp dir, so a
+      // runner retry starts from a fresh state and could never clean it up.
+      // The current CLI destroys rows at either FQN; beta.67 is the fallback
+      // for a phase-1-only state the current version cannot load.
+      const destroy = run({
         cmd: "bun",
         args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
         cwd: dir,
-      });
-      yield* waitForWorkerToBeDeleted(workerName, accountId);
-      yield* fs.remove(dir, { recursive: true });
+      }).pipe(
+        Effect.catch(() =>
+          run({
+            cmd: "bun",
+            args: ["node_modules/alchemy/bin/cli.js", "destroy", "--stage", STAGE, "--yes"],
+            cwd: dir,
+            env: legacyCliEnv,
+          }),
+        ),
+      );
+      const cleanup = destroy.pipe(
+        Effect.ignore,
+        Effect.andThen(fs.remove(dir, { recursive: true }).pipe(Effect.ignore)),
+      );
+
+      yield* Effect.gen(function* () {
+        // ── Fixture ─────────────────────────────────────────────────────────
+        yield* fs.writeFileString(
+          path.join(dir, "package.json"),
+          JSON.stringify(
+            {
+              name: "b67-migration-fixture",
+              private: true,
+              dependencies: {
+                alchemy: "2.0.0-beta.67",
+                // Match the beta.67 release lockfile, independently of the
+                // current workspace's Effect version.
+                effect: "4.0.0-beta.100",
+                "@effect/platform-node": "4.0.0-beta.100",
+                "@effect/platform-bun": "4.0.0-beta.100",
+              },
+              // Prerelease ranges otherwise pull newer adapters that import
+              // APIs absent from the legacy Effect runtime (e.g. ByteSize).
+              overrides: {
+                effect: "4.0.0-beta.100",
+                "@effect/platform-node": "4.0.0-beta.100",
+                "@effect/platform-bun": "4.0.0-beta.100",
+                "@effect/platform-node-shared": "4.0.0-beta.100",
+                "@effect/sql-d1": "4.0.0-beta.100",
+                "@effect/vitest": "4.0.0-beta.100",
+              },
+            },
+            null,
+            2,
+          ),
+        );
+        yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>b67-migration</h1>");
+        yield* fs.writeFileString(
+          path.join(dir, "build.sh"),
+          "mkdir -p dist && cp index.html dist/index.html",
+        );
+        // beta.67 entry: resolves `alchemy` from the temp node_modules.
+        yield* fs.writeFileString(
+          path.join(dir, "alchemy.run.ts"),
+          stackProgram("alchemy", "alchemy/Cloudflare"),
+        );
+        // Current-version entry: resolves the WORKSPACE sources directly, so
+        // no linking dance is needed and `effect` is the workspace instance.
+        yield* fs.writeFileString(
+          path.join(dir, "alchemy.current.run.ts"),
+          stackProgram(
+            pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
+            pathe.join(repoRoot, "packages/alchemy/src/Cloudflare/index.ts"),
+          ),
+        );
+
+        // ── Phase 1: deploy with the published beta.67 ──────────────────────
+        yield* run({ cmd: "bun", args: ["install"], cwd: dir });
+        yield* run({
+          cmd: "bun",
+          args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
+          cwd: dir,
+          env: legacyCliEnv,
+        });
+
+        // beta.67 persisted the Worker at the legacy `Site/Worker` FQN.
+        const before = yield* readRow("Site__Worker");
+        const workerName: string = before.attr.workerName;
+        expect(before.fqn).toEqual("Site/Worker");
+        expect(workerName).toBeDefined();
+        yield* expectWorkerExists(workerName, accountId);
+
+        // ── Phase 2: re-deploy with the CURRENT workspace version ───────────
+        const output = yield* run({
+          cmd: "bun",
+          args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
+          cwd: dir,
+        });
+
+        // The plan surfaced the migration and never planned a create/delete.
+        expect(output).toContain("renamed from Site/Worker");
+        expect(output).not.toContain("to create");
+        expect(output).not.toContain("to delete");
+
+        // The row moved: same instanceId, same physical worker, new FQN.
+        const after = yield* readRow("Site");
+        expect(after.instanceId).toEqual(before.instanceId);
+        expect(after.attr.workerName).toEqual(workerName);
+        expect(after.logicalId).toEqual("Site");
+        expect(yield* fs.exists(stateFile("Site__Worker"))).toBe(false);
+
+        // THE assertion: the worker survived the upgrade.
+        yield* expectWorkerExists(workerName, accountId);
+
+        // ── Cleanup ─────────────────────────────────────────────────────────
+        yield* destroy;
+        yield* waitForWorkerToBeDeleted(workerName, accountId);
+      }).pipe(Effect.ensuring(cleanup));
     }),
   {
     tags: [
