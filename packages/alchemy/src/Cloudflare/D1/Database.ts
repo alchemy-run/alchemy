@@ -270,6 +270,18 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("Cloudflare.D1Database");
 
+/**
+ * Keep the persisted replication shape when the live mode matches. An omitted
+ * persisted configuration means disabled, as it does during reconcile.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveObservedD1ReadReplication = (
+  observed: Database["Attributes"]["readReplication"],
+  persisted: Database["Attributes"]["readReplication"],
+): Database["Attributes"]["readReplication"] =>
+  (observed?.mode ?? "disabled") === (persisted?.mode ?? "disabled") ? persisted : observed;
+
 export const ProviderLive = () =>
   Provider.succeed(Database, {
     stables: ["databaseId", "accountId"],
@@ -359,9 +371,10 @@ export const ProviderLive = () =>
               databaseName: db.name ?? output.databaseName,
               jurisdiction: output.jurisdiction,
               // Distilled widened generated string enums to open unions.
-              readReplication: (db.readReplication ?? undefined) as
-                | { mode: "auto" | "disabled" }
-                | undefined,
+              readReplication: resolveObservedD1ReadReplication(
+                (db.readReplication ?? undefined) as { mode: "auto" | "disabled" } | undefined,
+                output.readReplication,
+              ),
               accountId: output.accountId,
               migrationsDir: output.migrationsDir,
               migrationsTable: output.migrationsTable,
