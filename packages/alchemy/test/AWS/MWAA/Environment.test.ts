@@ -1,4 +1,3 @@
-import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,7 +6,7 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import { getDefaultVpc } from "../DefaultVpc.ts";
+import { MwaaNetwork } from "./network.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,38 +24,6 @@ test.provider(
     }),
   { tags: ["provider:aws", "provider:aws:mwaa", "live"] },
 );
-
-// Resolve two subnets from the account's default VPC in distinct Availability
-// Zones plus the VPC's default security group. NOTE: a REAL MWAA environment
-// requires PRIVATE subnets with outbound internet egress (NAT gateway or the
-// full set of MWAA VPC interface endpoints). The factory never creates NAT
-// gateways, so this networking is expected to be supplied out of band by an
-// entitled/patient runner — which is exactly why the lifecycle below is gated.
-const resolveNetwork = Effect.gen(function* () {
-  const vpc = yield* getDefaultVpc;
-  const subnets = yield* EC2.describeSubnets({
-    Filters: [
-      { Name: "vpc-id", Values: [vpc.vpcId] },
-      { Name: "default-for-az", Values: ["true"] },
-    ],
-  });
-  const byAz = new Map<string, string>();
-  for (const s of subnets.Subnets ?? []) {
-    if (s.AvailabilityZone && s.SubnetId && !byAz.has(s.AvailabilityZone)) {
-      byAz.set(s.AvailabilityZone, s.SubnetId);
-    }
-  }
-  const subnetIds = [...byAz.values()].slice(0, 2);
-
-  const sgs = yield* EC2.describeSecurityGroups({
-    Filters: [
-      { Name: "vpc-id", Values: [vpc.vpcId] },
-      { Name: "group-name", Values: ["default"] },
-    ],
-  });
-  const securityGroupId = sgs.SecurityGroups?.[0]?.GroupId;
-  return { subnetIds, securityGroupId };
-});
 
 // MWAA execution role: trusts the Airflow environment + task principals and
 // grants the standard access to the DAGs bucket, CloudWatch Logs, SQS, and KMS.
@@ -111,13 +78,12 @@ const executionRolePolicy = (
   ],
 });
 
-// MWAA environments take ~20-30 minutes to create, ~20-30 minutes to delete,
-// and are billed hourly while they exist. They also require PRIVATE subnets
-// with outbound egress (NAT or MWAA VPC endpoints) that this test does not
-// provision — against the default VPC's public subnets CreateEnvironment fails
-// with `ValidationException: The subnets must be private.` The full lifecycle
-// is therefore gated behind AWS_TEST_MWAA=1 (a runner that supplies private
-// networking) and always destroys what it created.
+// MWAA environments take ~20-30 minutes to create and ~20-30 minutes to
+// delete (the provider waits for deletion so the in-stack VPC can be torn
+// down), and are billed hourly (~$0.49/h for mw1.small, plus ~$0.045/h for the
+// test's single NAT gateway). The test builds its own private networking
+// (VPC + 2 private subnets in 2 AZs + IGW + one NAT gateway, see network.ts),
+// so the only reason for the AWS_TEST_MWAA=1 gate is time and cost.
 test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
   "create environment, verify available, destroy, verify gone",
   (stack) =>
@@ -125,12 +91,10 @@ test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
       yield* stack.destroy();
 
       const { accountId, region } = yield* AWSEnvironment.current;
-      const { subnetIds, securityGroupId } = yield* resolveNetwork;
-      expect(subnetIds.length).toBe(2);
-      expect(securityGroupId).toBeDefined();
 
       const { environment } = yield* stack.deploy(
         Effect.gen(function* () {
+          const { subnetIds, securityGroupIds } = yield* MwaaNetwork("MwaaNetwork", "10.86.0.0/16");
           const bucket = yield* AWS.S3.Bucket("Dags", {
             versioning: "Enabled",
             forceDestroy: true,
@@ -157,7 +121,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
             sourceBucketArn: bucket.bucketArn,
             dagS3Path: "dags",
             subnetIds,
-            securityGroupIds: securityGroupId ? [securityGroupId] : undefined,
+            securityGroupIds,
             environmentClass: "mw1.small",
             maxWorkers: 2,
             minWorkers: 1,
@@ -187,8 +151,9 @@ test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
 
       yield* stack.destroy();
       yield* assertEnvironmentDeleted(environment.environmentName);
-    }),
-  // create (~20-30 min) + destroy initiation, one test.
+      // Billable NAT gateway + environment: never leave them behind on failure.
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  // network + create (~20-30 min) + delete-until-gone (~20-30 min) + network teardown.
   {
     tags: [
       "provider:aws",
@@ -198,12 +163,12 @@ test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
       "provider:aws:s3",
       "live",
     ],
-    timeout: 4_200_000,
+    timeout: 6_000_000,
   },
 );
 
-// Deletion is verified as INITIATED (status DELETING, irreversible) or fully
-// gone. Full disappearance takes ~20-30 more minutes server-side.
+// The provider's delete waits until the environment is gone; tolerate a
+// lingering DELETING status for eventual consistency of GetEnvironment.
 const assertEnvironmentDeleted = (name: string) =>
   Effect.gen(function* () {
     const status = yield* mwaa.getEnvironment({ Name: name }).pipe(

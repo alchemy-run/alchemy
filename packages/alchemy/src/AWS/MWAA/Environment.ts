@@ -287,6 +287,28 @@ const toLoggingInput = (
   };
 };
 
+// Compare desired logging against the OBSERVED configuration. A module left
+// unset is disabled; a disabled module's log level is irrelevant.
+const LOG_MODULES = [
+  ["dagProcessingLogs", "DagProcessingLogs"],
+  ["schedulerLogs", "SchedulerLogs"],
+  ["webserverLogs", "WebserverLogs"],
+  ["workerLogs", "WorkerLogs"],
+  ["taskLogs", "TaskLogs"],
+] as const;
+
+const sameLogging = (
+  desired: EnvironmentLoggingConfig,
+  observed: mwaa.LoggingConfiguration | undefined,
+): boolean =>
+  LOG_MODULES.every(([prop, wire]) => {
+    const want = desired[prop];
+    const have = observed?.[wire];
+    const wantEnabled = want?.enabled ?? false;
+    if (wantEnabled !== (have?.Enabled ?? false)) return false;
+    return !wantEnabled || want?.logLevel === have?.LogLevel;
+  });
+
 const sameStringSet = (a: string[], b: string[]): boolean => {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
@@ -593,7 +615,10 @@ export const EnvironmentProvider = () =>
             update.AirflowConfigurationOptions = props.airflowConfigurationOptions;
             mutated = true;
           }
-          if (props.loggingConfiguration !== undefined) {
+          if (
+            props.loggingConfiguration !== undefined &&
+            !sameLogging(props.loggingConfiguration, observed.LoggingConfiguration)
+          ) {
             update.LoggingConfiguration = toLoggingInput(props.loggingConfiguration);
             mutated = true;
           }
@@ -624,9 +649,39 @@ export const EnvironmentProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* mwaa
-            .deleteEnvironment({ Name: output.environmentName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          const name = output.environmentName;
+          const existing = yield* readEnvironment(name);
+          if (existing === undefined) return;
+          // A second DeleteEnvironment on an environment that is already
+          // DELETING is rejected; only initiate when it is not in flight.
+          if (existing.Status !== "DELETING") {
+            yield* mwaa
+              .deleteEnvironment({ Name: name })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          }
+          // Wait until the environment is gone. MWAA keeps ENIs in the
+          // customer's subnets (under the environment's security groups)
+          // until deletion completes, so returning early makes every
+          // downstream Subnet/SecurityGroup/VPC delete fail with
+          // DependencyViolation. Deletion typically takes 20-30 minutes;
+          // budget ~45 min (90 * 30s). DELETE_FAILED stops immediately.
+          yield* readEnvironment(name).pipe(
+            Effect.flatMap((env) => {
+              if (env === undefined || env.Status === "DELETED") return Effect.void;
+              if (env.Status === "DELETE_FAILED") {
+                return Effect.fail(
+                  new Error(`Environment '${name}' reached terminal state 'DELETE_FAILED'`),
+                );
+              }
+              return Effect.fail(
+                new Error(`Environment '${name}' still deleting (status: ${env.Status})`),
+              );
+            }),
+            Effect.retry({
+              while: (e) => e instanceof Error && !e.message.includes("terminal state"),
+              schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]),
+            }),
+          );
         }),
 
         list: () =>
