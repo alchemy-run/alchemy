@@ -46,10 +46,9 @@ const collectorWorker = () =>
 // actually executing inside the deployed container (`/ticks` keeps climbing).
 //
 // This is the real-deploy regression for #706. Docker/ECR + Fargate placement
-// + the ALB health ramp takes about five minutes even on the standing default
-// VPC, so keep it out of the hard-240 default sweep. Run it explicitly with
-// `AWS_TEST_SLOW=1`; `FAST=1` always keeps the lifecycle disabled.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// + the ALB health ramp takes about five minutes (~4.6 min observed) on the
+// standing default VPC; `--fast` skips the lifecycle.
+test.provider.skipIf(!!process.env.FAST)(
   // The title doubles as the scratch stack name, which prefixes every
   // physical name — the orphan sweep prefix-matches on it.
   E2E_TEST_TITLE,

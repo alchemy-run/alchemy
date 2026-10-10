@@ -41,14 +41,14 @@ test.provider(
 
 // The live lifecycle requires an EFS file system + mount target; the mount
 // target's ENI takes 1–3 minutes to become available and again to release on
-// teardown, so the full cycle is gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// teardown (~100s observed), so the full cycle is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "create EFS location from a file system + mount target, delete",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const region = yield* Region;
+      const region = yield* yield* Region;
       const vpc = yield* getDefaultVpc;
       const subnets = yield* EC2.describeSubnets({
         Filters: [

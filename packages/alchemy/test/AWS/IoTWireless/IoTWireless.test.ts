@@ -207,14 +207,14 @@ test.provider(
 
 // Deterministic fabricated radio identities — devices and gateways can be
 // registered without hardware (they just never join), but accounts shared
-// with real LoRaWAN fleets should not accumulate phantom radios, so the
-// full device/gateway lifecycle is gated behind AWS_TEST_IOT_WIRELESS=1.
+// with real LoRaWAN fleets should not accumulate phantom radios — such an
+// account opts out with AWS_TEST_IOT_WIRELESS=0. The test destroys both.
 const DEV_EUI = "1a2b3c4d5e6f7081";
 const APP_EUI = "0000000000000001";
 const APP_KEY = Redacted.make("000102030405060708090a0b0c0d0e0f");
 const GATEWAY_EUI = "aa555a0000000101";
 
-test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
+test.provider.skipIf(process.env.AWS_TEST_IOT_WIRELESS === "0")(
   "lifecycle: wireless device + wireless gateway",
   (stack) =>
     Effect.gen(function* () {

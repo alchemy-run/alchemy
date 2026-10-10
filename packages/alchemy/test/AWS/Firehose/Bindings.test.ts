@@ -195,10 +195,10 @@ describe(
     });
 
     // Even with zero buffering, Firehose treats the interval and size as hints
-    // and has exceeded the default suite's 90-second platform budget in live
-    // runs. Keep the end-to-end proof opt-in, but run its independent checks
-    // concurrently so they share one bounded delivery window.
-    describe.concurrent.skipIf(!process.env.AWS_TEST_SLOW)("S3 delivery (slow)", () => {
+    // (~50s observed), so the end-to-end proof is skipped under --fast; its
+    // independent checks run concurrently so they share one bounded delivery
+    // window.
+    describe.concurrent.skipIf(!!process.env.FAST)("S3 delivery (slow)", () => {
       class MarkerNotDeliveredYet extends Data.TaggedError("MarkerNotDeliveredYet") {}
 
       const waitForMarker = (bucketName: string, marker: string) => {

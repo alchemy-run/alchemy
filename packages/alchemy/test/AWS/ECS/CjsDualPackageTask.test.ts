@@ -19,10 +19,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // exit 0. The unit-level pin is test/Bundle/ConditionNames.test.ts — this
 // is the same defect observed from the cloud.
 //
-// Docker + ECR + Fargate placement is minutes of wall clock, so like the
-// Task e2e smoke test it is gated out of the default sweep: run it
-// explicitly with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Docker + ECR + Fargate placement is ~1 minute of wall clock, so it is
+// skipped under --fast like the Task e2e smoke test.
+test.provider.skipIf(!!process.env.FAST)(
   "task importing a CJS dual-package consumer (pg) boots and exits 0",
   (stack) =>
     Effect.gen(function* () {
