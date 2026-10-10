@@ -225,9 +225,9 @@ describe(
       );
 
       // The full RUNNABLE→STARTING→SUCCEEDED round-trip takes 1-3 minutes of
-      // Fargate provisioning — gated so the default suite stays in budget.
-      test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-        "submitted echo job runs to SUCCEEDED (AWS_TEST_SLOW=1)",
+      // Fargate provisioning (~50s observed) — skipped only under --fast.
+      test.provider.skipIf(!!process.env.FAST)(
+        "submitted echo job runs to SUCCEEDED",
         () =>
           Effect.gen(function* () {
             const { jobId } = yield* submit("alchemy-e2e-echo-succeed");
@@ -235,12 +235,12 @@ describe(
               Effect.repeat({
                 schedule: Schedule.spaced("10 seconds"),
                 until: (s) => s === "SUCCEEDED" || s === "FAILED",
-                times: 42,
+                times: 24,
               }),
             );
             expect(status).toBe("SUCCEEDED");
           }),
-        { timeout: 480_000 },
+        { timeout: 300_000 },
       );
     });
 
