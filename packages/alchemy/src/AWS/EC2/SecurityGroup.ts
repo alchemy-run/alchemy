@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./defaultVpcScope.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import {
   declaredSecurityGroupRuleIds,
@@ -692,6 +693,8 @@ export const SecurityGroupProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
+            const defaultVpc = yield* getDefaultVpcScope;
+            const emrManaged = yield* getDefaultVpcEmrManagedSecurityGroupIds(defaultVpc.vpcId);
             const groups = yield* ec2.describeSecurityGroups.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -701,7 +704,9 @@ export const SecurityGroupProvider = () =>
                       sg.GroupId != null &&
                       // Every VPC's `default` group is AWS-managed and can
                       // never be deleted (CannotDelete) — don't enumerate it.
-                      sg.GroupName !== "default",
+                      sg.GroupName !== "default" &&
+                      // EMR's shared default-VPC groups (see helper).
+                      !emrManaged.has(sg.GroupId),
                   ),
                 ),
               ),

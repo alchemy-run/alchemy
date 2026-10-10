@@ -267,7 +267,11 @@ export const ClusterSubnetGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.ClusterSubnetGroups ?? []).filter(
-                  (group) => group.ClusterSubnetGroupName !== undefined,
+                  (group) =>
+                    group.ClusterSubnetGroupName !== undefined &&
+                    // `default` is auto-created by Redshift for the default
+                    // VPC — never ours, never census/nuke it.
+                    group.ClusterSubnetGroupName !== "default",
                 ),
               ),
             ),

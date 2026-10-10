@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 import { findClusterById, sameStringSet, toTagRecord } from "./internal.ts";
 
@@ -366,6 +367,17 @@ export const ClusterProvider = () =>
             }),
             Effect.catchTag("CloudHsmResourceNotFoundException", () => Effect.void),
           );
+          // CloudHSM writes audit logs to `/aws/cloudhsm/<clusterId>` and
+          // never deletes the group. Wait (bounded) for the deletion to
+          // finish so no late flush recreates it, then reap it.
+          yield* findClusterById(clusterId).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
+              until: (cluster) => cluster === undefined || cluster.State === "DELETED",
+            }),
+            Effect.catch(() => Effect.void),
+          );
+          yield* reapLogGroupsByPrefix(`/aws/cloudhsm/${clusterId}`);
         }),
 
         list: () =>

@@ -203,7 +203,9 @@ export const DBSubnetGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBSubnetGroups ?? []).flatMap((group) =>
-                  group.DBSubnetGroupName
+                  // `default` is the RDS-family subnet group AWS auto-creates
+                  // for the default VPC — never ours, never census/nuke it.
+                  group.DBSubnetGroupName && group.DBSubnetGroupName !== "default"
                     ? [
                         {
                           dbSubnetGroupName: group.DBSubnetGroupName,
