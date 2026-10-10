@@ -2535,12 +2535,13 @@ export const FunctionProvider = () =>
           // after the last invoke, even after BOTH the function and its role
           // are already deleted), silently re-creating a just-deleted group.
           // The only reliable reap is a bounded watch over that flush window.
-          // A provably-quiescent group (last ingestion > 2 minutes ago —
-          // every pending flush has long since landed) deletes in a single
-          // call, so routine deletes of idle functions stay fast; a group
-          // with recent ingestion — or one that does not exist yet, where a
-          // first flush may still be in flight — is re-reaped on a short
-          // bounded schedule.
+          // There is NO cheap quiescence shortcut: the group's
+          // lastIngestionTime only reflects batches that have ALREADY been
+          // flushed, so an idle-looking group (last ingestion minutes ago)
+          // can still be recreated seconds later by an invocation that ran
+          // just before deleteFunction and has not flushed yet (observed
+          // live: invokes at t-8s/t-1s, group recreated at t+1s after a
+          // single-shot reap). Always watch the window.
           const logGroupName = `/aws/lambda/${output.functionName}`;
           const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -2553,40 +2554,13 @@ export const FunctionProvider = () =>
               orElse: () => Effect.logWarning(`Timed out reaping Lambda log group ${logGroupName}`),
             }),
           );
-          const lastIngestion = yield* logs
-            .describeLogStreams({
-              logGroupName,
-              orderBy: "LastEventTime",
-              descending: true,
-              limit: 1,
-            })
-            .pipe(
-              Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-              Effect.timeoutOrElse({
-                duration: "5 seconds",
-                orElse: () =>
-                  Effect.gen(function* () {
-                    yield* Effect.logWarning(
-                      `Timed out inspecting Lambda log group ${logGroupName}`,
-                    );
-                    return undefined;
-                  }),
-              }),
-            );
-          const now = yield* Effect.sync(() => Date.now());
-          const quiescent = lastIngestion !== undefined && now - lastIngestion > 120_000;
-          if (quiescent) {
-            yield* reapLogGroup;
-          } else {
-            // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
-            yield* reapLogGroup.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("20 seconds"),
-                times: 2,
-              }),
-            );
-          }
+          // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
+          yield* reapLogGroup.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 seconds"),
+              times: 2,
+            }),
+          );
 
           // A timed-out delete attempt above is not deletion proof, and the
           // Lambda service keeps flushing buffered logs AFTER the function is
