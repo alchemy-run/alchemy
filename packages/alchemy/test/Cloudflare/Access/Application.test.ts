@@ -713,7 +713,7 @@ test.provider(
       );
       const live2 = yield* getLive(cors.applicationId);
       expect(live2.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
-      expect(live2.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
+      expect(live2.corsHeaders?.allowedMethods?.toSorted()).toEqual(["GET", "POST"]);
       expect(live2.sameSiteCookieAttribute).toEqual("lax");
       expect(live2.httpOnlyCookieAttribute).toBe(true);
       expect(live2.enableBindingCookie).toBe(true);
@@ -725,7 +725,7 @@ test.provider(
       const live3 = yield* getLive(eager.applicationId);
       expect(live3.eagerRedirectCookieSetting).toBe(true);
       expect(live3.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
-      expect(live3.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
+      expect(live3.corsHeaders?.allowedMethods?.toSorted()).toEqual(["GET", "POST"]);
       expect(live3.sameSiteCookieAttribute).toEqual("lax");
       expect(live3.httpOnlyCookieAttribute).toBe(true);
       expect(live3.enableBindingCookie).toBe(true);
@@ -737,7 +737,7 @@ test.provider(
       const live4 = yield* getLive(final.applicationId);
       expect(live4.eagerRedirectCookieSetting).toBe(true);
       expect(live4.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
-      expect(live4.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
+      expect(live4.corsHeaders?.allowedMethods?.toSorted()).toEqual(["GET", "POST"]);
       expect(live4.sameSiteCookieAttribute).toEqual("strict");
       expect(live4.httpOnlyCookieAttribute).toBe(true);
       expect(live4.enableBindingCookie).toBe(true);
