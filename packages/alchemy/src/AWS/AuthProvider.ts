@@ -771,6 +771,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           }),
         ),
       );
+      const endpoint = yield* getEnv("AWS_ENDPOINT_URL");
       return {
         accountId,
         credentials: Effect.succeed({
@@ -780,6 +781,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           region,
         }),
         region,
+        endpoint,
         source: { type: "env" as const },
       } satisfies AwsResolvedCredentials;
     }).pipe(

@@ -1017,6 +1017,11 @@ importers:
         specifier: 4.0.0
         version: 4.0.0
 
+    devDependencies:
+      alchemy-test:
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/aws-ecs:
     dependencies:
       '@distilled.cloud/aws':
