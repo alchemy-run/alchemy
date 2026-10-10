@@ -1496,6 +1496,11 @@ const makePlan = <A>(
           state: oldState,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
+        if (oldState.propsIncomplete && provider.read && !reusesMigratedFqn) {
+          // The old identity was not persisted. Diffing its stripped props can
+          // turn a refused create into a replacement that bypasses admission.
+          return Node<Create>({ action: "create", props: applyProps, state: oldState });
+        }
         // A create may have succeeded before state persistence failed. If the
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.

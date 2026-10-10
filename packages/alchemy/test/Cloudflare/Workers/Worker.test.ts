@@ -10,7 +10,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
-import { adopt } from "@/AdoptPolicy";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -21,6 +21,7 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
+import { isResourceState } from "@/State/State.ts";
 import * as Test from "@/Test/Alchemy";
 import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -876,6 +877,140 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(physicalName, accountId);
         }).pipe(logLevel),
       { tags: ["live"] },
+    );
+
+    // #1299: unresolved props bypass the plan probe, and the self-binding forces
+    // precreate. A binding-only cycle with resolved props would not test this path.
+    for (const scopedAdopt of [undefined, false]) {
+      test.provider(
+        `cyclic precreate refuses a foreign Worker with scoped adoption ${scopedAdopt}`,
+        (stack) =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            yield* stack.destroy();
+            const original = yield* stack.deploy(
+              Cloudflare.Worker("CyclicOriginal", { main, workersDev: false }),
+            );
+            const request = { accountId, scriptName: original.workerName };
+            const settings = yield* workers.getScriptScriptAndVersionSetting(request);
+            const deployment = yield* workers.listScriptDeployments(request);
+            yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "CyclicOriginal" });
+            }).pipe(Effect.provide(stack.state));
+
+            const program = Effect.gen(function* () {
+              const kv = yield* Cloudflare.KV.Namespace("CyclicKv");
+              const declaration = Cloudflare.Worker("CyclicDifferent", {
+                main,
+                name: original.workerName,
+                workersDev: false,
+                env: { KV: kv },
+              });
+              const worker = yield* scopedAdopt === undefined
+                ? declaration
+                : declaration.pipe(adopt(scopedAdopt));
+              yield* worker.bind`SELF_NAME`({
+                bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+              });
+              return worker;
+            });
+            const plan = yield* stack.plan(program);
+            expect(plan.resources.CyclicDifferent?.action).toBe("create");
+            const refused = yield* stack.deploy(program).pipe(
+              Effect.as(false),
+              Effect.catchTag("OwnedBySomeoneElse", (error) => {
+                expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+                return Effect.succeed(true);
+              }),
+            );
+            expect(refused).toBe(true);
+            const checkpoint = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "CyclicDifferent",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect(checkpoint?.status).toBe("creating");
+            if (!isResourceState(checkpoint)) throw new Error("Expected a resource checkpoint");
+            expect(checkpoint?.attr).toBeUndefined();
+            expect(checkpoint?.propsIncomplete).toBe(true);
+            // Verify both configuration and active code remain unchanged, not just tags.
+            expect(yield* workers.getScriptScriptAndVersionSetting(request)).toEqual(settings);
+            expect(yield* workers.listScriptDeployments(request)).toEqual(deployment);
+            yield* stack.destroy();
+            expect(yield* workers.listScriptDeployments(request)).toEqual(deployment);
+
+            // Restore only the original logical owner so normal stack cleanup removes it.
+            yield* stack.deploy(
+              Cloudflare.Worker("CyclicOriginal", {
+                main,
+                name: original.workerName,
+                workersDev: false,
+              }),
+            );
+            yield* stack.destroy();
+            yield* waitForWorkerToBeDeleted(original.workerName, accountId);
+          }).pipe(adopt(scopedAdopt === false), logLevel),
+        { tags: ["live"], timeout: 120_000 },
+      );
+    }
+
+    test.provider(
+      "cyclic precreate permits resource-scoped adoption of a foreign Worker",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const original = yield* stack.deploy(
+            Cloudflare.Worker("CyclicAdoptOriginal", { main, workersDev: false }),
+          );
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "CyclicAdoptOriginal",
+            });
+          }).pipe(Effect.provide(stack.state));
+          const program = Effect.gen(function* () {
+            const kv = yield* Cloudflare.KV.Namespace("CyclicAdoptKv");
+            const worker = yield* Cloudflare.Worker("CyclicAdoptDifferent", {
+              main,
+              name: original.workerName,
+              workersDev: false,
+              env: { KV: kv },
+            }).pipe(adopt(true));
+            yield* worker.bind`SELF_NAME`({
+              bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+            });
+            return worker;
+          });
+          expect((yield* stack.plan(program)).resources.CyclicAdoptDifferent?.action).toBe(
+            "create",
+          );
+          const adopted = yield* stack.deploy(program);
+          expect(adopted.workerName).toBe(original.workerName);
+          const tags = yield* getWorkerTags(adopted.workerName, accountId);
+          expect(tags).toContain("alchemy:id:CyclicAdoptDifferent");
+          expect(tags).not.toContain("alchemy:id:CyclicAdoptOriginal");
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: adopted.workerName,
+          });
+          expect(settings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "plain_text",
+              name: "SELF_NAME",
+              text: adopted.workerName,
+            }),
+          );
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(adopted.workerName, accountId);
+        }).pipe(adopt(false), logLevel),
+      { tags: ["live"], timeout: 120_000 },
     );
 
     // First-deploy behaviour: the default (omitting `workersDev`) must enable
