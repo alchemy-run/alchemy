@@ -1,6 +1,7 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -137,6 +138,32 @@ export const ProviderLive = () =>
                   `Namespace with title "${title}" already exists but could not be found`,
                 );
               }),
+            ),
+            // A freshly created namespace is visible to the control plane
+            // immediately, but the KV value API can answer
+            // `NamespaceNotFound` (code 10013) for a short window — under
+            // load long enough that a consumer writing right after deploy
+            // (an Action, a Worker's first request) fails. Wait until a
+            // value read reaches the namespace (`KeyNotFound` for a sentinel
+            // key proves it exists on the data plane).
+            Effect.tap((created) =>
+              kv
+                .getNamespaceMetadata({
+                  accountId: acct,
+                  namespaceId: created.id,
+                  keyName: "__alchemy_namespace_ready__",
+                })
+                .pipe(
+                  Effect.asVoid,
+                  Effect.catchTag("KeyNotFound", () => Effect.void),
+                  Effect.retry({
+                    while: (e) => e._tag === "NamespaceNotFound",
+                    schedule: Schedule.exponential("250 millis", 1.5),
+                    times: 10,
+                  }),
+                  // Readiness is best-effort: never fail the deploy on it.
+                  Effect.catchTag("NamespaceNotFound", () => Effect.void),
+                ),
             ),
           );
       }
