@@ -5612,6 +5612,11 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
       foreign: boolean;
       absent: boolean;
       fail: boolean;
+      precreates: boolean[];
+      refusePrecreate: boolean;
+      failPrecreate: boolean;
+      recoveryOwned: boolean;
+      replaceOnParentChange: boolean;
       reads: string[];
       reconciles: Array<{
         id: string;
@@ -5659,11 +5664,26 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
   > {}
   const Stub = Resource<Stub>("Test.DeferredStub");
   const stubProvider = Provider.succeed(Stub, {
-    read: Effect.fn(function* ({ id }) {
-      (yield* Probe).reads.push(id);
-      return Unowned({ identity: "stub", value: "stub" });
+    diff: Effect.fn(function* ({ olds, news }) {
+      if ((yield* Probe).replaceOnParentChange && isResolved(news) && olds.parent !== news.parent) {
+        return { action: "replace" };
+      }
     }),
-    precreate: () => Effect.succeed({ identity: "stub", value: "stub" }),
+    read: Effect.fn(function* ({ id }) {
+      const probe = yield* Probe;
+      probe.reads.push(id);
+      const attrs = { identity: "stub", value: "stub" };
+      return probe.recoveryOwned ? attrs : Unowned(attrs);
+    }),
+    precreate: Effect.fn(function* ({ adopt }) {
+      const probe = yield* Probe;
+      probe.precreates.push(adopt === true);
+      if (probe.refusePrecreate && !adopt) {
+        return yield* new OwnedBySomeoneElse({ message: "Precreate requires explicit adoption" });
+      }
+      if (probe.failPrecreate) return yield* new ResourceFailure();
+      return { identity: "stub", value: "stub" };
+    }),
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const probe = yield* Probe;
       probe.reconciles.push({ id, olds, output });
@@ -5681,6 +5701,11 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
     foreign: true,
     absent: false,
     fail: false,
+    precreates: [],
+    refusePrecreate: false,
+    failPrecreate: false,
+    recoveryOwned: false,
+    replaceOnParentChange: false,
     reads: [],
     reconciles: [],
     deletes: [],
@@ -5778,6 +5803,106 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
     });
   });
 
+  const cyclicStub = (enabled?: boolean) =>
+    Effect.gen(function* () {
+      const parent = yield* Singleton("Parent", {});
+      const declaration = Stub("Stub", { parent: parent.identity });
+      const stub = yield* enabled === undefined ? declaration : declaration.pipe(adopt(enabled));
+      yield* stub.bind("Self", { env: { SELF: stub.identity } });
+      return stub;
+    });
+
+  for (const scoped of [undefined, true, false]) {
+    test.provider(`precreate receives the effective adoption policy (${scoped})`, (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* Probe;
+        probe.refusePrecreate = true;
+        yield* stack.destroy();
+        const app = cyclicStub(scoped);
+        const plan = yield* stack.plan(app);
+        expect(plan.resources.Stub?.action).toBe("create");
+        expect(probe.precreates).toEqual([]);
+        const accepted = yield* stack.deploy(app).pipe(
+          Effect.as(true),
+          Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(false)),
+        );
+        expect(accepted).toBe(scoped !== false);
+        expect(probe.precreates).toEqual([scoped !== false]);
+        if (scoped === false) {
+          expect((yield* getState("Stub")).attr).toBeUndefined();
+          expect(probe.reconciles).toEqual([]);
+        }
+        yield* stack.destroy();
+        if (scoped === false) expect(probe.deletes).not.toContain("Stub");
+      }).pipe(Effect.provideService(AdoptPolicy, scoped !== true)),
+    );
+  }
+
+  test.provider(
+    "incomplete precreate checkpoints never recover a different owned identity",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* Probe;
+        probe.failPrecreate = true;
+        // A speculative recovery read would find a different, apparently owned resource.
+        probe.recoveryOwned = true;
+        yield* stack.destroy();
+        const app = cyclicStub(false);
+        yield* stack.deploy(app).pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+        const checkpoint = yield* getState("Stub");
+        expect(checkpoint.status).toBe("creating");
+        expect(checkpoint.attr).toBeUndefined();
+        expect(checkpoint.propsIncomplete).toBe(true);
+        expect(checkpoint.props?.parent).toBeUndefined();
+
+        // The upstream now exists, but recovery must not use the stripped old props.
+        yield* stack.plan(app);
+        expect(probe.reads).toEqual([]);
+        yield* stack.destroy();
+        expect(probe.reads).toEqual([]);
+        expect(probe.deletes).not.toContain("Stub");
+        expect(yield* getState("Stub")).toBeUndefined();
+      }),
+  );
+
+  test.provider("replacement cleanup preserves incomplete current-generation props", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* Probe;
+      probe.failPrecreate = true;
+      probe.recoveryOwned = true;
+      yield* stack.destroy();
+      yield* stack
+        .deploy(cyclicStub(false))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      const checkpoint = yield* getState<CreatingResourceState>("Stub");
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.set({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "Stub",
+          value: {
+            ...checkpoint,
+            status: "replacing",
+            deleteFirst: false,
+            old: {
+              ...checkpoint,
+              instanceId: "old-generation",
+              status: "created",
+              attr: { identity: "old-stub", value: "old" },
+            },
+          },
+        });
+      });
+      yield* stack.destroy();
+      // Only the recorded old generation is deleted. Collapsing the replacement
+      // chain must not enable an identity lookup for the incomplete current row.
+      expect(probe.reads).toEqual([]);
+      expect(probe.deletes.filter((id) => id === "Stub")).toHaveLength(1);
+      expect(yield* getState("Stub")).toBeUndefined();
+    }),
+  );
+
   // A resource outside a dependency cycle is never precreated: like any
   // other create with unresolved props, it gets the deferred ownership probe.
   const acyclicStub = (enabled: boolean) =>
@@ -5785,6 +5910,32 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
       const parent = yield* Singleton("Parent", {});
       return yield* Stub("Stub", { parent: parent.identity }).pipe(adopt(enabled));
     });
+
+  test.provider("retrying incomplete props without the cycle still requires admission", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* Probe;
+      probe.failPrecreate = true;
+      probe.replaceOnParentChange = true;
+      yield* stack.destroy();
+      yield* stack
+        .deploy(cyclicStub(false))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect((yield* getState("Stub")).propsIncomplete).toBe(true);
+      probe.failPrecreate = false;
+      const retry = acyclicStub(false);
+      expect((yield* stack.plan(retry)).resources.Stub?.action).toBe("create");
+      const refused = yield* stack.deploy(retry).pipe(
+        Effect.as(false),
+        Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
+      );
+      expect(refused).toBe(true);
+      expect(probe.reconciles).toEqual([]);
+      expect(probe.precreates).toEqual([false]);
+      expect(probe.reads).toEqual(["Stub"]);
+      yield* stack.destroy();
+      expect(probe.deletes).not.toContain("Stub");
+    }),
+  );
 
   test.provider(
     "probes instead of precreating outside a cycle and refuses foreign state",

@@ -57,6 +57,8 @@ interface BaseResourceState {
   removalPolicy?: RemovalPolicy["Service"];
   /** Attr-less lookup could recover the predecessor migrated away from this FQN. */
   adoptionBlocked?: "migrated-fqn";
+  /** Unresolved props were stripped; an attr-less identity lookup is unsafe. */
+  propsIncomplete?: true;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *

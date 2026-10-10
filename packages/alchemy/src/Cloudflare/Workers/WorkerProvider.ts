@@ -14,7 +14,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Unowned } from "../../AdoptPolicy.ts";
+import { OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
 import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
@@ -69,6 +69,10 @@ import {
 } from "./WorkerBinding.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
+export class WorkerIdentityUnresolved extends Data.TaggedError("WorkerIdentityUnresolved")<{
+  message: string;
+}> {}
+
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
@@ -4682,9 +4686,18 @@ export const LiveWorkerProvider = () =>
             }
           }
         }),
-        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
+        precreate: Effect.fn(function* ({ id, fqn, news, session, bindings, adopt }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
+          if (
+            news.version?.parent == null &&
+            news.preview?.of == null &&
+            (!isResolved(news.name) || !isResolved(news.namespace))
+          ) {
+            return yield* new WorkerIdentityUnresolved({
+              message: `Cannot pre-create Worker '${fqn}' before its name and dispatch namespace resolve.`,
+            });
+          }
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4715,15 +4728,33 @@ export const LiveWorkerProvider = () =>
               crons: [],
             } satisfies Worker["Attributes"];
           }
-          // A Workers for Platforms user worker can't be pre-created: precreate
-          // runs on raw, *unresolved* props (so resources in a dependency cycle
-          // can signal early), meaning a `namespace` that references the
-          // namespace resource is still an unresolved Output here, and the
-          // namespace itself may not be deployed yet. There's also nothing to
-          // pre-create — a user worker is dispatched to by name, never bound to
-          // circularly. Return a stub; `reconcile` performs the real upload
-          // once props resolve and the namespace exists.
+          const assertOwnership = (tags: string[] | null | undefined) =>
+            hasAlchemyWorkerTags(id, tags ?? []) || adopt === true
+              ? Effect.void
+              : Effect.fail(
+                  new OwnedBySomeoneElse({
+                    message:
+                      `Cannot adopt Worker '${fqn}': '${name}' is not owned by this ` +
+                      "stack/stage/logical-id. Re-run with `--adopt` or `adopt(true)` to take it over.",
+                    resourceType: "Cloudflare.Worker",
+                    logicalId: id,
+                    physicalName: name,
+                  }),
+                );
+          // Dispatch workers need no upload stub, but their provisional output
+          // still bypasses deferred admission. Check ownership before publishing it.
           if (news.namespace != null) {
+            const settings = yield* getScriptSettings(
+              accountId,
+              name,
+              resolveNamespaceName(news.namespace),
+            ).pipe(
+              Effect.catchTag(
+                ["DispatchNamespaceScriptNotFound", "DispatchNamespaceNotFound"],
+                () => Effect.succeed(undefined),
+              ),
+            );
+            if (settings) yield* assertOwnership(settings.tags);
             yield* Effect.logInfo(
               `Cloudflare Worker precreate: skipping stub for dispatch-namespace worker ${name}`,
             );
@@ -4733,7 +4764,7 @@ export const LiveWorkerProvider = () =>
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
+              namespace: resolveNamespaceName(news.namespace),
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4792,15 +4823,10 @@ export const LiveWorkerProvider = () =>
             name,
             dispatchNamespace,
           ).pipe(
-            // A freshly pre-created stub can briefly report "has no
-            // versions" before its first version registers — treat it the
-            // same as a missing worker (nothing to adopt yet). For a user
-            // worker the dispatch-namespace endpoints report a missing
-            // script as `DispatchNamespaceScriptNotFound` (and a missing
-            // namespace as `DispatchNamespaceNotFound`).
+            // A versionless script has unreadable ownership, not proven absence.
+            // Only explicit not-found errors permit a placeholder upload.
             Effect.catchTags({
               WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
               DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
               DispatchNamespaceNotFound: () => Effect.succeed(undefined),
             }),
@@ -4809,9 +4835,8 @@ export const LiveWorkerProvider = () =>
 
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
-            // Engine has already cleared this resource for write via
-            // `read` + AdoptPolicy. Either we own it (matching tags) or
-            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
+            // Cycles can reach precreate before the deferred ownership read.
+            yield* assertOwnership(existingSettings.tags);
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
