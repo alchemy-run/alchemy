@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
@@ -124,8 +125,8 @@ export const cached =
   ): Effect.Effect<A, Err, Req | Artifacts> =>
     Effect.gen(function* () {
       const artifacts = yield* Artifacts;
-      const deferred = yield* Deferred.make<A>();
-      const cached = yield* artifacts.get<A | Effect.Effect<A>>(id);
+      const deferred = yield* Deferred.make<A, Err>();
+      const cached = yield* artifacts.get<A | Effect.Effect<A, Err>>(id);
       if (cached) {
         if (Effect.isEffect(cached)) {
           return yield* cached;
@@ -133,8 +134,15 @@ export const cached =
         return cached;
       }
       yield* artifacts.set(id, Deferred.await(deferred));
-      const result = yield* eff;
-      yield* Deferred.succeed(deferred, result);
-      yield* artifacts.set(id, result);
-      return result;
+      // Settle the placeholder on every exit (success, failure, interruption) so
+      // waiters never hang, and drop it on failure so a later call re-runs.
+      return yield* eff.pipe(
+        Effect.onExit((exit) =>
+          Deferred.done(deferred, exit).pipe(
+            Effect.andThen(
+              Exit.isSuccess(exit) ? artifacts.set(id, exit.value) : artifacts.delete(id),
+            ),
+          ),
+        ),
+      );
     });
