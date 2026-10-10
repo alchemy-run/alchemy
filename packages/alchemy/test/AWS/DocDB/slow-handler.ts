@@ -110,9 +110,17 @@ export default DocDBSlowTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/ping") {
-          const { use } = yield* db;
-          const pong = yield* use((_db, client) => client.db("admin").command({ ping: 1 }));
-          return yield* HttpServerResponse.json({ ok: pong.ok });
+          return yield* db.pipe(
+            Effect.flatMap(({ use }) =>
+              use((_db, client) => client.db("admin").command({ ping: 1 })),
+            ),
+            Effect.flatMap((pong) => HttpServerResponse.json({ ok: pong.ok })),
+            // Surface the driver failure (server selection timeout, TLS,
+            // auth, …) so the test failure names it.
+            Effect.catchTag("AWS.DocDB.MongoError", (e) =>
+              HttpServerResponse.json({ error: e.message }, { status: 500 }),
+            ),
+          );
         }
 
         if (request.method === "GET" && pathname === "/crud") {

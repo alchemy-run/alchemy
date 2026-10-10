@@ -80,6 +80,8 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
+  /** `LastUpdateStatusReasonCode` (or `StateReasonCode` for a failed create). */
+  reasonCode?: string;
 }> {
   override get message() {
     return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
@@ -1395,6 +1397,10 @@ export const FunctionProvider = () =>
             return yield* new FunctionUpdateFailed({
               functionName,
               reason: configuration.LastUpdateStatusReason ?? configuration.StateReason,
+              reasonCode:
+                configuration.LastUpdateStatus === "Failed"
+                  ? configuration.LastUpdateStatusReasonCode
+                  : configuration.StateReasonCode,
             });
           }
           if (
@@ -2385,9 +2391,31 @@ export const FunctionProvider = () =>
                   ? []
                   : undefined,
             session,
-          });
-
-          yield* waitForFunctionUpdate(functionName, session, vpc !== undefined);
+          }).pipe(
+            Effect.andThen(waitForFunctionUpdate(functionName, session, vpc !== undefined)),
+            // The create/update call can succeed while Lambda's ASYNC
+            // provisioning (VPC ENIs, EFS mounts) still fails with
+            // `InsufficientRolePermissions` — "The function's execution role
+            // doesn't have permission to perform this operation." — because
+            // the just-attached AWSLambdaVPCAccessExecutionRole /
+            // EFS client policy has not propagated yet. That is IAM eventual
+            // consistency, not a misconfiguration: re-apply the function
+            // (the create path falls through to update on conflict, which
+            // re-triggers provisioning) and wait again, bounded.
+            Effect.tapError((e) =>
+              e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions"
+                ? session.note(
+                    `Waiting for Lambda execution role permissions to propagate: ${functionName}`,
+                  )
+                : Effect.void,
+            ),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 6,
+            }),
+          );
 
           const previousImage = output?.code.image;
           const nextImage = "image" in prepared.attributes ? prepared.attributes.image : undefined;

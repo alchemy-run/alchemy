@@ -25,7 +25,11 @@ const drive = (request: HttpClientRequest.HttpClientRequest) =>
     Effect.flatMap((response) =>
       response.status === 200
         ? Effect.succeed(response)
-        : Effect.fail(new Error(`route not ready: ${response.status}`)),
+        : response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(new Error(`route not ready: ${response.status} ${body}`)),
+            ),
+          ),
     ),
     Effect.retry({
       schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
@@ -33,7 +37,7 @@ const drive = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 // Collections have a real-money OCU floor and take ~1-5 min to provision, so
-// the index data-plane bindings (aoss:APIAccessAll) are gated behind
+// the index bindings (aoss:{Create,Get,Update,Delete}Index + APIAccessAll) are gated behind
 // AWS_TEST_SLOW=1, destroy IMMEDIATELY, and verify the collection is gone.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "index bindings roundtrip against a live collection (AWS_TEST_SLOW=1)",
@@ -52,7 +56,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const fn = yield* AossIndexFunction;
           // The data access policy granting the function's role index
           // permissions — the control-plane index APIs enforce it in
-          // addition to the IAM aoss:APIAccessAll grant.
+          // addition to the IAM aoss:{Create,Get,Update,Delete}Index grants.
           yield* AccessPolicy("Acc", {
             policyName: ACC_POLICY,
             policy: Output.interpolate`[{"Rules":[{"ResourceType":"index","Resource":["index/${COLLECTION_NAME}/*"],"Permission":["aoss:*"]},{"ResourceType":"collection","Resource":["collection/${COLLECTION_NAME}"],"Permission":["aoss:*"]}],"Principal":["${fn.roleArn}"]}]`,

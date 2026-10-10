@@ -8,6 +8,6 @@ export const CreateIndexHttp = Layer.effect(
   makeAossCollectionHttpBinding({
     tag: "AWS.OpenSearchServerless.CreateIndex",
     operation: aoss.createIndex,
-    actions: ["aoss:APIAccessAll"],
+    actions: ["aoss:CreateIndex", "aoss:APIAccessAll"],
   }),
 );

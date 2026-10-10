@@ -270,12 +270,22 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(functionUrl).toBeTruthy();
         const slowBaseUrl = functionUrl!.replace(/\/+$/, "");
 
+        // A non-200 is a test failure carrying the status — the fixture
+        // answers an empty 500 on a defect, which `r.json` decodes to null.
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
               schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
             }),
-            Effect.flatMap((r) => r.json),
+            Effect.flatMap((r) =>
+              r.status === 200
+                ? r.json
+                : r.text.pipe(
+                    Effect.flatMap((body) =>
+                      Effect.fail(new Error(`${path} returned ${r.status}: ${body}`)),
+                    ),
+                  ),
+            ),
           );
 
         // Connection info resolves from the runtime attributes, the secret,

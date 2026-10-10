@@ -8,6 +8,6 @@ export const DeleteIndexHttp = Layer.effect(
   makeAossCollectionHttpBinding({
     tag: "AWS.OpenSearchServerless.DeleteIndex",
     operation: aoss.deleteIndex,
-    actions: ["aoss:APIAccessAll"],
+    actions: ["aoss:DeleteIndex", "aoss:APIAccessAll"],
   }),
 );
