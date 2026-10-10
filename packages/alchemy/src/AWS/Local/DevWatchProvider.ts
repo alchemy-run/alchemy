@@ -83,6 +83,19 @@ export interface DevWatchContext<Props, Attrs> {
    * on the same logical id.
    */
   readonly rerunReconcile: Effect.Effect<Attrs, unknown>;
+  /**
+   * {@link rerunReconcile}, gated on a staleness check that runs INSIDE the
+   * per-id lock against the freshest attributes. A trigger can fire while an
+   * engine reconcile for the same id holds the lock; by the time the lock
+   * frees, that reconcile may already have published exactly the content the
+   * trigger saw, and re-running would register a redundant revision and reap
+   * the one the engine just recorded. A check made before waiting on the
+   * lock cannot see that. Returns the current attributes untouched when
+   * `isStale` resolves `false`.
+   */
+  readonly rerunReconcileIfStale: (
+    isStale: (current: Attrs) => Effect.Effect<boolean, unknown, any>,
+  ) => Effect.Effect<Attrs, unknown>;
 }
 
 /**
@@ -296,46 +309,54 @@ export const makeDevWatchProvider = <
           attrs,
         };
         watches.set(input.id, entry);
+        // One watcher-driven reconcile, UNLOCKED: callers take the per-id lock.
+        const rerun = Effect.gen(function* () {
+          const previous = entry.attrs as Attrs | undefined;
+          const rerunNews =
+            spec.transformReconcileNews !== undefined
+              ? yield* spec
+                  .transformReconcileNews({
+                    id: input.id,
+                    news: stripEffects(entry.lastInput.news) as Props,
+                  })
+                  .pipe(Effect.provide(services))
+              : entry.lastInput.news;
+          const fresh = yield* wrapped.reconcile(
+            withSafeSession({
+              ...entry.lastInput,
+              news: rerunNews,
+              olds: entry.lastInput.news,
+              output: entry.attrs,
+            }) as any,
+          );
+          entry.attrs = fresh;
+          if (spec.onReconciled !== undefined) {
+            yield* spec
+              .onReconciled({
+                id: input.id,
+                news: stripEffects(entry.lastInput.news) as Props,
+                previous,
+                attrs: fresh as Attrs,
+              })
+              .pipe(Effect.provide(services));
+          }
+          return fresh as Attrs;
+        });
         const ctx: DevWatchContext<Props, Attrs> = {
           id: input.id,
           instanceId: input.instanceId,
           news: strippedNews as Props,
           attrs: attrs as Attrs,
           currentAttrs: Effect.sync(() => entry.attrs as Attrs),
-          rerunReconcile: withLock(input.id)(
-            Effect.gen(function* () {
-              const previous = entry.attrs as Attrs | undefined;
-              const rerunNews =
-                spec.transformReconcileNews !== undefined
-                  ? yield* spec
-                      .transformReconcileNews({
-                        id: input.id,
-                        news: stripEffects(entry.lastInput.news) as Props,
-                      })
-                      .pipe(Effect.provide(services))
-                  : entry.lastInput.news;
-              const fresh = yield* wrapped.reconcile(
-                withSafeSession({
-                  ...entry.lastInput,
-                  news: rerunNews,
-                  olds: entry.lastInput.news,
-                  output: entry.attrs,
-                }) as any,
-              );
-              entry.attrs = fresh;
-              if (spec.onReconciled !== undefined) {
-                yield* spec
-                  .onReconciled({
-                    id: input.id,
-                    news: stripEffects(entry.lastInput.news) as Props,
-                    previous,
-                    attrs: fresh as Attrs,
-                  })
-                  .pipe(Effect.provide(services));
-              }
-              return fresh as Attrs;
-            }),
-          ) as Effect.Effect<Attrs, unknown>,
+          rerunReconcile: withLock(input.id)(rerun) as Effect.Effect<Attrs, unknown>,
+          rerunReconcileIfStale: (isStale) =>
+            withLock(input.id)(
+              Effect.gen(function* () {
+                const current = entry.attrs as Attrs;
+                if (!(yield* isStale(current).pipe(Effect.provide(services)))) return current;
+                return yield* rerun;
+              }),
+            ) as Effect.Effect<Attrs, unknown>,
         };
         const fiber = yield* spec.startWatch(ctx).pipe(
           Effect.provide(services),

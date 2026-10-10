@@ -32,9 +32,12 @@ import * as Schedule from "effect/Schedule";
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@/AWS";
+import * as Command from "@/Command/index.ts";
+import * as Output from "@/Output";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
 import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
@@ -488,6 +491,98 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
           taskDefinitionArn: outputs.task.taskDefinitionArn,
           containerName: outputs.task.containerName,
         });
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!dockerAvailable)(
+    "keeps the recorded task definition revision when a Build rewrites the image context during an apply",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* stack.destroy();
+
+        const app = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-reload`, {
+          prefix: "ecs-build-context-",
+        });
+
+        // The Build republishes `dist/` from the clone on every input change,
+        // so the Task's `context` changes underneath the running watcher in
+        // the same apply that updates the Task.
+        yield* fs.writeFileString(
+          path.join(app, "build.sh"),
+          "rm -rf dist\nmkdir dist\ncp Dockerfile index.html dist/\n",
+        );
+        const program = Effect.gen(function* () {
+          const build = yield* Command.Build("EcsBuildContextImage", {
+            command: "bash build.sh",
+            cwd: app,
+            outdir: "dist",
+            memo: { include: ["build.sh", "Dockerfile", "index.html"], lockfile: false },
+          });
+          return yield* AWS.ECS.Task("EcsBuildContextTask", {
+            // `build.outdir` is persisted relative to the initial cwd.
+            context: Output.map(build.outdir, (dir) => path.resolve(initialCwd, dir)),
+            port: RELOAD_PORT,
+            cpu: 256,
+            memory: 512,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            runtimePlatform: hostRuntimePlatform,
+          });
+        });
+
+        /** ACTIVE revisions of the task's family, as the emulator lists them. */
+        const activeRevisions = Effect.fn(function* (family: string) {
+          const response = yield* rawEcs("ListTaskDefinitions", {
+            familyPrefix: family,
+            status: "ACTIVE",
+          });
+          const page = (yield* response.json) as { taskDefinitionArns?: string[] };
+          return page.taskDefinitionArns ?? [];
+        });
+
+        /**
+         * Poll that the ARN the apply recorded stays the family's only ACTIVE
+         * revision. The dev watcher reacts to the rewritten context a few
+         * milliseconds after the engine's update, so a single read right after
+         * the deploy can miss a redundant swap.
+         */
+        const expectRecordedRevisionSettled = (task: {
+          readonly taskDefinitionArn: string;
+          readonly taskFamily: string;
+        }) =>
+          Effect.gen(function* () {
+            const described = yield* rawEcs("DescribeTaskDefinition", {
+              taskDefinition: task.taskDefinitionArn,
+            });
+            expect(described.status).toBe(200);
+            expect(yield* activeRevisions(task.taskFamily)).toEqual([task.taskDefinitionArn]);
+          }).pipe(Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 6 }));
+
+        const first = yield* stack.deploy(program);
+        yield* expectRecordedRevisionSettled(first);
+
+        // Control: nothing changed, so the redeploy keeps the same revision.
+        const unchanged = yield* stack.deploy(program);
+        expect(unchanged.taskDefinitionArn).toBe(first.taskDefinitionArn);
+        yield* expectRecordedRevisionSettled(unchanged);
+
+        // Change the Build's input: the apply rebuilds `dist/` and then updates
+        // the Task. The watcher's trigger for that rewrite must not register
+        // another revision over the one the engine just recorded.
+        yield* fs.writeFileString(path.join(app, "index.html"), "ecs-build-context-v2\n");
+        const second = yield* stack.deploy(program);
+        expect(second.code.hash).not.toBe(first.code.hash);
+        expect(second.taskDefinitionArn).not.toBe(first.taskDefinitionArn);
+        yield* expectRecordedRevisionSettled(second);
+
+        // The state row holds the revision the emulator still serves.
+        const row = yield* getState("EcsBuildContextTask");
+        expect(row?.attr?.taskDefinitionArn).toBe(second.taskDefinitionArn);
+
+        yield* stack.destroy();
       }),
     { timeout: 300_000 },
   );
