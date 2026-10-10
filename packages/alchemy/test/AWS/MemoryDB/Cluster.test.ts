@@ -129,9 +129,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertClusterDeleting(cluster.clusterName);
     }),
-  // create (~10-15 min) + delete initiation, one test.
+  // create (~10-15 min) + delete-until-gone (~5-10 min), one test.
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:memorydb", "live"],
-    timeout: 1_500_000,
+    timeout: 2_400_000,
   },
 );
