@@ -15,6 +15,22 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
 
+const envScript = `export default { fetch(_request, env) { return new Response([env.LINEAR.teamIds.FIN, env.LINEAR.stateIds["FIN/Triage"], env.LINEAR.stateIds["In Review"], env.SIGNING_KEY.algorithm.namedCurve].join("|")); } };`;
+
+const linearConfig = {
+  teamIds: { FIN: "team-fin" },
+  stateIds: { "FIN/Triage": "state-1", "In Review": "state-2" },
+};
+const envMarker = "team-fin|state-1|state-2|P-256";
+
+const ECDSA_P256_JWK = {
+  kty: "EC",
+  crv: "P-256",
+  x: "I1ozXkOgIpZDp-Nn7Q3OtPapgQ_h2E8UqrtEPPqz2qY",
+  y: "cJhHJik5pjNIZolyCryZu3NDb8zgL_5z4HWXdkAu-lQ",
+  d: "4MwKCFxYuXltCvTaoz2RDvf_B8VRr2Ft0UtFIkcWuDI",
+};
+
 describe.concurrent(
   "Cloudflare.Worker preview",
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
@@ -93,6 +109,45 @@ describe.concurrent(
               Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
             );
           expect(gone).toBe(true);
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "Preview sees json and secret_key binding payloads exactly as declared",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { parent, preview } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const env = {
+                LINEAR: linearConfig,
+                SIGNING_KEY: Cloudflare.Workers.SecretKey("SIGNING_KEY", {
+                  format: "jwk",
+                  algorithm: { name: "ECDSA", namedCurve: "P-256" },
+                  usages: ["sign"],
+                  keyJwk: ECDSA_P256_JWK,
+                }),
+              };
+              const parent = yield* Cloudflare.Worker("EnvParent", { script: envScript, env });
+              const preview = yield* Cloudflare.Worker("EnvPreview", {
+                script: envScript,
+                env,
+                preview: { of: parent },
+              });
+              return { parent, preview };
+            }),
+          );
+
+          yield* expectUrlContains(parent.url!, envMarker, {
+            label: "parent sees the payloads as declared",
+          });
+          yield* expectUrlContains(preview.url!, envMarker, {
+            label: "Preview sees the same payloads as its parent",
+          });
+
+          yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 240_000 },
     );

@@ -235,13 +235,20 @@ const toPreviewWire = (value: unknown): unknown => {
   return value;
 };
 
+const previewVerbatimFields = new Set(["json", "algorithm", "keyJwk", "props"]);
+
 /** Convert Alchemy's binding array into wrangler's Preview `env` map. */
-const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
+export const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
   const env: Record<string, unknown> = {};
   for (const binding of bindings) {
     const { name, ...rest } = binding as unknown as { name?: unknown } & Record<string, unknown>;
     if (typeof name !== "string") continue;
-    env[name] = toPreviewWire(rest);
+    env[name] = Object.fromEntries(
+      Object.entries(rest).map(([k, v]) => [
+        toPreviewWireKey(k),
+        previewVerbatimFields.has(k) ? v : toPreviewWire(v),
+      ]),
+    );
   }
   return env;
 };
