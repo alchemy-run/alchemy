@@ -62,6 +62,14 @@ export default NetworkFirewallFirewallBindingsFunction.make(
       getAnalysisReportResults: yield* NetworkFirewall.GetAnalysisReportResults(firewall),
     };
 
+    // Flow operations target exactly one firewall endpoint ("Exactly one of
+    // AvailabilityZone, AvailabilityZoneId, VpcEndpointId, or
+    // VpcEndpointAssociationArn must be set"). The firewall's sync states are
+    // keyed by the Availability Zone of each endpoint.
+    const firewallAz = bound
+      .describeFirewall()
+      .pipe(Effect.map((r) => Object.keys(r.FirewallStatus?.SyncStates ?? {})[0]));
+
     // A narrow filter so the capture/flush stays tiny.
     const flowFilters = [{ SourceAddress: { AddressDefinition: "10.78.1.10/32" } }];
 
@@ -91,8 +99,16 @@ export default NetworkFirewallFirewallBindingsFunction.make(
         // step reports its typed failure so a single grant gap is
         // diagnosable from the JSON instead of a generic 500.
         if (request.method === "GET" && pathname === "/flow") {
+          const az = yield* Effect.result(firewallAz);
+          if (Result.isFailure(az)) {
+            return yield* HttpServerResponse.json({
+              step: "describeFirewall",
+              tag: az.failure._tag,
+              error: String(az.failure),
+            });
+          }
           const started = yield* Effect.result(
-            bound.startFlowCapture({ FlowFilters: flowFilters }),
+            bound.startFlowCapture({ AvailabilityZone: az.success, FlowFilters: flowFilters }),
           );
           if (Result.isFailure(started)) {
             return yield* HttpServerResponse.json({
@@ -103,7 +119,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
           }
           const FlowOperationId = started.success.FlowOperationId!;
           const polled = yield* Effect.result(
-            bound.describeFlowOperation({ FlowOperationId }).pipe(
+            bound.describeFlowOperation({ AvailabilityZone: az.success, FlowOperationId }).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (r): boolean => r.FlowOperationStatus !== "IN_PROGRESS",
@@ -119,7 +135,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
             });
           }
           const listed = yield* Effect.result(
-            bound.listFlowOperations({ FlowOperationType: "FLOW_CAPTURE" }),
+            bound.listFlowOperations({
+              AvailabilityZone: az.success,
+              FlowOperationType: "FLOW_CAPTURE",
+            }),
           );
           if (Result.isFailure(listed)) {
             return yield* HttpServerResponse.json({
@@ -128,7 +147,9 @@ export default NetworkFirewallFirewallBindingsFunction.make(
               error: String(listed.failure),
             });
           }
-          const results = yield* Effect.result(bound.listFlowOperationResults({ FlowOperationId }));
+          const results = yield* Effect.result(
+            bound.listFlowOperationResults({ AvailabilityZone: az.success, FlowOperationId }),
+          );
           if (Result.isFailure(results)) {
             return yield* HttpServerResponse.json({
               step: "listFlowOperationResults",
@@ -147,7 +168,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
 
         // Flush — success or any typed rejection proves the grant.
         if (request.method === "GET" && pathname === "/flush") {
-          const tag = yield* bound.startFlowFlush({ FlowFilters: flowFilters }).pipe(
+          const tag = yield* firewallAz.pipe(
+            Effect.flatMap((AvailabilityZone) =>
+              bound.startFlowFlush({ AvailabilityZone, FlowFilters: flowFilters }),
+            ),
             Effect.map(() => "ok"),
             Effect.catch((e) => Effect.succeed(e._tag)),
           );
