@@ -36,22 +36,87 @@ import { recordStateStoreInit, recordStateStoreOp } from "../../Telemetry/Metric
 import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
-import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
+import Api, { STATE_STORE_VERSION } from "./Api.ts";
 import {
-  CREDENTIALS_FILE,
   StoredStateStoreCredentials,
   isStateStoreCredentialsStale,
+  stateStoreCredentialsFile,
 } from "./CredentialsFile.ts";
-import { AuthToken, AuthTokenSecretName, EncryptionKeySecretName, TokenValue } from "./Token.ts";
+import {
+  STATE_STORE_SCRIPT_NAME,
+  StateStoreWorkerName,
+  authTokenSecretName,
+  encryptionKeySecretName,
+} from "./Names.ts";
+import { AuthToken, TokenValue } from "./Token.ts";
 
 const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
-export const state = () =>
+export interface StateStoreOptions {
+  /**
+   * Physical name of the state-store Worker. Its Durable Object state,
+   * secrets, and cached credentials are independent of other stores.
+   * @default "alchemy-state-store"
+   */
+  workerName?: string;
+}
+
+/**
+ * This client cannot downgrade a store deployed by a newer Alchemy release.
+ * Upgrade the project's dependency or use a dedicated named store.
+ */
+export class StateStoreClientTooOldError extends Data.TaggedError("StateStoreClientTooOldError")<{
+  readonly scriptName: string;
+  readonly expected: number;
+  readonly observed: number;
+}> {
+  constructor(scriptName: string, expected: number, observed: number) {
+    super({ scriptName, expected, observed });
+  }
+
+  override get message() {
+    return (
+      `Cloudflare State Store '${this.scriptName}' was deployed by a newer version of alchemy ` +
+      `(store contract v${this.observed}, this client expects v${this.expected}). ` +
+      `Refusing to downgrade shared state infrastructure. ` +
+      `Upgrade this project's 'alchemy' dependency, or isolate it with ` +
+      `Cloudflare.state({ workerName: "..." }).`
+    );
+  }
+}
+
+/** How the deployed store's contract version relates to this client's. */
+export type StoreVersionStatus = "match" | "missing" | "store-older" | "store-newer";
+
+/** @internal exported for unit testing. */
+export const classifyStoreVersion = (
+  expected: number,
+  observed: number | undefined,
+): StoreVersionStatus =>
+  observed === undefined
+    ? "missing"
+    : observed === expected
+      ? "match"
+      : observed < expected
+        ? "store-older"
+        : "store-newer";
+
+/**
+ * Cloudflare-backed state-store Layer. With no options, uses the shared
+ * account-wide `alchemy-state-store`. Pass `workerName` for an independent
+ * store whose projects can upgrade their Alchemy dependency separately.
+ *
+ * ```typescript
+ * state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
+ * ```
+ */
+export const state = (options: StateStoreOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const scriptName = STATE_STORE_SCRIPT_NAME;
+      const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+      const credentialsFile = stateStoreCredentialsFile(scriptName);
       const profileName = yield* currentProfileName;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
@@ -83,9 +148,10 @@ export const state = () =>
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
           Effect.gen(function* () {
-            const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+            const { expected, observed } = yield* checkStateStoreVersion(url, scriptName);
+            const status = classifyStoreVersion(expected, observed);
 
-            if (observed === undefined) {
+            if (status === "missing") {
               const shouldDeploy =
                 autoUpdateStateStore ||
                 (yield* Interaction.accessors.prompt.confirm({
@@ -106,12 +172,19 @@ export const state = () =>
               }
             }
 
+            if (status === "store-newer" && observed !== undefined) {
+              // --yes cannot authorize an older client to downgrade a newer store.
+              return yield* Effect.die(
+                new StateStoreClientTooOldError(scriptName, expected, observed),
+              );
+            }
+
             const httpState = yield* ensureAccess({ url, authToken });
-            if (matches) {
+            if (status === "match") {
               return httpState;
             }
 
-            // The store is out of date. Upgrade it in place.
+            // The store is older than this client. Upgrade it in place.
             const upgrade = Effect.gen(function* () {
               const interaction = yield* Interaction.Interaction;
               return yield* interaction.task(
@@ -121,7 +194,7 @@ export const state = () =>
                 },
                 Effect.gen(function* () {
                   const stateStoreOptions = yield* deployStateStore({
-                    stage: scriptName,
+                    scriptName,
                     state: httpState,
                     force: false,
                   });
@@ -165,7 +238,7 @@ export const state = () =>
             const isAuth = yield* checkHttpStateStoreAuth(credentials);
             if (!isAuth) {
               // our token is wrong, force a refresh
-              const credentials = yield* loginWithCloudflare(profileName, true);
+              const credentials = yield* loginWithCloudflare(profileName, true, scriptName);
               if (!(yield* checkHttpStateStoreAuth(credentials))) {
                 return yield* Effect.die(
                   AuthError.make({
@@ -182,7 +255,7 @@ export const state = () =>
 
         const credentials = yield* credStore.read(
           profileName,
-          CREDENTIALS_FILE,
+          credentialsFile,
           StoredStateStoreCredentials,
         );
         if (credentials) {
@@ -197,16 +270,16 @@ export const state = () =>
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
-            yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+            yield* credStore.delete(profileName, credentialsFile).pipe(Effect.ignore);
           } else {
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId)) {
-          return yield* ensureLatest(yield* loginWithCloudflare(profileName, false));
+        if (yield* isStateStoreServing(accountId, scriptName)) {
+          return yield* ensureLatest(yield* loginWithCloudflare(profileName, false, scriptName));
         } else if (autoUpdateStateStore) {
           // `--yes`: deploy the missing state store automatically (also in CI).
-          return yield* bootstrap();
+          return yield* bootstrap({ workerName: scriptName, profile: profileName });
         } else if (isCI) {
           return yield* Effect.die(
             AuthError.make({
@@ -216,12 +289,14 @@ export const state = () =>
         } else {
           const confirm = Interaction.accessors.prompt.confirm;
           return yield* confirm({
-            message: "Cloudflare State Store not found. Do you want to deploy it?",
+            message: `Cloudflare State Store '${scriptName}' not found. Do you want to deploy it?`,
             // Deploying is the constructive happy path — default-yes.
             initialValue: true,
           }).pipe(
             Effect.flatMap((shouldDeploy) =>
-              shouldDeploy ? bootstrap() : Effect.die(new Interaction.TerminalCancelled()),
+              shouldDeploy
+                ? bootstrap({ workerName: scriptName, profile: profileName })
+                : Effect.die(new Interaction.TerminalCancelled()),
             ),
           );
         }
@@ -301,7 +376,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         );
       }
       const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-      if (yield* isStateStoreServing(accountId)) {
+      if (yield* isStateStoreServing(accountId, scriptName, force)) {
         // this is a regular update, let's check if it needs an update and refresh credentials
         if (!force) {
           yield* Interaction.accessors.output.info(
@@ -313,6 +388,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           profileName,
           // force refresh during
           true,
+          scriptName,
         );
         const { url, authToken } = credentials;
         if (!isCI) {
@@ -320,21 +396,25 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           const store = yield* CredentialsStore;
           yield* store.write(
             profileName,
-            CREDENTIALS_FILE,
+            stateStoreCredentialsFile(scriptName),
             StoredStateStoreCredentials,
             credentials,
           );
         }
-        const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+        const { expected, observed } = yield* checkStateStoreVersion(url, scriptName);
+        const status = classifyStoreVersion(expected, observed);
+        if (status === "store-newer" && !force && observed !== undefined) {
+          return yield* Effect.die(new StateStoreClientTooOldError(scriptName, expected, observed));
+        }
         const httpState = yield* makeCloudflareStateStore({ url, authToken });
-        if (!matches || force) {
+        if (status !== "match" || force) {
           return yield* interaction.task(
             {
-              label: `${matches ? "Redeploying" : "Updating"} Cloudflare State Store '${scriptName}'`,
-              detail: matches ? "forced" : `v${observed ?? "unknown"} → v${expected}`,
+              label: `${status === "match" ? "Redeploying" : status === "store-newer" ? "Downgrading" : "Updating"} Cloudflare State Store '${scriptName}'`,
+              detail: status === "match" ? "forced" : `v${observed ?? "unknown"} → v${expected}`,
             },
             deployStateStore({
-              stage: scriptName,
+              scriptName,
               state: httpState,
               force,
             }).pipe(Effect.flatMap(makeCloudflareStateStore)),
@@ -412,7 +492,11 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     );
 
     // 2. Delete the secrets the state store created, plus any now-empty store.
-    const ourSecretNames = new Set<string>([AuthTokenSecretName, EncryptionKeySecretName]);
+    // Only remove the selected store's secrets; other stores keep their authority.
+    const ourSecretNames = new Set<string>([
+      authTokenSecretName(scriptName),
+      encryptionKeySecretName(scriptName),
+    ]);
     const stores = yield* SecretsStore.listStores.items({ accountId }).pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -462,7 +546,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
 
     // 3. Drop the locally cached state-store credentials for this profile.
     const credStore = yield* CredentialsStore;
-    yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+    yield* credStore.delete(profileName, stateStoreCredentialsFile(scriptName)).pipe(Effect.ignore);
 
     yield* Interaction.accessors.output.success(
       `Cloudflare State Store '${scriptName}' torn down.`,
@@ -477,11 +561,15 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
   );
 
 const deployStateStore = ({
-  stage,
+  scriptName,
+  stage = scriptName,
   state,
   force,
 }: {
-  stage: string;
+  /** Physical name of the state-store Worker and its secrets. */
+  scriptName: string;
+  /** Stack stage; defaults to the script name. */
+  stage?: string;
   state: StateService;
   force?: boolean;
 }) =>
@@ -511,7 +599,7 @@ const deployStateStore = ({
             url: api.url.as<string>(),
             authToken: token.text.pipe(Output.map(Redacted.value)),
           };
-        }),
+        }).pipe(Effect.provideService(StateStoreWorkerName, scriptName)),
       ),
     }).pipe(
       // The Cloudflare State Store is account-level infrastructure that
@@ -524,7 +612,7 @@ const deployStateStore = ({
       Effect.provide(stateLayer),
     );
 
-    yield* writeCredentials(url, authToken);
+    yield* writeCredentials(url, authToken, scriptName);
 
     // Cloudflare's worker upload is eventually consistent: the deploy
     // call returns as soon as the script upload is accepted, but the
@@ -535,7 +623,7 @@ const deployStateStore = ({
     // adoption) end up talking to the old worker and may either
     // observe stale data or trip the staleness check and recurse into
     // another redeploy.
-    yield* waitForStateStoreVersion(url);
+    yield* waitForStateStoreVersion(url, scriptName);
     return { url, authToken };
   }).pipe(
     Effect.withSpan("state_store.deploy", {
@@ -558,16 +646,21 @@ const deployWithLocalState = ({
   profileName: string;
 }) =>
   Effect.gen(function* () {
+    // An interrupted local bootstrap may coexist with a store another client
+    // upgraded. Observe its version before resuming any deployment.
+    const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    yield* isStateStoreServing(accountId, scriptName, force);
     const localState = yield* makeLocalState();
     const localStage = `${profileName}_${scriptName}`;
     const remoteStage = scriptName;
     const { authToken } = yield* deployStateStore({
+      scriptName,
       stage: localStage,
       state: localState,
       force,
     });
 
-    const { url } = yield* loginWithCloudflare(profileName, force);
+    const { url } = yield* loginWithCloudflare(profileName, force, scriptName);
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
 
     yield* hoistBootstrapStack({
@@ -695,11 +788,9 @@ const hoistBootstrapStack = Effect.fn(function* ({
  * 1. Find the single account-wide Secrets Store.
  * 2. Upload a short-lived edge-preview worker that binds the
  *    auth-token secret and returns its value.
- * 3. Derive the state-store worker URL from
- *    {@link STATE_STORE_SCRIPT_NAME} and the account's workers.dev
- *    subdomain.
- * 4. Persist `{ url, token }` under the `http-state-store`
- *    credentials file.
+ * 3. Derive the selected state-store worker URL from its name and the
+ *    account's workers.dev subdomain.
+ * 4. Persist `{ url, authToken }` under the per-store credentials file.
  *
  * Requirements are covered by the Cloudflare provider stack —
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
@@ -708,10 +799,11 @@ const hoistBootstrapStack = Effect.fn(function* ({
 export const loginWithCloudflare = Effect.fn("state_store.login", {
   attributes: {
     "alchemy.state_store.op": "login",
-    "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
   },
 })(
-  function* (profileName: string, force: boolean) {
+  function* (profileName: string, force: boolean, scriptName: string = STATE_STORE_SCRIPT_NAME) {
+    yield* Effect.annotateCurrentSpan("alchemy.state_store.script_name", scriptName);
+    const credentialsFile = stateStoreCredentialsFile(scriptName);
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
@@ -720,7 +812,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       // try and read from the cached credentials first if not forcing (force will always refresh)
       const credentials = yield* credStore.read(
         profileName,
-        CREDENTIALS_FILE,
+        credentialsFile,
         StoredStateStoreCredentials,
       );
       // Ignore a cache minted for a different account (or a legacy file with
@@ -747,9 +839,9 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
         // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker.
         const authToken = yield* readSecretViaEdge(
-          STATE_STORE_SCRIPT_NAME,
+          scriptName,
           store.id,
-          AuthTokenSecretName,
+          authTokenSecretName(scriptName),
         ).pipe(
           Effect.retry({
             while: (error) =>
@@ -765,7 +857,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
         // 3. Derive the deployed worker URL.
         const { subdomain } = yield* workers.getSubdomain({ accountId });
-        const url = `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`;
+        const url = `https://${scriptName}.${subdomain}.workers.dev`;
         const credentials = {
           url,
           authToken: authToken.trim(),
@@ -775,7 +867,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
         if (!isCI) {
           // 4. Persist credentials for subsequent invocations.
           yield* credStore
-            .write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, credentials)
+            .write(profileName, credentialsFile, StoredStateStoreCredentials, credentials)
             .pipe(
               Effect.mapError((e) =>
                 AuthError.make({
@@ -802,7 +894,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
   ),
 );
 
-const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
+const isStateStoreAvailable = (scriptName: string) =>
   Effect.gen(function* () {
     // otherwise, the remote one might exist
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
@@ -824,16 +916,20 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
  * verified by checking the /version endpoint
  *
  */
-const isStateStoreServing = (accountId: string) =>
+const isStateStoreServing = (accountId: string, scriptName: string, force = false) =>
   Effect.gen(function* () {
     const url = yield* workers.getSubdomain({ accountId }).pipe(
       Effect.map(({ subdomain }) =>
-        subdomain ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev` : undefined,
+        subdomain ? `https://${scriptName}.${subdomain}.workers.dev` : undefined,
       ),
       Effect.orElseSucceed(() => undefined),
     );
     if (url === undefined) return false;
-    const { observed } = yield* checkStateStoreVersion(url);
+    const { expected, observed } = yield* checkStateStoreVersion(url, scriptName);
+    if (observed !== undefined && observed > expected && !force) {
+      // Guard cold login/bootstrap paths before secret previews or cache writes.
+      return yield* Effect.die(new StateStoreClientTooOldError(scriptName, expected, observed));
+    }
     return observed !== undefined;
   });
 
@@ -863,9 +959,9 @@ export class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersi
   }
 }
 
-const waitForStateStoreVersion = (url: string) =>
+const waitForStateStoreVersion = (url: string, scriptName: string) =>
   Effect.gen(function* () {
-    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
     if (!matches) {
       return yield* new StateStoreVersionNotReady({ expected, observed });
     }
@@ -888,9 +984,9 @@ const waitForStateStoreVersion = (url: string) =>
 
 const checkStateStoreVersion = Effect.fn("state_store.check_version", {
   attributes: { "alchemy.state_store.op": "check_version" },
-})(function* (url: string) {
+})(function* (url: string, scriptName: string) {
   const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-  const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
+  const isAvailable = yield* Effect.cached(isStateStoreAvailable(scriptName));
   // The /version route may 404 transiently after a fresh deploy
   // while Cloudflare propagates the new script to the edge, and may
   // also surface transport-level blips on cold workers.dev hosts.
@@ -1003,16 +1099,17 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
     }),
   );
 
-const writeCredentials = (url: string, authToken: string) =>
+const writeCredentials = (url: string, authToken: string, scriptName: string) =>
   Effect.gen(function* () {
     const profileName = yield* currentProfileName;
     const credStore = yield* CredentialsStore;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-    yield* credStore.write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, {
-      url,
-      authToken,
-      accountId,
-    });
+    yield* credStore.write(
+      profileName,
+      stateStoreCredentialsFile(scriptName),
+      StoredStateStoreCredentials,
+      { url, authToken, accountId },
+    );
   });
 
 const isWorkersPreviewConfigurationError = (error: unknown) =>
