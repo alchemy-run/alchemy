@@ -27,6 +27,15 @@ export interface DBInstanceProps {
    */
   dbInstanceIdentifier?: string;
   /**
+   * Pin updates to this immutable physical instance (`DbiResourceId`). When
+   * the instance found under `dbInstanceIdentifier` is missing or reports a
+   * different resource ID — after a Blue/Green switchover or a manual restore
+   * under the same identifier — planning and reconciliation fail instead of
+   * creating or mutating another database. Admit the replacement by updating
+   * or removing this value.
+   */
+  expectedDbiResourceId?: string;
+  /**
    * Aurora cluster the instance belongs to. When set, the instance is a
    * cluster member and most storage/backup props are managed by the cluster.
    * Replacing this forces a new instance.
@@ -825,6 +834,26 @@ export interface DBInstance extends Resource<
  * an existing secret also requires `secretsmanager:GetResourcePolicy` and, when
  * resetting a policy, `secretsmanager:DeleteResourcePolicy`.
  *
+ * ### Pinning the Physical Instance
+ * `expectedDbiResourceId` binds the resource to one immutable physical
+ * database. If the instance under the identifier is missing or reports a
+ * different `DbiResourceId` — after a Blue/Green switchover or a manual
+ * restore under the same name — planning and reconciliation fail with
+ * `DBInstanceIdentityChanged` instead of creating or modifying another
+ * database. Update or remove the value to admit the replacement.
+ *
+ * **Example:** Refuse to mutate anything but the known production instance
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   dbInstanceIdentifier: "production-postgres",
+ *   expectedDbiResourceId: "db-ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ * });
+ * ```
+ *
  * ### Readiness
  * Deployment waits for an instance ARN and an operational status: `available`
  * or `storage-optimization`. Storage optimization remains online and can
@@ -1480,6 +1509,35 @@ class DBInstanceReadinessBlocked extends Data.TaggedError("DBInstanceReadinessBl
   }
 }
 
+class DBInstanceIdentityChanged extends Data.TaggedError(
+  "DBInstanceIdentityChanged",
+)<{
+  instanceId: string;
+  expected: string;
+  observed: string | undefined;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' physical identity changed (expected ${this.expected}, observed ${this.observed ?? "no instance"}); explicitly admit its replacement before reconciling`;
+  }
+}
+
+/** Fail closed when a pinned instance is missing or is another physical database. */
+const assertExpectedIdentity = (
+  instanceId: string,
+  props: DBInstanceProps,
+  instance: rds.DBInstance | undefined,
+) =>
+  props.expectedDbiResourceId !== undefined &&
+  instance?.DbiResourceId !== props.expectedDbiResourceId
+    ? Effect.fail(
+        new DBInstanceIdentityChanged({
+          instanceId,
+          expected: props.expectedDbiResourceId,
+          observed: instance?.DbiResourceId,
+        }),
+      )
+    : Effect.void;
+
 const blockedStatuses = new Set([
   "automation-paused",
   "delete-precheck",
@@ -1810,6 +1868,11 @@ export const DBInstanceProvider = () =>
           const storage = yield* toStorageConfiguration(news);
           if (output !== undefined) {
             const instance = yield* readInstance(output.dbInstanceIdentifier);
+            yield* assertExpectedIdentity(
+              output.dbInstanceIdentifier,
+              news,
+              instance,
+            );
             if (!instance?.DBInstanceArn) {
               return { action: "update", stables: [] } as const;
             }
@@ -1895,6 +1958,7 @@ export const DBInstanceProvider = () =>
           const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
           let observed = yield* observeReadiness(identifier);
+          yield* assertExpectedIdentity(identifier, news, observed);
           if (observed?.DBInstanceArn) {
             observed = yield* waitForInstance(identifier);
           }
