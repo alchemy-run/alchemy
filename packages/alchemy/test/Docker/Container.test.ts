@@ -2,10 +2,18 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Action } from "@/Action";
 import * as Docker from "@/Docker";
+import {
+  containerRuntimeStatusAction,
+  ContainerRemovalTimeout,
+  removeDockerContainer,
+  waitForContainerRemoval,
+} from "@/Docker/Container";
+import type { Docker as DockerApi } from "@/Docker/Docker";
 import { healthcheckCommand, isHealthcheckDisabled } from "@/Docker/HealthcheckCommand";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
@@ -42,6 +50,65 @@ test.provider(
 );
 
 test.provider(
+  "handles transitional and unrestartable Docker statuses explicitly",
+  () =>
+    Effect.sync(() => {
+      expect(containerRuntimeStatusAction("running", true)).toBeUndefined();
+      expect(containerRuntimeStatusAction("restarting", true)).toBeUndefined();
+      expect(containerRuntimeStatusAction("restarting", false)).toBe("update");
+      expect(containerRuntimeStatusAction("paused", true)).toBe("update");
+      expect(containerRuntimeStatusAction("dead", true)).toBe("replace");
+      expect(containerRuntimeStatusAction("dead", false)).toBeUndefined();
+      expect(containerRuntimeStatusAction("removing", true)).toBe("update");
+      expect(containerRuntimeStatusAction("removing", false)).toBe("update");
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "removes dead containers without issuing a stop",
+  () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const container = {
+        stop: () => Effect.die("stop must not be called for dead containers"),
+        remove: (name: string) =>
+          Effect.sync(() => {
+            calls.push(name);
+            return {
+              exitCode: 0 as ChildProcessSpawner.ExitCode,
+              stdout: "",
+              stderr: "",
+            };
+          }),
+      };
+      yield* removeDockerContainer(container, "dead-container", undefined, false);
+      expect(calls).toEqual(["dead-container"]);
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "fails when a removing container never finishes removal",
+  () =>
+    Effect.gen(function* () {
+      const removing = { State: { Status: "removing" } } as DockerApi.Container;
+      const error = yield* waitForContainerRemoval(
+        () => Effect.succeed(removing),
+        "removing",
+        undefined,
+        Schedule.recurs(8),
+      ).pipe(Effect.flip);
+      expect(error).toBeInstanceOf(ContainerRemovalTimeout);
+      expect(error._tag).toBe("ContainerRemovalTimeout");
+      if (error._tag === "ContainerRemovalTimeout") {
+        expect(error.attempts).toBe(9);
+      }
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "diff replaces a container when its image changes",
   () =>
     Effect.gen(function* () {
@@ -64,6 +131,98 @@ test.provider(
         },
       });
       expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "diff updates when the live container status drifts",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = yield* stack.deploy(
+        Docker.Container("runtime-status-drift-container", {
+          image: "nginx:alpine",
+          start: true,
+        }),
+      );
+      yield* docker.container.stop(container.name);
+      const plan = yield* stack.plan(
+        Docker.Container("runtime-status-drift-container", {
+          image: "nginx:alpine",
+          start: true,
+        }),
+      );
+      expect(plan.resources["runtime-status-drift-container"]?.action).toBe("update");
+      yield* stack.deploy(
+        Docker.Container("runtime-status-drift-container", {
+          image: "nginx:alpine",
+          start: true,
+        }),
+      );
+      expect((yield* docker.container.inspect(container.name)).State.Status).toBe("running");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "recreates a missing physical container during redeploy",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = Docker.Container("missing-container", {
+        image: "nginx:alpine",
+        start: true,
+      });
+      const first = yield* stack.deploy(container);
+      yield* docker.container.remove(first.name, true);
+      const plan = yield* stack.plan(container);
+      expect(plan.resources["missing-container"]?.action).toBe("update");
+      const second = yield* stack.deploy(container);
+      expect(second.id).not.toBe(first.id);
+      expect((yield* docker.container.inspect(second.name)).State.Status).toBe("running");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "repairs an externally started container when start is false",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = Docker.Container("start-false-runtime-drift-container", {
+        image: "nginx:alpine",
+        start: false,
+      });
+      const deployed = yield* stack.deploy(container);
+      yield* docker.container.start(deployed.name);
+      const plan = yield* stack.plan(container);
+      expect(plan.resources["start-false-runtime-drift-container"]?.action).toBe("update");
+      yield* stack.deploy(container);
+      expect((yield* docker.container.inspect(deployed.name)).State.Status).not.toBe("running");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "resumes a paused container when start is true",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = Docker.Container("paused-runtime-drift-container", {
+        image: "nginx:alpine",
+        start: true,
+      });
+      const deployed = yield* stack.deploy(container);
+      yield* docker.run(["container", "pause", deployed.name]);
+      const plan = yield* stack.plan(container);
+      expect(plan.resources["paused-runtime-drift-container"]?.action).toBe("update");
+      yield* stack.deploy(container);
+      expect((yield* docker.container.inspect(deployed.name)).State.Status).toBe("running");
+      yield* stack.destroy();
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },
 );
@@ -623,7 +782,9 @@ describe(
         const { base } = yield* writeEnvFiles;
         const container = Docker.Container("env-file-bytes-container", {
           image: "nginx:alpine",
-          command: printLayered,
+          // Keep the process alive so the runtime-status drift check does not
+          // correctly treat its intentional exit as an external drift.
+          command: ["sh", "-c", 'echo "[$LAYERED]"; sleep 300'],
           envFiles: [base],
           start: true,
         });

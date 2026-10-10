@@ -107,6 +107,11 @@ export class Docker extends Context.Service<
         name: string,
         context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Resumes a paused container. */
+      readonly unpause: (
+        name: string,
+        context?: string,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Stops a container. */
       readonly stop: (
         name: string,
@@ -769,6 +774,7 @@ const makeDocker = (options: DockerOptions) =>
         remove: (name, force, context) =>
           run([...formatArgs({ context }), "container", "rm", name, ...(force ? ["-f"] : [])]),
         start: (name, context) => run([...formatArgs({ context }), "container", "start", name]),
+        unpause: (name, context) => run([...formatArgs({ context }), "container", "unpause", name]),
         stop: (name, context) => run([...formatArgs({ context }), "container", "stop", name]),
       },
       image: {
