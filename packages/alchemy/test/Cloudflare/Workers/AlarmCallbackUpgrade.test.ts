@@ -73,6 +73,32 @@ const ready = (url: string, version: Snapshot["version"], name?: string) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
   );
 
+/**
+ * Wait for a redeploy to reach the live Durable Object. A Worker deploy that
+ * carries no Durable Object lifecycle change (declarative `exports`, no
+ * migration) does not restart a running object: Cloudflare keeps an
+ * activation that keeps receiving requests on the previous code — measured:
+ * polling every 3s still reached V1 150s after the V2 deploy — and only
+ * starts the new code once the object has been idle (~20s). So the first
+ * probe after the upgrade must come after an idle gap, and so must every
+ * retry. Local restarts are atomic, so dev mode needs no gap.
+ */
+const readyAfterRollout = (url: string, dev: boolean) =>
+  dev
+    ? ready(url, "v2")
+    : Effect.sleep("25 seconds").pipe(
+        Effect.andThen(
+          request(url).pipe(
+            Effect.flatMap((snapshot) =>
+              snapshot.version === "v2"
+                ? Effect.succeed(snapshot)
+                : Effect.fail(new Error(`Waiting for v2; got ${snapshot.version}`)),
+            ),
+            Effect.retry({ schedule: Schedule.spaced("25 seconds"), times: 2 }),
+          ),
+        ),
+      );
+
 const delivered = (
   url: string,
   until: (snapshot: Snapshot) => boolean,
@@ -203,7 +229,7 @@ for (const dev of [true, false]) {
             expect(upgraded.durableObjectNamespaces.UpgradeObject).toBe(
               original.durableObjectNamespaces.UpgradeObject,
             );
-            const after = yield* ready(upgraded.url!, "v2");
+            const after = yield* readyAfterRollout(upgraded.url!, dev);
             expect(after.id).toBe(before.id);
             expect(after.marker).toBe(before.marker);
             expect(after.constructors).toContain("v1");
@@ -402,7 +428,8 @@ for (const dev of [true, false]) {
             expect(rollback.recovered?.alarm).toBe(rollbackOriginal.alarm);
             yield* stack.destroy();
           }),
-        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
+        // Live: up to ~75s of idle-gap waiting for the DO rollout (readyAfterRollout).
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 180_000 },
       );
     },
   );

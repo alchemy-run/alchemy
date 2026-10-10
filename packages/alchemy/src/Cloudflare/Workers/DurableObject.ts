@@ -578,6 +578,28 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * };
  * ```
  *
+ * ### Redeploying a Busy Durable Object
+ * A redeploy reaches your Workers right away, but a Durable Object that
+ * is still receiving requests can keep running its previous code. It
+ * picks up the new code once it has been idle for about 20 seconds.
+ * Until then a new Worker calling a method that only the new code
+ * defines fails with `RpcCallError` ("The RPC receiver does not
+ * implement the method"). Keep RPC changes backward compatible across a
+ * deploy: add a method, ship the callers in a later deploy, and remove
+ * old methods last.
+ *
+ * **Example:** Tolerate an object that has not picked up a new method yet
+ * ```typescript
+ * const result = yield* counter.incrementBy(5).pipe(
+ *   // Older code is still serving this object: use the old method.
+ *   Effect.catchCause((cause) =>
+ *     Cause.squash(cause) instanceof Cloudflare.RpcCallError
+ *       ? counter.increment()
+ *       : Effect.failCause(cause),
+ *   ),
+ * );
+ * ```
+ *
  * ### Returning Streams from RPC
  * RPC methods can return an Effect `Stream` and the caller will see
  * the chunks as they're produced. Combine with `Stream.schedule` to
