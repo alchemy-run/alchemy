@@ -124,6 +124,18 @@ export const AccountApiToken = Resource<AccountApiToken>("Cloudflare.ApiToken.Ac
 
 type AccountApiTokenAttributes = AccountApiToken["Attributes"];
 
+// Offset pagination can return the same token on two pages when the list
+// shifts between fetches; keep the first occurrence of each id.
+const uniqueTokens = <T extends { id?: string | null }>(tokens: ReadonlyArray<T>): T[] => {
+  const seen = new Set<string>();
+  return tokens.filter((token) => {
+    if (!token.id) return true;
+    if (seen.has(token.id)) return false;
+    seen.add(token.id);
+    return true;
+  });
+};
+
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     return name ?? (yield* createPhysicalName({ id }));
@@ -266,13 +278,18 @@ export const AccountApiTokenProvider = () =>
       // creation time. The list/get APIs never expose it, so we hydrate an
       // empty redacted placeholder — matching what `read` returns when it
       // re-observes a token whose value we no longer hold.
-      return yield* accounts.listTokens.pages({ accountId }).pipe(
+      //
+      // `GET /accounts/{id}/tokens` is offset-paginated over a name-sorted
+      // list, so any token created or deleted between page fetches (e.g. a
+      // concurrent deploy) shifts the window: tokens get listed twice or
+      // skipped. Request the API's maximum page size (1000) so a typical
+      // account is enumerated in one snapshot, and de-duplicate by id in
+      // case it still spans pages.
+      return yield* accounts.listTokens.pages({ accountId, perPage: 1000 }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) =>
-              buildAttributes(token, Redacted.make(""), accountId),
-            ),
+          uniqueTokens(Array.from(chunk).flatMap((page) => page.result ?? [])).map((token) =>
+            buildAttributes(token, Redacted.make(""), accountId),
           ),
         ),
       );

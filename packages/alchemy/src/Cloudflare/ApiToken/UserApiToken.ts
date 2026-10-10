@@ -200,11 +200,14 @@ export const UserApiTokenProvider = () =>
     // hydrate the read shape with an empty Redacted value, matching what
     // `read` produces when the secret was never captured.
     list: () =>
-      user.listTokens.pages({}).pipe(
+      // Offset-paginated over a name-sorted list: concurrent creates/deletes
+      // between page fetches duplicate or skip tokens. Use the API's maximum
+      // page size (1000) for a single-snapshot read and de-duplicate by id.
+      user.listTokens.pages({ perPage: 1000 }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) => buildAttributes(token, Redacted.make(""))),
+          uniqueTokens(Array.from(chunk).flatMap((page) => page.result ?? [])).map((token) =>
+            buildAttributes(token, Redacted.make("")),
           ),
         ),
         // User-scoped tokens require user-level auth; an account-scoped token
@@ -212,6 +215,18 @@ export const UserApiTokenProvider = () =>
         Effect.catchTag("Unauthorized", () => Effect.succeed([])),
       ),
   });
+
+// Offset pagination can return the same token on two pages when the list
+// shifts between fetches; keep the first occurrence of each id.
+const uniqueTokens = <T extends { id?: string | null }>(tokens: ReadonlyArray<T>): T[] => {
+  const seen = new Set<string>();
+  return tokens.filter((token) => {
+    if (!token.id) return true;
+    if (seen.has(token.id)) return false;
+    seen.add(token.id);
+    return true;
+  });
+};
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
