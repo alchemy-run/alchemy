@@ -65,14 +65,15 @@ describe(
 // Full runtime fixture: a Lambda bound to all four MWAA bindings against a
 // live Airflow environment. An environment takes ~20-30 minutes to provision
 // and is billed hourly while it exists (and needs real private-subnet
-// networking supplied out of band), so this is gated behind AWS_TEST_SLOW=1
-// (same gate as the Environment lifecycle test) and always destroys what it
-// created.
+// networking supplied out of band — against the default VPC's public subnets
+// CreateEnvironment fails with `ValidationException: The subnets must be
+// private.`), so this is gated behind AWS_TEST_MWAA=1 (same gate as the
+// Environment lifecycle test) and always destroys what it created.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "MWAABindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
   "token, REST API, and describe bindings against a live environment",
   () =>
     Effect.gen(function* () {

@@ -112,9 +112,13 @@ const executionRolePolicy = (
 });
 
 // MWAA environments take ~20-30 minutes to create, ~20-30 minutes to delete,
-// and are billed hourly while they exist. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// and are billed hourly while they exist. They also require PRIVATE subnets
+// with outbound egress (NAT or MWAA VPC endpoints) that this test does not
+// provision — against the default VPC's public subnets CreateEnvironment fails
+// with `ValidationException: The subnets must be private.` The full lifecycle
+// is therefore gated behind AWS_TEST_MWAA=1 (a runner that supplies private
+// networking) and always destroys what it created.
+test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
   "create environment, verify available, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
