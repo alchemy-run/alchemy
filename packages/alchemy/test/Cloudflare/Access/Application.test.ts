@@ -692,6 +692,7 @@ test.provider(
           sameSiteCookieAttribute: "strict",
           httpOnlyCookieAttribute: true,
           enableBindingCookie: true,
+          eagerRedirectCookieSetting: false,
         }),
       );
       const live1 = yield* getLive(cors.applicationId);
@@ -700,6 +701,7 @@ test.provider(
       expect(live1.sameSiteCookieAttribute).toEqual("strict");
       expect(live1.httpOnlyCookieAttribute).toBe(true);
       expect(live1.enableBindingCookie).toBe(true);
+      expect(live1.eagerRedirectCookieSetting).toBe(false);
       expect((yield* getLive(preflight.applicationId)).optionsPreflightBypass).toBe(true);
 
       // Settings dropped from the props are left as they are live.
@@ -715,6 +717,30 @@ test.provider(
       expect(live2.sameSiteCookieAttribute).toEqual("lax");
       expect(live2.httpOnlyCookieAttribute).toBe(true);
       expect(live2.enableBindingCookie).toBe(true);
+      expect(live2.eagerRedirectCookieSetting).toBe(false);
+
+      const { cors: eager } = yield* stack.deploy(program({ eagerRedirectCookieSetting: true }));
+      expect(eager.applicationId).toEqual(cors.applicationId);
+      expect(eager.aud).toEqual(cors.aud);
+      const live3 = yield* getLive(eager.applicationId);
+      expect(live3.eagerRedirectCookieSetting).toBe(true);
+      expect(live3.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
+      expect(live3.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
+      expect(live3.sameSiteCookieAttribute).toEqual("lax");
+      expect(live3.httpOnlyCookieAttribute).toBe(true);
+      expect(live3.enableBindingCookie).toBe(true);
+
+      // A neighboring setting update keeps the now-enabled Eager Redirect value.
+      const { cors: final } = yield* stack.deploy(program({ sameSiteCookieAttribute: "strict" }));
+      expect(final.applicationId).toEqual(cors.applicationId);
+      expect(final.aud).toEqual(cors.aud);
+      const live4 = yield* getLive(final.applicationId);
+      expect(live4.eagerRedirectCookieSetting).toBe(true);
+      expect(live4.corsHeaders?.allowedOrigins).toEqual(["https://app.example.com"]);
+      expect(live4.corsHeaders?.allowedMethods).toEqual(["GET", "POST"]);
+      expect(live4.sameSiteCookieAttribute).toEqual("strict");
+      expect(live4.httpOnlyCookieAttribute).toBe(true);
+      expect(live4.enableBindingCookie).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -936,6 +962,41 @@ describe(
     tags: ["unit", "provider:cloudflare", "provider:cloudflare:access", "local"],
   },
   () => {
+    for (const desired of [false, true]) {
+      it.effect(`explicit Eager Redirect ${desired} updates and then needs no PUT`, () =>
+        Effect.gen(function* () {
+          const news = { ...selfHostedNews, eagerRedirectCookieSetting: desired };
+          const { result, calls } = yield* reconcileApp(
+            news,
+            existingOutput(),
+            echo((o) => liveSelfHosted({ eager_redirect_cookie_setting: !desired, ...o })),
+          );
+
+          expect(calls.map((call) => call.method)).toEqual(["GET", "PUT"]);
+          expect(putOf(calls)?.path).toEqual(`/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}`);
+          expect(putOf(calls)?.body).toMatchObject({
+            eager_redirect_cookie_setting: desired,
+            same_site_cookie_attribute: "lax",
+            http_only_cookie_attribute: true,
+            enable_binding_cookie: false,
+            path_cookie_attribute: true,
+          });
+          expect(result.applicationId).toEqual(APP_ID);
+          expect(result.aud).toEqual("aud-1");
+
+          const redeployed = yield* reconcileApp(news, result, () =>
+            liveSelfHosted({ eager_redirect_cookie_setting: desired }),
+          );
+          expect(redeployed.calls.map((call) => call.method)).toEqual(["GET"]);
+
+          const unmanaged = yield* reconcileApp(selfHostedNews, result, () =>
+            liveSelfHosted({ eager_redirect_cookie_setting: !desired }),
+          );
+          expect(unmanaged.calls.map((call) => call.method)).toEqual(["GET"]);
+        }),
+      );
+    }
+
     it.effect("update keeps live CORS, cookie and preflight settings it does not manage", () =>
       Effect.gen(function* () {
         const { calls } = yield* reconcileApp(
@@ -965,6 +1026,7 @@ describe(
           custom_deny_url: "https://deny.example.com",
         });
         expect(put?.body.cors_headers).not.toHaveProperty("max_age");
+        expect(put?.body).not.toHaveProperty("eager_redirect_cookie_setting");
         for (const readOnly of ["id", "aud", "created_at", "updated_at"]) {
           expect(put?.body).not.toHaveProperty(readOnly);
         }
@@ -1031,6 +1093,7 @@ describe(
             sameSiteCookieAttribute: "none",
             httpOnlyCookieAttribute: false,
             pathCookieAttribute: true,
+            eagerRedirectCookieSetting: false,
           },
           undefined,
           (call) => liveSelfHosted(call.body),
@@ -1044,6 +1107,7 @@ describe(
           same_site_cookie_attribute: "none",
           http_only_cookie_attribute: false,
           path_cookie_attribute: true,
+          eager_redirect_cookie_setting: false,
         });
       }),
     );

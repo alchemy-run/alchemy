@@ -230,6 +230,14 @@ export interface ApplicationProps {
    */
   pathCookieAttribute?: boolean;
   /**
+   * Preemptively set the Access session cookie on each concrete hostname
+   * of a multi-hostname self-hosted application during login. Set to false
+   * to issue cookies as each hostname is visited. Omit to preserve the live
+   * setting on updates or use Cloudflare's default for a new application.
+   * Wildcard hostnames cannot receive preemptive cookies.
+   */
+  eagerRedirectCookieSetting?: boolean;
+  /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
    *
@@ -1103,6 +1111,7 @@ const SETTINGS = [
   "httpOnlyCookieAttribute",
   "enableBindingCookie",
   "pathCookieAttribute",
+  "eagerRedirectCookieSetting",
 ] as const satisfies ReadonlyArray<keyof ApplicationProps>;
 
 type Settings = Pick<ApplicationProps, (typeof SETTINGS)[number]>;
