@@ -73,5 +73,22 @@ export const tokenPolicies = (
     seen.add(group.id);
     bucket.permissionGroups.push({ id: group.id });
   }
-  return Object.values(buckets).filter((policy) => policy.permissionGroups.length > 0);
+  // Cloudflare rejects a policy with more than 300 permission groups
+  // ("permission_groups must have a length between 1 and 300"), and an
+  // account scope alone exceeds that, so split each bucket into policies
+  // over the same resources.
+  return Object.values(buckets).flatMap((policy) =>
+    chunk(policy.permissionGroups, MAX_POLICY_PERMISSION_GROUPS).map((permissionGroups) => ({
+      ...policy,
+      permissionGroups,
+    })),
+  );
 };
+
+/** Cloudflare's per-policy limit on `permission_groups`. */
+export const MAX_POLICY_PERMISSION_GROUPS = 300;
+
+const chunk = <A>(items: ReadonlyArray<A>, size: number): A[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, (index + 1) * size),
+  );

@@ -186,11 +186,9 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
   const maskGlyph = mask ? glyphs.mask : undefined;
   const [error, setError] = useState<string>();
   useCancel(cancel);
+  const defaultValue = "defaultValue" in options ? options.defaultValue : undefined;
   const complete = (raw: string) => {
-    const value =
-      raw === "" && "defaultValue" in options && options.defaultValue !== undefined
-        ? options.defaultValue
-        : raw;
+    const value = raw === "" && defaultValue !== undefined ? defaultValue : raw;
     const problem = errorMessage(options.validate?.(value));
     if (problem !== undefined) setError(problem);
     else
@@ -207,6 +205,7 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
       error={error}
       keys={[
         [keys.enter, "confirm"],
+        ...(defaultValue === undefined ? [] : ([[keys.tab, "fill default"]] as const)),
         [keys.escape, "cancel"],
       ]}
     >
@@ -215,9 +214,8 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
         // field when the caller did not supply more specific hint text.
         // Keep it a placeholder (rather than initialValue) so the first
         // keystroke starts a replacement instead of appending to the default.
-        placeholder={
-          options.placeholder ?? ("defaultValue" in options ? options.defaultValue : undefined)
-        }
+        placeholder={options.placeholder ?? defaultValue}
+        completion={defaultValue}
         initialValue={"initialValue" in options ? options.initialValue : undefined}
         mask={maskGlyph}
         ariaLabel={options.message}
