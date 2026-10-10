@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -309,6 +310,29 @@ export interface Ruleset extends Resource<
  * })
  * ```
  *
+ * ### Adopting an Existing Ruleset
+ * Ruleset names are unique per repository. A ruleset that already exists
+ * with the same name is foreign until you opt in with `adopt(true)` or
+ * `--adopt`; adoption then converges it to the declared props in place.
+ *
+ * **Example:** Take over a ruleset created in the GitHub UI
+ * ```typescript
+ * import { adopt } from "alchemy/AdoptPolicy";
+ *
+ * yield* GitHub.Ruleset("main-protection", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "main protection",
+ *   conditions: {
+ *     include: ["~DEFAULT_BRANCH"],
+ *   },
+ *   rules: {
+ *     deletion: true,
+ *     nonFastForward: true,
+ *   },
+ * }).pipe(adopt(true))
+ * ```
+ *
  * @resource
  * @product Repository
  */
@@ -459,9 +483,30 @@ export const RulesetProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const observed = yield* getRuleset(olds, output.rulesetId);
-      return observed === undefined ? undefined : attrsOf(observed);
+      if (output !== undefined) {
+        const observed = yield* getRuleset(olds, output.rulesetId);
+        return observed === undefined ? undefined : attrsOf(observed);
+      }
+      const octokit = yield* octokitFor(olds.baseUrl);
+      const rulesets = yield* Effect.tryPromise({
+        try: () =>
+          octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+            owner: olds.owner,
+            repo: olds.repository,
+            includes_parents: false,
+            per_page: 100,
+          }),
+        catch: (e) => e as Error & { status?: number },
+      }).pipe(
+        Effect.catchIf(
+          (error) => error.status === 404,
+          () => Effect.succeed([]),
+        ),
+      );
+      const match = rulesets.find((ruleset) => ruleset.name === olds.name);
+      if (match === undefined) return undefined;
+      const observed = yield* getRuleset(olds, match.id);
+      return observed === undefined ? undefined : Unowned(attrsOf(observed));
     }),
 
     list: Effect.fn(function* () {
