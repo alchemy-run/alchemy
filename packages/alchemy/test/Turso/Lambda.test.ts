@@ -33,7 +33,13 @@ test.provider(
       yield* stack.destroy();
     }),
   {
-    tags: ["provider:turso", "provider:turso:database", "provider:aws:lambda", "live"],
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:aws",
+      "provider:aws:lambda",
+      "live",
+    ],
     timeout: 300_000,
   },
 );
