@@ -329,8 +329,12 @@ const environmentIdOf = (value: unknown): string | undefined => {
     : undefined;
 };
 
-const redact = (value: string | undefined): Redacted.Redacted<string> | undefined =>
-  value !== undefined && value.length > 0 ? Redacted.make(value) : undefined;
+const redact = (
+  value: string | Redacted.Redacted<string> | undefined,
+): Redacted.Redacted<string> | undefined => {
+  const secret = typeof value === "string" ? Redacted.make(value) : value;
+  return secret !== undefined && Redacted.value(secret).length > 0 ? secret : undefined;
+};
 
 const keepSecret = (
   next: Redacted.Redacted<string> | undefined,
