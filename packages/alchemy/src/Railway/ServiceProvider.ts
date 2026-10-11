@@ -51,6 +51,10 @@ import {
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
+import {
+  registryCredentialsDigest,
+  registryCredentialsToSend,
+} from "./ServiceRegistryCredentials.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
@@ -819,6 +823,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  registryCredentialsDigest: string | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -834,6 +839,7 @@ const toAttrs = (input: {
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
   region: input.region,
+  registryCredentialsDigest: input.registryCredentialsDigest,
   port: input.port,
   url: input.domain?.url,
   domain: input.domain?.domain,
@@ -954,6 +960,7 @@ export const ServiceProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
             region,
+            registryCredentialsDigest: output?.registryCredentialsDigest,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -989,6 +996,7 @@ export const ServiceProvider = () =>
                       codeHash: "",
                       rpcToken: "",
                       region: undefined,
+                      registryCredentialsDigest: undefined,
                     }),
                   ),
               ),
@@ -1021,6 +1029,7 @@ export const ServiceProvider = () =>
             cronSchedule: undefined,
             rootDirectory: undefined,
             region: undefined,
+            registryCredentialsDigest: undefined,
             port,
             url: undefined,
             domain: undefined,
@@ -1212,7 +1221,10 @@ export const ServiceProvider = () =>
             instance,
             sourceImage,
             sourceRepo,
-            registryCredentials: undefined,
+            registryCredentials: registryCredentialsToSend(
+              props.registryCredentials,
+              output?.registryCredentialsDigest,
+            ),
             props: {
               ...props,
               dockerfilePath,
@@ -1381,6 +1393,10 @@ export const ServiceProvider = () =>
             codeHash,
             rpcToken,
             region,
+            registryCredentialsDigest:
+              props.registryCredentials === undefined
+                ? undefined
+                : registryCredentialsDigest(props.registryCredentials),
           });
         }),
 

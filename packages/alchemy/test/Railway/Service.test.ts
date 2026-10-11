@@ -3,6 +3,7 @@ import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -713,6 +714,51 @@ test.provider.skipIf(!githubEntitled)(
     ],
     timeout: 120_000,
   },
+);
+
+// A private image and credentials that can pull it, e.g. a GHCR package and a
+// `read:packages` token. The image must start without extra configuration.
+const registryImage = process.env.RAILWAY_TEST_REGISTRY_IMAGE;
+const registryUsername = process.env.RAILWAY_TEST_REGISTRY_USERNAME;
+const registryPassword = process.env.RAILWAY_TEST_REGISTRY_PASSWORD;
+
+test.provider.skipIf(!registryImage || !registryUsername || !registryPassword)(
+  "pull a private image and keep its registry credentials without redeploying",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const { project, environment } = yield* suitePartition;
+        const api = yield* Railway.Service("Registry", {
+          project,
+          environment,
+          image: registryImage!,
+          publicDomain: false,
+          registryCredentials: {
+            username: registryUsername!,
+            password: Redacted.make(registryPassword!),
+          },
+        });
+        return { api };
+      });
+
+      const created = yield* stack.deploy(program);
+      expect(created.api.deploymentStatus).toEqual("SUCCESS");
+      expect(created.api.registryCredentialsDigest).toMatch(/^[0-9a-f]{64}$/);
+
+      // Forcing reconcile with unchanged props must not rewrite the credentials,
+      // which would redeploy the service.
+      const again = yield* stack.deploy(program, { force: true });
+      expect(again.api.deploymentId).toEqual(created.api.deploymentId);
+      expect(again.api.registryCredentialsDigest).toEqual(created.api.registryCredentialsDigest);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 const placedRegions = (config: unknown, serviceId: string) =>
