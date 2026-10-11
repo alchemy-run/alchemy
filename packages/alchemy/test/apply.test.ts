@@ -9699,3 +9699,116 @@ describe("resource selection apply barriers", { tags: ["unit", "local"] }, () =>
     );
   }
 });
+
+describe("Worker identity proof compatibility", { tags: ["unit", "local"] }, () => {
+  interface CompatibilityWorker extends Resource<
+    "Cloudflare.Worker",
+    { name: string },
+    { workerName: string; workerId: string }
+  > {}
+  interface CompatibilityOther extends Resource<
+    "Test.CompatibilityOther",
+    { name: string },
+    { workerName: string; workerId: string }
+  > {}
+  const CompatibilityWorker = Resource<CompatibilityWorker>("Cloudflare.Worker");
+  const CompatibilityOther = Resource<CompatibilityOther>("Test.CompatibilityOther");
+  class CompatibilityProbe extends Context.Service<
+    CompatibilityProbe,
+    { reads: string[]; deletes: string[] }
+  >()("WorkerIdentityCompatibility") {}
+  const lifecycle = {
+    read: Effect.fn(function* ({ olds }: { olds: { name: string } }) {
+      (yield* CompatibilityProbe).reads.push(olds.name);
+      return { workerName: olds.name, workerId: "physical" };
+    }),
+    reconcile: ({ news }: { news: { name: string } }) =>
+      Effect.succeed({ workerName: news.name, workerId: "physical" }),
+    delete: Effect.fn(function* ({ output }: { output: { workerName: string } }) {
+      (yield* CompatibilityProbe).deletes.push(output.workerName);
+    }),
+  };
+  const providers = Layer.mergeAll(
+    Provider.succeed(CompatibilityWorker, lifecycle),
+    Provider.succeed(CompatibilityOther, lifecycle),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        CompatibilityProbe,
+        Effect.sync(() => ({ reads: [], deletes: [] })),
+      ),
+    ),
+  );
+  const { test } = Test.make({ providers });
+  for (const marker of [undefined, false, true]) {
+    test.provider(`live Worker recovery uses explicit identity proof (${marker})`, (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CompatibilityProbe;
+        yield* stack.destroy();
+        const state = yield* yield* State;
+        yield* state.set({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "Checkpoint",
+          value: {
+            status: "creating",
+            fqn: "Checkpoint",
+            logicalId: "Checkpoint",
+            instanceId: "interrupted",
+            resourceType: CompatibilityWorker.Type,
+            namespace: undefined,
+            props: { name: "shared" },
+            attr: undefined,
+            bindings: [],
+            downstream: [],
+            providerVersion: 0,
+            providerMode: "live",
+            propsIncomplete: true,
+            workerIdentityResolved: marker,
+          } as ResourceState,
+        });
+        yield* stack.plan(CompatibilityWorker("Checkpoint", { name: "shared" }));
+        expect(probe.reads).toHaveLength(marker === true ? 1 : 0);
+        yield* stack.destroy();
+        expect(probe.reads).toHaveLength(marker === true ? 2 : 0);
+        expect(probe.deletes).toEqual(marker === true ? ["shared"] : []);
+      }),
+    );
+  }
+  for (const local of [false, true]) {
+    test.provider(
+      `generic incompleteness remains conservative for ${local ? "local Worker" : "another resource"}`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CompatibilityProbe;
+          yield* stack.destroy();
+          const state = yield* yield* State;
+          yield* state.set({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: "Checkpoint",
+            value: {
+              status: "creating",
+              fqn: "Checkpoint",
+              logicalId: "Checkpoint",
+              instanceId: "interrupted",
+              resourceType: local ? CompatibilityWorker.Type : CompatibilityOther.Type,
+              namespace: undefined,
+              props: { name: "shared" },
+              attr: undefined,
+              bindings: [],
+              downstream: [],
+              providerVersion: 0,
+              providerMode: local ? "local" : "live",
+              propsIncomplete: true,
+              workerIdentityResolved: true,
+            } as ResourceState,
+          });
+          if (!local) yield* stack.plan(CompatibilityOther("Checkpoint", { name: "shared" }));
+          yield* stack.destroy();
+          expect(probe.reads).toEqual([]);
+          expect(probe.deletes).toEqual([]);
+        }),
+    );
+  }
+});

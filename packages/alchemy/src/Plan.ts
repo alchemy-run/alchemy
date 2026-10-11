@@ -1496,7 +1496,16 @@ const makePlan = <A>(
           state: oldState,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
-        if (oldState.propsIncomplete && provider.read && !reusesMigratedFqn) {
+        const hasWorkerIdentityProof =
+          resource.Type === "Cloudflare.Worker" &&
+          mode !== "local" &&
+          oldState.workerIdentityResolved === true;
+        if (
+          oldState.propsIncomplete &&
+          !hasWorkerIdentityProof &&
+          provider.read &&
+          !reusesMigratedFqn
+        ) {
           // The old identity was not persisted. Diffing its stripped props can
           // turn a refused create into a replacement that bypasses admission.
           return Node<Create>({ action: "create", props: applyProps, state: oldState });

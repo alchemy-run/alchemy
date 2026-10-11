@@ -59,6 +59,8 @@ interface BaseResourceState {
   adoptionBlocked?: "migrated-fqn";
   /** Unresolved props were stripped; an attr-less identity lookup is unsafe. */
   propsIncomplete?: true;
+  /** Whether Worker identity properties survived checkpoint serialization. */
+  workerIdentityResolved?: boolean;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *

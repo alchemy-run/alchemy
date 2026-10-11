@@ -1882,6 +1882,13 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const propsIncomplete = isDeleteNode(node)
           ? node.state.propsIncomplete
           : generation.propsIncomplete;
+        const workerIdentityResolved = isDeleteNode(node)
+          ? node.state.workerIdentityResolved
+          : generation.workerIdentityResolved;
+        const hasWorkerIdentityProof =
+          resourceType === "Cloudflare.Worker" &&
+          providerMode !== "local" &&
+          workerIdentityResolved === true;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2035,7 +2042,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
-              } else if (propsIncomplete) {
+              } else if (propsIncomplete && !hasWorkerIdentityProof) {
                 yield* scopedSession.note(
                   "Skipping recovery because unresolved properties were omitted from state. " +
                     "Any interrupted physical resource must be identified and cleaned up manually.",
@@ -2102,6 +2109,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 providerMode,
                 adoptionBlocked,
                 propsIncomplete,
+                workerIdentityResolved,
               });
             }
 
@@ -2173,6 +2181,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
                   propsIncomplete: node.propsIncomplete,
+                  workerIdentityResolved: node.workerIdentityResolved,
                 });
               }
               yield* scopedSession.note(
