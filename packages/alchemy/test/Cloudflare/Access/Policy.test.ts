@@ -222,6 +222,67 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
 );
 
+test.provider(
+  "adopted policy keeps the live fields it does not declare",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = "alchemy-access-policy-preserve-test";
+
+      yield* stack.destroy();
+
+      const existing = yield* zeroTrust.createAccessPolicy({
+        accountId,
+        name,
+        decision: "allow",
+        include: [{ emailDomain: { domain: "example.com" } }],
+        exclude: [{ email: { email: "intern@example.com" } }],
+        require: [{ geo: { countryCode: "US" } }],
+        approvalRequired: true,
+        approvalGroups: [{ approvalsNeeded: 1, emailAddresses: ["lead@example.com"] }],
+        purposeJustificationRequired: true,
+        purposeJustificationPrompt: "Ticket number?",
+      });
+
+      const deploy = (props: Partial<Cloudflare.Access.PolicyProps>) =>
+        stack.deploy(
+          Cloudflare.Access.Policy("PreservePolicy", {
+            name,
+            decision: "allow",
+            include: [{ emailDomain: "example.com" }],
+            adopt: true,
+            ...props,
+          }),
+        );
+      const live = () => zeroTrust.getAccessPolicy({ accountId, policyId: existing.id! });
+
+      // Only sessionDuration is declared; every other live field survives the PUT.
+      const adopted = yield* deploy({ sessionDuration: "12h" });
+      expect(adopted.policyId).toEqual(existing.id);
+      const kept = yield* live();
+      expect(kept.sessionDuration).toEqual("12h");
+      expect(kept.exclude).toEqual([{ email: { email: "intern@example.com" } }]);
+      expect(kept.require).toEqual([{ geo: { countryCode: "US" } }]);
+      expect(kept.approvalRequired).toBe(true);
+      expect(kept.approvalGroups?.[0]?.emailAddresses).toEqual(["lead@example.com"]);
+      expect(kept.purposeJustificationRequired).toBe(true);
+      expect(kept.purposeJustificationPrompt).toEqual("Ticket number?");
+
+      // Explicit `[]` / `false` still clear.
+      yield* deploy({ sessionDuration: "12h", require: [], approvalRequired: false });
+      const cleared = yield* live();
+      expect(cleared.require ?? []).toEqual([]);
+      expect(cleared.approvalRequired ?? false).toBe(false);
+      expect(cleared.exclude).toEqual([{ email: { email: "intern@example.com" } }]);
+
+      yield* stack.destroy();
+
+      const afterDestroy = yield* live().pipe(Effect.catch(() => Effect.succeed(undefined)));
+      expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
+);
+
 const POLICY_ID = "policy-1";
 
 const livePolicy = (overrides: Record<string, unknown> = {}) => ({
@@ -275,6 +336,7 @@ const sshWire = {
 const reconcilePolicy = (
   output: Cloudflare.Access.Policy["Attributes"] | undefined,
   respond: (call: StubCall) => unknown,
+  news: Cloudflare.Access.PolicyProps = sshProps,
 ) =>
   Effect.gen(function* () {
     const stub = stubCloudflare(respond);
@@ -284,8 +346,8 @@ const reconcilePolicy = (
         id: "SshOps",
         fqn: "SshOps",
         instanceId: "0123456789abcdef0123456789abcdef",
-        news: sshProps,
-        olds: output === undefined ? undefined : sshProps,
+        news,
+        olds: output === undefined ? undefined : news,
         output,
         bindings: [] as never,
         session,
@@ -337,6 +399,42 @@ describe(
         expect(update?.path).toEqual(`/accounts/${ACCOUNT_ID}/access/policies/${POLICY_ID}`);
         expect(update?.body).toMatchObject(sshWire);
         expect(calls.some((c) => c.method === "POST")).toBe(false);
+      }),
+    );
+
+    it.effect("update sends live values for omitted fields and honors explicit clears", () =>
+      Effect.gen(function* () {
+        const { calls } = yield* reconcilePolicy(
+          {
+            policyId: POLICY_ID,
+            name: "ssh-ops",
+            decision: "allow",
+            accountId: ACCOUNT_ID,
+            createdAt: undefined,
+            updatedAt: undefined,
+          },
+          (call) =>
+            call.method === "GET"
+              ? livePolicy({ ...sshWire, require: [{ geo: { country_code: "US" } }] })
+              : livePolicy(call.body),
+          {
+            name: "ssh-ops",
+            decision: "allow",
+            include: [{ emailDomain: "example.com" }],
+            sessionDuration: "12h",
+            approvalRequired: false,
+            exclude: [],
+          },
+        );
+
+        const update = calls.find((c) => c.method === "PUT");
+        expect(update?.body).toMatchObject({
+          ...sshWire,
+          session_duration: "12h",
+          approval_required: false,
+          exclude: [],
+          require: [{ geo: { country_code: "US" } }],
+        });
       }),
     );
 

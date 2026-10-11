@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { stripNullFields } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -270,6 +271,11 @@ export type Policy = Resource<
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
  * inline policies attached directly to an `Application` — a reusable
  * policy can be referenced by multiple applications by id.
+ *
+ * Optional fields you leave out keep their live value on update, so adopting
+ * a policy never drops rules you did not declare. Pass `[]` or `false` to
+ * clear one.
+ *
  * ### Creating a Policy
  * **Example:** Allow a single email domain
  * ```typescript
@@ -352,17 +358,14 @@ export const PolicyProvider = () =>
       // Observe — prefer cached policyId, fall back to a name lookup so
       // we recover from out-of-band deletes and partial state-persistence
       // failures.
-      let observed: ObservedPolicy | undefined;
+      let observed: RawPolicy | undefined;
       if (output?.policyId) {
         observed = yield* zeroTrust
           .getAccessPolicy({
             accountId: acct,
             policyId: output.policyId,
           })
-          .pipe(
-            Effect.map(toObserved),
-            Effect.orElseSucceed((): ObservedPolicy | undefined => undefined),
-          );
+          .pipe(Effect.orElseSucceed((): RawPolicy | undefined => undefined));
       }
       if (!observed) {
         observed = yield* findPolicyByName(acct, name);
@@ -385,15 +388,14 @@ export const PolicyProvider = () =>
             ),
           );
       } else {
-        // Sync — Cloudflare PUTs the policy as a whole replacement, so a
-        // single update converges every mutable field. Always issuing the
-        // PUT keeps the resource convergent against drift; the API is
-        // idempotent for equal payloads.
+        // Sync — Cloudflare PUTs the policy as a whole replacement and
+        // resets every field the body omits, so undeclared optional fields
+        // are sent back with their live value.
         const prior = observed;
         const updated = yield* zeroTrust.updateAccessPolicy({
           accountId: acct,
           policyId: prior.id!,
-          ...policyBody(name, news),
+          ...withLiveFields(policyBody(name, news), prior),
         });
         ensured = {
           id: updated.id ?? prior.id,
@@ -503,6 +505,32 @@ const policyBody = (name: string, news: PolicyProps) => ({
   mfaConfig: news.mfaConfig,
 });
 
+// Optional fields a whole-replacement PUT would reset when omitted.
+const PRESERVED_FIELDS = [
+  "exclude",
+  "require",
+  "sessionDuration",
+  "approvalRequired",
+  "approvalGroups",
+  "isolationRequired",
+  "purposeJustificationRequired",
+  "purposeJustificationPrompt",
+  "connectionRules",
+  "mfaConfig",
+] as const;
+
+const withLiveFields = (
+  body: ReturnType<typeof policyBody>,
+  live: RawPolicy,
+): ReturnType<typeof policyBody> => ({
+  ...body,
+  ...Object.fromEntries(
+    PRESERVED_FIELDS.flatMap((key) =>
+      body[key] === undefined && live[key] != null ? [[key, stripNullFields(live[key])]] : [],
+    ),
+  ),
+});
+
 const createPolicyName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     if (name) return name;
@@ -525,16 +553,16 @@ type ObservedPolicy = {
   updatedAt?: string | null;
 };
 
-// Distilled response shapes (Get / Create / Update) all carry the same set
-// of fields we care about, but typed wider than `ObservedPolicy`. Narrow at
-// the API boundary so the rest of the reconciler stays in our shape.
+// Distilled response shapes (Get / List / Create / Update) all carry the same
+// set of fields we care about, but typed wider than `ObservedPolicy`. Narrow
+// at the API boundary so the rest of the reconciler stays in our shape.
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
   decision?: PolicyDecision | null | string;
   createdAt?: string | null;
   updatedAt?: string | null;
-};
+} & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };
 
 const toObserved = (r: RawPolicy): ObservedPolicy => ({
   id: r.id,
