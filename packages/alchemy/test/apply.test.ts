@@ -9570,6 +9570,7 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
       deleteFirst: boolean;
       unreadableAfterPrecreate: boolean;
       events: string[];
+      deletes: string[];
       reads: Array<{
         olds: ReplacementWorker["Props"];
         output: ReplacementWorker["Attributes"] | undefined;
@@ -9610,8 +9611,10 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
       expect(Unowned.is(output)).toBe(false);
       return { workerName: news.name, workerId: "created", url: "https://desired.example" };
     }),
-    delete: Effect.fn(function* () {
-      (yield* ReplacementProbe).events.push("delete");
+    delete: Effect.fn(function* ({ output }) {
+      const probe = yield* ReplacementProbe;
+      probe.events.push("delete");
+      probe.deletes.push(output.workerName);
     }),
   }).pipe(
     Layer.provideMerge(
@@ -9622,6 +9625,7 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
           deleteFirst: false,
           unreadableAfterPrecreate: false,
           events: [],
+          deletes: [],
           reads: [],
           creates: [],
           checkpointAttrs: [],
@@ -9669,10 +9673,11 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
     override?: boolean,
     version?: ReplacementWorker["Props"]["version"],
     preview?: ReplacementWorker["Props"]["preview"],
+    name = "target",
   ) =>
     Effect.gen(function* () {
       const worker = yield* ReplacementWorker("Replacement", {
-        name: "target",
+        name,
         version,
         preview,
       }).pipe(override === undefined ? (effect) => effect : adopt(override));
@@ -9741,6 +9746,166 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
               : undefined,
           ]);
           expect(probe.checkpointAttrs[0]).toBeUndefined();
+          yield* stack.destroy();
+        }),
+    );
+  }
+  for (const cycle of [false, true]) {
+    for (const deleteFirst of [false, true]) {
+      for (const restart of [false, true]) {
+        test.provider(
+          `destroy preserves foreign cached replacement after refusal (cycle=${cycle}, deleteFirst=${deleteFirst}, restart=${restart})`,
+          (stack) =>
+            Effect.gen(function* () {
+              const probe = yield* ReplacementProbe;
+              yield* stack.destroy();
+              probe.deleteFirst = deleteFirst;
+              yield* seed(true);
+              const state = yield* yield* State;
+              const row = yield* getState("Replacement");
+              yield* state.set({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "Replacement",
+                value: { ...row, deleteFirst },
+              });
+              const result = yield* stack
+                .deploy(
+                  program(
+                    cycle,
+                    undefined,
+                    undefined,
+                    undefined,
+                    restart ? "other-target" : "target",
+                  ),
+                )
+                .pipe(Effect.exit);
+              expect(Exit.isFailure(result)).toBe(true);
+              if (Exit.isFailure(result))
+                expect(result.cause.reasons.find(Cause.isFailReason)?.error).toMatchObject({
+                  _tag: "OwnedBySomeoneElse",
+                });
+              expect((yield* getState("Replacement")).attr).toBeUndefined();
+              yield* stack.destroy();
+              expect(probe.deletes).toEqual(["old"]);
+              expect(probe.events).not.toContain("precreate");
+              expect(probe.events).not.toContain("create");
+            }),
+        );
+      }
+    }
+  }
+  test.provider("destroy preserves foreign cached candidates already nested in a retry", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* ReplacementProbe;
+      yield* stack.destroy();
+      yield* seed(true);
+      const row = yield* getState("Replacement");
+      if (row.status !== "replacing") return yield* Effect.die("Expected replacing checkpoint");
+      const state = yield* yield* State;
+      yield* state.set({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Replacement",
+        value: {
+          ...row,
+          deleteFirst: false,
+          old: {
+            ...row,
+            instanceId: "abandoned-generation",
+            props: { name: "abandoned" },
+            attr: { workerName: "abandoned", workerId: "cached-abandoned" },
+          },
+        },
+      });
+      const result = yield* stack.deploy(program(false)).pipe(Effect.exit);
+      expect(Exit.isFailure(result)).toBe(true);
+      yield* stack.destroy();
+      expect(probe.deletes).toEqual(["old"]);
+    }),
+  );
+  for (const update of [false, true]) {
+    test.provider(
+      `terminal replacement quarantines nested foreign candidates before cleanup (update=${update})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* ReplacementProbe;
+          yield* stack.destroy();
+          yield* seed(true);
+          const row = yield* getState("Replacement");
+          if (row.status !== "replacing") return yield* Effect.die("Expected replacing checkpoint");
+          const state = yield* yield* State;
+          yield* state.set({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: "Replacement",
+            value: {
+              ...row,
+              status: "replaced",
+              deleteFirst: false,
+              attr: { workerName: "target", workerId: "owned-id" },
+              old: {
+                ...row,
+                instanceId: "abandoned-generation",
+                props: { name: "abandoned" },
+                attr: { workerName: "abandoned", workerId: "cached-abandoned" },
+              },
+            },
+          });
+          const plan = yield* stack.plan(program(false));
+          expect(plan.resources.Replacement?.action).toBe("replace");
+          if (update) {
+            const node = plan.resources.Replacement;
+            if (node?.action !== "replace" || node.state.status !== "replaced")
+              return yield* Effect.die("Expected replaced cleanup plan");
+            plan.resources.Replacement = { ...node, action: "update", state: node.state };
+          }
+          yield* apply(plan);
+          expect(probe.deletes).toEqual(["old"]);
+          yield* stack.destroy();
+          expect(probe.deletes).toEqual(["old", "target"]);
+        }),
+    );
+  }
+  for (const matching of [true, false]) {
+    test.provider(
+      `cyclic retry reuses cached URL only after matching ownership (matching=${matching})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* ReplacementProbe;
+          yield* stack.destroy();
+          probe.observation = "owned";
+          yield* seed(true);
+          const state = yield* yield* State;
+          const row = yield* getState("Replacement");
+          yield* state.set({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: "Replacement",
+            value: {
+              ...row,
+              deleteFirst: false,
+              attr: {
+                workerName: "target",
+                workerId: matching ? "observed" : "cached",
+                url: "https://desired.example",
+              },
+            },
+          });
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              const worker = yield* ReplacementWorker("Replacement", { name: "target" });
+              yield* worker.bind("Self", {
+                self: Output.map(worker.url, (url) => {
+                  expect(url).toBe("https://desired.example");
+                  return url!;
+                }),
+              });
+              return worker;
+            }),
+          );
+          expect(probe.events[0]).toBe("read");
+          expect(probe.events.includes("precreate")).toBe(!matching);
           yield* stack.destroy();
         }),
     );

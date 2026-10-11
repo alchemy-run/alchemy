@@ -91,6 +91,26 @@ interface ResourceTracker {
   instanceId: string;
 }
 
+const quarantineReplacingWorkerOutputs = (
+  generation: ReplacementOldResourceState,
+): ReplacementOldResourceState => {
+  if (generation.status !== "replacing" && generation.status !== "replaced") return generation;
+  const old = quarantineReplacingWorkerOutputs(generation.old);
+  if (generation.status === "replaced") {
+    return old === generation.old ? generation : { ...generation, old };
+  }
+  const attr =
+    generation.resourceType === "Cloudflare.Worker" &&
+    stampedMode(generation) !== "local" &&
+    generation.attr?.versionOf === undefined &&
+    generation.attr?.previewOf === undefined
+      ? undefined
+      : generation.attr;
+  return attr === generation.attr && old === generation.old
+    ? generation
+    : { ...generation, attr, old };
+};
+
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -547,6 +567,13 @@ const executeNode = (
         } as S,
       });
 
+    if (node.state?.status === "replacing" || node.state?.status === "replaced") {
+      const old = quarantineReplacingWorkerOutputs(node.state.old);
+      if (old !== node.state.old) {
+        yield* state.set({ stack: stackName, stage, fqn, value: { ...node.state, old } });
+      }
+    }
+
     const scopedSession = {
       ...session,
       note: (note, options?) =>
@@ -731,7 +758,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           resourceType: node.resource.Type,
           bindings: excludeDeletedBindings(node.bindings),
-          old: node.state,
+          old: quarantineReplacingWorkerOutputs(node.state),
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
@@ -954,6 +981,7 @@ const executeNode = (
             // Keep the replacement wrapper intact while changing the live
             // replacement props; GC still has older generations to delete.
             ...node.state,
+            old: quarantineReplacingWorkerOutputs(node.state.old),
             attr: node.state.attr,
             props: news,
             providerMode: node.mode,
@@ -1009,6 +1037,7 @@ const executeNode = (
           // The live replacement changed, but cleanup of older generations still
           // has to continue afterwards.
           ...node.state,
+          old: quarantineReplacingWorkerOutputs(node.state.old),
           attr,
           props: news,
           // Resolved payload, not raw `node.bindings` — see create commit.
@@ -1088,7 +1117,7 @@ const executeNode = (
           attr: undefined,
           providerVersion: node.provider.version ?? 0,
           deleteFirst: node.deleteFirst,
-          old: node.state,
+          old: quarantineReplacingWorkerOutputs(node.state),
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
@@ -1114,6 +1143,23 @@ const executeNode = (
       // left to drain. `delete` is required to be idempotent, so a re-run
       // after an interrupted apply simply re-converges.
       let attr: any = replState.attr;
+      const cachedAttr = attr;
+      const hasCachedScript =
+        isLiveWorker &&
+        cachedAttr !== undefined &&
+        cachedAttr?.versionOf === undefined &&
+        cachedAttr?.previewOf === undefined;
+      const old = quarantineReplacingWorkerOutputs(replState.old);
+      if (hasCachedScript || old !== replState.old) {
+        // Legacy replacement caches do not prove ownership of the current target.
+        replState = yield* commit<ReplacingResourceState>({
+          ...replState,
+          props: node.props,
+          old,
+          attr: hasCachedScript ? undefined : attr,
+        });
+        attr = replState.attr;
+      }
       const isScriptWorker = (props: Record<string, any>) =>
         props.version?.parent == null && props.preview?.of == null;
       const readReplacement = Effect.fn(function* (news: Record<string, any>) {
@@ -1130,7 +1176,7 @@ const executeNode = (
             logicalId,
           });
         }
-        return observed === undefined ? undefined : stripUnowned(observed);
+        return observed === undefined ? undefined : stripUnowned(observed as Record<string, any>);
       });
       const clearReplacementOutput = Effect.fn(function* (props: Record<string, any>) {
         attr = undefined;
@@ -1198,7 +1244,23 @@ const executeNode = (
           );
         }
         // Admission must preserve precreate's desired stable outputs for peers.
-        if (isScriptWorker(identity)) yield* readReplacement(identity);
+        if (isScriptWorker(identity)) {
+          const observed = yield* readReplacement(identity);
+          if (
+            hasCachedScript &&
+            !node.deleteFirst &&
+            typeof cachedAttr.workerId === "string" &&
+            cachedAttr.workerId !== "" &&
+            observed !== undefined &&
+            cachedAttr.workerId === observed.workerId &&
+            cachedAttr.workerName === observed.workerName &&
+            cachedAttr.namespace === observed.namespace &&
+            cachedAttr.accountId === observed.accountId
+          ) {
+            attr = cachedAttr;
+            replState = yield* commit<ReplacingResourceState>({ ...replState, attr });
+          }
+        }
       }
       if (node.deleteFirst && (!isLiveWorker || inCycle)) {
         if (isLiveWorker) yield* clearReplacementOutput(node.props);
