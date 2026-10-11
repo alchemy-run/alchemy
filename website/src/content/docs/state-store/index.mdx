@@ -142,6 +142,29 @@ Alchemy.Stack(
 
 It is imported from `alchemy/State/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
 
+## GCS state store
+
+`GCP.state()` persists state as JSON objects in a Google Cloud Storage bucket, and it locks: each `(stack, stage)` holds a lock object for the duration of a run, so a second deploy of the same stage fails instead of interleaving. The holder refreshes the lock while it runs. If a deploy crashes, its lock expires within a minute and the next deploy takes it.
+
+```typescript
+import * as GCP from "alchemy/GCP";
+
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: GCP.providers(),
+    state: GCP.state({ bucketName: "my-company-infra-state", prefix: "alchemy" }),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+If the bucket does not exist, the store creates it with object versioning, uniform bucket-level access and public access prevention. An existing bucket is used as it is, so check those settings yourself: state can hold secrets in plaintext. Set `prefix` when the bucket holds other data.
+
+Reads take the lock too. A stack that reads another stack's outputs holds that stack's lock for the rest of its run, as with `postgresState()`.
+
 ## State and lifecycle
 
 State transitions track the lifecycle of each resource:
