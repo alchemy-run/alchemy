@@ -69,6 +69,7 @@ import {
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { isProvisionalWorkerOutput } from "./State/WorkerState.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -572,7 +573,7 @@ const executeNode = (
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
           workerIdentityResolved:
-            isLiveWorker && (value.attr === undefined || value.attr?.workerId === "")
+            isLiveWorker && (value.attr === undefined || isProvisionalWorkerOutput(value.attr))
               ? identityContainerSurvivesPersistence(value.props, props) &&
                 identityContainerSurvivesPersistence(value.props?.version, props?.version) &&
                 identityContainerSurvivesPersistence(value.props?.preview, props?.preview) &&
@@ -758,6 +759,11 @@ const executeNode = (
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
+          workerWriteStarted: isLiveWorker
+            ? node.state === undefined
+              ? false
+              : node.state.workerWriteStarted
+            : undefined,
         });
         return id;
       } else if (node.action === "replace") {
@@ -799,27 +805,33 @@ const executeNode = (
 
     // ── create ──
     if (node.action === "create") {
-      if (!node.state || (isLiveWorker && node.state.attr === undefined)) {
-        // Capture the current desired identity before precreate can write.
-        // An attr-less retry must not carry proof from an earlier set of props.
-        yield* commit<CreatingResourceState>({
+      let attr: any = node.state?.attr;
+      let workerWriteStarted = isLiveWorker
+        ? node.state === undefined
+          ? false
+          : node.state.workerWriteStarted
+        : undefined;
+      const checkpoint = (props: Record<string, any>, bindings: ResourceBinding[]) =>
+        commit<CreatingResourceState>({
           status: "creating",
           fqn,
           logicalId,
           instanceId,
           resourceType: node.resource.Type,
-          props: node.props,
-          attr: undefined,
+          props,
+          attr,
           providerVersion: node.provider.version ?? 0,
-          bindings: excludeDeletedBindings(node.bindings),
+          bindings,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
+          workerWriteStarted,
         });
+      if (!node.state || (isLiveWorker && attr === undefined)) {
+        // Capture current identity without changing an earlier write attempt's provenance.
+        yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
       }
-
-      let attr: any = node.state?.attr;
 
       if (attr !== undefined) {
         // Precreate/read may already have produced a usable output snapshot. Publish
@@ -836,6 +848,10 @@ const executeNode = (
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
+        if (isLiveWorker) {
+          workerWriteStarted = true;
+          yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
+        }
         attr = yield* node.provider
           .precreate({
             id: logicalId,
@@ -846,21 +862,7 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
           })
           .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
-        yield* commit<CreatingResourceState>({
-          status: "creating",
-          fqn,
-          logicalId,
-          instanceId,
-          resourceType: node.resource.Type,
-          props: node.props,
-          attr,
-          providerVersion: node.provider.version ?? 0,
-          bindings: excludeDeletedBindings(node.bindings),
-          downstream: node.downstream,
-          removalPolicy: node.resource.RemovalPolicy,
-          providerMode: node.mode,
-          adoptionBlocked: node.adoptionBlocked,
-        });
+        yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
         yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
       }
 
@@ -881,24 +883,8 @@ const executeNode = (
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
       if (attr === undefined && node.deferredAdoption && node.provider.read) {
-        const checkpoint = () =>
-          commit<CreatingResourceState>({
-            status: "creating",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: news,
-            attr,
-            providerVersion: node.provider.version ?? 0,
-            bindings: bindingOutputs,
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-            adoptionBlocked: node.adoptionBlocked,
-          });
         // Refusal or interruption must retain identity, never foreign attributes.
-        yield* checkpoint();
+        yield* checkpoint(news, bindingOutputs);
         const observed = yield* node.provider
           .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
           .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
@@ -916,10 +902,14 @@ const executeNode = (
           }
           attr = stripUnowned(observed);
           // A creating checkpoint retains olds: undefined on retry.
-          yield* checkpoint();
+          yield* checkpoint(news, bindingOutputs);
         }
       }
 
+      if (isLiveWorker) {
+        workerWriteStarted = true;
+        yield* checkpoint(news, bindingOutputs);
+      }
       attr = yield* node.provider
         .reconcile({
           id: logicalId,
@@ -1913,14 +1903,15 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const workerIdentityResolved = isDeleteNode(node)
           ? node.state.workerIdentityResolved
           : generation.workerIdentityResolved;
+        const workerWriteStarted = isDeleteNode(node)
+          ? node.state.workerWriteStarted
+          : generation.workerWriteStarted;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr =
           resourceType === "Cloudflare.Worker" &&
           providerMode !== "local" &&
-          persistedAttr?.workerId === "" &&
-          persistedAttr.versionOf === undefined &&
-          persistedAttr.previewOf === undefined
+          isProvisionalWorkerOutput(persistedAttr)
             ? undefined
             : persistedAttr;
 
@@ -2076,6 +2067,14 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               } else if (
                 resourceType === "Cloudflare.Worker" &&
                 providerMode !== "local" &&
+                workerWriteStarted === false
+              ) {
+                yield* scopedSession.note(
+                  "Removing Worker checkpoint without a cloud lookup because no mutating lifecycle started.",
+                );
+              } else if (
+                resourceType === "Cloudflare.Worker" &&
+                providerMode !== "local" &&
                 workerIdentityResolved !== true
               ) {
                 yield* scopedSession.note(
@@ -2144,6 +2143,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 providerMode,
                 adoptionBlocked,
                 workerIdentityResolved,
+                workerWriteStarted,
               });
             }
 
@@ -2215,6 +2215,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
                   workerIdentityResolved: node.workerIdentityResolved,
+                  workerWriteStarted: node.workerWriteStarted,
                 });
               }
               yield* scopedSession.note(

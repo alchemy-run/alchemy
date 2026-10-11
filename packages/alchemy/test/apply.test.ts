@@ -1,3 +1,4 @@
+import { WorkerHasNoVersions } from "@distilled.cloud/cloudflare/workers";
 import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
@@ -9570,11 +9571,16 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
   > {}
   const CheckpointDependency = Resource<CheckpointDependency>("Test.CheckpointDependency");
   class InterruptedPrecreate extends Data.TaggedError("InterruptedPrecreate")<{}> {}
+  class InterruptedUpload extends Data.TaggedError("InterruptedUpload")<{}> {}
   class CheckpointProbe extends Context.Service<
     CheckpointProbe,
     {
       reads: CheckpointWorker["Props"][];
       deletes: CheckpointWorker["Attributes"][];
+      unreadable: boolean;
+      absent: boolean;
+      interruptUpload: boolean;
+      writePhases: unknown[];
     }
   >()("CheckpointIdentityProbe") {}
   const providers = Layer.mergeAll(
@@ -9585,19 +9591,32 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
     Provider.succeed(CheckpointWorker, {
       read: Effect.fn(function* ({ olds, output }) {
         if (output) return output;
-        (yield* CheckpointProbe).reads.push(olds);
+        const probe = yield* CheckpointProbe;
+        probe.reads.push(olds);
+        if (probe.unreadable)
+          return yield* new WorkerHasNoVersions({ code: 10007, message: "Worker has no versions" });
+        if (probe.absent) return undefined;
         const attributes = {
           workerName: olds.name,
           namespace: typeof olds.namespace === "string" ? olds.namespace : olds.namespace?.name,
         };
         return olds.name === "foreign" ? Unowned(attributes) : attributes;
       }),
-      precreate: () => Effect.fail(new InterruptedPrecreate()),
-      reconcile: ({ news }) =>
-        Effect.succeed({
+      precreate: Effect.fn(function* () {
+        (yield* CheckpointProbe).writePhases.push(
+          (yield* getState<any>("Checkpoint")).workerWriteStarted,
+        );
+        return yield* new InterruptedPrecreate();
+      }),
+      reconcile: Effect.fn(function* ({ news }) {
+        const probe = yield* CheckpointProbe;
+        probe.writePhases.push((yield* getState<any>("Checkpoint")).workerWriteStarted);
+        if (probe.interruptUpload) return yield* new InterruptedUpload();
+        return {
           workerName: news.name,
           namespace: typeof news.namespace === "string" ? news.namespace : news.namespace?.name,
-        }),
+        };
+      }),
       delete: Effect.fn(function* ({ output }) {
         (yield* CheckpointProbe).deletes.push(output);
       }),
@@ -9607,7 +9626,16 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       Layer.effect(
         CheckpointProbe,
         Effect.serviceOption(CheckpointProbe).pipe(
-          Effect.map(Option.getOrElse(() => ({ reads: [], deletes: [] }))),
+          Effect.map(
+            Option.getOrElse(() => ({
+              reads: [],
+              deletes: [],
+              unreadable: false,
+              absent: false,
+              interruptUpload: false,
+              writePhases: [],
+            })),
+          ),
         ),
       ),
     ),
@@ -9632,6 +9660,173 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
     const stack = yield* Stack;
     yield* state.set({ stack: stack.name, stage: stack.stage, fqn: "Checkpoint", value });
   });
+
+  test.provider(
+    "destroy removes a refused no-write Worker checkpoint without another ownership read",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        probe.unreadable = true;
+        const desired = Effect.gen(function* () {
+          const dependency = yield* CheckpointDependency("Dependency", {});
+          return yield* CheckpointWorker("Checkpoint", {
+            name: "shared",
+            namespace: "dispatch",
+            dependency: dependency.name,
+          });
+        });
+        const refused = yield* stack.deploy(desired).pipe(Effect.exit);
+        expect(Exit.isFailure(refused)).toBe(true);
+        if (Exit.isFailure(refused))
+          expect(refused.cause.reasons.find(Cause.isFailReason)?.error).toMatchObject({
+            _tag: "WorkerHasNoVersions",
+          });
+        expect(probe.writePhases).toEqual([]);
+        const destroyed = yield* stack.destroy().pipe(Effect.exit);
+        const reads = [...probe.reads];
+        probe.unreadable = false;
+        if (Exit.isFailure(destroyed)) yield* stack.destroy();
+        expect(Exit.isSuccess(destroyed)).toBe(true);
+        expect(reads).toHaveLength(1);
+        expect(probe.deletes).toEqual([]);
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider("a refused no-write retry admits the current desired identity", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({ ...checkpoint(true, "dispatch"), workerWriteStarted: false });
+      yield* stack.deploy(
+        CheckpointWorker("Checkpoint", { name: "desired", namespace: "new-dispatch" }),
+      );
+      expect(probe.reads).toEqual([{ name: "desired", namespace: "new-dispatch" }]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "the first Worker checkpoint remains safe when the next checkpoint fails",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const dependency = yield* CheckpointDependency("Dependency", {});
+            return yield* CheckpointWorker("Checkpoint", {
+              name: "shared",
+              namespace: "dispatch",
+              dependency: dependency.name,
+            });
+          }),
+        );
+        const state = yield* yield* State;
+        let checkpoints = 0;
+        const interrupted = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                request.fqn === "Checkpoint" && ++checkpoints === 2
+                  ? Effect.fail(new StateStoreError({ message: "Second checkpoint failed" }))
+                  : state.set(request),
+            }),
+          ),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(interrupted)).toBe(true);
+        expect(probe.writePhases).toEqual([]);
+        probe.unreadable = true;
+        const destroyed = yield* stack.destroy().pipe(Effect.exit);
+        probe.unreadable = false;
+        if (Exit.isFailure(destroyed)) yield* stack.destroy();
+        expect(Exit.isSuccess(destroyed)).toBe(true);
+        expect(probe.reads).toEqual([]);
+        expect(probe.deletes).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "an interrupted upload records write provenance before calling reconcile",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        probe.absent = true;
+        probe.interruptUpload = true;
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const dependency = yield* CheckpointDependency("Dependency", {});
+              return yield* CheckpointWorker("Checkpoint", {
+                name: "shared",
+                namespace: "dispatch",
+                dependency: dependency.name,
+              });
+            }),
+          )
+          .pipe(Effect.catchTag("InterruptedUpload", () => Effect.void));
+        expect(probe.writePhases).toEqual([true]);
+        probe.absent = false;
+        yield* stack.destroy();
+        expect(probe.reads).toHaveLength(2);
+        expect(probe.deletes).toEqual([{ workerName: "shared", namespace: "dispatch" }]);
+      }),
+  );
+
+  test.provider(
+    "no-write provenance survives replacement cleanup without leaking to the old generation",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        const current = checkpoint(true, "dispatch");
+        yield* seed({
+          ...current,
+          status: "replacing",
+          workerWriteStarted: false,
+          deleteFirst: false,
+          old: {
+            ...checkpoint(true, "old-dispatch"),
+            status: "created",
+            instanceId: "old-generation",
+            workerWriteStarted: true,
+            attr: { workerName: "old", namespace: "old-dispatch" },
+          },
+        });
+        probe.unreadable = true;
+        const destroyed = yield* stack.destroy().pipe(Effect.exit);
+        probe.unreadable = false;
+        if (Exit.isFailure(destroyed)) yield* stack.destroy();
+        expect(Exit.isSuccess(destroyed)).toBe(true);
+        expect(probe.reads).toEqual([]);
+        expect(probe.deletes).toEqual([{ workerName: "old", namespace: "old-dispatch" }]);
+      }),
+  );
+
+  for (const writeStarted of [undefined, true]) {
+    test.provider(
+      `unproven or started writes retain unreadable recovery state (${writeStarted})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CheckpointProbe;
+          yield* stack.destroy();
+          yield* seed({ ...checkpoint(true, "dispatch"), workerWriteStarted: writeStarted });
+          probe.unreadable = true;
+          const destroyed = yield* stack.destroy().pipe(Effect.exit);
+          expect(Exit.isFailure(destroyed)).toBe(true);
+          expect(yield* getState("Checkpoint")).toBeDefined();
+          expect(probe.reads).toHaveLength(1);
+          expect(probe.deletes).toEqual([]);
+          probe.unreadable = false;
+          yield* stack.destroy();
+        }),
+    );
+  }
 
   for (const marker of [undefined, false]) {
     test.provider(`retry does not recover an unproven Worker identity (${marker})`, (stack) =>
@@ -9870,6 +10065,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
         expect(row.attr).toBeUndefined();
         expect(row.workerIdentityResolved).toBe(complete);
         expect(row.props.namespace).toBe(complete ? "dispatch" : undefined);
+        expect(probe.writePhases).toEqual([true]);
         yield* stack.destroy();
         expect(probe.reads).toHaveLength(complete ? 1 : 0);
         expect(probe.deletes).toHaveLength(complete ? 1 : 0);

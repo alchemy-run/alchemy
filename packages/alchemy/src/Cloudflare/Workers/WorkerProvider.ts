@@ -24,6 +24,7 @@ import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { Stack } from "../../Stack.ts";
+import { isProvisionalWorkerOutput } from "../../State/WorkerState.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -5159,10 +5160,7 @@ export const LiveWorkerProvider = () =>
               Effect.catchTags({
                 WorkerNotFound: () => Effect.succeed(undefined),
                 WorkerHasNoVersions: (error) =>
-                  output === undefined ||
-                  (output.workerId === "" &&
-                    output.versionOf === undefined &&
-                    output.previewOf === undefined)
+                  output === undefined || isProvisionalWorkerOutput(output)
                     ? Effect.fail(error)
                     : Effect.succeed(undefined),
                 DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
@@ -5247,12 +5245,7 @@ export const LiveWorkerProvider = () =>
           return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
         }),
         delete: Effect.fn(function* ({ output, session, force }) {
-          if (
-            !force &&
-            output.workerId === "" &&
-            output.versionOf === undefined &&
-            output.previewOf === undefined
-          ) {
+          if (!force && isProvisionalWorkerOutput(output)) {
             yield* session.note(
               "Skipping deletion of provisional Worker attributes. Any interrupted upload requires manual cleanup.",
             );

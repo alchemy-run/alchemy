@@ -59,6 +59,8 @@ interface BaseResourceState {
   adoptionBlocked?: "migrated-fqn";
   /** Whether Worker identity properties survived checkpoint serialization. */
   workerIdentityResolved?: boolean;
+  /** Whether a mutating Worker lifecycle started for this generation. */
+  workerWriteStarted?: boolean;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *

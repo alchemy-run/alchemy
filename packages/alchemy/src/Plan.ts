@@ -62,6 +62,7 @@ import {
   type SelectionOutput,
 } from "./ResourceSelection.ts";
 import { capturedEnvKeys } from "./RuntimeContext.ts";
+import { isProvisionalWorkerOutput } from "./State/WorkerState.ts";
 import { cachedInScope } from "./Util/Memoize.ts";
 export { InvalidResourceSelection, UnsafeSelectionBoundary } from "./ResourceSelection.ts";
 import { type StackSpec } from "./Stack.ts";
@@ -1468,9 +1469,7 @@ const makePlan = <A>(
       if (
         isLiveWorker &&
         (oldState?.status === "creating" || oldState?.status === "deleting") &&
-        oldState.attr?.workerId === "" &&
-        oldState.attr.versionOf === undefined &&
-        oldState.attr.previewOf === undefined
+        isProvisionalWorkerOutput(oldState.attr)
       ) {
         oldState = { ...oldState, attr: undefined };
       }
@@ -1509,7 +1508,7 @@ const makePlan = <A>(
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
         if (
           isLiveWorker &&
-          oldState.workerIdentityResolved !== true &&
+          (oldState.workerIdentityResolved !== true || oldState.workerWriteStarted === false) &&
           provider.read &&
           !reusesMigratedFqn
         ) {
