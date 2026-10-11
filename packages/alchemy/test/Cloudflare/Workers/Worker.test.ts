@@ -698,7 +698,7 @@ describe.concurrent(
               return { owner, replacement };
             }),
           );
-          const before = yield* Effect.all(
+          const snapshot = Effect.all(
             [initial.owner, initial.replacement].map((worker) =>
               Effect.all({
                 settings: workers.getScriptScriptAndVersionSetting({
@@ -712,6 +712,7 @@ describe.concurrent(
               }),
             ),
           );
+          const before = yield* snapshot;
           const originalState = yield* Effect.gen(function* () {
             const state = yield* yield* State;
             return yield* state.get({
@@ -733,20 +734,7 @@ describe.concurrent(
             )
             .pipe(Effect.flip);
           expect(refused._tag).toEqual("OwnedBySomeoneElse");
-          const after = yield* Effect.all(
-            [initial.owner, initial.replacement].map((worker) =>
-              Effect.all({
-                settings: workers.getScriptScriptAndVersionSetting({
-                  accountId,
-                  scriptName: worker.workerName,
-                }),
-                deployments: workers.listScriptDeployments({
-                  accountId,
-                  scriptName: worker.workerName,
-                }),
-              }),
-            ),
-          );
+          const after = yield* snapshot;
           expect(after).toEqual(before);
           if (originalState)
             yield* Effect.gen(function* () {
@@ -759,6 +747,11 @@ describe.concurrent(
               });
             }).pipe(Effect.provide(stack.state));
           yield* stack.destroy();
+          yield* Effect.all(
+            [initial.owner, initial.replacement].map((worker) =>
+              waitForWorkerToBeDeleted(worker.workerName, accountId),
+            ),
+          );
         }).pipe(logLevel),
       { tags: ["live"], timeout: 120000 },
     );
