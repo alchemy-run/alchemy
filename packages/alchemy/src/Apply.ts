@@ -520,8 +520,38 @@ const executeNode = (
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
-    const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
-      state.set({
+    const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
+    const identityContainerSurvivesPersistence = (raw: unknown, stored: unknown): boolean =>
+      raw == null
+        ? stored == null
+        : typeof raw === "object" &&
+          typeof stored === "object" &&
+          stored !== null &&
+          [Object.prototype, null].includes(Object.getPrototypeOf(raw)) &&
+          [Object.prototype, null].includes(Object.getPrototypeOf(stored));
+    const identitySurvivesPersistence = (raw: unknown, stored: unknown, key?: string): boolean => {
+      if (raw == null) return stored == null;
+      if (typeof raw === "string") return raw.length > 0 && raw === stored;
+      if (
+        key === undefined ||
+        typeof raw !== "object" ||
+        typeof stored !== "object" ||
+        raw === null ||
+        stored === null ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(raw)) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(stored))
+      )
+        return false;
+      const identity = (raw as Record<string, unknown>)[key];
+      return (
+        typeof identity === "string" &&
+        identity.length > 0 &&
+        (stored as Record<string, unknown>)[key] === identity
+      );
+    };
+    const commit = <S extends ResourceState>(value: Omit<S, "namespace">) => {
+      const props = stripUnresolved(value.props);
+      return state.set({
         stack: stackName,
         stage,
         fqn,
@@ -541,11 +571,30 @@ const executeNode = (
         value: {
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
-          props: stripUnresolved(value.props),
+          workerIdentityResolved:
+            isLiveWorker && (value.attr === undefined || value.attr?.workerId === "")
+              ? identityContainerSurvivesPersistence(value.props, props) &&
+                identityContainerSurvivesPersistence(value.props?.version, props?.version) &&
+                identityContainerSurvivesPersistence(value.props?.preview, props?.preview) &&
+                identitySurvivesPersistence(value.props?.name, props?.name) &&
+                identitySurvivesPersistence(value.props?.namespace, props?.namespace, "name") &&
+                identitySurvivesPersistence(
+                  value.props?.version?.parent,
+                  props?.version?.parent,
+                  "workerName",
+                ) &&
+                identitySurvivesPersistence(
+                  value.props?.preview?.of,
+                  props?.preview?.of,
+                  "workerId",
+                )
+              : undefined,
+          props,
           bindings: stripUnresolved(value.bindings),
           namespace,
         } as S,
       });
+    };
 
     const scopedSession = {
       ...session,
@@ -750,10 +799,9 @@ const executeNode = (
 
     // ── create ──
     if (node.action === "create") {
-      if (!node.state) {
-        // First persistence point for a brand new logical resource. Once this is
-        // written, retries know they should resume creation instead of planning
-        // another fresh create from scratch.
+      if (!node.state || (isLiveWorker && node.state.attr === undefined)) {
+        // Capture the current desired identity before precreate can write.
+        // An attr-less retry must not carry proof from an earlier set of props.
         yield* commit<CreatingResourceState>({
           status: "creating",
           fqn,
@@ -1862,9 +1910,19 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
+        const workerIdentityResolved = isDeleteNode(node)
+          ? node.state.workerIdentityResolved
+          : generation.workerIdentityResolved;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
-        let attr = persistedAttr;
+        let attr =
+          resourceType === "Cloudflare.Worker" &&
+          providerMode !== "local" &&
+          persistedAttr?.workerId === "" &&
+          persistedAttr.versionOf === undefined &&
+          persistedAttr.previewOf === undefined
+            ? undefined
+            : persistedAttr;
 
         const nextAncestors = new Set(ancestors).add(fqn);
 
@@ -2015,6 +2073,15 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
+              } else if (
+                resourceType === "Cloudflare.Worker" &&
+                providerMode !== "local" &&
+                workerIdentityResolved !== true
+              ) {
+                yield* scopedSession.note(
+                  "Skipping Worker recovery because its physical identity was not recorded completely. " +
+                    "Any interrupted upload must be identified and cleaned up manually.",
+                );
               } else if (provider.read) {
                 const recovered = yield* provider
                   .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
@@ -2076,6 +2143,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
+                workerIdentityResolved,
               });
             }
 
@@ -2146,6 +2214,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
+                  workerIdentityResolved: node.workerIdentityResolved,
                 });
               }
               yield* scopedSession.note(

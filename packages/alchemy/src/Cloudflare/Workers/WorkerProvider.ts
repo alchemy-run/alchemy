@@ -5152,15 +5152,19 @@ export const LiveWorkerProvider = () =>
             // raises `OwnedBySomeoneElse`).
             return hasAlchemyWorkerTags(id, settings.tags ?? []) ? attrs : Unowned(attrs);
           },
-          (effect) =>
+          (effect, { output }) =>
             effect.pipe(
-              // A worker that exists but hasn't registered a version yet reads
-              // as "not deployed" — fall through to (re)create like NotFound.
-              // The dispatch-namespace endpoints report the same conditions as
-              // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+              // Version propagation may lag a known upload. Without trusted
+              // output, unreadable version settings cannot prove absence.
               Effect.catchTags({
                 WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: () => Effect.succeed(undefined),
+                WorkerHasNoVersions: (error) =>
+                  output === undefined ||
+                  (output.workerId === "" &&
+                    output.versionOf === undefined &&
+                    output.previewOf === undefined)
+                    ? Effect.fail(error)
+                    : Effect.succeed(undefined),
                 DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
                 DispatchNamespaceNotFound: () => Effect.succeed(undefined),
               }),
@@ -5242,7 +5246,18 @@ export const LiveWorkerProvider = () =>
 
           return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session, force }) {
+          if (
+            !force &&
+            output.workerId === "" &&
+            output.versionOf === undefined &&
+            output.previewOf === undefined
+          ) {
+            yield* session.note(
+              "Skipping deletion of provisional Worker attributes. Any interrupted upload requires manual cleanup.",
+            );
+            return;
+          }
           // Version workers own a version, not the script — `workerName` is
           // the *parent's* script and must never be deleted here. Versions
           // can't be deleted through the API (they age out of Cloudflare's

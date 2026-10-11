@@ -1464,6 +1464,16 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+      const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
+      if (
+        isLiveWorker &&
+        (oldState?.status === "creating" || oldState?.status === "deleting") &&
+        oldState.attr?.workerId === "" &&
+        oldState.attr.versionOf === undefined &&
+        oldState.attr.previewOf === undefined
+      ) {
+        oldState = { ...oldState, attr: undefined };
+      }
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,
       ) =>
@@ -1480,7 +1490,8 @@ const makePlan = <A>(
             node.action === "create" &&
             provider.read &&
             !reusesMigratedFqn &&
-            ((oldState === undefined && !isResolved(news)) ||
+            ((isLiveWorker && node.action === "create" && node.state?.attr === undefined) ||
+              (oldState === undefined && !isResolved(news)) ||
               (oldState?.status === "creating" && oldState.attr === undefined))
               ? { adopt: adoptThis }
               : undefined,
@@ -1496,6 +1507,14 @@ const makePlan = <A>(
           state: oldState,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
+        if (
+          isLiveWorker &&
+          oldState.workerIdentityResolved !== true &&
+          provider.read &&
+          !reusesMigratedFqn
+        ) {
+          return Node<Create>({ action: "create", props: applyProps, state: oldState });
+        }
         // A create may have succeeded before state persistence failed. If the
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.
