@@ -68,6 +68,24 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
     }),
   );
 
+  it.effect("serves assets inside dot-directories", () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "assets-dotfiles",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        assets: { directory: ASSETS_DIRECTORY },
+        bindings: [Assets.local("ASSETS")],
+      });
+      const response = yield* worker.fetch("/.well-known/security.txt");
+      expect(response.status).toBe(200);
+      expect(yield* Effect.promise(() => response.text())).toBe(
+        "Contact: mailto:security@example.com\n",
+      );
+    }),
+  );
+
   it.effect("Assets.binding fails with ConfigError when no assets are configured", () =>
     Effect.gen(function* () {
       const error = yield* startTestWorker({
