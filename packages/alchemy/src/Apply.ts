@@ -790,6 +790,7 @@ const executeNode = (
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
+          workerWriteStarted: isLiveWorker ? false : undefined,
         });
         return id;
       } else if (node.state?.instanceId) {
@@ -1129,11 +1130,33 @@ const executeNode = (
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
+          workerWriteStarted: isLiveWorker ? false : undefined,
         });
       } else {
         // Resume the same replacement generation after an interrupted apply.
         replState = node.state;
       }
+
+      const checkpointWrite =
+        (props: Record<string, any>, attr: any, bindings: ResourceBinding[]) =>
+        <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          !isLiveWorker
+            ? effect
+            : Effect.gen(function* () {
+                replState = yield* commit<ReplacingResourceState>({
+                  ...replState,
+                  props,
+                  attr,
+                  bindings,
+                  downstream: node.downstream,
+                  removalPolicy: node.resource.RemovalPolicy,
+                  providerMode: node.mode,
+                  providerVersion: node.provider.version ?? 0,
+                  deleteFirst: node.deleteFirst,
+                  workerWriteStarted: true,
+                });
+                return yield* effect;
+              });
 
       // ── delete-first replacements ──
       //
@@ -1208,7 +1231,10 @@ const executeNode = (
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
           })
-          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+          .pipe(
+            checkpointWrite(node.props, attr, excludeDeletedBindings(node.bindings)),
+            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
+          );
         yield* commit<ReplacingResourceState>({
           status: "replacing",
           fqn,
@@ -1224,6 +1250,7 @@ const executeNode = (
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
+          workerWriteStarted: replState.workerWriteStarted,
         });
         yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
       }
@@ -1254,7 +1281,10 @@ const executeNode = (
           olds: undefined,
           output: attr,
         })
-        .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
+        .pipe(
+          checkpointWrite(news, attr, bindingOutputs),
+          instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId),
+        );
 
       if (node.deleteFirst) {
         // The old generation(s) were already torn down above, so there is

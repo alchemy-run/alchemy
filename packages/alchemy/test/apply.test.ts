@@ -9580,6 +9580,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       unreadable: boolean;
       absent: boolean;
       interruptUpload: boolean;
+      replace: boolean;
       writePhases: unknown[];
     }
   >()("CheckpointIdentityProbe") {}
@@ -9589,6 +9590,9 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       delete: () => Effect.void,
     }),
     Provider.succeed(CheckpointWorker, {
+      diff: Effect.fn(function* () {
+        return (yield* CheckpointProbe).replace ? { action: "replace" as const } : undefined;
+      }),
       read: Effect.fn(function* ({ olds, output }) {
         if (output) return output;
         const probe = yield* CheckpointProbe;
@@ -9633,6 +9637,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
               unreadable: false,
               absent: false,
               interruptUpload: false,
+              replace: false,
               writePhases: [],
             })),
           ),
@@ -9660,6 +9665,102 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
     const stack = yield* Stack;
     yield* state.set({ stack: stack.name, stage: stack.stage, fqn: "Checkpoint", value });
   });
+
+  const seedPredecessor = (writeStarted: boolean) =>
+    seed({
+      ...checkpoint(true, "old-dispatch"),
+      status: "created",
+      workerWriteStarted: writeStarted,
+      props: { name: "old", namespace: "old-dispatch" },
+      attr: { workerName: "old", namespace: "old-dispatch" },
+    });
+
+  test.provider(
+    "the first replacement generation checkpoint proves no write after interruption",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        probe.replace = true;
+        yield* seedPredecessor(true);
+        const plan = yield* stack.plan(
+          CheckpointWorker("Checkpoint", { name: "shared", namespace: "dispatch" }),
+        );
+        const state = yield* yield* State;
+        let checkpoints = 0;
+        const interrupted = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                request.fqn === "Checkpoint" && ++checkpoints === 2
+                  ? Effect.fail(
+                      new StateStoreError({ message: "Second replacement checkpoint failed" }),
+                    )
+                  : state.set(request),
+            }),
+          ),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(interrupted)).toBe(true);
+        if (Exit.isFailure(interrupted))
+          expect(Cause.pretty(interrupted.cause)).toContain("Second replacement checkpoint failed");
+        expect(checkpoints).toBe(2);
+        expect(probe.writePhases).toEqual([]);
+        probe.unreadable = true;
+        const destroyed = yield* stack.destroy().pipe(Effect.exit);
+        probe.unreadable = false;
+        if (Exit.isFailure(destroyed)) yield* stack.destroy();
+        expect(Exit.isSuccess(destroyed)).toBe(true);
+        expect(probe.reads).toEqual([]);
+        expect(probe.deletes).toEqual([{ workerName: "old", namespace: "old-dispatch" }]);
+      }),
+  );
+
+  test.provider("replacement upload records its own write attempt before reconcile", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      probe.replace = true;
+      probe.interruptUpload = true;
+      yield* seedPredecessor(false);
+      yield* stack
+        .deploy(CheckpointWorker("Checkpoint", { name: "shared", namespace: "dispatch" }))
+        .pipe(Effect.catchTag("InterruptedUpload", () => Effect.void));
+      expect(probe.writePhases).toEqual([true]);
+      expect((yield* getState("Checkpoint")).workerWriteStarted).toBe(true);
+      yield* stack.destroy();
+      expect(probe.deletes).toEqual([
+        { workerName: "old", namespace: "old-dispatch" },
+        { workerName: "shared", namespace: "dispatch" },
+      ]);
+    }),
+  );
+
+  test.provider("replacement precreate records its own write attempt before publication", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      probe.replace = true;
+      yield* seedPredecessor(false);
+      yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* CheckpointWorker("Checkpoint", {
+              name: "shared",
+              namespace: "dispatch",
+            });
+            yield* worker.bind("Self", { self: worker.workerName });
+            return worker;
+          }),
+        )
+        .pipe(Effect.catchTag("InterruptedPrecreate", () => Effect.void));
+      expect(probe.writePhases).toEqual([true]);
+      expect((yield* getState("Checkpoint")).workerWriteStarted).toBe(true);
+      yield* stack.destroy();
+    }),
+  );
 
   test.provider(
     "destroy removes a refused no-write Worker checkpoint without another ownership read",
