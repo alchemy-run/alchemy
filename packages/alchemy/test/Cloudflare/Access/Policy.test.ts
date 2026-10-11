@@ -242,6 +242,10 @@ test.provider(
         approvalGroups: [{ approvalsNeeded: 1, emailAddresses: ["lead@example.com"] }],
         purposeJustificationRequired: true,
         purposeJustificationPrompt: "Ticket number?",
+        connectionRules: {
+          ssh: { usernames: ["root", "ubuntu"], allowEmailAlias: true },
+          rdp: { allowedClipboardLocalToRemoteFormats: ["text"] },
+        },
       });
 
       const deploy = (props: Partial<Cloudflare.Access.PolicyProps>) =>
@@ -267,6 +271,9 @@ test.provider(
       expect(kept.approvalGroups?.[0]?.emailAddresses).toEqual(["lead@example.com"]);
       expect(kept.purposeJustificationRequired).toBe(true);
       expect(kept.purposeJustificationPrompt).toEqual("Ticket number?");
+      expect(kept.connectionRules?.ssh?.usernames).toEqual(["root", "ubuntu"]);
+      expect(kept.connectionRules?.ssh?.allowEmailAlias).toBe(true);
+      expect(kept.connectionRules?.rdp?.allowedClipboardLocalToRemoteFormats).toEqual(["text"]);
 
       // Explicit `[]` / `false` still clear.
       yield* deploy({ sessionDuration: "12h", require: [], approvalRequired: false });
