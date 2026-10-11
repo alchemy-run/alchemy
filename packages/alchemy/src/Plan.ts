@@ -188,6 +188,8 @@ export interface NoopUpdate<R extends ResourceLike = ResourceLike> extends Apply
 
 export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNodeBase<R> {
   action: "replace";
+  /** Whether replacement may take over a foreign physical identity. */
+  adopt?: boolean;
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
@@ -1464,11 +1466,13 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+      const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,
       ) =>
         ({
           ...node,
+          ...(isLiveWorker && node.action === "replace" ? { adopt: adoptThis } : {}),
           provider,
           resource,
           bindings: bindingDiffs,

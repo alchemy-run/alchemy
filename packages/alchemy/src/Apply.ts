@@ -26,7 +26,7 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-import { havePropsChanged, stripUnresolved } from "./Diff.ts";
+import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -1057,6 +1057,7 @@ const executeNode = (
 
     // ── replace ──
     if (node.action === "replace") {
+      const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
         // older generations, so expose the current replacement and stop here.
@@ -1112,6 +1113,33 @@ const executeNode = (
       // `created` state (rather than `replaced`) so Phase 2 has no old chain
       // left to drain. `delete` is required to be idempotent, so a re-run
       // after an interrupted apply simply re-converges.
+      let attr: any = replState.attr;
+      const isScriptWorker = (props: Record<string, any>) =>
+        props.version?.parent == null && props.preview?.of == null;
+      const readReplacement = Effect.fn(function* (news: Record<string, any>) {
+        if (!node.provider.read) {
+          return yield* Effect.die("Worker replacement requires an ownership reader");
+        }
+        const observed = yield* node.provider
+          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
+          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        if (observed !== undefined && Unowned.is(observed) && !node.adopt) {
+          return yield* new OwnedBySomeoneElse({
+            message: `Cannot adopt replacement '${fqn}': it is not owned by this stack/stage/logical-id.`,
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+        return observed === undefined ? undefined : stripUnowned(observed);
+      });
+      const clearReplacementOutput = Effect.fn(function* (props: Record<string, any>) {
+        attr = undefined;
+        replState = yield* commit<ReplacingResourceState>({
+          ...replState,
+          props,
+          attr: undefined,
+        });
+      });
       const deleteOldGenerations = (
         old: ReplacementOldResourceState,
       ): Effect.Effect<void, any, any> =>
@@ -1144,14 +1172,41 @@ const executeNode = (
           }
         });
 
-      if (node.deleteFirst) {
+      if (isLiveWorker && node.deleteFirst && !inCycle) {
+        yield* clearReplacementOutput(node.props);
+      }
+      if (isLiveWorker && inCycle) {
+        // Cycles need a placeholder before upstream outputs can resolve.
+        // Admit only the known identity; other props may still be unresolved.
+        const identity = {
+          name: node.props.name,
+          namespace:
+            node.props.namespace == null || typeof node.props.namespace === "string"
+              ? node.props.namespace
+              : { name: node.props.namespace.name },
+          version: { parent: node.props.version?.parent },
+          preview: { of: node.props.preview?.of },
+        };
+        if (
+          Effect.isEffect(node.props.namespace) ||
+          Effect.isEffect(node.props.version) ||
+          Effect.isEffect(node.props.preview) ||
+          !isResolved(identity)
+        ) {
+          return yield* Effect.die(
+            "Cannot admit a cyclic Worker replacement with an unresolved identity",
+          );
+        }
+        // Admission must preserve precreate's desired stable outputs for peers.
+        if (isScriptWorker(identity)) yield* readReplacement(identity);
+      }
+      if (node.deleteFirst && (!isLiveWorker || inCycle)) {
+        if (isLiveWorker) yield* clearReplacementOutput(node.props);
         yield* scopedSession.note(
           "Deleting previous resource before creating its replacement (deleteFirst)...",
         );
         yield* deleteOldGenerations(replState.old);
       }
-
-      let attr: any = replState.attr;
 
       if (attr !== undefined) {
         // If precreate already ran, expose that intermediate output immediately so
@@ -1204,6 +1259,14 @@ const executeNode = (
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      if (isLiveWorker && !inCycle && isScriptWorker(news)) {
+        attr = yield* readReplacement(news);
+      }
+      if (isLiveWorker && node.deleteFirst && !inCycle) {
+        yield* clearReplacementOutput(news);
+        yield* deleteOldGenerations(replState.old);
+      }
 
       attr = yield* node.provider
         .reconcile({
