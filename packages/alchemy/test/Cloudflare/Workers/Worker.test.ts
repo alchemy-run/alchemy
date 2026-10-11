@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { adopt } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
@@ -890,7 +891,13 @@ describe.concurrent(
               Cloudflare.Worker("InterruptedIdentity", { main, workersDev: false }),
             );
             const request = { accountId, scriptName: original.workerName };
-            const settings = yield* workers.getScriptScriptAndVersionSetting(request);
+            const settings = yield* workers.getScriptScriptAndVersionSetting(request).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerHasNoVersions",
+                times: 20,
+                schedule: Schedule.spaced("500 millis"),
+              }),
+            );
             const deployments = yield* workers.listScriptDeployments(request);
             yield* Effect.gen(function* () {
               const state = yield* yield* State;
@@ -913,7 +920,11 @@ describe.concurrent(
             expect(yield* workers.getScriptScriptAndVersionSetting(request)).toEqual(settings);
             expect(yield* workers.listScriptDeployments(request)).toEqual(deployments);
             yield* stack.deploy(
-              Cloudflare.Worker("InterruptedIdentity", { main, workersDev: false }),
+              Cloudflare.Worker("InterruptedIdentity", {
+                main,
+                name: original.workerName,
+                workersDev: false,
+              }),
             );
             yield* stack.destroy();
             yield* waitForWorkerToBeDeleted(original.workerName, accountId);
