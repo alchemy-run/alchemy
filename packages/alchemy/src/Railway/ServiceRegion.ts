@@ -116,11 +116,11 @@ export const serviceRegionPlacement = (config: unknown, serviceId: string): Regi
   return placement;
 };
 
-const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
+export const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
   config: Railway.environment(args).config,
 }));
 
-const environmentPatchCommit = Query.fn(
+export const environmentPatchCommit = Query.fn(
   (args: { environmentId: string; commitMessage: string; patch: unknown }) =>
     Railway.environmentPatchCommit(args),
 );
