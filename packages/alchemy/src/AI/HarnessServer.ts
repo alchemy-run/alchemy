@@ -15,9 +15,9 @@ import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import { gitCliLayer } from "../FS/GitMount.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
+import { HarnessRpcs, serveHarness } from "./HarnessRpcs.ts";
 import { prewarmWorkspaces, sessionCwd } from "./LocalWorkspace.ts";
 import { SessionError, type Harness } from "./Session.ts";
-import { HarnessRpcs, serveHarness } from "./SessionRpcs.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
 
 /** Where sessions work when neither the server nor the session names a directory. */

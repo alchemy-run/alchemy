@@ -2,7 +2,7 @@
  * Container egress: the Durable Object that owns a container intercepts the
  * container's outbound HTTP(S), decides each request, adds credentials, and
  * forwards it. Credentials stay in the Worker; the container only ever sees
- * placeholders. See ./EGRESS.md.
+ * placeholders.
  */
 import type * as cf from "@cloudflare/workers-types";
 import * as Config from "effect/Config";

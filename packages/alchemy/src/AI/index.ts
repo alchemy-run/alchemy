@@ -10,7 +10,7 @@ export {
 } from "./HarnessServer.ts";
 export * from "./Parameter.ts";
 export * from "./Session.ts";
-export * from "./SessionRpcs.ts";
+export * from "./HarnessRpcs.ts";
 export * from "./SessionStore.ts";
 export * from "./Tool.ts";
 export * from "./UIMessageStream.ts";

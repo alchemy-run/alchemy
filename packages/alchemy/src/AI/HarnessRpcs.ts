@@ -28,46 +28,6 @@ import {
 const SessionFailure = Schema.Union([SessionError, Unsupported]);
 
 /**
- * The standard per-session RPC contract — one session per server instance
- * (e.g. a Durable Object whose name IS the session id). Serve it with
- * {@link makeSessionHandlers}; merge your own RPCs into it with `.merge(...)`.
- *
- * A standard contract is what lets shared UIs and clients (React hooks, a
- * desktop app) drive any user-built session host.
- *
- * @example
- * ```typescript
- * export class Agent extends Cloudflare.RpcDurableObject<Agent>()("Agent", {
- *   schema: AI.SessionRpcs,
- * }) {}
- * ```
- */
-export class SessionRpcs extends RpcGroup.make(
-  Rpc.make("start", { payload: StartSession, success: SessionInfo, error: SessionFailure }),
-  Rpc.make("prompt", { payload: { prompt: Prompt }, success: TurnInfo, error: SessionFailure }),
-  Rpc.make("steer", { payload: { prompt: Prompt }, error: SessionFailure }),
-  Rpc.make("interrupt", { error: SessionFailure }),
-  Rpc.make("setModel", { payload: { model: Schema.String }, error: SessionFailure }),
-  Rpc.make("respond", {
-    payload: { requestId: Schema.String, answer: Answer },
-    error: SessionFailure,
-  }),
-  Rpc.make("result", {
-    payload: { turnId: Schema.optional(Schema.String) },
-    success: TurnResult,
-    error: SessionFailure,
-  }),
-  Rpc.make("events", {
-    payload: { after: Schema.optional(Cursor) },
-    success: SessionEvent,
-    error: SessionFailure,
-    stream: true,
-  }),
-  Rpc.make("info", { success: SessionInfo, error: SessionFailure }),
-  Rpc.make("close", { error: SessionFailure }),
-) {}
-
-/**
  * The multi-session contract a harness server exposes (e.g. from inside a
  * container): every call names its session. {@link serveHarness} implements
  * it over a {@link Harness}; {@link remoteHarness} turns a client back into
@@ -120,49 +80,6 @@ export class HarnessRpcs extends RpcGroup.make(
   }),
   Rpc.make("close", { payload: { sessionId: Schema.String }, error: SessionFailure }),
 ) {}
-
-/**
- * {@link SessionRpcs} handlers for the session `id` on `harness` — a pure
- * mapping onto the {@link Session} methods. `start` creates the session
- * under `id` (idempotent); every other call resolves it.
- *
- * `harness` may be an Effect, resolved on every call in the call's own
- * scope. Use that form whenever reaching the harness does I/O (connecting to
- * a container): a Durable Object must not do I/O while it is constructed.
- */
-export const makeSessionHandlers = <R = never>(options: {
-  readonly harness: Harness | Effect.Effect<Harness, SessionError, R | Scope.Scope>;
-  readonly id: string;
-}) => {
-  const { id } = options;
-  const harness: Effect.Effect<Harness, SessionError, R | Scope.Scope> = Effect.isEffect(
-    options.harness,
-  )
-    ? options.harness
-    : Effect.succeed(options.harness);
-  const session = Effect.flatMap(harness, (h) => h.get(id));
-  const call = <A, E, R2>(f: (s: Session) => Effect.Effect<A, E, R2>) =>
-    Effect.scoped(Effect.flatMap(session, f));
-  return SessionRpcs.toLayer({
-    start: (opts) =>
-      Effect.scoped(
-        harness.pipe(
-          Effect.flatMap((h) => h.start({ ...opts, id })),
-          Effect.flatMap((s) => s.info()),
-        ),
-      ),
-    prompt: ({ prompt }) => call((s) => s.prompt(prompt)),
-    steer: ({ prompt }) => call((s) => s.steer(prompt)),
-    interrupt: () => call((s) => s.interrupt()),
-    setModel: ({ model }) => call((s) => s.setModel(model)),
-    respond: ({ requestId, answer }) => call((s) => s.respond(requestId, answer)),
-    result: ({ turnId }) => call((s) => s.result(turnId)),
-    events: ({ after }) =>
-      Stream.unwrap(Effect.map(session, (s) => s.events({ after }))).pipe(Stream.scoped),
-    info: () => call((s) => s.info()),
-    close: () => call((s) => s.close()),
-  });
-};
 
 /** {@link HarnessRpcs} handlers over a {@link Harness}. */
 export const serveHarness = (harness: Harness) => {

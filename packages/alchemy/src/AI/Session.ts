@@ -7,8 +7,9 @@
  * normalized into these events by its server; harness-specific extras live on
  * the harness's own session type (e.g. `Anthropic.ClaudeCodeSession`).
  *
- * Everything here is a `Schema`, so the same types travel over RPC
- * (`AI.SessionRpcs`), persist in a session store, and decode in browsers.
+ * Everything here is a `Schema`, so the same types travel over RPC (your
+ * own API, or `AI.HarnessRpcs` to a harness server), persist in a session
+ * store, and decode in browsers.
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -312,8 +313,8 @@ export class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported"
 }) {}
 
 /**
- * A running coding-agent session. Methods map 1:1 onto `AI.SessionRpcs`, so
- * exposing a session over RPC is a pure mapping (`AI.makeSessionHandlers`).
+ * A running coding-agent session. Expose the methods your application needs
+ * from your own Worker or Durable Object interface.
  */
 export interface Session {
   readonly id: string;
@@ -351,9 +352,8 @@ export interface Session {
 /**
  * The harness a session host (e.g. a Durable Object) talks to, as a service:
  * its value connects to the harness for the duration of a call. Provide it
- * with `Cloudflare.ContainerHarness(Sandbox)` (the session's container) or
- * `AI.LocalHarness(Sandbox)` (the same program on this machine, under
- * `alchemy dev`), and hand it to `AI.makeSessionHandlers`.
+ * with `AI.LocalHarness(Sandbox)` (the Sandbox's program on this machine).
+ * For harnesses in Cloudflare Containers, see `Cloudflare.Containers.Harness`.
  */
 export const Harness = Context.Service<
   Harness,

@@ -26,6 +26,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { connectHarness } from "../../AI/HarnessRpcs.ts";
 import {
   type Harness as AIHarness,
   type Session,
@@ -35,7 +36,6 @@ import {
   SessionInfo,
   StartSession,
 } from "../../AI/Session.ts";
-import { connectHarness } from "../../AI/SessionRpcs.ts";
 import { SessionStore } from "../../AI/SessionStore.ts";
 import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";

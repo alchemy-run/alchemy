@@ -18,11 +18,15 @@ const decodeEvent = Schema.decodeUnknownSync(SessionEvent);
  *
  * @example
  * ```typescript
- * export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
- *   { schema: AI.SessionRpcs },
  *   Effect.gen(function* () {
- *     // ...
+ *     const store = yield* AI.SessionStore;
+ *     return Effect.gen(function* () {
+ *       return {
+ *         events: (sessionId: string, after?: number) => store.read(sessionId, { after }),
+ *       };
+ *     });
  *   }).pipe(Effect.provide(Cloudflare.DurableSessionStore)),
  * ) {}
  * ```

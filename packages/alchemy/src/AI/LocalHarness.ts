@@ -6,8 +6,8 @@ import type { Container } from "../Cloudflare/Containers/Container.ts";
 import type { ContainerApplication } from "../Cloudflare/Containers/ContainerApplication.ts";
 import { Worker } from "../Cloudflare/Workers/Worker.ts";
 import { WorkerEnvironment } from "../Cloudflare/Workers/WorkerRuntime.ts";
+import { connectHarness } from "./HarnessRpcs.ts";
 import { Harness, SessionError } from "./Session.ts";
-import { connectHarness } from "./SessionRpcs.ts";
 
 /**
  * Provides `AI.Harness` by running a container's program **on this
@@ -18,19 +18,27 @@ import { connectHarness } from "./SessionRpcs.ts";
  * `git worktree` of each mounted repository, under
  * `.alchemy/worktrees/<session>/`, with the repository's dependencies and
  * build outputs already in place. The Durable Object reaches the process
- * over HTTP. Use the same Sandbox as `Cloudflare.ContainerHarness`, so dev
- * and deploy run the same program.
+ * over HTTP.
  *
- * ### Developing locally, deploying to containers
- * **Example:** Pick the harness with `ALCHEMY_DEV`
+ * ### Running sessions on this machine
+ * **Example:** A Durable Object driving the local harness
  * ```typescript
- * const HarnessLive = Layer.unwrap(
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
  *   Effect.gen(function* () {
- *     return (yield* Alchemy.ALCHEMY_DEV)
- *       ? AI.LocalHarness(Sandbox)
- *       : Cloudflare.ContainerHarness(Sandbox);
- *   }),
- * );
+ *     const harness = yield* AI.Harness;
+ *     return Effect.gen(function* () {
+ *       return {
+ *         prompt: (sessionId: string, prompt: string) =>
+ *           harness.pipe(
+ *             Effect.flatMap((h) => h.start({ id: sessionId })),
+ *             Effect.flatMap((session) => session.prompt(prompt)),
+ *             Effect.scoped,
+ *           ),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(AI.LocalHarness(Sandbox))),
+ * ) {}
  * ```
  *
  * @binding
