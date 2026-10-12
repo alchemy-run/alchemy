@@ -85,6 +85,33 @@ describe(
     );
 
     test(
+      "an egress answers its host over HTTP and HTTPS, and only while it is live",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+        const text = yield* client.get(new URL("/probe/egress", url)).pipe(
+          Effect.flatMap((r) =>
+            r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
+          ),
+          Effect.timeout("60 seconds"),
+          Effect.retry({ schedule: readinessSchedule, times: 30 }),
+        );
+        yield* Effect.log(`egress probe: ${text}`);
+        const result = JSON.parse(text) as Record<string, string>;
+        const http = JSON.parse(result.http!) as { body?: string };
+        const https = JSON.parse(result.https!) as { body?: string };
+        const other = JSON.parse(result.other!) as { status?: number; error?: string };
+        const removed = JSON.parse(result.removed!) as { status?: number; body?: string };
+        expect(http.body).toBe("egress GET /hello auth=-");
+        expect(https.body).toBe("egress GET /hello auth=-");
+        // Not an egress host: no internet, no interception.
+        expect(other.status === undefined || other.status >= 400).toBe(true);
+        expect(removed.status).toBe(403);
+      }).pipe(logLevel),
+      { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+
+    test(
       "interceptOutboundHttps injects the CA and routes TLS requests to the entrypoint",
       Effect.gen(function* () {
         const result = (yield* probe("/probe/https")) as { ca?: { exists: boolean } } & {

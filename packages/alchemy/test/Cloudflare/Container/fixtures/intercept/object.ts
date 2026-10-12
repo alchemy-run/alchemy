@@ -9,6 +9,9 @@ interface InterceptExports {
   default(options: { props: Record<string, unknown> }): import("@cloudflare/workers-types").Fetcher;
 }
 
+/** Only this object's egress answers this host. */
+export const EGRESS_HOST = "egress.internal";
+
 /** Only the owning object's `interceptOutboundHttp` answers this host. */
 export const INTERCEPT_HOST = "intercept.internal";
 
@@ -29,6 +32,14 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
   Effect.gen(function* () {
     const container = yield* InterceptContainer;
     const state = yield* Cloudflare.DurableObjectState;
+    // Answers the container's requests to EGRESS_HOST, showing what arrived.
+    const echo = yield* Cloudflare.Egress(InterceptContainer, EGRESS_HOST, (request) =>
+      Effect.succeed(
+        HttpServerResponse.text(
+          `egress ${request.method} ${new URL(request.url).pathname} auth=${request.headers.authorization ?? "-"}`,
+        ),
+      ),
+    );
     const env = yield* Cloudflare.WorkerEnvironment;
 
     return Effect.gen(function* () {
@@ -64,7 +75,31 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
         }),
       );
 
+      const probeJson = (path: string) =>
+        Effect.gen(function* () {
+          const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
+          return yield* response.text;
+        });
+
       return {
+        // An egress answers its host over HTTP and HTTPS; other hosts are unreachable.
+        probeEgress: () =>
+          container.start({ egress: [echo] }).pipe(
+            Effect.andThen(
+              Effect.all({
+                http: probe(`http://${EGRESS_HOST}/hello`),
+                https: probeTls(`https://${EGRESS_HOST}/hello`),
+                other: probe("http://not-allowed.example/hello"),
+              }),
+            ),
+            Effect.flatMap((result) =>
+              // Removing it refuses its host on the running container.
+              container.removeEgress(echo).pipe(
+                Effect.andThen(probe(`http://${EGRESS_HOST}/again`)),
+                Effect.map((removed) => JSON.stringify({ ...result, removed })),
+              ),
+            ),
+          ),
         // HTTP through the Worker entrypoint (the production-compatible route).
         probeEntrypoint: () =>
           start.pipe(

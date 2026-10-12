@@ -11,6 +11,7 @@ export type {
   ContainerProcess,
   ContainerSnapshot,
   ContainerSnapshotOptions,
+  ContainerStartOptions,
   ContainerStartError,
   ReservedContainerKey,
 } from "./ContainerClient.ts";
@@ -22,3 +23,4 @@ export { ContainerPlatform } from "./ContainerPlatform.ts";
 export * from "./ContainerProvider.ts";
 export * from "./LocalContainerProvider.ts";
 export * from "./ContainerHarness.ts";
+export { Egress, type EgressHandler, isEgress } from "./Egress.ts";

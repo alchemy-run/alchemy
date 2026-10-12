@@ -31,6 +31,28 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 import { httpSchemePort } from "./ContainerPlatform.ts";
+import {
+  EGRESS_DENIED,
+  EGRESS_PROPS_KEY,
+  egressRoute,
+  registerEgress,
+  type Egress,
+} from "./Egress.ts";
+
+/** The platform's startup options with `enableInternet` optional. */
+type RelaxInternet<T> = T extends unknown
+  ? Omit<T, "enableInternet"> & { readonly enableInternet?: boolean }
+  : never;
+
+/** `start` options: the platform's, plus the container's egress. */
+export type ContainerStartOptions = RelaxInternet<ContainerStartupOptions> & {
+  /**
+   * The container's outbound access: these egresses' hosts are intercepted
+   * (registered before the container starts) and every other host is
+   * unreachable — `enableInternet` defaults to `false` when `egress` is given.
+   */
+  readonly egress?: ReadonlyArray<Egress>;
+};
 
 export type ContainerExecOptions = cf.ContainerExecOptions;
 export type ContainerExecOutput = cf.ExecOutput;
@@ -112,9 +134,13 @@ export interface ContainerClient<ImageName extends string = string> {
    * it once. Returns before ports are ready; {@link getTcpPort} waits for them.
    * Options apply only when this call actually starts the container.
    */
-  start(
-    options?: ContainerStartupOptions,
-  ): Effect.Effect<void, ContainerStartError, RuntimeContext>;
+  start(options?: ContainerStartOptions): Effect.Effect<void, ContainerStartError, RuntimeContext>;
+  /** Replace the container's live egress set (takes effect on a running container). */
+  setEgress(egress: ReadonlyArray<Egress>): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /** Add one egress to the live set. */
+  addEgress(egress: Egress): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /** Remove one egress from the live set; its hosts become unreachable. */
+  removeEgress(egress: Egress): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Stop the container immediately. */
   destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Signal the container's main process. */
@@ -302,6 +328,8 @@ const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
  */
 export const fromContainer = <ImageName extends string = string>(
   getContainer: () => cf.Container | undefined,
+  /** The owning Durable Object's state, for routing intercepted requests back to it. */
+  getState?: () => cf.DurableObjectState | undefined,
 ): ContainerClient<ImageName> => {
   const attached = Effect.suspend(() => {
     const container = getContainer();
@@ -324,11 +352,86 @@ export const fromContainer = <ImageName extends string = string>(
 
   const running = call((container) => container.running ?? false);
 
-  const start = (options?: ContainerStartupOptions) =>
+  //#region egress
+
+  /** The live egress set, and which egress each intercepted host routes to. */
+  let liveEgress: ReadonlyArray<Egress> = [];
+  let interceptedHosts = new Map<string, string>();
+
+  /**
+   * Point every host of `next` at its egress, and refuse hosts that left the
+   * set. `fresh` re-registers everything (a container starting has none).
+   */
+  const applyEgress = (next: ReadonlyArray<Egress>, fresh: boolean) =>
     Effect.gen(function* () {
+      const state = getState?.();
+      if (!state) {
+        return yield* new ContainerError({
+          message: "Container egress is only available inside the Durable Object that owns it.",
+        });
+      }
+      const container = yield* attached;
+      const exports = (state as unknown as { exports?: Record<string, unknown> }).exports as
+        | { default?: (options: { props: Record<string, unknown> }) => cf.Fetcher }
+        | undefined;
+      if (!exports?.default) {
+        return yield* new ContainerError({
+          message: "Container egress needs ctx.exports (compatibility date 2025-11-01 or later).",
+        });
+      }
+      const fetcherFor = (key: string) =>
+        exports.default!({ props: { [EGRESS_PROPS_KEY]: egressRoute(state, key) } });
+      const desired = new Map<string, string>();
+      for (const egress of next) {
+        registerEgress(state, egress);
+        for (const host of egress.hosts) desired.set(host, egress.key);
+      }
+      const previous = fresh ? new Map<string, string>() : interceptedHosts;
+      const intercept = (host: string, key: string) =>
+        Effect.tryPromise({
+          try: async () => {
+            const fetcher = fetcherFor(key);
+            if (host === "*") await container.interceptAllOutboundHttp(fetcher);
+            else await container.interceptOutboundHttp(host, fetcher);
+            await container.interceptOutboundHttps(host, fetcher);
+          },
+          catch: containerError,
+        });
+      for (const [host, key] of desired) {
+        if (previous.get(host) !== key) yield* intercept(host, key);
+      }
+      for (const host of previous.keys()) {
+        if (!desired.has(host)) yield* intercept(host, EGRESS_DENIED);
+      }
+      interceptedHosts = desired;
+      liveEgress = next;
+    });
+
+  const sameEgress = (a: ReadonlyArray<Egress>, b: ReadonlyArray<Egress>) =>
+    a.length === b.length && a.every((egress, i) => egress.key === b[i]!.key);
+
+  //#endregion
+
+  const start = (startOptions?: ContainerStartOptions) =>
+    Effect.gen(function* () {
+      const { egress, ...rest } = startOptions ?? {};
+      const platformOptions = rest as ContainerStartupOptions;
+      // With egress, only its hosts are reachable unless asked otherwise.
+      const options: ContainerStartupOptions | undefined =
+        startOptions === undefined
+          ? undefined
+          : egress !== undefined &&
+              (rest as { enableInternet?: boolean }).enableInternet === undefined
+            ? ({ ...rest, enableInternet: false } as ContainerStartupOptions)
+            : platformOptions;
       const container = yield* attached;
       // Fast path: the steady state is one cheap `running` read, no lock.
-      if (container.running) return;
+      if (container.running) {
+        if (egress !== undefined && !sameEgress(egress, liveEgress)) {
+          yield* applyEgress(egress, false);
+        }
+        return;
+      }
       const { startMutex, readyPorts } = coordinationFor(container);
       yield* Semaphore.withPermits(
         startMutex,
@@ -339,6 +442,9 @@ export const fromContainer = <ImageName extends string = string>(
           if (container.running) return;
           // Nothing listens on a fresh start; re-probe every port.
           readyPorts.clear();
+          // Intercept before the program runs, so it never sees a moment
+          // with wider access than its egress.
+          if (egress !== undefined) yield* applyEgress(egress, true);
           yield* Effect.try({
             try: () => container.start(options),
             catch: classifyStartError,
@@ -456,6 +562,18 @@ export const fromContainer = <ImageName extends string = string>(
     images: call((container) => container.images as PreparedImages<ImageName>),
     running,
     start,
+    setEgress: (egress) => applyEgress(egress, false),
+    addEgress: (egress) =>
+      Effect.suspend(() =>
+        applyEgress([...liveEgress.filter((e) => e.key !== egress.key), egress], false),
+      ),
+    removeEgress: (egress) =>
+      Effect.suspend(() =>
+        applyEgress(
+          liveEgress.filter((e) => e.key !== egress.key),
+          false,
+        ),
+      ),
     destroy: (error) => callAsync((container) => container.destroy(error)),
     signal: (signo) => call((container) => container.signal(signo)),
     monitor: () => callAsync((container) => container.monitor()),
@@ -495,7 +613,10 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
-  const client = fromContainer(() => state.container);
+  const client = fromContainer(
+    () => state.container,
+    () => state.raw,
+  );
   const rpcPort = client.getTcpPort(3000);
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is

@@ -24,6 +24,9 @@ export default class InterceptContainerWorker extends Cloudflare.Worker<Intercep
         if (url.pathname === "/probe/entrypoint") {
           return HttpServerResponse.text(yield* objects.getByName("entrypoint").probeEntrypoint());
         }
+        if (url.pathname === "/probe/egress") {
+          return HttpServerResponse.text(yield* objects.getByName("egress").probeEgress());
+        }
         if (url.pathname === "/probe/https") {
           return HttpServerResponse.text(yield* objects.getByName("https").probeHttps());
         }

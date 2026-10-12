@@ -10,6 +10,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
+import { dispatchEgress, EGRESS_METHOD, registerDurableObjectClass } from "../Containers/Egress.ts";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
@@ -59,6 +60,8 @@ export const makeDurableObjectBridge =
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
+        // Container egress routes intercepted requests back by class name.
+        registerDurableObjectClass(state, className);
 
         this.#instance = state.blockConcurrencyWhile(() =>
           build((promise) => void (state as any).waitUntil?.(promise)).then(
@@ -184,6 +187,17 @@ export const makeDurableObjectBridge =
                   ),
                 ),
           );
+      }
+
+      /** A container request intercepted by this object's egress (see Containers/Egress.ts). */
+      async [EGRESS_METHOD](key: string, request: Request): Promise<Response> {
+        return this.#execute(
+          () => dispatchEgress(this.#state, key, request),
+          async (exit) =>
+            exit._tag === "Success"
+              ? exit.value
+              : new Response(`alchemy egress: ${Cause.pretty(exit.cause)}`, { status: 500 }),
+        );
       }
 
       async fetch(request: Request): Promise<any> {
