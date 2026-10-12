@@ -278,10 +278,10 @@ A client gets commands as methods and views and aggregates as namespaces: `bank.
 
 ## A foldkit app
 
-The app's Commands run Fold commands, and its Subscriptions watch a view's snapshots and another's events. The client is a foldkit resource, provided once in [`web/entry.ts`](web/entry.ts).
+The app's Commands run Fold commands, and its Subscriptions watch a view's snapshots and another's events. The client is a foldkit resource, provided once in [`src/web/entry.ts`](src/web/entry.ts).
 
 ```ts
-// web/Bank.ts
+// src/web/Bank.ts
 import type { Api } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -597,9 +597,8 @@ src/
   Session.ts, CurrentActor.ts, MfaChallenge.ts   authentication and step-up
   Bank.ts       the Domain
   BankWorker.ts the Worker: both Apis + Stripe events, hosted on Durable Objects
-web/
-  Bank.ts       the foldkit app: model, messages, commands, subscriptions, view
-  entry.ts      boots it with the bank client as a resource
+  web/          the foldkit app: Bank.ts (model, messages, commands, subscriptions, view)
+                and entry.ts (boots it with the bank client as a resource)
 ```
 
 ## Hosting

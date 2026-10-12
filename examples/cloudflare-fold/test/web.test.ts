@@ -2,7 +2,7 @@ import { expect, test } from "@effect/vitest";
 import * as Story from "foldkit/story";
 import { AccountId } from "../src/Account/AccountId.ts";
 import { StatementLine } from "../src/Account/Statement.ts";
-import { Deposit, Message, type Model, update, Withdraw } from "../web/Bank.ts";
+import { Deposit, Message, type Model, update, Withdraw } from "../src/web/Bank.ts";
 
 const account: Model = {
   accountId: AccountId.make("c-1-main"),

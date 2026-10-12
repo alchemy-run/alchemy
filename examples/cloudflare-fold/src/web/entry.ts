@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { Runtime } from "foldkit";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
-import { sessionClient } from "../src/Session.ts";
+import { CustomerId } from "../Customer/CustomerId.ts";
+import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
+import { sessionClient } from "../Session.ts";
 import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
 
 /** The signed-in customer, as the sign-in page left it. */

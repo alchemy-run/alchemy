@@ -5,10 +5,10 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "../src/Account/AccountId.ts";
-import { StatementLine } from "../src/Account/Statement.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
+import { AccountId, mainAccountId } from "../Account/AccountId.ts";
+import { StatementLine } from "../Account/Statement.ts";
+import { CustomerId } from "../Customer/CustomerId.ts";
+import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
 
 /** The bank client this app runs on, provided by the `resources` Layer in `entry.ts`. */
 type Bank = Api.ClientKey<"CustomerApi">;
