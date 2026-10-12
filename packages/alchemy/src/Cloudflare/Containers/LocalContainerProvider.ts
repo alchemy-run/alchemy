@@ -316,7 +316,9 @@ export const LocalContainerProvider = () =>
           // runtime image reference is just the name.
           const imageNames = Object.keys(program.images ?? {});
           // `AI.LocalHarness` asked for the program to run on this machine.
-          const mainSource = program.images?.[MAIN_IMAGE] as AnyContainerApplicationProps | undefined;
+          const mainSource = program.images?.[MAIN_IMAGE] as
+            | AnyContainerApplicationProps
+            | undefined;
           let devHostUrl: string | undefined;
           if (mainSource && bindings.some((binding) => binding.data?.devHost)) {
             const prepared = yield* prepareImage(`${id}-${MAIN_IMAGE}`, mainSource);

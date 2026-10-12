@@ -6,13 +6,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
 import ProgramBoxStack, { state } from "./fixtures/program-do/stack.ts";
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
-  state,
-  dev: true,
-});
-
-const HOOK_TIMEOUT = 300_000;
+const HOOK_TIMEOUT = 600_000;
 
 /**
  * A bundled program (`Container.make`) under `schedulingPolicy:
@@ -20,10 +14,16 @@ const HOOK_TIMEOUT = 300_000;
  * `start()` without an image, and snapshotted and restored by its
  * Durable Object.
  */
-describe(
-  "program containers scheduled by a Durable Object",
-  { tags: ["provider:cloudflare", "provider:cloudflare:container"] },
-  () => {
+describe.each([
+  { dev: true, mode: "local" },
+  { dev: false, mode: "live" },
+])("program containers scheduled by a Durable Object (dev: $dev)", ({ dev, mode }) => {
+  const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+    providers: Cloudflare.providers(),
+    state,
+    dev,
+  });
+  {
     const stack = beforeAll(deploy(ProgramBoxStack), { timeout: HOOK_TIMEOUT });
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ProgramBoxStack), {
       timeout: HOOK_TIMEOUT,
@@ -36,7 +36,9 @@ describe(
         return yield* client.get(new URL(path, url)).pipe(
           Effect.flatMap((r) =>
             r.status !== 200
-              ? r.text.pipe(Effect.flatMap((body) => Effect.fail(new Error(`${r.status}: ${body}`))))
+              ? r.text.pipe(
+                  Effect.flatMap((body) => Effect.fail(new Error(`${r.status}: ${body}`))),
+                )
               : r.text,
           ),
           Effect.timeout("90 seconds"),
@@ -49,7 +51,7 @@ describe(
       Effect.gen(function* () {
         expect(yield* get("/write-read")).toBe("hello");
       }),
-      { tags: ["local"], timeout: 240_000 },
+      { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 300_000 },
     );
 
     test(
@@ -59,7 +61,7 @@ describe(
         expect(result.fresh).toBe("");
         expect(result.restored).toBe("persisted");
       }),
-      { tags: ["local"], timeout: 240_000 },
+      { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 300_000 },
     );
-  },
-);
+  }
+});

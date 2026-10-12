@@ -456,9 +456,14 @@ export const fromContainer = <ImageName extends string = string>(
           if (egress !== undefined) yield* applyEgress(egress, true);
           // A Durable Object-managed container with a bundled program runs
           // it (the named image `main`) unless told otherwise.
-          if (options !== undefined && !("image" in options && options.image) && !options.containerSnapshot) {
+          if (
+            options !== undefined &&
+            !("image" in options && options.image) &&
+            !options.containerSnapshot
+          ) {
             const main = mainImage(container);
-            if (main !== undefined) options = { ...options, image: main } as ContainerStartupOptions;
+            if (main !== undefined)
+              options = { ...options, image: main } as ContainerStartupOptions;
           }
           yield* Effect.try({
             try: () => container.start(options),

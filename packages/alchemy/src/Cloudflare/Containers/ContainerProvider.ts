@@ -571,6 +571,9 @@ export const LiveContainerProvider = () =>
         const cacheOptions = {
           "cache-from": [`type=registry,ref=${cacheRef}`],
           "cache-to": ["type=inline"],
+          // One image manifest, no attestation index: Durable Object-managed
+          // containers fail to start from an index (Cloudflare "internal error").
+          args: ["--provenance=false", "--sbom=false"],
         };
 
         if (build.kind === "remote") {

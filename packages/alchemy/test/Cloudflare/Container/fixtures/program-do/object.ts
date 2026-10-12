@@ -17,10 +17,12 @@ export class ProgramBoxObject extends Cloudflare.DurableObject<ProgramBoxObject>
       return {
         // No image given: start() runs the bundled program (the `main` image).
         writeAndRead: (text: string) =>
-          box.start({ enableInternet: false }).pipe(
-            Effect.andThen(call(`/write?text=${encodeURIComponent(text)}`)),
-            Effect.andThen(call("/read")),
-          ),
+          box
+            .start({ enableInternet: false })
+            .pipe(
+              Effect.andThen(call(`/write?text=${encodeURIComponent(text)}`)),
+              Effect.andThen(call("/read")),
+            ),
         snapshotRoundTrip: (text: string) =>
           Effect.gen(function* () {
             yield* box.start({ enableInternet: false });
