@@ -8,16 +8,15 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per session) ──�
 ```
 
 - `src/Sandbox.runtime.ts` — the container program. It mounts the repository (`GitHub.MountRepository`), and `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port.
-- `src/Agent.ts` — one Durable Object per session, serving the standard `AI.SessionRpcs` contract.
+- `src/Agent.ts` — one Durable Object per session, serving the standard `AI.SessionRpcs` contract. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. `Cloudflare.Containers.Harness` keeps the session's history in the Durable Object and snapshots the container's filesystem when it shuts down.
 - `src/worker.ts` — the HTTP API.
 
 ## Run it
 
-Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed and TypeScript built. Give it a GitHub token for `git push` and the `gh` CLI:
+Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed and TypeScript built. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
 ```sh
-export ANTHROPIC_API_KEY=sk-ant-...
-export GITHUB_TOKEN=$(gh auth token)
+export ANTHROPIC_API_KEY=sk-ant-...   # read by the Worker, never the container
 bun alchemy dev      # Worker + DO in workerd, the container in local Docker
 bun alchemy deploy   # Cloudflare Containers
 ```
@@ -52,7 +51,7 @@ End-to-end tests drive the API and the web UI (Playwright). They start
 environment:
 
 ```sh
-GITHUB_TOKEN=$(gh auth token) doppler run -- pnpm test:e2e
+doppler run -- pnpm test:e2e
 ```
 
 Point them at a deployment with `WEB_URL` and `API_URL`.

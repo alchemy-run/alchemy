@@ -2,14 +2,13 @@ import * as AI from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
 import { Dockerfile } from "alchemy/Docker";
 import * as GitHub from "alchemy/GitHub";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
 /**
- * The program a session's harness runs: in a container per session when
- * deployed (`Cloudflare.ContainerHarness`), or on this machine under
- * `alchemy dev` (`AI.LocalHarness`), with a git worktree per session.
+ * The program a session's container runs: Claude Code in a checkout of
+ * Alchemy. It holds no credentials — the Durable Object that owns the
+ * container adds them to its requests (see Agent.ts).
  */
 export default Sandbox.make(
   {
@@ -20,7 +19,8 @@ export default Sandbox.make(
       FROM node:24-bookworm
       RUN corepack enable && npm install -g bun@1.3.13
     `,
-    instanceType: "standard-4",
+    // Scheduled by its Durable Object, which snapshots and restores it.
+    schedulingPolicy: "durable_object",
   },
   Effect.gen(function* () {
     // Alchemy itself, ready to work in. The repository is prepared once per
@@ -34,10 +34,10 @@ export default Sandbox.make(
       install: "pnpm install --frozen-lockfile",
       build: "pnpm exec tsc -b",
       access: "write",
-      token: yield* Config.Redacted("GITHUB_TOKEN"),
+      // git authenticates through the Durable Object's GitHub egress.
+      egress: true,
     });
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
-      apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
       model: "claude-haiku-4-5-20251001",
       // Stream the model's thinking (shown in the UI as reasoning).
       thinking: { type: "enabled", budgetTokens: 4000 },
