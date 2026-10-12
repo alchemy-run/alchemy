@@ -358,11 +358,13 @@ export const CertificatePackProvider = () =>
       // domain (hosts `[apex, host, *.host]`) and owns its lifecycle — the
       // domain's `certId` is that pack's id. Those packs are not ours to
       // enumerate (deleting one strips TLS from a live custom domain), so
-      // exclude them.
-      const workerManaged = yield* workers.listDomains.items({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((domains) => new Set(Array.from(domains, (d) => d.certId))),
-      );
+      // exclude them. Only zones that have candidate packs look up their
+      // custom domains, filtered to that zone.
+      const workerManagedIn = (zoneId: string) =>
+        workers.listDomains.items({ accountId, zoneId }).pipe(
+          Stream.runCollect,
+          Effect.map((domains) => new Set(Array.from(domains, (d) => d.certId))),
+        );
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
@@ -370,13 +372,21 @@ export const CertificatePackProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .filter(
-                    (pack) =>
-                      pack.type === "advanced" && !isTombstone(pack) && !workerManaged.has(pack.id),
-                  )
-                  .map((pack) => toAttributes(zone.id, pack)),
+                (page.result ?? []).filter(
+                  (pack) => pack.type === "advanced" && !isTombstone(pack),
+                ),
               ),
+            ),
+            Effect.flatMap((packs) =>
+              packs.length === 0
+                ? Effect.succeed([] as CertificatePackAttributes[])
+                : workerManagedIn(zone.id).pipe(
+                    Effect.map((workerManaged) =>
+                      packs
+                        .filter((pack) => !workerManaged.has(pack.id))
+                        .map((pack) => toAttributes(zone.id, pack)),
+                    ),
+                  ),
             ),
             // A plan-gated zone (no ACM) rejects the route, and a freshly
             // minted token may briefly answer Forbidden — skip either.
