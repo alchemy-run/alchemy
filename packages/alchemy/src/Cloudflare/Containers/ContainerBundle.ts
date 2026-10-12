@@ -14,6 +14,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
+import { ContainerConfigurationError } from "./ContainerConfiguration.ts";
 
 /**
  * Fold the runtime-context `env` map (populated by `Binding.Service`s and
@@ -199,6 +200,66 @@ export const withImageLayers = <P extends AnyContainerApplicationProps>(
   const layers = dedupeImageLayers(bindings.flatMap((b) => b.data?.image ?? []));
   return layers.length > 0 ? { ...props, imageLayers: layers } : props;
 };
+
+/**
+ * Under Durable Object scheduling a bundled `main` program has no
+ * application environment, so it is published as one more named image,
+ * `main`: the program, its bindings' image layers, and their plain env
+ * baked in as `ENV`. Secrets are refused — they would be baked into an
+ * image layer; pass them with `start({ env })` or keep them out with egress.
+ * Other props pass through unchanged.
+ */
+export const withMainImage = <P extends AnyContainerApplicationProps>(
+  props: P,
+  bindings: ReadonlyArray<{
+    readonly data?: {
+      readonly image?: ReadonlyArray<ImageLayer>;
+      readonly env?: Record<string, unknown>;
+      readonly [key: string]: unknown;
+    };
+  }>,
+  env: Record<string, string | Redacted.Redacted<string>>,
+): Effect.Effect<P, ContainerConfigurationError> =>
+  Effect.gen(function* () {
+    if (props.schedulingPolicy !== "durable_object" || props.main === undefined) return props;
+    const secrets = Object.entries(env)
+      .filter(([, value]) => Redacted.isRedacted(value))
+      .map(([name]) => name);
+    if (secrets.length > 0) {
+      return yield* new ContainerConfigurationError({
+        message: `A Durable Object-managed container bakes its program's env into its image, so it can't hold secrets (${secrets.join(", ")}). Pass them with start({ env }), or keep them out of the container with egress.`,
+      });
+    }
+    const entries = Object.entries(env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+    const envLayer: ImageLayer[] =
+      entries.length > 0
+        ? [
+            {
+              id: "container-env",
+              stage: "setup",
+              instructions: `ENV ${entries.map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(" ")}`,
+            },
+          ]
+        : [];
+    const layered = withImageLayers(props, bindings);
+    const main = {
+      main: props.main,
+      image: props.image,
+      dockerfile: props.dockerfile,
+      runtime: props.runtime,
+      handler: props.handler,
+      external: props.external,
+      autoInstallExternals: props.autoInstallExternals,
+      build: props.build,
+      imageLayers: dedupeImageLayers([...envLayer, ...(layered.imageLayers ?? [])]),
+    } as AnyContainerApplicationProps;
+    return {
+      ...props,
+      images: { ...props.images, main },
+    };
+  });
 
 const baseEnvPreamble = (
   props: Pick<AnyContainerApplicationProps, "image" | "dockerfile">,

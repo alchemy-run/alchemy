@@ -426,6 +426,27 @@ export interface DurableObjectContainerProps extends PlatformProps {
    */
   images?: Record<string, ContainerImageProps>;
   /**
+   * Entrypoint of a bundled Effect program (`Container.make`), published as
+   * the named image `main` — the image `start()` uses when none is given.
+   * Its bindings' image layers and plain env are baked into that image;
+   * pass secrets with `start({ env })` or keep them out with egress.
+   */
+  main?: string;
+  /** Environment image for {@link main}'s generated Dockerfile. Exclusive with {@link dockerfile}. */
+  image?: string;
+  /** Inline environment Dockerfile for {@link main}. Exclusive with {@link image}. */
+  dockerfile?: InlineDockerfile;
+  /** Runtime for {@link main}. @default "bun" */
+  runtime?: "bun" | "node";
+  /** Exported handler in {@link main}. @default "default" */
+  handler?: string;
+  /** Packages {@link main}'s bundle leaves external. */
+  external?: string[];
+  /** Install {@link external} packages into the image. */
+  autoInstallExternals?: boolean;
+  /** Bundler configuration for {@link main}. */
+  build?: Bundle.BundleConfig;
+  /**
    * Maximum wait for Cloudflare to prepare each published image, including API calls.
    * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
    * Cancellation stops waiting; another deployment reuses the published registry image.
@@ -443,6 +464,9 @@ export interface DurableObjectContainerProps extends PlatformProps {
   /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
   observability?: Containers.ContainerApplicationObservability;
 }
+
+/** A bundled Effect program (`Container.make`) scheduled by its Durable Object. */
+export type ProgramDurableObjectContainerProps = DurableObjectContainerProps & { main: string };
 
 /**
  * Fleet-scheduled applications select a deployment image through `main`

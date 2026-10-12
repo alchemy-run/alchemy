@@ -62,6 +62,15 @@ const FLEET_ONLY_PROPS = [
   "sshPublicKeyIds",
 ] as const satisfies ReadonlyArray<keyof AnyContainerApplicationProps>;
 
+/**
+ * The named image a Durable Object-managed container's bundled `main`
+ * program is published as (see `withMainImage`).
+ */
+export const MAIN_IMAGE = "main";
+
+/** Fleet props that a bundled `main` program keeps under Durable Object scheduling. */
+const MAIN_PROGRAM_PROPS: ReadonlyArray<string> = ["main", "image", "dockerfile", "env"];
+
 export const isDurableObjectContainer = (
   props: AnyContainerApplicationProps,
 ): props is DurableObjectContainerProps => props.schedulingPolicy === "durable_object";
@@ -123,10 +132,20 @@ export const validateContainerConfiguration = Effect.fn(function* (
     );
   }
 
+  if (props.main !== undefined && props.images?.[MAIN_IMAGE] !== undefined) {
+    return yield* invalid(
+      `The image name '${MAIN_IMAGE}' is taken by the container's bundled program (main).`,
+    );
+  }
+
   // The union type already forbids these, but untyped or Effect-produced
-  // props can still carry them.
+  // props can still carry them. A bundled program keeps its own entrypoint
+  // and environment image.
   const loose: AnyContainerApplicationProps = props;
-  const unsupported = FLEET_ONLY_PROPS.find((key) => loose[key] !== undefined);
+  const unsupported = FLEET_ONLY_PROPS.find(
+    (key) =>
+      loose[key] !== undefined && !(props.main !== undefined && MAIN_PROGRAM_PROPS.includes(key)),
+  );
   if (unsupported !== undefined) {
     return yield* invalid(
       `Container property '${unsupported}' is not supported with schedulingPolicy: 'durable_object'. Declare image sources under 'images' and pass per-instance settings to start().`,

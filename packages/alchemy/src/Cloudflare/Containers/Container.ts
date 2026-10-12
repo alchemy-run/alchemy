@@ -80,6 +80,7 @@ import type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
+  ProgramDurableObjectContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
 
@@ -863,8 +864,12 @@ export declare namespace Container {
     Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
-        | InputProps<EffectfulContainerProps>
-        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+        | InputProps<EffectfulContainerProps | ProgramDurableObjectContainerProps>
+        | Effect.Effect<
+            InputProps<EffectfulContainerProps | ProgramDurableObjectContainerProps>,
+            Config.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;

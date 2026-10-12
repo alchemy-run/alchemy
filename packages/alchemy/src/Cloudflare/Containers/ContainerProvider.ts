@@ -33,6 +33,7 @@ import type {
 import {
   buildFinalDockerfile,
   withImageLayers,
+  withMainImage,
   bundleContainerProgram,
   containerEnvPreamble,
   createContainerApplicationName,
@@ -912,8 +913,12 @@ export const LiveContainerProvider = () =>
         }
 
         // Image content (a Dockerfile, a context file) can change without any
-        // prop changing, so compare content hashes as well.
-        const hashes = hashesByName(yield* computeNamedImages(id, news));
+        // prop changing, so compare content hashes as well. A bundled program
+        // is the named image `main` (with its bindings' layers and env).
+        const program = isResolved(newBindings)
+          ? yield* withMainImage(news, newBindings, makeContainerEnv(news, accountId, newBindings))
+          : yield* withMainImage(news, [], makeContainerEnv(news, accountId));
+        const hashes = hashesByName(yield* computeNamedImages(id, program));
         if (output.images === undefined || !deepEqual(hashes, output.hash?.images)) {
           return { action: "update" } as const;
         }
@@ -926,6 +931,7 @@ export const LiveContainerProvider = () =>
         olds,
         name,
         durableObjects,
+        bindings,
         output,
         session,
       }: {
@@ -934,6 +940,7 @@ export const LiveContainerProvider = () =>
         olds: AnyContainerApplicationProps | undefined;
         name: string;
         durableObjects: { namespaceId: string } | undefined;
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
         session: ScopedPlanStatusSession;
       }) {
@@ -972,7 +979,13 @@ export const LiveContainerProvider = () =>
         if (application) yield* assertMatchesDeclaration(application);
 
         // 2. Publish images. The Worker upload that follows references them.
-        const published = yield* publishNamedImages(id, news, output, session);
+        // A bundled program is the named image `main`.
+        const program = yield* withMainImage(
+          news,
+          bindings,
+          makeContainerEnv(news, accountId, bindings),
+        );
+        const published = yield* publishNamedImages(id, program, output, session);
 
         const configuration: Containers.DurableObjectContainerConfiguration = {
           ...(news.ssh !== undefined ? { wranglerSsh: news.ssh } : {}),
@@ -1410,7 +1423,12 @@ export const LiveContainerProvider = () =>
                 createdAt: "",
                 observability: news.observability,
               }),
-              ...(yield* publishNamedImages(id, news, undefined, session)),
+              ...(yield* publishNamedImages(
+                id,
+                yield* withMainImage(news, [], makeContainerEnv(news, accountId)),
+                undefined,
+                session,
+              )),
             } satisfies ContainerApplication["Attributes"];
           }
           const env = makeContainerEnv(news, accountId);
@@ -1474,6 +1492,7 @@ export const LiveContainerProvider = () =>
               olds,
               name,
               durableObjects,
+              bindings,
               output,
               session,
             });

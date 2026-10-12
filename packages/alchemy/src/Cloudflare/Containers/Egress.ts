@@ -5,11 +5,14 @@
  * placeholders. See ./EGRESS.md.
  */
 import type * as cf from "@cloudflare/workers-types";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import * as Output from "../../Output.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
 
@@ -193,6 +196,32 @@ export const Egress = <R = never>(
       hosts: list,
       handle: (request) => makeEgressHandle(handler)(request).pipe(Effect.provideContext(context)),
     });
+  });
+
+/** A secret an egress adds to requests: a value, a `Config`, or an `Output` (e.g. `GitHub.ProfileToken`). */
+export type EgressSecret =
+  | Redacted.Redacted<string>
+  | Config.Config<Redacted.Redacted<string>>
+  | Output.Output<Redacted.Redacted<string>, any>;
+
+/**
+ * Resolve an {@link EgressSecret} in the Durable Object's construction phase
+ * to an effect that reads it at runtime. `Config`s and `Output`s are bound
+ * into the hosting Worker (as secrets), never into the container.
+ */
+export const egressSecret = (
+  secret: EgressSecret,
+  name: string,
+): Effect.Effect<Effect.Effect<Redacted.Redacted<string>>, Config.ConfigError, any> =>
+  Effect.gen(function* () {
+    if (Output.isOutput(secret)) {
+      return (yield* Output.named(secret, name)) as Effect.Effect<Redacted.Redacted<string>>;
+    }
+    if (Config.isConfig(secret)) {
+      const value = yield* secret;
+      return Effect.succeed(value);
+    }
+    return Effect.succeed(secret);
   });
 
 //#region registry (runtime, inside the Durable Object)

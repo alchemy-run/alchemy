@@ -28,10 +28,12 @@ import {
   materializeInlineDockerfileContext,
   prepareContainerBuildContext,
   withImageLayers,
+  withMainImage,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import {
   isDurableObjectContainer,
+  MAIN_IMAGE,
   durableObjectPlaceholder,
   namedImageHash,
   validateContainerConfiguration,
@@ -207,7 +209,10 @@ export const LocalContainerProvider = () =>
       ) {
         const devImages: Record<string, DevContainerImage> = {};
         const hashes: Record<string, string> = {};
-        for (const [name, source] of Object.entries(props.images ?? {})) {
+        for (const [name, source] of Object.entries(props.images ?? {}) as [
+          string,
+          AnyContainerApplicationProps,
+        ][]) {
           const image = yield* prepareImage(`${id}-${name}`, source);
           devImages[name] = image.dev;
           hashes[name] = image.hash;
@@ -304,9 +309,21 @@ export const LocalContainerProvider = () =>
         yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
         if (isDurableObjectContainer(news)) {
+          // A bundled program is published as the named image `main`.
+          const env = makeContainerEnv(news, accountId, bindings);
+          const program = yield* withMainImage(news, bindings, env);
           // workerd resolves each image by its declared name, so locally the
           // runtime image reference is just the name.
-          const imageNames = Object.keys(news.images ?? {});
+          const imageNames = Object.keys(program.images ?? {});
+          // `AI.LocalHarness` asked for the program to run on this machine.
+          const mainSource = program.images?.[MAIN_IMAGE] as AnyContainerApplicationProps | undefined;
+          let devHostUrl: string | undefined;
+          if (mainSource && bindings.some((binding) => binding.data?.devHost)) {
+            const prepared = yield* prepareImage(`${id}-${MAIN_IMAGE}`, mainSource);
+            if ("host" in prepared && prepared.host) {
+              devHostUrl = yield* runOnHost(id, mainSource, env, prepared.host, prepared.hash);
+            }
+          }
           return {
             ...durableObjectPlaceholder({
               applicationId: output?.applicationId ?? generateLocalId(),
@@ -316,7 +333,8 @@ export const LocalContainerProvider = () =>
               observability: news.observability,
             }),
             images: Object.fromEntries(imageNames.map((name) => [name, name])),
-            ...(yield* prepareNamedImages(id, news)),
+            ...(yield* prepareNamedImages(id, program)),
+            ...(devHostUrl ? { devHostUrl } : {}),
           } satisfies ContainerApplication["Attributes"];
         }
         const env = makeContainerEnv(news, accountId, bindings);
@@ -388,11 +406,18 @@ export const LocalContainerProvider = () =>
           const imageInputs = resolvedImageInputs(news);
           if (imageInputs !== undefined && isResolved(newBindings)) {
             if (isDurableObjectContainer(imageInputs)) {
+              const program = yield* withMainImage(
+                imageInputs,
+                newBindings,
+                makeContainerEnv(imageInputs, yield* localAccountId, newBindings),
+              );
               const artifacts = yield* Artifacts.Artifacts;
-              for (const name of Object.keys(imageInputs.images ?? {})) {
-                yield* artifacts.delete(`container-image:${id}-${name}`);
+              for (const [name, source] of Object.entries(program.images ?? {})) {
+                yield* artifacts.delete(
+                  imageMemoKey(`${id}-${name}`, source as AnyContainerApplicationProps),
+                );
               }
-              const prepared = yield* prepareNamedImages(id, imageInputs);
+              const prepared = yield* prepareNamedImages(id, program);
               const changed =
                 output.devImages === undefined ||
                 !deepEqual(prepared.hash.images, output.hash?.images);

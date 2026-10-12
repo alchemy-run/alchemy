@@ -242,6 +242,15 @@ const coordination = new WeakMap<
   { readonly startMutex: Semaphore.Semaphore; readonly readyPorts: Set<number> }
 >();
 
+/** The bundled program's image of a Durable Object-managed container, if it has one. */
+const mainImage = (container: cf.Container): string | undefined => {
+  try {
+    return container.images?.main;
+  } catch {
+    return undefined;
+  }
+};
+
 const coordinationFor = (container: cf.Container) => {
   let entry = coordination.get(container);
   if (!entry) {
@@ -417,7 +426,7 @@ export const fromContainer = <ImageName extends string = string>(
       const { egress, ...rest } = startOptions ?? {};
       const platformOptions = rest as ContainerStartupOptions;
       // With egress, only its hosts are reachable unless asked otherwise.
-      const options: ContainerStartupOptions | undefined =
+      let options: ContainerStartupOptions | undefined =
         startOptions === undefined
           ? undefined
           : egress !== undefined &&
@@ -445,6 +454,12 @@ export const fromContainer = <ImageName extends string = string>(
           // Intercept before the program runs, so it never sees a moment
           // with wider access than its egress.
           if (egress !== undefined) yield* applyEgress(egress, true);
+          // A Durable Object-managed container with a bundled program runs
+          // it (the named image `main`) unless told otherwise.
+          if (options !== undefined && !("image" in options && options.image) && !options.containerSnapshot) {
+            const main = mainImage(container);
+            if (main !== undefined) options = { ...options, image: main } as ContainerStartupOptions;
+          }
           yield* Effect.try({
             try: () => container.start(options),
             catch: classifyStartError,
