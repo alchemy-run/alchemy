@@ -34,7 +34,9 @@ export const waitForContainerImage = <E, R>(options: {
         });
         return true;
       }
-      if (result.status === "error") {
+      // Cloudflare can keep reporting "pending" after its build of the image
+      // failed (seen with multi-GB images); waiting longer won't help.
+      if (result.status === "error" || /build failed/i.test(result.reason ?? "")) {
         return yield* new ContainerImagePreparationError({
           image: options.image,
           status: "error",
