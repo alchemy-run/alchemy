@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 import { mainAccountId } from "../src/Account/AccountId.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { Username } from "../src/Customer/Username.ts";
 import { CustomerApi, CustomerApiLive } from "../src/CustomerApi/CustomerApi.ts";
 import { CustomerSessionLive, customerSessionClient } from "../src/CustomerApi/CustomerSession.ts";
 import { MfaChallengeLive } from "../src/CustomerApi/MfaChallenge.ts";
@@ -88,7 +89,11 @@ it.live("a customer can only register themselves", () =>
     Effect.gen(function* () {
       const sam = yield* asCustomer("c-1");
       const error = yield* sam
-        .RegisterCustomer({ target: CustomerId.make("c-2"), name: "not sam" })
+        .RegisterCustomer({
+          target: CustomerId.make("c-2"),
+          name: "not sam",
+          username: Username.make("not-sam"),
+        })
         .pipe(Effect.flip);
       expect(error._tag).toBe("NotTheCustomer");
     }),
@@ -102,7 +107,11 @@ it.live("a request without a session is unauthorized", () =>
         Effect.provide(customerSessionClient("nobody")),
       );
       const error = yield* anonymous
-        .RegisterCustomer({ target: CustomerId.make("c-1"), name: "x" })
+        .RegisterCustomer({
+          target: CustomerId.make("c-1"),
+          name: "x",
+          username: Username.make("x"),
+        })
         .pipe(Effect.flip);
       expect(error._tag).toBe("Unauthorized");
     }),

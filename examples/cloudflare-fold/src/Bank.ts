@@ -10,6 +10,8 @@ import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
 } from "./Customer/MainAccountProvisioning.ts";
+import { UsernameClaim } from "./Customer/UsernameClaim.ts";
+import { UsernameReservation, UsernameReservationLive } from "./Customer/UsernameReservation.ts";
 import { DailyOutflow } from "./Fraud/DailyOutflow.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
@@ -24,7 +26,7 @@ import { TransferStatus } from "./Transfer/TransferStatus.ts";
 
 /** The bank: every aggregate, view and policy, hosted together. */
 export class Bank extends Domain.make("Bank", {
-  aggregates: [Customer, Account, Transfer],
+  aggregates: [Customer, UsernameClaim, Account, Transfer],
   views: [
     AccountSummary,
     CustomerDashboard,
@@ -35,6 +37,7 @@ export class Bank extends Domain.make("Bank", {
     DailyOutflow,
   ],
   policies: [
+    UsernameReservation,
     MainAccountProvisioning,
     TransferExecution,
     TransferApprovalDeadline,
@@ -45,6 +48,7 @@ export class Bank extends Domain.make("Bank", {
 
 /** The policies' implementations. They require the FraudCheck and Payments ports. */
 export const BankPolicies = Layer.mergeAll(
+  UsernameReservationLive,
   MainAccountProvisioningLive,
   TransferExecutionLive,
   TransferApprovalDeadlineLive,

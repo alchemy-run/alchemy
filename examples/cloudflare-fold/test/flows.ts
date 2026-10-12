@@ -3,6 +3,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { type AccountId, mainAccountId } from "../src/Account/AccountId.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { Username } from "../src/Customer/Username.ts";
 import type { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { TransferId } from "../src/Transfer/TransferId.ts";
 
@@ -13,13 +14,19 @@ export type CustomerClient = Effect.Success<typeof CustomerApi.client>;
 export const mfa = { headers: { "x-mfa-code": "000000" } };
 
 /**
- * Register, then wait until `MainAccountProvisioning` has opened the main
- * account: it appears on the customer's live dashboard.
+ * Register, then wait until the username is claimed and
+ * `MainAccountProvisioning` has opened the main account: it appears on the
+ * customer's live dashboard. The username defaults to the customer id.
  */
-export const register = (client: CustomerClient, customerId: string, name: string) =>
+export const register = (
+  client: CustomerClient,
+  customerId: string,
+  name: string,
+  username: string = customerId,
+) =>
   Effect.gen(function* () {
     const id = CustomerId.make(customerId);
-    yield* client.RegisterCustomer({ target: id, name });
+    yield* client.RegisterCustomer({ target: id, name, username: Username.make(username) });
     const accountId = mainAccountId(id);
     yield* client.dashboard({}).pipe(
       Stream.filter((d) => d.accounts.some((a) => a.accountId === accountId)),

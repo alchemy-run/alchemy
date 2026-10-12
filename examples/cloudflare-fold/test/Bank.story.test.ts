@@ -22,10 +22,15 @@ import { DailyLimitExceeded, MoneyWithdrawn, WithdrawMoney } from "../src/Accoun
 import { type Actor, agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
+import { UsernameClaimed } from "../src/Customer/ClaimUsername.ts";
+import { CustomerRegistered } from "../src/Customer/ConfirmRegistration.ts";
 import { Customer } from "../src/Customer/Customer.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerRegistered, RegisterCustomer } from "../src/Customer/RegisterCustomer.ts";
+import { RegisterCustomer, RegistrationRequested } from "../src/Customer/RegisterCustomer.ts";
+import { RegistrationRejected } from "../src/Customer/RejectRegistration.ts";
+import { Username } from "../src/Customer/Username.ts";
+import { UsernameClaim } from "../src/Customer/UsernameClaim.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
@@ -68,14 +73,20 @@ const c2 = Customer.ref("c-2");
 const t1 = Transfer.ref("t-1");
 const sam = customer("c-1");
 const alex = customer("c-2");
+const samsName = Username.make("sam");
 const opened = (customerId = "c-1") =>
   new AccountOpened({ customerId: CustomerId.make(customerId), owner: "sam" });
 
-it.effect("registering opens a main account (a pure policy runs for real)", () =>
+it.effect("registering claims the username, then opens a main account", () =>
   story(
     as(sam),
-    when(c1, new RegisterCustomer({ name: "sam" })),
-    then(c1, new CustomerRegistered({ name: "sam" })),
+    when(c1, new RegisterCustomer({ name: "sam", username: samsName })),
+    then(
+      c1,
+      new RegistrationRequested({ name: "sam", username: samsName }),
+      new CustomerRegistered({ name: "sam", username: samsName }),
+    ),
+    then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-1"))),
       new AccountOpened({ customerId: c1.id, owner: "sam" }),
@@ -87,6 +98,27 @@ it.effect("registering opens a main account (a pure policy runs for real)", () =
       frozen: false,
     }),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({ ["c-1-main"]: 0 } as any)),
+  ),
+);
+
+it.effect("a taken username rejects the registration, and nothing else happens", () =>
+  story(
+    given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
+    as(alex),
+    when(c2, new RegisterCustomer({ name: "alex", username: samsName })),
+    then(
+      c2,
+      new RegistrationRequested({ name: "alex", username: samsName }),
+      new RegistrationRejected({ username: samsName, reason: "username taken" }),
+    ),
+    then(Account.ref(mainAccountId(CustomerId.make("c-2")))),
+    // The customer can try again with another name.
+    when(c2, new RegisterCustomer({ name: "alex", username: Username.make("alex") })),
+    then(
+      c2,
+      new RegistrationRequested({ name: "alex", username: Username.make("alex") }),
+      new CustomerRegistered({ name: "alex", username: Username.make("alex") }),
+    ),
   ),
 );
 
@@ -363,8 +395,8 @@ it.effect("a settlement on a closed account can't be rejected, so it is refunded
 
 it.effect("only agents reassign accounts, and the dashboards re-key", () =>
   story(
-    given(c1, new CustomerRegistered({ name: "sam" })),
-    given(c2, new CustomerRegistered({ name: "alex" })),
+    given(c1, new CustomerRegistered({ name: "sam", username: samsName })),
+    given(c2, new CustomerRegistered({ name: "alex", username: Username.make("alex") })),
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({ ["a-1"]: 100 } as any)),
     as(sam),

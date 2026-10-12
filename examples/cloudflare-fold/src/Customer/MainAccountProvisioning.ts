@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import { Account } from "../Account/Account.ts";
 import { mainAccountId } from "../Account/AccountId.ts";
 import { OpenAccount } from "../Account/OpenAccount.ts";
+import { CustomerRegistered } from "./ConfirmRegistration.ts";
 import { Customer } from "./Customer.ts";
-import { CustomerRegistered } from "./RegisterCustomer.ts";
 
 /** Whenever a customer registers, open their main account. */
 export class MainAccountProvisioning extends Policy.make("MainAccountProvisioning", {
