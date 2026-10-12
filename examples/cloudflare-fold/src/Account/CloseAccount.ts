@@ -12,7 +12,7 @@ export class BalanceNotZero extends Rejection.make("BalanceNotZero", {
 export class AccountClosed extends Event.make("AccountClosed") {}
 
 /** Close an empty account. */
-export class Close extends Command.make("Close", {
+export class CloseAccount extends Command.make("CloseAccount", {
   input: { by: Actor },
   events: [AccountClosed],
   rejects: [NotOpen, NotOwner, BalanceNotZero],

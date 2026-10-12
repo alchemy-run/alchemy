@@ -6,7 +6,7 @@ import { AccountActivity } from "../src/Account/AccountActivity.ts";
 import { mainAccountId } from "../src/Account/AccountId.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "../src/Account/ChangeOwner.ts";
-import { AccountClosed, Close } from "../src/Account/Close.ts";
+import { AccountClosed, CloseAccount } from "../src/Account/CloseAccount.ts";
 import { TransferCredited } from "../src/Account/CreditTransfer.ts";
 import { TransferDebited } from "../src/Account/DebitTransfer.ts";
 import { MoneyDeposited } from "../src/Account/Deposit.ts";
@@ -165,7 +165,7 @@ it.effect("race: the account is closed while the fraud check is pending", () =>
     given(a1, opened(), new MoneyDeposited({ amount: 60_000, balanceAfter: 60_000 })),
     when(a1, new Withdraw({ amount: 60_000, by: sam })),
     expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-    when(a1, new Close({ by: sam })),
+    when(a1, new CloseAccount({ by: sam })),
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 0 }), new AccountClosed()),
     resolve(FraudCheck.score, { risk: 0.95 }),
     then(a1),

@@ -7,7 +7,7 @@ import { CustomerId } from "../Customer/CustomerId.ts";
 import { Cents } from "../Money.ts";
 import { AccountId } from "./AccountId.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.ts";
-import { AccountClosed, BalanceNotZero, Close } from "./Close.ts";
+import { AccountClosed, BalanceNotZero, CloseAccount } from "./CloseAccount.ts";
 import { CreditTransfer, TransferCredited } from "./CreditTransfer.ts";
 import { DebitTransfer, TransferDebited } from "./DebitTransfer.ts";
 import { Deposit, MoneyDeposited } from "./Deposit.ts";
@@ -76,7 +76,7 @@ export class Account extends Aggregate.make("Account", {
     Deposit,
     Withdraw,
     Freeze,
-    Close,
+    CloseAccount,
     DebitTransfer,
     CreditTransfer,
     RefundTransfer,
@@ -119,7 +119,7 @@ export class Account extends Aggregate.make("Account", {
       return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: cmd.by })];
     },
 
-    Close: (s, cmd) => {
+    CloseAccount: (s, cmd) => {
       const o = openFor(s, cmd.by);
       if (o._tag !== "Open") return o;
       return o.balance !== 0 ? new BalanceNotZero({ balance: o.balance }) : [new AccountClosed()];
