@@ -559,10 +559,10 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
    * engine and compare. `TestFunction` executes against the `DEVELOPMENT`
    * stage, so this costs seconds and never touches a distribution.
    *
-   * Gated because it needs real credentials — `AWS_TEST_CLOUDFRONT_FUNCTION=1
-   * pnpm test test/AWS/Website/Router.local.test.ts --profile testing`.
+   * Needs real credentials (it is tagged `live`, so it runs in the live plan
+   * with `--profile testing`); opt out with `AWS_TEST_CLOUDFRONT_FUNCTION=0`.
    */
-  test.provider.skipIf(process.env.AWS_TEST_CLOUDFRONT_FUNCTION !== "1")(
+  test.provider.skipIf(process.env.AWS_TEST_CLOUDFRONT_FUNCTION === "0")(
     "the emulated runtime agrees with the real CloudFront runtime",
     () =>
       Effect.gen(function* () {
@@ -589,15 +589,23 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
             FunctionConfig: { Comment: "parity", Runtime: "cloudfront-js-2.0" },
             FunctionCode: new TextEncoder().encode(code),
           });
-          const result = yield* cloudfront.testFunction({
-            Name: `${name}-${suffix}`,
-            IfMatch: created.ETag!,
-            Stage: "DEVELOPMENT",
-            EventObject: event,
-          });
-          yield* cloudfront
-            .deleteFunction({ Name: `${name}-${suffix}`, IfMatch: created.ETag! })
-            .pipe(Effect.ignore);
+          // Always delete the scratch function, even when the test call fails,
+          // so a failed run never leaves a function behind (or blocks a rerun
+          // with FunctionAlreadyExists).
+          const result = yield* cloudfront
+            .testFunction({
+              Name: `${name}-${suffix}`,
+              IfMatch: created.ETag!,
+              Stage: "DEVELOPMENT",
+              EventObject: event,
+            })
+            .pipe(
+              Effect.ensuring(
+                cloudfront
+                  .deleteFunction({ Name: `${name}-${suffix}`, IfMatch: created.ETag! })
+                  .pipe(Effect.ignore),
+              ),
+            );
           const raw = result.TestResult?.FunctionOutput;
           return {
             error: result.TestResult?.FunctionErrorMessage,

@@ -19,8 +19,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 // never passes, and the service never reaches RUNNING.
 //
 // Heavy (Docker build + ECR push + 3-5 min App Runner provisioning, bills
-// while running), so gated behind AWS_TEST_SLOW=1 like the platform e2e.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// while running), so it is skipped under `--fast` like the platform e2e.
+test.provider.skipIf(!!process.env.FAST)(
   "service bundled from an isolated project boots and serves HTTP",
   (stack) =>
     Effect.gen(function* () {

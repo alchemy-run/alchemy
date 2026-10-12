@@ -148,7 +148,8 @@ export type MagicSiteLan = Resource<
  * NAT).
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * `siteId` and `haLink` are create-only — changing either triggers a
  * replacement. Everything else is updated in place.
@@ -321,7 +322,7 @@ export const MagicSiteLanProvider = () =>
     // exhaustively paginate the LANs of each site (bounded concurrency) and
     // hydrate into the same Attributes shape `read` returns. Accounts (or
     // individual sites) without Magic WAN entitlement reject with the typed
-    // `MagicWanUnauthorized` (Cloudflare code 1025) — nothing to enumerate,
+    // `MagicWanUnauthorized` (code 1025) or `MagicWanNotEnabled` (code 1101) — nothing to enumerate,
     // so skip → [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -335,7 +336,9 @@ export const MagicSiteLanProvider = () =>
               .filter((id): id is string => typeof id === "string"),
           ),
         ),
-        Effect.catchTag("MagicWanUnauthorized", () => Effect.succeed([] as string[])),
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
+          Effect.succeed([] as string[]),
+        ),
       );
 
       const rows = yield* Effect.forEach(
@@ -348,7 +351,7 @@ export const MagicSiteLanProvider = () =>
                 (page.result ?? []).map((lan) => toAttributes(lan, siteId, accountId)),
               ),
             ),
-            Effect.catchTag("MagicWanUnauthorized", () =>
+            Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
               Effect.succeed([] as MagicSiteLanAttributes[]),
             ),
           ),

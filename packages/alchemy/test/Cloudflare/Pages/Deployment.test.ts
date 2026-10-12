@@ -147,18 +147,8 @@ test.provider(
 );
 
 // `list()` fans out over `pages.listProjects` → per-project
-// `pages.listProjectDeployments`. The live list assertion is gated behind
-// CLOUDFLARE_TEST_PAGES_LIST because `pages.listProjects` currently fails to
-// decode: direct-upload / ad_hoc deployments return no `source` field, but
-// the generated `ListProjectsResponse` schema marks
-// `canonicalDeployment.source` and `latestDeployment.source` as required
-// (`Schema.Struct`, not `Schema.optional`). The failure surfaces as:
-//   CloudflareHttpError { status: 200, statusText: "Schema decode failed" }
-// NEEDED DISTILLED PATCH: make the deployment-level `source` optional on the
-// projects-list response (and on every other deployment object that can be an
-// ad_hoc/direct-upload deployment). Patch + regen `pages`, then remove the
-// gate — `list()` itself is already correct.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
+// `pages.listProjectDeployments`.
+test.provider(
   "list enumerates deployments across Pages projects",
   (stack) =>
     Effect.gen(function* () {

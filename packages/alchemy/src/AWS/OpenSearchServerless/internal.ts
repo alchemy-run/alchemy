@@ -15,7 +15,13 @@ export class OpenSearchServerlessProvisioningFailed extends Data.TaggedError(
   readonly status: string | undefined;
   readonly failureCode: string | undefined;
   readonly failureMessage: string | undefined;
-}> {}
+}> {
+  override get message() {
+    return `${this.resource} ${this.id} did not reach ACTIVE (status: ${this.status ?? "unknown"}${
+      this.failureCode !== undefined ? `, ${this.failureCode}` : ""
+    }${this.failureMessage !== undefined ? `: ${this.failureMessage}` : ""})`;
+  }
+}
 
 /**
  * Serialize a security/access policy document to the compact JSON string the

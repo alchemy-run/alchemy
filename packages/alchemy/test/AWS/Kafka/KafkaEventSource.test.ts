@@ -3,16 +3,21 @@ import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import KafkaTestFunctionLive, { FixtureCluster, KafkaTestFunction } from "./kafka-handler.ts";
+import KafkaTestFunctionLive, {
+  FixtureCluster,
+  FixtureClusterLive,
+  KafkaTestFunction,
+} from "./kafka-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // The MSK Serverless cluster this test provisions takes ~5-10 minutes to
 // create and is metered while it exists, so the whole event-source e2e is
-// gated behind AWS_TEST_SLOW=1. It deploys a cluster + a Lambda that binds
+// skipped under `--fast`. It deploys a cluster + a Lambda that binds
 // `consumeKafkaTopic`, then verifies the event source mapping was created and
 // points at the cluster with the configured topic. (A full produce/consume
 // roundtrip additionally requires a Kafka admin/producer with MSK IAM auth to
@@ -23,7 +28,7 @@ describe.sequential(
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kafka", "provider:aws:lambda", "live"],
   },
   () => {
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    test.provider.skipIf(!!process.env.FAST)(
       "creates an event source mapping pointing a Lambda at the cluster topic",
       (stack) =>
         Effect.gen(function* () {
@@ -34,7 +39,10 @@ describe.sequential(
               const { cluster } = yield* FixtureCluster;
               const fn = yield* KafkaTestFunction;
               return { cluster, fn };
-            }).pipe(Effect.provide(KafkaTestFunctionLive)),
+              // FixtureClusterLive is provided inside the Function's own impl,
+              // so the stack must provide it too to read the cluster outputs
+              // (the engine de-dupes the shared "FixtureCluster" declaration).
+            }).pipe(Effect.provide(Layer.mergeAll(KafkaTestFunctionLive, FixtureClusterLive))),
           );
 
           expect(cluster.clusterArn).toContain(":cluster/");
@@ -55,7 +63,15 @@ describe.sequential(
           const get = (path: string) =>
             HttpClient.get(`${baseUrl}${path}`).pipe(
               Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
-              Effect.flatMap((res) => res.json),
+              Effect.flatMap((res) =>
+                res.status === 200
+                  ? res.json
+                  : res.text.pipe(
+                      Effect.flatMap((body) =>
+                        Effect.die(new Error(`GET ${path} -> ${res.status}: ${body}`)),
+                      ),
+                    ),
+              ),
             );
 
           const brokers = (yield* get("/brokers")) as { saslIam?: string };
@@ -71,8 +87,15 @@ describe.sequential(
           expect(connect.bootstrapServers).toContain(":9098");
           expect(connect.clusterArn).toBe(cluster.clusterArn);
 
-          const topics = (yield* get("/topics")) as { topics: string[] };
-          expect(Array.isArray(topics.topics)).toBe(true);
+          const topics = (yield* get("/topics")) as { topics?: string[]; error?: string };
+          // MSK Serverless rejects the topic control plane with the typed
+          // `ServerlessUnsupported` ("Topic APIs are not supported on
+          // serverless clusters.") — either branch proves the grant works.
+          if (topics.error === undefined) {
+            expect(Array.isArray(topics.topics)).toBe(true);
+          } else {
+            expect(["BadRequestException", "ServerlessUnsupported"]).toContain(topics.error);
+          }
 
           const roundtrip = (yield* get("/topics/roundtrip")) as {
             created: boolean;

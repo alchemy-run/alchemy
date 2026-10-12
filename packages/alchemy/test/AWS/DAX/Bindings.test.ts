@@ -102,8 +102,8 @@ describe.sequential(
 
 // ---------------------------------------------------------------------------
 // Cluster-scoped bindings (ConnectReadWrite, RebootNode) need a real DAX
-// cluster (~10 min to provision, billed per node-hour) — gated behind
-// AWS_TEST_SLOW=1 like the Cluster lifecycle test.
+// cluster (~10 min to provision, billed per node-hour) — skipped under
+// `--fast` like the Cluster lifecycle test.
 // ---------------------------------------------------------------------------
 
 const slowStack = Core.scratchStack(testOptions, "DAXSlowBindings");
@@ -152,7 +152,7 @@ const deleteSubnetGroup = dax.deleteSubnetGroup({ SubnetGroupName: SLOW_SUBNET_G
   }),
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "connect + scaling + reboot-node bindings against a live cluster",
   () =>
     Effect.gen(function* () {

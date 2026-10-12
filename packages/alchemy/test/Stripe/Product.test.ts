@@ -161,6 +161,15 @@ test.provider(
       const archived = yield* GetProduct({ id: created.product.id });
       expect(archived.id).toEqual(created.product.id);
       expect(archived.active).toEqual(false);
+
+      // Archived products (and their archived prices) are effectively
+      // deleted and must not re-enter nuke.
+      const products = yield* (yield* Provider.findProvider(Stripe.Product)).list();
+      expect(products.find((product) => product.id === created.product.id)).toBeUndefined();
+      const prices = yield* (yield* Provider.findProvider(Stripe.Price)).list();
+      expect(prices.find((price) => price.id === created.price.id)).toBeUndefined();
+      const plans = yield* (yield* Provider.findProvider(Stripe.Plan)).list();
+      expect(plans.find((plan) => plan.id === created.price.id)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:price", "provider:stripe:product", "live"],

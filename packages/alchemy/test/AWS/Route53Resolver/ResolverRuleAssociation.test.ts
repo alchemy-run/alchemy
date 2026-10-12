@@ -31,7 +31,7 @@ test.provider(
 // The full lifecycle is gated: a VPC rule association takes ~1-2 minutes to
 // reach COMPLETE and another ~1-2 minutes to drain on disassociation, which
 // does not fit the ungated 240s budget.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "associate a forward rule with the default VPC and tear it down",
   (stack) =>
     Effect.gen(function* () {

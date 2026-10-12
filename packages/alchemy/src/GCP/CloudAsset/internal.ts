@@ -1,11 +1,13 @@
 import * as cloudasset from "@distilled.cloud/gcp/cloudasset_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
+import { waitForOperation } from "../Operation.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const MAX_SAVED_QUERY_DESCRIPTION = 255;
@@ -169,11 +171,37 @@ export const projectNumberOf = (project: string) =>
     }),
   );
 
+/**
+ * The Cloud Asset service agent (`service-{number}@gcp-sa-cloudasset…`) is
+ * created lazily by Google — on a fresh project it does not exist until
+ * something asks for it, and granting it a role fails with
+ * `IamMemberNotFound`. Generating the identity is idempotent.
+ */
+const ensureCloudAssetServiceIdentity = (projectNumber: string) =>
+  Effect.gen(function* () {
+    const operation = yield* serviceusage
+      .generateServiceIdentityServices({
+        parent: `projects/${projectNumber}/services/cloudasset.googleapis.com`,
+      })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    if (operation === undefined) return;
+    yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
+  });
+
 export const grantCloudAssetPublisher = (project: string, topic: string) =>
   Effect.gen(function* () {
     const resource = topicResource(topic, project);
     const projectNumber = yield* projectNumberOf(project);
+    yield* ensureCloudAssetServiceIdentity(projectNumber);
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-cloudasset.iam.gserviceaccount.com`;
+    yield* grantTopicPublisher(resource, member);
+  });
+
+const grantTopicPublisher = (resource: string, member: string) =>
+  Effect.gen(function* () {
     const policy = yield* pubsub.getIamPolicyProjectsTopics({ resource });
     const bindings = (policy.bindings ?? []).map((binding) => ({
       ...binding,
@@ -192,8 +220,10 @@ export const grantCloudAssetPublisher = (project: string, topic: string) =>
     });
   }).pipe(
     Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 5,
+      // IamMemberNotFound: a just-generated service agent takes a few
+      // seconds to become visible to IAM.
+      while: (error) => error._tag === "Conflict" || error._tag === "IamMemberNotFound",
+      times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );

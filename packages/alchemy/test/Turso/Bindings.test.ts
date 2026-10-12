@@ -48,7 +48,16 @@ test(
     const body = (yield* get("/sql")) as { count: number };
     expect(body.count).toBeGreaterThanOrEqual(1);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -58,7 +67,16 @@ test(
     expect(body.failed).toBe(true);
     expect(body.after).toBe(body.before);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -68,7 +86,16 @@ test(
     const body = (yield* get("/drizzle")) as { bodies: string[] };
     expect(body.bodies).toContain("from-drizzle");
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -80,7 +107,16 @@ test(
     expect(body.author.name).toBe("ada");
     expect(body.author.posts.map((p) => p.title)).toEqual(["engines"]);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -89,7 +125,16 @@ test(
     const body = (yield* get("/client")) as { seven: number };
     expect(body.seven).toBe(7);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -109,5 +154,14 @@ test(
     // `deleted` is the Worker's own Platform API lookup after the delete.
     expect(body.deleted).toBe(true);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:turso",
+      "provider:turso:database",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

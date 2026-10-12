@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as AWS from "@/AWS";
 
-// Gated (AWS_TEST_SLOW) fixture: a single-region Multi-Region Access Point
+// Gated (skipped under `--fast`) fixture: a single-region Multi-Region Access Point
 // plus a Lambda that exercises the two MRAP failover bindings —
 // GetMultiRegionAccessPointRoutes and SubmitMultiRegionAccessPointRoutes.
 // MRAP provisioning is asynchronous and takes 10-20 minutes, hence the gate.

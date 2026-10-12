@@ -236,7 +236,8 @@ test.provider(
         ),
         Effect.retry({
           while: (e) => e._tag === "OutputNotListed",
-          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
         }),
       );
 

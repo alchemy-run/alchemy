@@ -10,6 +10,12 @@ import { CERT_A_PEM, KEY_A_PEM } from "../Compute/fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
+// Project setup (one-time): Application Integration must be provisioned in
+// us-central1, else calls fail with `Found zero or more than one active
+// project` / `Failed to client for project`:
+//   POST https://integrations.googleapis.com/v1/projects/PROJECT_ID/locations/us-central1/clients:provision
+//   {"createSampleWorkflows": false}
+
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
@@ -71,9 +77,18 @@ test.provider(
       expect(created.displayName).toEqual("alchemy-client-tls");
       expect(created.description).toEqual("client tls");
 
-      const fetched = yield* integrations.getProjectsLocationsProductsCertificates({
-        name: created.name,
-      });
+      // A just-created certificate can 404 on GET for a few seconds.
+      const fetched = yield* integrations
+        .getProjectsLocationsProductsCertificates({
+          name: created.name,
+        })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "NotFound",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 8,
+          }),
+        );
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
 

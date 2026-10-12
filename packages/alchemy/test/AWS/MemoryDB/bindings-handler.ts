@@ -23,7 +23,7 @@ export class MemoryDBBindingsTestFunction extends Lambda.Function<Lambda.Functio
  *
  * The cluster-scoped `Connect`, `CreateSnapshot`, and `FailoverShard`
  * bindings need a live cluster and are exercised only alongside the
- * AWS_TEST_SLOW-gated cluster lifecycle.
+ * slow (skipped under `--fast`) cluster lifecycle.
  */
 export default MemoryDBBindingsTestFunction.make(
   {

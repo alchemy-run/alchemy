@@ -203,6 +203,9 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *       InstanceType: "ml.t3.medium",
  *       InstanceCount: 1,
  *       ExecutionRole: role.roleArn,
+ *       // HyperPod now provisions Slurm clusters in Continuous mode, which
+ *       // requires a Slurm node type on at least one instance group.
+ *       SlurmConfig: { NodeType: "Controller" },
  *       LifeCycleConfig: {
  *         SourceS3Uri: `s3://${bucket.bucketName}/lifecycle`,
  *         OnCreate: "on_create.sh",

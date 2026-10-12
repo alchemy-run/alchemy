@@ -32,7 +32,15 @@ test.provider(
               const namespaceId = yield* namespace.namespaceId;
 
               return Effect.fn(function* () {
-                yield* kv.put("greeting", "hello world");
+                // The namespace was created moments ago; the KV value API can
+                // briefly answer `namespace not found` before it sees it.
+                // Retry the first write, bounded, until it lands.
+                yield* kv.put("greeting", "hello world").pipe(
+                  Effect.retry({
+                    schedule: Schedule.spaced("1 second"),
+                    times: 10,
+                  }),
+                );
 
                 // KV is eventually consistent — retry the read-back until the
                 // value propagates (bounded so the test fails fast).
