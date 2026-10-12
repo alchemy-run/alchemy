@@ -1,6 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { Tunnel } from "./Connector.ts";
+import { Connector, Tunnel } from "./Connector.ts";
 import { DB_NAME, DB_USER, Database, DbPassword } from "./Database.ts";
 
 /**
@@ -9,13 +10,20 @@ import { DB_NAME, DB_USER, Database, DbPassword } from "./Database.ts";
  */
 export const AuroraService = Effect.gen(function* () {
   const tunnel = yield* Tunnel;
+  const connector = yield* Connector;
   const db = yield* Database;
+  // Hyperdrive connects to the database when it is created, so the path
+  // must be live first: wait for the writer instance and the connector.
+  const hostname = Output.map(
+    Output.all(db.cluster.endpoint, db.writer.dbInstanceArn, connector.serviceArn),
+    ([endpoint]) => endpoint!,
+  );
   return yield* Cloudflare.Connectivity.DirectoryService("AuroraService", {
     type: "tcp",
     tcpPort: 5432,
     appProtocol: "postgresql",
     host: {
-      hostname: db.cluster.endpoint.as<string>(),
+      hostname,
       resolverNetwork: { tunnelId: tunnel.tunnelId },
     },
     // Aurora's certificate is issued by the Amazon RDS CA, which Workers VPC
