@@ -1,0 +1,348 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import type * as Aggregate from "./Aggregate.ts";
+import {
+  type Delivery,
+  emptySnapshot,
+  Platform,
+  type Json,
+  type SendResult,
+  type StoredEvent,
+  type ViewEntry,
+  type ViewSnapshot,
+} from "./Platform.ts";
+
+/**
+ * Options for {@link make}.
+ */
+export interface Options {
+  /**
+   * When `true`, deliveries queue until {@link Control.drain} is called and
+   * policy runs are tracked so a caller can wait for quiescence. Used by the
+   * story runner. Defaults to `false` (deliver in the background).
+   */
+  readonly manual?: boolean;
+  /** Clock used to time-stamp commands. Defaults to `Date.now`. */
+  readonly now?: () => number;
+}
+
+/**
+ * Control surface of an in-memory platform.
+ */
+export interface Control {
+  /**
+   * Send due scheduled commands, then deliver every queued delivery (and
+   * those it produces) until the queue is empty.
+   */
+  readonly drain: Effect.Effect<void>;
+  /** `true` when nothing is queued and every running policy is suspended. */
+  readonly idle: Effect.Effect<boolean>;
+  /** Mark the current policy run as suspended while `effect` runs (story ports). */
+  readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+  /** Defects raised by policy runs. */
+  readonly failures: ReadonlyArray<unknown>;
+}
+
+/**
+ * Build an in-memory platform and its control surface.
+ */
+export const make = (
+  options: Options = {},
+): { readonly layer: Layer.Layer<Platform>; readonly control: Control } => {
+  const now = options.now ?? (() => Date.now());
+  const pending: Array<{
+    readonly delivery: Delivery;
+    readonly deliver: (d: Delivery) => Effect.Effect<void>;
+  }> = [];
+  let draining = false;
+  let running = 0;
+  let suspended = 0;
+  const failures: Array<unknown> = [];
+  // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
+  const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
+
+  /** Send every scheduled command that is due on the platform's clock. */
+  const fireDue: Effect.Effect<void> = Effect.suspend(() => {
+    const due = [...timers].filter(([, timer]) => timer.at <= now());
+    for (const [key] of due) timers.delete(key);
+    return Effect.forEach(due, ([, timer]) => timer.fire, { discard: true });
+  });
+
+  const deliverAll: Effect.Effect<void> = Effect.suspend(function loop(): Effect.Effect<void> {
+    const next = pending.shift();
+    if (!next) {
+      draining = false;
+      return Effect.void;
+    }
+    draining = true;
+    return next.deliver(next.delivery).pipe(Effect.flatMap(loop));
+  });
+
+  const drain: Effect.Effect<void> = fireDue.pipe(Effect.andThen(deliverAll));
+
+  const enqueue = (
+    deliveries: ReadonlyArray<Delivery>,
+    deliver: (d: Delivery) => Effect.Effect<void>,
+  ) =>
+    Effect.suspend(() => {
+      for (const delivery of deliveries) pending.push({ delivery, deliver });
+      if (options.manual || draining || pending.length === 0) return Effect.void;
+      draining = true;
+      return Effect.forkDetach(drain).pipe(Effect.asVoid);
+    });
+
+  const control: Control = {
+    drain,
+    idle: Effect.sync(() => pending.length === 0 && !draining && running === suspended),
+    suspended: (effect) =>
+      Effect.suspend(() => {
+        suspended++;
+        return effect.pipe(Effect.ensuring(Effect.sync(() => suspended--)));
+      }),
+    failures,
+  };
+
+  const platform = Platform.of({
+    aggregate: (_aggregate, kit) =>
+      Effect.sync(() => {
+        const instances = new Map<
+          string,
+          {
+            state: Json | null;
+            version: number;
+            readonly receipts: Map<string, SendResult>;
+            readonly events: Array<StoredEvent>;
+          }
+        >();
+        const lock = Semaphore.makeUnsafe(1);
+        // The latest version of each instance that anyone watches.
+        const versions = new Map<string, SubscriptionRef.SubscriptionRef<number>>();
+        const versionOf = (id: string) =>
+          Effect.suspend(() => {
+            const found = versions.get(id);
+            if (found) return Effect.succeed(found);
+            return SubscriptionRef.make(instance(id).version).pipe(
+              Effect.tap((created) => Effect.sync(() => versions.set(id, created))),
+            );
+          });
+        const announce = (id: string) =>
+          Effect.suspend(() => {
+            const ref = versions.get(id);
+            return ref ? SubscriptionRef.set(ref, instance(id).version) : Effect.void;
+          });
+        const instance = (id: string) => {
+          let found = instances.get(id);
+          if (!found)
+            instances.set(
+              id,
+              (found = { state: null, version: 0, receipts: new Map(), events: [] }),
+            );
+          return found;
+        };
+        const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+          lock.withPermits(1)(
+            Effect.gen(function* () {
+              const current = instance(id);
+              const duplicate = current.receipts.get(meta.commandId);
+              if (duplicate) return duplicate;
+              const result = kit.handle({
+                id,
+                state: current.state,
+                version: current.version,
+                command,
+                commandId: meta.commandId,
+                context: meta.context,
+                now: now(),
+              });
+              if (result._tag === "Rejected") return result satisfies SendResult;
+              current.state = result.state;
+              current.version = result.version;
+              current.events.push(...result.events);
+              const sent: SendResult = {
+                _tag: "Accepted",
+                receipt: {
+                  stream: `${kit.name}/${id}`,
+                  version: result.version,
+                  events: result.events.map((e) => e.event),
+                  reply: result.reply,
+                },
+              };
+              current.receipts.set(meta.commandId, sent);
+              yield* announce(id);
+              yield* enqueue(result.deliveries, kit.deliver);
+              return sent;
+            }),
+          );
+        return {
+          send,
+          schedule: (id, command, meta, due) =>
+            Effect.suspend(() => {
+              const at = "at" in due ? due.at : now() + due.afterMillis;
+              timers.set(`${kit.name}/${id}/${meta.commandId}`, {
+                at,
+                fire: send(id, command, meta).pipe(Effect.asVoid),
+              });
+              // Stories fire timers from `drain` as their clock moves; otherwise wait in real time.
+              if (options.manual) return Effect.void;
+              return Effect.forkDetach(
+                Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
+              ).pipe(Effect.asVoid);
+            }),
+          state: (id) =>
+            Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
+          events: (id) => Effect.sync(() => [...instance(id).events]),
+          changes: (id) =>
+            Stream.unwrap(
+              versionOf(id).pipe(
+                Effect.map((ref) =>
+                  SubscriptionRef.changes(ref).pipe(
+                    Stream.map(() => ({
+                      state: instance(id).state,
+                      version: instance(id).version,
+                    })),
+                  ),
+                ),
+              ),
+            ),
+          tail: (id, after) =>
+            Stream.unwrap(
+              versionOf(id).pipe(
+                Effect.map((ref) => {
+                  let last = after;
+                  return SubscriptionRef.changes(ref).pipe(
+                    Stream.flatMap(() => {
+                      const fresh = instance(id).events.filter((e) => e.envelope.seq > last);
+                      if (fresh.length > 0) last = fresh[fresh.length - 1]!.envelope.seq;
+                      return Stream.fromIterable(fresh);
+                    }),
+                  );
+                }),
+              ),
+            ),
+          seed: (id, events) =>
+            lock.withPermits(1)(
+              Effect.suspend(() => {
+                const current = instance(id);
+                const result = kit.seed({
+                  id,
+                  state: current.state,
+                  version: current.version,
+                  events,
+                  commandId: `seed:${id}:${current.version}`,
+                  now: now(),
+                });
+                current.state = result.state;
+                current.version = result.version;
+                current.events.push(...result.events);
+                return announce(id).pipe(Effect.andThen(enqueue(result.deliveries, kit.deliver)));
+              }),
+            ),
+        };
+      }),
+
+    view: (_view, kit) =>
+      Effect.sync(() => {
+        const keys = new Map<
+          string,
+          {
+            readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
+            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
+          }
+        >();
+        const lock = Semaphore.makeUnsafe(1);
+        const get = (key: string) =>
+          Effect.suspend(() => {
+            const found = keys.get(key);
+            if (found) return Effect.succeed(found);
+            return Effect.all({
+              snapshot: SubscriptionRef.make(emptySnapshot),
+              entries: SubscriptionRef.make<ReadonlyArray<ViewEntry>>([]),
+            }).pipe(Effect.tap((created) => Effect.sync(() => keys.set(key, created))));
+          });
+        return {
+          receive: (key, deliveries) =>
+            lock.withPermits(1)(
+              Effect.gen(function* () {
+                const current = yield* get(key);
+                const result = kit.apply(
+                  key,
+                  yield* SubscriptionRef.get(current.snapshot),
+                  deliveries,
+                );
+                if (!result.changed) return;
+                if (result.entries.length > 0) {
+                  yield* SubscriptionRef.update(current.entries, (entries) => [
+                    ...entries,
+                    ...result.entries,
+                  ]);
+                }
+                yield* SubscriptionRef.set(current.snapshot, result.snapshot);
+                yield* enqueue(result.downstream, kit.deliver);
+              }),
+            ),
+          read: (key) =>
+            get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+          changes: (key) =>
+            Stream.unwrap(
+              get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+            ),
+          list: (key) =>
+            get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+          tail: (key, after) =>
+            Stream.unwrap(
+              get(key).pipe(
+                Effect.map((current) => {
+                  let last = after;
+                  return SubscriptionRef.changes(current.entries).pipe(
+                    Stream.flatMap((entries) => {
+                      const fresh = entries.filter((entry) => entry.seq > last);
+                      if (fresh.length > 0) last = fresh[fresh.length - 1]!.seq;
+                      return Stream.fromIterable(fresh);
+                    }),
+                  );
+                }),
+              ),
+            ),
+        };
+      }),
+
+    policy: (_policy, kit) =>
+      Effect.sync(() => {
+        const locks = new Map<string, Semaphore.Semaphore>();
+        const lockFor = (key: string) => {
+          let found = locks.get(key);
+          if (!found) locks.set(key, (found = Semaphore.makeUnsafe(1)));
+          return found;
+        };
+        return {
+          receive: (delivery) =>
+            Effect.suspend(() => {
+              running++;
+              return Effect.forkDetach(
+                lockFor(delivery.key)
+                  .withPermits(1)(kit.run(delivery))
+                  .pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() => failures.push(cause)).pipe(
+                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
+                      ),
+                    ),
+                    Effect.ensuring(Effect.sync(() => running--)),
+                  ),
+              ).pipe(Effect.asVoid);
+            }),
+        };
+      }),
+  });
+
+  return { layer: Layer.succeed(Platform, platform), control };
+};
+
+/**
+ * An in-memory platform: every aggregate, view and policy lives in the
+ * current process. Use it for tests and single-process servers.
+ */
+export const InMemory: Layer.Layer<Platform> = Layer.suspend(() => make().layer);
