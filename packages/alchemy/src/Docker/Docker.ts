@@ -503,6 +503,18 @@ export interface DockerOptions {
   bin?: string;
 }
 
+/**
+ * Extra environment for every Docker CLI invocation, layered over the
+ * process environment (per-call variables still win). Scope it with
+ * `Effect.provideService(DockerEnvironment, { BUILDX_BUILDER: "ci" })` to
+ * target a buildx builder or Docker context without mutating `process.env`.
+ * @default {}
+ */
+export const DockerEnvironment = Context.Reference<Record<string, string>>(
+  "alchemy/Docker/DockerEnvironment",
+  { defaultValue: () => ({}) },
+);
+
 /** The Docker CLI client, running `options.bin` (`DOCKER_BIN` overrides). */
 export const dockerLive = (options: DockerOptions = {}) =>
   Layer.effect(Docker, makeDocker(options));
@@ -523,15 +535,19 @@ const makeDocker = (options: DockerOptions) =>
         stream: Stream.Stream<string, PlatformError, never>,
       ) => Stream.Stream<string, PlatformError, never> = Stream.tap(Effect.logDebug),
     ) =>
-      ChildProcess.make(bin, args, {
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        detached: false,
-        env,
-        extendEnv: true,
+      Effect.gen(function* () {
+        const ambient = yield* DockerEnvironment;
+        return yield* spawner.spawn(
+          ChildProcess.make(bin, args, {
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+            detached: false,
+            env: { ...ambient, ...env },
+            extendEnv: true,
+          }),
+        );
       }).pipe(
-        spawner.spawn,
         Effect.flatMap((child) =>
           Effect.all(
             {

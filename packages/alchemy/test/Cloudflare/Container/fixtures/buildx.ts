@@ -1,7 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Docker } from "@/Docker/Docker.ts";
+import { Docker, DockerEnvironment } from "@/Docker/Docker.ts";
 import { Stage } from "@/Stage.ts";
+
+/** Run `effect` with extra environment on every Docker CLI call it makes. */
+export const withDockerEnv =
+  (env: Record<string, string>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.flatMap(DockerEnvironment, (current) =>
+      Effect.provideService(effect, DockerEnvironment, { ...current, ...env }),
+    );
 
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>
@@ -21,25 +29,12 @@ export const withBuilder =
             ),
           ),
         () =>
-          Effect.acquireUseRelease(
-            Effect.sync(() => {
-              const previous = {
-                builder: process.env.BUILDX_BUILDER,
-                attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
-              };
-              process.env.BUILDX_BUILDER = name;
-              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(options?.attestations === false);
-              return previous;
+          docker.run(["buildx", "inspect", "--bootstrap"]).pipe(
+            Effect.andThen(effect),
+            withDockerEnv({
+              BUILDX_BUILDER: name,
+              BUILDX_NO_DEFAULT_ATTESTATIONS: String(options?.attestations === false),
             }),
-            () => docker.run(["buildx", "inspect", "--bootstrap"]).pipe(Effect.andThen(effect)),
-            (previous) =>
-              Effect.sync(() => {
-                if (previous.builder === undefined) delete process.env.BUILDX_BUILDER;
-                else process.env.BUILDX_BUILDER = previous.builder;
-                if (previous.attestations === undefined)
-                  delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
-                else process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = previous.attestations;
-              }),
           ),
         () => docker.run(["buildx", "rm", "--force", name]).pipe(Effect.orDie),
       );
