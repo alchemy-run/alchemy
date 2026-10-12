@@ -28,6 +28,7 @@ import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { mergeWorkerContainers } from "../Containers/ContainerConfiguration.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -3449,9 +3450,16 @@ export const LiveWorkerProvider = () =>
         // Compute delete-class candidates. Candidates are validated against
         // observed namespace ownership below — a class may already have been
         // transferred to another script by its new host's deploy.
+        // Several bindings may name one class (e.g. two Containers sharing a
+        // Durable Object class): a class stays while any binding hosts it.
+        const currentDoClasses = new Set(currentDoBindings.map((binding) => binding.className));
         const deletedClassCandidates: string[] = [];
         for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
-          if (!currentDoClassNameByLogicalId[logicalId]) {
+          if (
+            !currentDoClassNameByLogicalId[logicalId] &&
+            !currentDoClasses.has(className) &&
+            !deletedClassCandidates.includes(className)
+          ) {
             deletedClassCandidates.push(className);
           }
         }
@@ -3469,7 +3477,9 @@ export const LiveWorkerProvider = () =>
               "className" in oldBinding &&
               oldBinding.className &&
               ownedLocally &&
-              !currentDoBindings.some((binding) => binding.bindingName === oldBinding.name)
+              !currentDoBindings.some((binding) => binding.bindingName === oldBinding.name) &&
+              !currentDoClasses.has(oldBinding.className) &&
+              !deletedClassCandidates.includes(oldBinding.className)
             ) {
               deletedClassCandidates.push(oldBinding.className);
             }
@@ -3607,14 +3617,25 @@ export const LiveWorkerProvider = () =>
         }
 
         // Collect container-backed classes so we can send container metadata.
-        // `name` and `images` are only set for Durable Object-managed applications.
-        const containerClasses = new Map(
-          bindings.flatMap((b) =>
-            (b.data.containers ?? []).map(
-              ({ className, name, images }) => [className, { className, name, images }] as const,
-            ),
+        // A Durable Object-managed class merges the images of every bound
+        // Container under one entry; `name` and `images` are only set for it.
+        const containerClasses = (yield* mergeWorkerContainers(
+          bindings.flatMap((b) => b.data.containers ?? []),
+        )).map(({ className, name, images }) => ({ className, name, images }));
+
+        // Classes the deployed script hosts locally, by migration tag or by
+        // an observed local Durable Object binding.
+        const deployedDoClasses = new Set([
+          ...Object.values(oldDoClassNameByLogicalId),
+          ...oldBindings.flatMap((old) =>
+            old.type === "durable_object_namespace" &&
+            "className" in old &&
+            old.className &&
+            (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+              ? [old.className]
+              : [],
           ),
-        );
+        ]);
 
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
@@ -3653,6 +3674,24 @@ export const LiveWorkerProvider = () =>
               previousClassName = observed.className;
             }
           }
+          // Another binding already hosts this class on the deployed script
+          // (several bindings may name one class): the class exists, so a
+          // binding added for it creates nothing.
+          if (
+            (!previousClassName || previousClassName !== binding.className) &&
+            deployedDoClasses.has(binding.className)
+          ) {
+            continue;
+          }
+          // A logical id that moved to another class while its old class is
+          // still hosted by another binding is a new class, not a rename.
+          if (
+            previousClassName !== undefined &&
+            previousClassName !== binding.className &&
+            currentDoClasses.has(previousClassName)
+          ) {
+            previousClassName = undefined;
+          }
           if (!previousClassName) {
             // A class new to this script is a host move when the declaration
             // says so: `transferredFrom` lists the former host(s) — moves
@@ -3685,9 +3724,17 @@ export const LiveWorkerProvider = () =>
             }
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
-            // Durable Objects require it.
-            newSqliteClasses.push(binding.className);
-          } else if (previousClassName !== binding.className) {
+            // Durable Objects require it. Several bindings may name one class
+            // (e.g. two Containers sharing a class); create it once.
+            if (!newSqliteClasses.includes(binding.className)) {
+              newSqliteClasses.push(binding.className);
+            }
+          } else if (
+            previousClassName !== binding.className &&
+            !renamedClasses.some(
+              (rename) => rename.from === previousClassName && rename.to === binding.className,
+            )
+          ) {
             renamedClasses.push({ from: previousClassName, to: binding.className });
           }
         }
@@ -3732,7 +3779,7 @@ export const LiveWorkerProvider = () =>
         );
         const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
 
-        const metadataContainers = [...containerClasses.values()];
+        const metadataContainers = containerClasses;
 
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);

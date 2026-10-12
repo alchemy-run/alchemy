@@ -50,6 +50,7 @@ import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
+import { mergeWorkerContainers } from "../Containers/ContainerConfiguration.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -361,6 +362,7 @@ export const LocalWorkerProvider = () =>
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const containerRows: NonNullable<Worker["Binding"]["containers"]> = [];
         const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
           if (data.env) Object.assign(boundEnv, data.env);
@@ -415,28 +417,28 @@ export const LocalWorkerProvider = () =>
               };
             }
           }
-          if (data.containers) {
-            const toRuntimeImage = (image: DevContainerImage) => ({
-              ...image,
-              env: unwrapRedacted(image.env),
-            });
-            for (const container of data.containers) {
-              if (container.devImages !== undefined) {
-                // Durable Object-managed: named images, selected at start().
-                const images: Record<string, RuntimeContainerImage> = {};
-                for (const [name, image] of Object.entries(container.devImages)) {
-                  images[name] = toRuntimeImage(image);
-                }
-                containers[container.className] = { images };
-              } else if (container.dev) {
-                containers[container.className] = toRuntimeImage(container.dev);
-              } else {
-                return yield* Effect.die(`Container ${container.className} has no dev image`);
-              }
-              if (container.hash !== undefined) {
-                containerHashes[container.className] = container.hash;
-              }
+          if (data.containers) containerRows.push(...data.containers);
+        }
+        // A Durable Object-managed class merges the images of every bound
+        // Container (keyed by Container id); a fleet class has one image.
+        const toRuntimeImage = (image: DevContainerImage) => ({
+          ...image,
+          env: unwrapRedacted(image.env),
+        });
+        for (const container of yield* mergeWorkerContainers(containerRows)) {
+          if (container.devImages !== undefined) {
+            const images: Record<string, RuntimeContainerImage> = {};
+            for (const [key, image] of Object.entries(container.devImages)) {
+              images[key] = toRuntimeImage(image);
             }
+            containers[container.className] = { images };
+          } else if (container.dev) {
+            containers[container.className] = toRuntimeImage(container.dev);
+          } else {
+            return yield* Effect.die(`Container ${container.className} has no dev image`);
+          }
+          if (container.hash !== undefined) {
+            containerHashes[container.className] = container.hash;
           }
         }
         for (const [className, dev] of Object.entries(containers)) {

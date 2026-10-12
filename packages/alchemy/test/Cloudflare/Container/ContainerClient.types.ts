@@ -2,38 +2,32 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
-import type { InputProps } from "@/Input.ts";
 import type { Output } from "@/Output.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 
 type Assert<T extends true> = T;
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-// `yield* Container` returns the handle; its `images` are typed by declaration.
-type ImagesOf<T> =
-  T extends Effect.Effect<infer Handle, infer _E, infer _R>
-    ? Handle extends { readonly images: Effect.Effect<infer Images, infer _IE, infer _IR> }
-      ? Images
-      : never
-    : never;
+// `yield* Container` returns the handle.
+type HandleOf<T> = T extends Effect.Effect<infer Handle, infer _E, infer _R> ? Handle : never;
 
-class Sandbox extends Cloudflare.Container<Sandbox>()("SandboxTypes", {
+// One Container is one image: the handle exposes its own image reference.
+class Node extends Cloudflare.Container<Node>()("NodeTypes", {
   schedulingPolicy: "durable_object",
-  images: {
-    shell: { image: "alpine:3.21" },
-    node: { image: "node:22-slim" },
-  },
+  image: "node:24-slim",
 }) {}
 
-const sandbox = Sandbox;
-type _ClassImageNames = Assert<
-  Equal<ImagesOf<typeof sandbox>, Readonly<Record<"shell" | "node", string>>>
->;
-
-const direct = Cloudflare.Container("DirectTypes", {
+class Python extends Cloudflare.Container<Python>()("PythonTypes", {
   schedulingPolicy: "durable_object",
-  images: { shell: { image: "alpine:3.21" } },
-});
-type _DirectImageNames = Assert<Equal<ImagesOf<typeof direct>, Readonly<Record<"shell", string>>>>;
+  context: "./python",
+}) {}
+
+type _OwnImage = Assert<
+  Equal<
+    HandleOf<typeof Node>["image"],
+    Effect.Effect<string, Cloudflare.Containers.ContainerError, RuntimeContext>
+  >
+>;
 
 class ImageSource extends Context.Service<ImageSource, { image: string }>()(
   "container/types/ImageSource",
@@ -43,79 +37,55 @@ class Effectful extends Cloudflare.Container<Effectful>()(
   "EffectfulTypes",
   Effect.gen(function* () {
     const { image } = yield* ImageSource;
-    return { schedulingPolicy: "durable_object", images: { shell: { image } } };
+    return { schedulingPolicy: "durable_object" as const, image };
   }),
 ) {}
 
-const effectful = Effectful;
-type _EffectImageNames = Assert<
-  Equal<ImagesOf<typeof effectful>, Readonly<Record<"shell", string>>>
->;
 type _PreservesPropsRequirements = Assert<
-  Equal<Extract<Effect.Services<typeof effectful>, ImageSource>, ImageSource>
+  Equal<Extract<Effect.Services<typeof Effectful>, ImageSource>, ImageSource>
 >;
 
 const config = Cloudflare.Container("ConfigTypes", {
   schedulingPolicy: "durable_object",
-  images: Config.succeed({ shell: { image: "alpine:3.21" } }),
+  image: Config.succeed("alpine:3.21"),
 });
-type _ConfigImageNames = Assert<Equal<ImagesOf<typeof config>, Readonly<Record<"shell", string>>>>;
 
-const output = (images: Output<{ shell: Cloudflare.Containers.ContainerImageProps }>) =>
-  Cloudflare.Container("OutputTypes", {
-    schedulingPolicy: "durable_object",
-    images,
-  });
-type _OutputImageNames = Assert<
-  Equal<ImagesOf<ReturnType<typeof output>>, Readonly<Record<"shell", string>>>
->;
+const output = (image: Output<string>) =>
+  Cloudflare.Container("OutputTypes", { schedulingPolicy: "durable_object", image });
 
-const dynamic = (images: Record<string, Cloudflare.Containers.ContainerImageProps>) =>
-  Cloudflare.Container("DynamicTypes", {
-    schedulingPolicy: "durable_object",
-    images,
-  });
-type _DynamicImagesMayBeMissing = Assert<
-  Equal<ImagesOf<ReturnType<typeof dynamic>>, Readonly<Record<string, string | undefined>>>
->;
-
-const optional = (props: InputProps<Cloudflare.Containers.DurableObjectContainerProps>) =>
-  Cloudflare.Container("OptionalTypes", props);
-type _OptionalImagesMayBeMissing = Assert<
-  Equal<ImagesOf<ReturnType<typeof optional>>, Readonly<Record<string, string | undefined>>>
->;
-
-const optionalKey = (images: { shell?: Cloudflare.Containers.ContainerImageProps }) =>
-  Cloudflare.Container("OptionalKeyTypes", {
-    schedulingPolicy: "durable_object",
-    images,
-  });
-type _OptionalImageKeyMayBeMissing = Assert<
-  Equal<ImagesOf<ReturnType<typeof optionalKey>>, Readonly<Record<string, string | undefined>>>
->;
-
-const noImages = Cloudflare.Container("NoImageTypes", { schedulingPolicy: "durable_object" });
-type _OmittedImagesMayBeMissing = Assert<
-  Equal<ImagesOf<typeof noImages>, Readonly<Record<string, string | undefined>>>
->;
+const noImage = Cloudflare.Container("NoImageTypes", { schedulingPolicy: "durable_object" });
 
 export const imageTypes = Effect.gen(function* () {
-  const client = yield* sandbox;
-  const images = yield* client.images;
-  yield* client.start({ image: images.shell, enableInternet: false });
-  // @ts-expect-error Only declared image names are available.
-  images.shel;
-
-  const dynamicClient = yield* dynamic({});
-  // @ts-expect-error An arbitrary image name may be absent.
-  const missing: string = (yield* dynamicClient.images).shell;
-  void missing;
+  const node = yield* Node;
+  const python = yield* Python;
+  // start() starts the Container's own image by default.
+  yield* node.start({ instance: "lite", entrypoint: ["sleep", "infinity"], enableInternet: false });
+  if (yield* node.running) yield* node.destroy();
+  yield* python.start({ image: yield* python.image, enableInternet: false });
+  // @ts-expect-error The named-image map was removed; one Container is one image.
+  void node.images;
 });
+
+// Every image source accepts Inputs, and an image is optional.
+export const declarations = [config, output, noImage];
+
+export const removedImagesProp: Cloudflare.Containers.DurableObjectContainerProps = {
+  schedulingPolicy: "durable_object",
+  // @ts-expect-error Declare one Container per image instead of an image map.
+  images: { shell: { image: "alpine:3.21" } },
+};
 
 export const invalidInstanceType: Cloudflare.Containers.DurableObjectContainerProps = {
   schedulingPolicy: "durable_object",
   // @ts-expect-error Instance sizes are selected by start(), not at deployment.
   instanceType: "lite",
+};
+
+export const settings: Cloudflare.Containers.DurableObjectContainerProps = {
+  schedulingPolicy: "durable_object",
+  image: "alpine:3.21",
+  ssh: { enabled: true },
+  observability: { logs: { enabled: true } },
 };
 
 type ClashingShape = { exec: (cmd: string) => Effect.Effect<string> };

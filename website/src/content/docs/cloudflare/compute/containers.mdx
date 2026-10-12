@@ -565,6 +565,110 @@ can be bound this way. An effectful (`main`) container's runtime is
 provided by its `.make()` Layer, which needs an Effect-native
 Durable Object host.
 
+## Several images in one Durable Object
+
+A Durable Object can choose its image at runtime. Declare one Container
+per image with `schedulingPolicy: "durable_object"`:
+
+```typescript
+export class Node extends Cloudflare.Container<Node>()("Node", {
+  schedulingPolicy: "durable_object",
+  image: "node:24-slim",
+}) {}
+
+export class Python extends Cloudflare.Container<Python>()("Python", {
+  schedulingPolicy: "durable_object",
+  dockerfile: "./python/Dockerfile",
+  context: "./python",
+}) {}
+```
+
+One Container is one image: `image` copies a registry image, and
+`context`/`dockerfile` builds one. Alchemy publishes it to Cloudflare's
+registry and prepares it before the Worker is uploaded.
+
+Bind both in the Durable Object. Each handle's `start()` starts its own
+image:
+
+```typescript
+export class Agent extends Cloudflare.DurableObject<Agent>()(
+  "Agent",
+  Effect.gen(function* () {
+    const node = yield* Node;
+    const python = yield* Python;
+    return Effect.succeed({
+      run: (cmd: string[]) =>
+        Effect.gen(function* () {
+          yield* node.start({
+            instance: "lite",
+            entrypoint: ["sleep", "infinity"],
+            enableInternet: false,
+          });
+          return yield* (yield* node.exec(cmd)).output();
+        }).pipe(Effect.scoped),
+    });
+  }),
+) {}
+```
+
+Cloudflare gives a Durable Object class one container application, and
+each object one container. Every binding adds its image to the class's
+application under the Container's id. The handles control the same
+container, so start one image at a time and `destroy()` before you
+switch.
+
+Application-wide settings — `ssh`, `authorizedKeys`, and
+`observability` — can be declared on any of the class's Containers.
+Two Containers that declare different values fail the deploy with
+`ContainerApplicationSettingsConflict`.
+
+## Several images on an async Worker
+
+A plain Durable Object class binds the same Containers through `env`.
+Give each one the class's name:
+
+```typescript
+// alchemy.run.ts
+const Node = Cloudflare.Container("Node", {
+  className: "Agent",
+  schedulingPolicy: "durable_object",
+  image: "node:24-slim",
+});
+
+const Python = Cloudflare.Container("Python", {
+  className: "Agent",
+  schedulingPolicy: "durable_object",
+  image: "python:3.13-slim",
+});
+
+export const Worker = Cloudflare.Worker("App", {
+  main: "./src/worker.ts",
+  env: { NODE: Node, PYTHON: Python },
+});
+```
+
+Each `env` entry binds the `Agent` namespace. The class finds each
+image in `ctx.container.images` under its Container's id:
+
+```typescript
+// src/worker.ts
+import { DurableObject } from "cloudflare:workers";
+
+export class Agent extends DurableObject {
+  async run(cmd: string[]) {
+    const container = this.ctx.container!;
+    if (!container.running) {
+      container.start({
+        image: container.images.Node,
+        entrypoint: ["sleep", "infinity"],
+        enableInternet: false,
+      });
+    }
+    return (await container.exec(cmd)).output();
+  }
+}
+```
+
 ## ContainerApplication
 
 Under the hood every container is backed by a

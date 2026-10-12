@@ -6,13 +6,26 @@ import * as Cloudflare from "@/Cloudflare";
 import { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import { NativeImages } from "./images.ts";
 
-export class NativeImage extends Cloudflare.Container<NativeImage>()(
-  "NativeImage",
-  Effect.map(NativeImages, (images) => ({
-    schedulingPolicy: "durable_object",
-    images,
+/** The Durable Object's first image. */
+export class NativeShell extends Cloudflare.Container<NativeShell>()(
+  "NativeShell",
+  Effect.map(NativeImages, ({ shell }) => ({
+    schedulingPolicy: "durable_object" as const,
+    image: shell,
   })),
 ) {}
+
+/** The Durable Object's second image; without one, the class has only Shell's. */
+export class NativeTools extends Cloudflare.Container<NativeTools>()(
+  "NativeTools",
+  Effect.map(NativeImages, ({ tools }) => ({
+    schedulingPolicy: "durable_object" as const,
+    image: tools,
+  })),
+) {}
+
+/** Route names for the two images. */
+export type ImageName = "shell" | "tools";
 
 const SLEEP_FOREVER = ["sleep", "infinity"];
 const SEED_FILE = ["sh", "-c", "printf writable > /redeploy-marker"];
@@ -35,8 +48,13 @@ interface InterceptExports {
 export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
   "NativeObject",
   Effect.gen(function* () {
-    const container = yield* NativeImage;
+    // Both Containers share this object's one container instance; each
+    // handle's start() starts its own image.
+    const handles = { shell: yield* NativeShell, tools: yield* NativeTools };
+    const container = handles.shell;
     const state = yield* DurableObjectState;
+    /** The image map Cloudflare exposes to this object, keyed by Container id. */
+    const imageMap = Effect.sync(() => state.container?.images ?? {});
     /** Changes whenever the runtime re-creates this object. */
     let incarnation: string | undefined;
 
@@ -49,13 +67,8 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     const run = (cmd: string[]) =>
       Effect.scoped(Effect.flatMap(container.exec(cmd), (child) => child.output()));
 
-    const startImage = Effect.fn(function* (name: string) {
-      const images = yield* container.images;
-      yield* container.start({
-        image: images[name],
-        entrypoint: SLEEP_FOREVER,
-        enableInternet: false,
-      });
+    const startImage = Effect.fn(function* (name: ImageName) {
+      yield* handles[name].start({ entrypoint: SLEEP_FOREVER, enableInternet: false });
     });
 
     /** Snapshot a file, prove a fresh start lacks it, then restore it. */
@@ -140,9 +153,7 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         return { stdout: chunks.map((chunk) => new TextDecoder().decode(chunk)).join("") };
       }
       if (yield* container.running) yield* container.destroy();
-      const images = yield* container.images;
       yield* container.start({
-        image: images.shell,
         entrypoint: ["sh", "-c", "exit 3"],
         enableInternet: false,
       });
@@ -159,7 +170,7 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         return {
           id: state.id.toString(),
           incarnation,
-          images: yield* container.images,
+          images: yield* imageMap,
           stored: yield* storedMarker,
         };
       }),
@@ -170,7 +181,7 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
           return (env as { IMAGE_REVISION: string }).IMAGE_REVISION;
         }),
       /** Report which image is running and whether the seeded file survived. */
-      probe: Effect.fn(function* (options: { seed: boolean; restart: boolean; image: string }) {
+      probe: Effect.fn(function* (options: { seed: boolean; restart: boolean; image: ImageName }) {
         if (options.restart) yield* container.destroy();
 
         const wasRunning = yield* container.running;
@@ -184,7 +195,7 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         const [release, file] = decode(output.stdout).split("\n");
         return {
           wasRunning,
-          configured: (yield* container.images)[options.image],
+          configured: yield* handles[options.image].image,
           inspected: (yield* container.inspect())?.image,
           release,
           file,
@@ -193,11 +204,12 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
       }),
       // The Durable Object's own RPC can be named exec; it is separate from
       // the container handle's exec.
-      exec: Effect.fn(function* (mode: "exec" | "stdin" | "snapshot" = "exec") {
+      exec: Effect.fn(function* (
+        mode: "exec" | "stdin" | "snapshot" = "exec",
+        image: ImageName = "shell",
+      ) {
         if (!(yield* container.running)) {
-          const images = yield* container.images;
-          yield* container.start({
-            image: images.shell,
+          yield* handles[image].start({
             entrypoint: SLEEP_FOREVER,
             enableInternet: false,
             instance: "lite",
@@ -212,11 +224,13 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         } else {
           output = yield* run(["sh", "-c", "printf native; exit 7"]);
         }
+        const release = yield* run(["cat", "/etc/alpine-release"]);
 
         return {
           stdout: decode(output.stdout),
           exitCode: output.exitCode,
-          images: Object.keys(yield* container.images),
+          release: decode(release.stdout).trim(),
+          images: Object.keys(yield* imageMap).sort(),
         };
       }),
     });

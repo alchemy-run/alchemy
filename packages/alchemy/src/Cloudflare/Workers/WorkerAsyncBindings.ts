@@ -19,7 +19,13 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
-import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
+import {
+  containerApplicationSettings,
+  durableObjectContainerBinding,
+  isDurableObjectContainerResource,
+  workerContainerBinding,
+} from "../Containers/ContainerConfiguration.ts";
+import { declareDurableObjectApplication } from "../Containers/DurableObjectApplication.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -365,22 +371,37 @@ const bindContainerClass = Effect.fn(function* (
   // Container's logical id match (`Sandbox: Container("Sandbox", …)`). The
   // Worker then uploads the Container declaration itself as a `json` binding
   // and `env.NAME` is not a DO namespace at runtime.
-  yield* resource.bind`${bindingName}`({
-    bindings: [
-      {
-        type: "durable_object_namespace",
-        name: bindingName,
-        className,
+  const namespaceId = resource.durableObjectNamespaces.pipe(
+    Output.map((namespaces) => namespaces?.[className]),
+  );
+  const namespaceBinding = {
+    type: "durable_object_namespace" as const,
+    name: bindingName,
+    className,
+  };
+  if (isDurableObjectContainerResource(application)) {
+    // Every Durable Object-managed Container naming this class adds its image
+    // to the class's one application, keyed by the Container's id.
+    const classApplication = yield* declareDurableObjectApplication(resource, className);
+    yield* resource.bind`${bindingName}`({
+      bindings: [namespaceBinding],
+      containers: [durableObjectContainerBinding(className, classApplication, application)],
+    });
+    yield* classApplication.bind`${application.LogicalId}`({
+      durableObjects: { namespaceId },
+      container: {
+        id: application.LogicalId,
+        settings: containerApplicationSettings(application),
       },
-    ],
+    });
+    return;
+  }
+  yield* resource.bind`${bindingName}`({
+    bindings: [namespaceBinding],
     containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
-    durableObjects: {
-      namespaceId: resource.durableObjectNamespaces.pipe(
-        Output.map((namespaces) => namespaces?.[className]),
-      ),
-    },
+    durableObjects: { namespaceId },
   });
 });
 

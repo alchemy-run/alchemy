@@ -13,7 +13,7 @@ The examples use this container:
 // src/Sandbox.ts
 export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
   schedulingPolicy: "durable_object",
-  images: { node: { image: "node:24-slim" } },
+  image: "node:24-slim",
 }) {}
 ```
 
@@ -63,22 +63,22 @@ since the last request starts again on the next one.
 The options only apply when `start` actually starts the container.
 To run with different options, stop the container first.
 
-## Choose an image per start
+## Choose a size per start
 
-A container with `schedulingPolicy: "durable_object"` picks its image
-and size when it starts:
+A container with `schedulingPolicy: "durable_object"` picks its size
+when it starts:
 
 ```typescript
-const images = yield* sandbox.images;
 yield* sandbox.start({
-  image: images.node,
   instance: "standard-1",
   entrypoint: ["sleep", "infinity"],
   enableInternet: false,
 });
 ```
 
-`images` holds one reference per image you declared, typed by name.
+`start` starts the Container's own image. To run another image in the
+same Durable Object, bind another Container — see
+[Several images in one Durable Object](/cloudflare/compute/containers#several-images-in-one-durable-object).
 
 ## Start it from a Layer
 
@@ -213,13 +213,14 @@ Pass the snapshot to `start` to begin from that filesystem:
 const snapshot = yield* state.storage.get<Cloudflare.Containers.ContainerSnapshot>("snapshot");
 
 yield* sandbox.start({
-  ...(snapshot ? { containerSnapshot: snapshot } : { image: images.node }),
+  ...(snapshot ? { containerSnapshot: snapshot } : {}),
   entrypoint: ["sleep", "infinity"],
   enableInternet: false,
 });
 ```
 
-The entrypoint starts fresh. A snapshot can start any number of
+Without a snapshot, `start` uses the Container's image. The entrypoint
+starts fresh. A snapshot can start any number of
 containers, and expires after 30 days without a restore.
 
 ## Snapshot before you stop

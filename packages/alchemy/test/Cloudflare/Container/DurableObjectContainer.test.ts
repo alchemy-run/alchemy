@@ -38,8 +38,24 @@ interface Metadata {
 interface ExecResult {
   stdout: string;
   exitCode: number;
+  /** `/etc/alpine-release` of the running image, "" on non-Alpine images. */
+  release: string;
+  /** Sorted keys of `ctx.container.images`: the ids of the class's Containers. */
   images: string[];
 }
+
+const EFFECT_IMAGES = ["NativeShell", "NativeTools"];
+const ASYNC_IMAGES = ["AsyncShell", "AsyncTools"];
+
+/** A failed deploy's cause mentions the typed settings conflict. */
+const expectSettingsConflict = (exit: Exit.Exit<unknown, unknown>) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) {
+    const pretty = Cause.pretty(exit.cause);
+    expect(pretty).toContain("ContainerApplicationSettingsConflict");
+    expect(pretty).toContain("declare different 'observability'");
+  }
+};
 
 /** GET a route; a non-2xx response fails with its status and body. */
 const getText = (baseUrl: string, path: string) =>
@@ -62,6 +78,24 @@ const within = (path: string, duration: `${number} seconds`) =>
     orElse: () => Effect.fail(new Error(`GET ${path} timed out after ${duration}`)),
   });
 
+/**
+ * A redeploy reaches requests asynchronously (a new local workerd, or a new
+ * Worker version on Cloudflare). Wait until the object observes the deployed
+ * image set, which the fixtures expose as their `IMAGE_REVISION`.
+ */
+const waitForRevision = (url: string, images: object, query = "") => {
+  const expected = JSON.stringify(images);
+  return getText(url, `/revision${query}`).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (revision) => revision === expected,
+      times: 20,
+    }),
+    within(`/revision${query}`, "30 seconds"),
+    Effect.tap((revision) => Effect.sync(() => expect(revision).toBe(expected))),
+  );
+};
+
 /** A fresh workers.dev URL needs a few seconds before it routes requests. */
 const waitUntilReady = (url: string) =>
   getText(url, "/ready").pipe(
@@ -79,6 +113,19 @@ const probe = (url: string, query = "") =>
 
 const readMetadata = (url: string, query = "") =>
   getJson<Metadata>(url, `/metadata${query}`).pipe(within(`/metadata${query}`, "10 seconds"));
+
+/** The image keys a Worker version uploaded for one Durable Object class. */
+const uploadedImageKeys = Effect.fn(function* (
+  accountId: string,
+  scriptName: string,
+  className: string,
+) {
+  const containers = yield* uploadedContainers(accountId, scriptName);
+  const entries = containers?.filter((container) => container.className === className) ?? [];
+  // One class has exactly one merged entry.
+  expect(entries).toHaveLength(1);
+  return Object.keys(entries[0]?.images ?? {}).sort();
+});
 
 /** The `containers` metadata of a Worker's most recently uploaded version. */
 const uploadedContainers = Effect.fn(function* (accountId: string, scriptName: string) {
@@ -110,6 +157,9 @@ for (const dev of [true, false]) {
     `Durable Object containers (dev: ${dev})`,
     {
       tags: ["provider:cloudflare", "provider:cloudflare:container", dev ? "local" : "live"],
+      // The file's dev sidecar keys running Workers by FQN, so concurrent dev
+      // stacks declaring the same Worker would restart each other's instance.
+      sequential: dev,
     },
     () => {
       const { test } = Test.make({
@@ -118,7 +168,7 @@ for (const dev of [true, false]) {
         stage: `${Test.defaultStage()}-native-${dev ? "local" : "live"}`,
       });
 
-      // TODO: Investigate image-map propagation after same-name image updates.
+      // TODO: Investigate image-map propagation after same-key image updates.
       // Live Alpine 3.21 -> 3.20 updates uploaded the correct Worker metadata,
       // but existing DOs still exposed the old ctx.container.images map even
       // after observing the new environment revision. Fresh DOs were mixed:
@@ -129,20 +179,14 @@ for (const dev of [true, false]) {
       // publication. Local Alpine replacement also passed. No root cause yet;
       // eviction alone is not a reliable remedy. Keep these assertions intact.
       (dev ? test.provider : test.provider.todo)(
-        "preserves state across redeploys and selects replaced named images",
+        "preserves state across redeploys and starts each Container's replaced image",
         (stack) =>
           Effect.gen(function* () {
             yield* stack.destroy();
 
-            const initialImages = {
-              shell: { image: "alpine:3.21" },
-              tools: { image: "alpine:3.20" },
-            };
-            // Swap the two images under the same names.
-            const replacementImages = {
-              shell: { image: "alpine:3.20" },
-              tools: { image: "alpine:3.21" },
-            };
+            const initialImages = { shell: "alpine:3.21", tools: "alpine:3.20" };
+            // Swap the two Containers' images.
+            const replacementImages = { shell: "alpine:3.20", tools: "alpine:3.21" };
             const stackWith = (images: typeof initialImages) =>
               nativeStack.pipe(Effect.provideService(NativeImages, images));
 
@@ -164,7 +208,7 @@ for (const dev of [true, false]) {
 
             const verifyReplacedImages = Effect.fn(function* (
               worker: { url: string | undefined; workerName: string },
-              application: Cloudflare.Containers.ContainerApplication["Attributes"],
+              shellImage: string | undefined,
             ) {
               const url = worker.url!;
 
@@ -182,13 +226,9 @@ for (const dev of [true, false]) {
 
               const existing = yield* readMetadata(url);
               const fresh = yield* readMetadata(url, "?object=fresh-after-update");
-              const uploaded = dev
-                ? undefined
-                : yield* uploadedContainers(application.accountId, worker.workerName);
               yield* Effect.logInfo("Image metadata before eviction", {
                 worker: worker.workerName,
-                expected: application.images,
-                uploaded,
+                expected: shellImage,
                 existing,
                 fresh,
               });
@@ -202,10 +242,6 @@ for (const dev of [true, false]) {
                   times: 3,
                 }),
               );
-              yield* Effect.logInfo("Image metadata after eviction", {
-                worker: worker.workerName,
-                evicted,
-              });
               expect(evicted.id).toBe(existing.id);
               expect(evicted.incarnation).not.toBe(existing.incarnation);
               expect(evicted.stored).toBe("durable");
@@ -216,10 +252,9 @@ for (const dev of [true, false]) {
               // Local hot reload restarts workerd, so only production keeps
               // the running container.
               const beforeRestart = yield* probe(url);
-              yield* Effect.logInfo("Container replacement before restart", beforeRestart);
               expect(beforeRestart.stored).toBe("durable");
               if (!dev) {
-                expect(beforeRestart.configured).toBe(application.images?.shell);
+                expect(beforeRestart.configured).toBe(shellImage);
                 expect(beforeRestart).toMatchObject({
                   wasRunning: true,
                   release: expect.stringMatching(/^3\.21\./),
@@ -228,9 +263,8 @@ for (const dev of [true, false]) {
                 });
               }
 
-              // A restart picks up the replaced image under the same name.
+              // A restart picks up the Container's replaced image.
               const afterRestart = yield* probe(url, "?restart");
-              yield* Effect.logInfo("Container replacement after restart", afterRestart);
               if (!dev) {
                 expect(afterRestart.inspected).toBe(afterRestart.configured);
               }
@@ -266,25 +300,43 @@ for (const dev of [true, false]) {
 
               // Replacing images exercises external-image publication on update.
               const changed = yield* stack.deploy(stackWith(replacementImages));
-              for (const [before, after] of [
-                [initial.application, changed.application],
-                [initial.asyncApplication, changed.asyncApplication],
-              ] as const) {
-                expect(after.applicationId).toBe(before.applicationId);
-                // Local bindings expose names; cloud bindings expose digests.
-                if (!dev) {
-                  expect(after.images?.shell).not.toBe(before.images?.shell);
-                  expect(after.images?.tools).not.toBe(before.images?.tools);
-                }
+              expect(changed.application.applicationId).toBe(initial.application.applicationId);
+              expect(changed.asyncApplication.applicationId).toBe(
+                initial.asyncApplication.applicationId,
+              );
+              // Local bindings expose Container ids; cloud bindings expose digests.
+              if (!dev) {
+                expect(changed.shell.image).not.toBe(initial.shell.image);
+                expect(changed.tools.image).not.toBe(initial.tools.image);
               }
               yield* Effect.all(
                 [
-                  verifyReplacedImages(changed.worker, changed.application),
-                  verifyReplacedImages(changed.asyncWorker, changed.asyncApplication),
+                  verifyReplacedImages(changed.worker, changed.shell.image),
+                  verifyReplacedImages(changed.asyncWorker, changed.asyncShell.image),
                 ],
                 { concurrency: 2 },
               );
             }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+
+      // Settings conflicts fail the plan, before anything is published.
+      test.provider(
+        "rejects Containers of one class that declare different application settings",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const conflicting = yield* stack
+              .deploy(
+                settingsStack(
+                  { observability: { logs: { enabled: true } } },
+                  { observability: { logs: { enabled: false } } },
+                ),
+              )
+              .pipe(Effect.exit);
+            expectSettingsConflict(conflicting);
+            yield* stack.destroy();
           }),
         { timeout: 120_000, retry: 0 },
       );
@@ -297,20 +349,27 @@ for (const dev of [true, false]) {
           });
 
         test.provider(
-          "manages SSH, authorized keys, and observability on the application",
+          "manages SSH, authorized keys, and observability declared by any of the class's Containers",
           (stack) =>
             Effect.gen(function* () {
               yield* stack.destroy();
               yield* Effect.gen(function* () {
+                // `ssh`/`authorizedKeys` on one Container, `observability` on
+                // the other: the class's application merges both.
                 const declared = yield* stack.deploy(
-                  settingsStack({
-                    ssh: { enabled: true, port: 22 },
-                    authorizedKeys: [{ name: "alchemy-test", publicKey: TEST_SSH_PUBLIC_KEY }],
-                    observability: { logs: { enabled: true } },
-                  }),
+                  settingsStack(
+                    {
+                      ssh: { enabled: true, port: 22 },
+                      authorizedKeys: [{ name: "alchemy-test", publicKey: TEST_SSH_PUBLIC_KEY }],
+                    },
+                    { observability: { logs: { enabled: true } } },
+                  ),
                 );
                 const application = declared.application;
                 const withSettings = yield* observe(application);
+                expect(withSettings.id).toBe(
+                  declared.worker.durableObjectNamespaces.NativeAsyncObject,
+                );
                 expect(withSettings.configuration.wranglerSsh).toMatchObject({
                   enabled: true,
                   port: 22,
@@ -338,7 +397,7 @@ for (const dev of [true, false]) {
                 expect((yield* observe(application)).configuration.wranglerSsh?.enabled).toBe(true);
               }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
             }),
-          { timeout: 120_000, retry: 0 },
+          { timeout: 180_000, retry: 0 },
         );
 
         test.provider(
@@ -367,17 +426,11 @@ for (const dev of [true, false]) {
         );
       }
 
-      for (const scenario of ["execution", "named images"] as const) {
-        // TODO: Live image-map updates are inconsistent. Adding an image can
-        // leave it unavailable; removing images can retain the old map, even
-        // with correct active-version metadata and the new Worker revision.
-        // Fresh DOs and code changes do not reliably avoid this. Keep local
-        // coverage enabled while the live propagation behavior is investigated.
-        const run = !dev && scenario === "named images" ? test.provider.todo : test.provider;
-        run(
+      for (const scenario of ["execution", "membership"] as const) {
+        test.provider(
           scenario === "execution"
-            ? "deploys native Effect and async containers without fleet settings"
-            : "adds and removes named images without replacing applications",
+            ? "starts each bound Container's image from Effect and async Durable Objects"
+            : "adds and removes a class's Containers without replacing its application",
           (stack) =>
             Effect.gen(function* () {
               yield* stack.destroy();
@@ -407,24 +460,37 @@ for (const dev of [true, false]) {
                 const deployed = yield* stack.deploy(nativeStack);
 
                 if (scenario === "execution") {
-                  for (const worker of [deployed.asyncWorker, deployed.worker]) {
+                  for (const [worker, images] of [
+                    [deployed.asyncWorker, ASYNC_IMAGES],
+                    [deployed.worker, EFFECT_IMAGES],
+                  ] as const) {
                     const url = worker.url!;
                     yield* waitUntilReady(url);
+                    // Each handle's start() starts its own Container's image.
                     expect(yield* exec(url, "/exec")).toEqual({
                       stdout: "native",
                       exitCode: 7,
-                      images: ["shell"],
+                      release: expect.stringMatching(/^3\.21\./),
+                      images,
+                    });
+                    expect(yield* exec(url, "/image/tools")).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      release: expect.stringMatching(/^3\.20\./),
+                      images,
                     });
                     expect(yield* exec(url, "/stdin")).toEqual({
                       stdout: "native stdin",
                       exitCode: 0,
-                      images: ["shell"],
+                      release: expect.stringMatching(/^3\.21\./),
+                      images,
                     });
                   }
                   expect(yield* exec(deployed.worker.url!, "/snapshot")).toEqual({
                     stdout: "persisted",
                     exitCode: 0,
-                    images: ["shell"],
+                    release: expect.stringMatching(/^3\.21\./),
+                    images: EFFECT_IMAGES,
                   });
 
                   // Closing an exec's scope kills the process; stdout streams;
@@ -444,6 +510,13 @@ for (const dev of [true, false]) {
                     stderr: "",
                   });
 
+                  // Containers own images, not applications.
+                  for (const container of [deployed.shell, deployed.tools, deployed.asyncShell]) {
+                    expect(container.applicationId).toEqual(
+                      dev ? expect.stringMatching(/^dev:/) : "",
+                    );
+                  }
+
                   if (dev) {
                     // Local emulation never creates a cloud application.
                     for (const application of [deployed.application, deployed.asyncApplication]) {
@@ -452,21 +525,43 @@ for (const dev of [true, false]) {
                   }
 
                   if (!dev) {
-                    // The applications exist without any fleet configuration.
-                    for (const application of [deployed.application, deployed.asyncApplication]) {
+                    // One application per class, attached to its namespace,
+                    // without any fleet configuration.
+                    for (const [application, worker, className] of [
+                      [deployed.application, deployed.worker, "NativeObject"],
+                      [deployed.asyncApplication, deployed.asyncWorker, "NativeAsyncObject"],
+                    ] as const) {
                       const observed = yield* Containers.getContainerApplication({
                         accountId: application.accountId,
                         applicationId: application.applicationId,
                       });
                       expect(observed.schedulingPolicy).toBe("durable_object");
+                      expect(observed.id).toBe(worker.durableObjectNamespaces[className]);
                       expect(observed.id).toBe(observed.durableObjects?.namespaceId);
+                      expect(observed.name).toBe(application.applicationName);
                       expect(observed.configuration.image).toBeUndefined();
                       expect(observed.maxInstances ?? undefined).toBeUndefined();
                     }
+                    // The uploaded Worker merges both Containers into the class's entry.
+                    expect(
+                      yield* uploadedImageKeys(
+                        deployed.application.accountId,
+                        deployed.worker.workerName,
+                        "NativeObject",
+                      ),
+                    ).toEqual(EFFECT_IMAGES);
+                    expect(
+                      yield* uploadedImageKeys(
+                        deployed.asyncApplication.accountId,
+                        deployed.asyncWorker.workerName,
+                        "NativeAsyncObject",
+                      ),
+                    ).toEqual(ASYNC_IMAGES);
                     expect(yield* exec(deployed.asyncWorker.url!, "/builtin")).toEqual({
                       stdout: "native",
                       exitCode: 7,
-                      images: ["shell"],
+                      release: "",
+                      images: ASYNC_IMAGES,
                     });
                   }
 
@@ -474,86 +569,94 @@ for (const dev of [true, false]) {
                   expect(unchanged.application.applicationId).toBe(
                     deployed.application.applicationId,
                   );
-                } else {
-                  // Adding a named image updates the Worker in place.
-                  const named = yield* stack.deploy(
-                    nativeStack.pipe(
-                      Effect.provideService(NativeImages, {
-                        shell: { image: "alpine:3.21" },
-                        tools: { image: "alpine:3.21" },
-                      }),
-                    ),
-                  );
-                  const imageNames = (images: object | null | undefined) =>
-                    Object.keys(images ?? {}).sort();
-                  expect(imageNames(named.asyncApplication.images)).toEqual(["shell", "tools"]);
-                  expect(imageNames(named.asyncApplication.devImages)).toEqual(["shell", "tools"]);
-                  if (!dev) {
-                    const containers = yield* uploadedContainers(
-                      named.asyncApplication.accountId,
-                      named.asyncWorker.workerName,
-                    );
-                    const uploaded = containers?.find(
-                      (container) => container.className === "NativeAsyncObject",
-                    );
-                    expect(imageNames(uploaded?.images)).toEqual(["shell", "tools"]);
-                  }
-                  expect(yield* exec(named.asyncWorker.url!, "/image/tools")).toEqual({
-                    stdout: "native",
-                    exitCode: 7,
-                    images: ["shell", "tools"],
-                  });
-
-                  // Removing every named image leaves only managed images.
-                  const updated = yield* stack.deploy(
-                    nativeStack.pipe(Effect.provideService(NativeImages, {})),
-                  );
-                  expect(updated.asyncApplication.applicationId).toBe(
+                  expect(unchanged.asyncApplication.applicationId).toBe(
                     deployed.asyncApplication.applicationId,
                   );
-                  expect(updated.asyncApplication.images).toEqual({});
+                } else {
+                  yield* waitUntilReady(deployed.asyncWorker.url!);
+                  expect(yield* exec(deployed.asyncWorker.url!, "/image/tools")).toMatchObject({
+                    release: expect.stringMatching(/^3\.20\./),
+                    images: ASYNC_IMAGES,
+                  });
+
+                  // Removing a Container drops its image from the class.
+                  const removedImages = { shell: "alpine:3.21", tools: undefined };
+                  const removed = yield* stack.deploy(
+                    nativeStack.pipe(Effect.provideService(NativeImages, removedImages)),
+                  );
+                  expect(removed.asyncApplication.applicationId).toBe(
+                    deployed.asyncApplication.applicationId,
+                  );
+                  expect(removed.tools.image).toBeUndefined();
                   if (!dev) {
-                    const uploaded = yield* uploadedContainers(
-                      updated.asyncApplication.accountId,
-                      updated.asyncWorker.workerName,
-                    );
-                    // Upload completion does not mean this object's requests
-                    // already use the new Worker version. Wait for its env
-                    // revision before checking the independently managed map.
-                    const revision = yield* getText(
-                      updated.asyncWorker.url!,
-                      "/revision?object=/builtin-updated",
-                    ).pipe(
-                      Effect.repeat({
-                        schedule: Schedule.spaced("1 second"),
-                        until: (revision) => revision === "{}",
-                        times: 8,
-                      }),
-                      Effect.timeout("12 seconds"),
-                    );
-                    const metadata = yield* readMetadata(
-                      updated.asyncWorker.url!,
-                      "?object=/builtin-updated",
-                    );
-                    yield* Effect.logInfo("Named image removal metadata", {
-                      uploaded,
-                      metadata,
-                      revision,
-                    });
                     expect(
-                      imageNames(
-                        uploaded?.find((container) => container.className === "NativeAsyncObject")
-                          ?.images,
+                      yield* uploadedImageKeys(
+                        removed.asyncApplication.accountId,
+                        removed.asyncWorker.workerName,
+                        "NativeAsyncObject",
                       ),
-                    ).toEqual([]);
-                    expect(revision).toBe("{}");
+                    ).toEqual(["AsyncShell"]);
+                    expect(
+                      yield* uploadedImageKeys(
+                        removed.application.accountId,
+                        removed.worker.workerName,
+                        "NativeObject",
+                      ),
+                    ).toEqual(["NativeShell"]);
+                  }
+                  // TODO: Live image-map updates reach existing Workers
+                  // inconsistently: a redeploy's version can take longer than
+                  // a bounded wait to serve, and existing objects can keep
+                  // the old map. Live coverage asserts the uploaded metadata
+                  // above; the runtime view is asserted locally.
+                  if (dev) {
+                    // A redeploy cuts over to the new Worker version
+                    // asynchronously; wait for it before observing the class.
+                    yield* waitForRevision(
+                      removed.asyncWorker.url!,
+                      removedImages,
+                      "?object=removed",
+                    );
+                    yield* waitForRevision(removed.worker.url!, removedImages);
+                    expect(yield* exec(removed.asyncWorker.url!, "/exec?object=removed")).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      release: expect.stringMatching(/^3\.21\./),
+                      images: ["AsyncShell"],
+                    });
+                    expect(yield* exec(removed.worker.url!, "/exec")).toMatchObject({
+                      images: ["NativeShell"],
+                    });
                   }
 
-                  expect(yield* exec(updated.asyncWorker.url!, "/builtin-updated")).toEqual({
-                    stdout: "native",
-                    exitCode: 7,
-                    images: [],
-                  });
+                  // Adding it back restores the image under the same key.
+                  const added = yield* stack.deploy(nativeStack);
+                  expect(added.asyncApplication.applicationId).toBe(
+                    deployed.asyncApplication.applicationId,
+                  );
+                  if (!dev) {
+                    expect(
+                      yield* uploadedImageKeys(
+                        added.asyncApplication.accountId,
+                        added.asyncWorker.workerName,
+                        "NativeAsyncObject",
+                      ),
+                    ).toEqual(ASYNC_IMAGES);
+                  } else {
+                    yield* waitForRevision(
+                      added.asyncWorker.url!,
+                      { shell: "alpine:3.21", tools: "alpine:3.20" },
+                      "?object=added",
+                    );
+                    expect(
+                      yield* exec(added.asyncWorker.url!, "/image/tools?object=added"),
+                    ).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      release: expect.stringMatching(/^3\.20\./),
+                      images: ASYNC_IMAGES,
+                    });
+                  }
                 }
                 return [deployed.application, deployed.asyncApplication];
               }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));

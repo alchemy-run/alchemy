@@ -76,7 +76,6 @@ export class ContainerNotRunningError extends Data.TaggedError("ContainerNotRunn
 export type ContainerStartupOptions = cf.ContainerStartupOptions;
 
 import type {
-  ContainerImageProps,
   DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
@@ -130,23 +129,10 @@ export type ImageContainerProps<Req = never> =
     >;
 
 /**
- * Durable Object container props with statically known image names, so the
- * native client can type `images.<name>` as present.
- */
-type NamedImageProps<ImageName extends string> = Omit<DurableObjectContainerProps, "images"> & {
-  images: Record<ImageName, ContainerImageProps>;
-};
-
-type NamedImageContainerProps<ImageName extends string, Req> =
-  | InputProps<NamedImageProps<ImageName>>
-  | Effect.Effect<InputProps<NamedImageProps<ImageName>>, Config.ConfigError, Req>;
-
-/**
  * The handle `yield* MyContainer` returns inside a Durable Object. See
  * {@link ContainerClient}.
  */
-export type Container<Id extends string = string, ImageName extends string = string> = Named<Id> &
-  ContainerClient<ImageName>;
+export type Container<Id extends string = string> = Named<Id> & ContainerClient;
 
 /** An RPC shape may not redeclare the container handle's own methods. */
 type ContainerShape<Shape> = {
@@ -283,39 +269,37 @@ type ContainerShape<Shape> = {
  * ```
  *
  * ### Native Durable Object Containers
- * Use `schedulingPolicy: "durable_object"` to choose an image and instance
- * size for each container at runtime. Named images are built or copied into
- * Cloudflare's registry, pinned to a digest, and prepared before the Worker
- * is uploaded. Omit `images` to use `cloudflare/debian-trixie` or restore a
- * snapshot without publishing an image.
+ * Use `schedulingPolicy: "durable_object"` to let a Durable Object pick its
+ * image and instance size at runtime. One Container is one image: `image`
+ * copies a registry image, `context`/`dockerfile` builds one. Alchemy pins the
+ * image to a digest and prepares it before the Worker is uploaded.
  *
- * `yield* Sandbox` returns the container's handle without starting it. Its
- * `exec` takes an argument vector and returns a scoped process with streams,
- * an exit code, and an `output()` collector.
+ * `yield* Node` returns the container's handle without starting it.
+ * `start()` starts the Container's own image. Its `exec` takes an argument
+ * vector and returns a scoped process with streams, an exit code, and an
+ * `output()` collector.
  *
- * **Example:** Execute a command in a named image
+ * **Example:** Execute a command in a Container's image
  * ```typescript
- * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ * export class Node extends Cloudflare.Container<Node>()("Node", {
  *   schedulingPolicy: "durable_object",
- *   images: { node: { image: "node:24-slim" } },
+ *   image: "node:24-slim",
  * }) {}
  *
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const sandbox = yield* Sandbox;
+ *     const node = yield* Node;
  *     return Effect.succeed({
  *       exec: (args: string[]) =>
  *         Effect.gen(function* () {
- *           const images = yield* sandbox.images;
- *           // A no-op when the container is already running.
- *           yield* sandbox.start({
- *             image: images.node,
+ *           // Starts the Node image; a no-op when the container is running.
+ *           yield* node.start({
  *             instance: "lite",
  *             entrypoint: ["sleep", "infinity"],
  *             enableInternet: false,
  *           });
- *           const process = yield* sandbox.exec(args);
+ *           const process = yield* node.exec(args);
  *           const result = yield* process.output();
  *           return { text: new TextDecoder().decode(result.stdout), exitCode: result.exitCode };
  *         }).pipe(Effect.scoped),
@@ -324,13 +308,62 @@ type ContainerShape<Shape> = {
  * ) {}
  * ```
  *
+ * ### Several Images in One Durable Object
+ * Cloudflare gives each Durable Object class one container application and
+ * each object one container instance. Bind several Containers to choose
+ * between their images. Every binding adds its image to the class's
+ * application under the Container's id. Each handle's `start()` starts its
+ * own image; start one at a time and `destroy()` before switching.
+ *
+ * **Example:** A Durable Object with Node and Python images
+ * ```typescript
+ * export class Node extends Cloudflare.Container<Node>()("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * }) {}
+ *
+ * export class Python extends Cloudflare.Container<Python>()("Python", {
+ *   schedulingPolicy: "durable_object",
+ *   context: "./python",
+ * }) {}
+ *
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const node = yield* Node;
+ *     const python = yield* Python;
+ *     const run = (cmd: string[]) =>
+ *       Effect.scoped(Effect.flatMap(node.exec(cmd), (process) => process.output()));
+ *     return Effect.succeed({
+ *       node: (cmd: string[]) =>
+ *         node
+ *           .start({ entrypoint: ["sleep", "infinity"], enableInternet: false })
+ *           .pipe(Effect.andThen(run(cmd))),
+ *       python: (cmd: string[]) =>
+ *         Effect.gen(function* () {
+ *           // Every handle controls the same instance: switch images explicitly.
+ *           if (yield* node.running) yield* node.destroy();
+ *           yield* python.start({ entrypoint: ["sleep", "infinity"], enableInternet: false });
+ *           return yield* Effect.scoped(
+ *             Effect.flatMap(python.exec(cmd), (process) => process.output()),
+ *           );
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Application-wide settings (`ssh`, `authorizedKeys`, `observability`) may be
+ * declared on any of the class's Containers. Two Containers declaring
+ * different values fail the deploy with `ContainerApplicationSettingsConflict`.
+ *
  * **Example:** Save and restore the writable filesystem
  * ```typescript
- * const snapshot = yield* sandbox.snapshotContainer({ name: "workspace" });
+ * const snapshot = yield* node.snapshotContainer({ name: "workspace" });
  * // Persist this handle in Durable Object storage before stopping the instance.
  * yield* state.storage.put("snapshot", snapshot);
- * yield* sandbox.destroy();
- * yield* sandbox.start({
+ * yield* node.destroy();
+ * yield* node.start({
  *   containerSnapshot: snapshot,
  *   entrypoint: ["sleep", "infinity"],
  *   enableInternet: false,
@@ -344,9 +377,52 @@ type ContainerShape<Shape> = {
  * when needed. Scope closure kills an unfinished exec process, but does not
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
  *
- * Native async Durable Objects use the same declaration on a Worker's `env`
- * and call `this.ctx.container` directly. Local development exposes the named
- * images through workerd and Docker.
+ * ### Native Durable Objects on Async Workers
+ * A plain Durable Object class on an async Worker binds the same Containers
+ * through `env`. Containers naming the same `className` share the class's
+ * application; each `env` entry is a binding to the class's namespace. The
+ * class reads each image from `ctx.container.images` under its Container's id.
+ *
+ * **Example:** Two images for one async Durable Object class
+ * ```typescript
+ * // alchemy.run.ts
+ * const Node = Cloudflare.Container("Node", {
+ *   className: "Agent",
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * });
+ * const Python = Cloudflare.Container("Python", {
+ *   className: "Agent",
+ *   schedulingPolicy: "durable_object",
+ *   image: "python:3.13-slim",
+ * });
+ * export const Worker = Cloudflare.Worker("App", {
+ *   main: "./src/worker.ts",
+ *   env: { NODE: Node, PYTHON: Python },
+ * });
+ * ```
+ *
+ * **Example:** Starting an image from the class
+ * ```typescript
+ * // src/worker.ts
+ * import { DurableObject } from "cloudflare:workers";
+ *
+ * export class Agent extends DurableObject {
+ *   async run(cmd: string[]) {
+ *     const container = this.ctx.container!;
+ *     if (!container.running) {
+ *       container.start({
+ *         image: container.images.Node,
+ *         entrypoint: ["sleep", "infinity"],
+ *         enableInternet: false,
+ *       });
+ *     }
+ *     return (await container.exec(cmd)).output();
+ *   }
+ * }
+ * ```
+ *
+ * Local development runs every image through workerd and Docker.
  *
  * Switching an existing application to this scheduling policy requires a new
  * application and a new Durable Object class/namespace. Alchemy rejects an
@@ -683,7 +759,7 @@ type ContainerShape<Shape> = {
  * ```
  *
  * A container's shape cannot declare a method the handle already has
- * (`start`, `exec`, `images`, `getTcpPort`, …); declaring one is a type
+ * (`start`, `exec`, `image`, `getTcpPort`, …); declaring one is a type
  * error, because the handle's method would shadow the RPC call.
  *
  * ### Using a Container from a Layer
@@ -742,24 +818,11 @@ type ContainerShape<Shape> = {
  */
 export const Container: ResourceClassLike<ContainerApplication> &
   Pick<ResourceClass<ContainerApplication>, "ref"> & {
-    <
-      DOShape = unknown,
-      const Id extends string = string,
-      PropsReq = never,
-      ImageName extends string = string,
-    >(
-      id: Id,
-      props: NamedImageContainerProps<ImageName, PropsReq>,
-    ): Container.Decl<Container<Id, ImageName>, {}, Id, PropsReq, DOShape, ImageName>;
     <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
     ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
     <Self>(): {
-      <const Id extends string, ImageName extends string, PropsReq = never>(
-        id: Id,
-        props: NamedImageContainerProps<ImageName, PropsReq>,
-      ): Container.Decl<Self, {}, Id, PropsReq, unknown, ImageName>;
       <const Id extends string, PropsReq = never>(
         id: Id,
         props: ImageContainerProps<PropsReq>,
@@ -837,18 +900,15 @@ export declare namespace Container {
     Id extends string = string,
     Req = never,
     DOShape = unknown,
-    ImageName extends string = string,
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
-    new (): Container<Id, ImageName> & Shape;
+    new (): Container<Id> & Shape;
     /**
      * @internal phantom — the Durable Object class type backing this
      * container when it is bound on an async Worker's `env`. Drives
      * `InferEnv` (`env.NAME` becomes `DurableObjectNamespace<DOShape>`).
      */
     readonly "~alchemy/Container/Shape": DOShape;
-    /** @internal phantom — required image names available to the native client. */
-    readonly "~alchemy/Container/Images": ImageName;
     /**
      * @internal — the explicit `className` from props (`undefined` defaults
      * to the binding name at bind time). Doubles as the runtime marker that

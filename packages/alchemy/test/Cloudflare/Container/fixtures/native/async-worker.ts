@@ -13,6 +13,13 @@ const READ_RELEASE_AND_SEED = [
 const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
 
 /**
+ * Each Container bound to this class adds its image to
+ * `ctx.container.images` under the Container's id (see stack.ts).
+ */
+const IMAGE_KEYS = { shell: "AsyncShell", tools: "AsyncTools" } as const;
+const imageKey = (name: string | null) => (name === "tools" ? IMAGE_KEYS.tools : IMAGE_KEYS.shell);
+
+/**
  * The plain-JS twin of `NativeObject` (object.ts): the same routes, written
  * against `this.ctx.container` directly instead of the Effect client.
  */
@@ -39,7 +46,7 @@ export class NativeAsyncObject extends DurableObject<{
           await this.probe({
             seed: url.searchParams.has("seed"),
             restart: url.searchParams.has("restart"),
-            image: url.searchParams.get("image") ?? "shell",
+            image: imageKey(url.searchParams.get("image")),
           }),
         );
       default:
@@ -103,8 +110,8 @@ export class NativeAsyncObject extends DurableObject<{
    * - `/stdin` echoes piped stdin through `cat`
    * - anything else prints "native" and exits 7
    *
-   * `/builtin*` starts the managed image and `/image/<name>` a named image;
-   * every other path uses the `shell` image.
+   * `/builtin*` starts the managed image and `/image/<name>` the `shell` or
+   * `tools` Container's image; every other path uses the `shell` image.
    */
   private async exec(path: string) {
     const container = this.container;
@@ -130,19 +137,23 @@ export class NativeAsyncObject extends DurableObject<{
       const child = await container.exec(["sh", "-c", "printf native; exit 7"]);
       output = await child.output();
     }
+    const release = await (
+      await container.exec(["sh", "-c", "cat /etc/alpine-release || true"])
+    ).output();
 
     return {
       stdout: decode(output.stdout),
       exitCode: output.exitCode,
-      images: Object.keys(container.images),
+      release: decode(release.stdout).trim(),
+      images: Object.keys(container.images).sort(),
     };
   }
 
   private imageFor(path: string) {
     if (path.startsWith("/builtin")) return "cloudflare/debian-trixie";
-    const name = path.startsWith("/image/") ? path.slice("/image/".length) : "shell";
-    const image = this.container.images[name];
-    if (!image) throw new Error(`The ${name} image is not configured.`);
+    const key = imageKey(path.startsWith("/image/") ? path.slice("/image/".length) : "shell");
+    const image = this.container.images[key];
+    if (!image) throw new Error(`The ${key} image is not configured.`);
     return image;
   }
 }
