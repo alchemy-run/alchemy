@@ -63,3 +63,26 @@ export const setEquals = <T>(
   const others = new Set(b ?? []);
   return members.size === others.size && [...members].every((member) => others.has(member));
 };
+
+/**
+ * True when any DEFINED leaf of `desired` differs from the corresponding
+ * value in `observed`. Keys the caller left undefined are ignored, so the
+ * comparison only covers configuration the user actually expressed.
+ */
+export const subsetDiffers = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return false;
+  if (Array.isArray(desired)) {
+    if (!Array.isArray(observed) || observed.length !== desired.length) {
+      return true;
+    }
+    return desired.some((value, i) => subsetDiffers(value, observed[i]));
+  }
+  if (typeof desired === "object" && desired !== null) {
+    if (typeof observed !== "object" || observed === null) return true;
+    return Object.entries(desired).some(
+      ([key, value]) =>
+        value !== undefined && subsetDiffers(value, (observed as Record<string, unknown>)[key]),
+    );
+  }
+  return desired !== observed;
+};

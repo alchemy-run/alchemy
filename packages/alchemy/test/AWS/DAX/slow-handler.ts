@@ -23,7 +23,7 @@ export class DAXSlowTestFunction extends Lambda.Function<Lambda.Function>()(
 
 /**
  * Cluster-scoped binding fixture: deploys a real single-node DAX cluster
- * (~10 minutes, billed per node-hour — gated behind AWS_TEST_SLOW) and a
+ * (~10 minutes, billed per node-hour — skipped under `--fast`) and a
  * Lambda bound to it with ConnectReadWrite + RebootNode + DescribeClusters +
  * IncreaseReplicationFactor + DecreaseReplicationFactor.
  * The Lambda is not VPC-attached: the connect binding only resolves endpoint

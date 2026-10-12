@@ -231,7 +231,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, verify, and destroy a provisioned Valkey replication group",
   (stack) =>
     Effect.gen(function* () {
@@ -275,7 +275,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, scale, verify, and destroy a provisioned Memcached cluster",
   (stack) =>
     Effect.gen(function* () {
@@ -317,7 +317,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "replace a replication group when its port changes",
   (stack) =>
     Effect.gen(function* () {
@@ -355,7 +355,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "add and remove a Valkey replica",
   (stack) =>
     Effect.gen(function* () {
@@ -404,7 +404,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and clean up the requested final snapshot",
   (stack) =>
     Effect.gen(function* () {

@@ -324,7 +324,10 @@ export const DBParameterGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBParameterGroups ?? []).flatMap((group) =>
-                  group.DBParameterGroupName && group.DBParameterGroupFamily?.startsWith("neptune")
+                  group.DBParameterGroupName &&
+                  // `default.<family>` groups are AWS-managed and undeletable.
+                  !group.DBParameterGroupName.startsWith("default.") &&
+                  group.DBParameterGroupFamily?.startsWith("neptune")
                     ? [
                         {
                           dbParameterGroupName: group.DBParameterGroupName,

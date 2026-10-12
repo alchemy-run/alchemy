@@ -185,7 +185,7 @@ describe(
 
 // Full end-to-end (gated). An EKS Auto Mode cluster takes ~10–15 min to
 // provision, plus image build/push, pod scheduling, and NLB provisioning —
-// well beyond the routine speed-doctrine ceiling. Gate it behind AWS_TEST_SLOW.
+// well beyond the routine speed-doctrine ceiling. Skip it under `--fast`.
 //
 // It deploys, in two phases (refs read committed stack state, not the in-flight
 // plan): (1) a public network + a `compute: "auto"` cluster (the provider owns
@@ -200,7 +200,7 @@ describe(
 //
 // NOTE: this path has not been run green live in this factory wave (cluster
 // create alone exceeds the agent budget). It is gated + skip-clean; run on an
-// account with Auto Mode Pod Identity by setting AWS_TEST_SLOW=1.
+// account with Auto Mode Pod Identity unless `--fast` is set.
 
 // Cluster declared at a TOP-LEVEL logical id so the fixture can resolve it
 // with `Cluster.ref("EksHostCluster")` (no namespace nesting). `compute:
@@ -226,7 +226,7 @@ const infra = Effect.gen(function* () {
 
 const sharedStack = Core.scratchStack(testOptions, "EksServerHost");
 
-describe.skipIf(!process.env.AWS_TEST_SLOW)(
+describe.skipIf(!!process.env.FAST)(
   "Kubernetes Deployment E2E",
   {
     tags: [

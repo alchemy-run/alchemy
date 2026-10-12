@@ -12,7 +12,11 @@ import { State, isActionState } from "../../State/State.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import { canonicalCidr } from "../../Utils/ip-address.ts";
 import type { Providers } from "../Providers.ts";
-import { getDefaultVpcDefaultSecurityGroupId, getDefaultVpcScope } from "./defaultVpcScope.ts";
+import {
+  getDefaultVpcDefaultSecurityGroupId,
+  getDefaultVpcEmrManagedSecurityGroupIds,
+  getDefaultVpcScope,
+} from "./defaultVpcScope.ts";
 import type { SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 
 export type SecurityGroupRuleId<ID extends string = string> = `sgr-${ID}`;
@@ -410,6 +414,7 @@ export const SecurityGroupRuleProvider = () =>
             // default VPC are still listed.
             const defaultVpc = yield* getDefaultVpcScope;
             const defaultSgId = yield* getDefaultVpcDefaultSecurityGroupId(defaultVpc.vpcId);
+            const emrManaged = yield* getDefaultVpcEmrManagedSecurityGroupIds(defaultVpc.vpcId);
             return yield* ec2.describeSecurityGroupRules.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -423,6 +428,7 @@ export const SecurityGroupRuleProvider = () =>
                       } => rule.SecurityGroupRuleId != null,
                     )
                     .filter((rule) => defaultSgId === undefined || rule.GroupId !== defaultSgId)
+                    .filter((rule) => rule.GroupId === undefined || !emrManaged.has(rule.GroupId))
                     .map((rule) => toAttrs(rule)),
                 ),
               ),

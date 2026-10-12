@@ -5,13 +5,17 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const SERVICE_ACCOUNT_EMAIL = "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com";
+// The testing profile's own service account, derived from the configured project.
+const serviceAccountEmailOf = GcpEnvironment.current.pipe(
+  Effect.map(({ project }) => `alchemy-testing@${project}.iam.gserviceaccount.com`),
+);
 
 const waitUntilGone = (projectId: string, accessId: string) =>
   storage.getProjectsHmacKeys({ projectId, accessId }).pipe(
@@ -31,18 +35,19 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const serviceAccountEmail = yield* serviceAccountEmailOf;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Storage.HmacKey("Interop", {
-            serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
+            serviceAccountEmail,
           });
         }),
       );
 
       expect(created.accessId).toEqual(expect.any(String));
       expect(created.accessId.length).toBeGreaterThan(0);
-      expect(created.serviceAccountEmail).toEqual(SERVICE_ACCOUNT_EMAIL);
+      expect(created.serviceAccountEmail).toEqual(serviceAccountEmail);
       expect(created.state).toEqual("ACTIVE");
       expect(created.projectId).toEqual(expect.any(String));
       expect(Redacted.isRedacted(created.secret)).toEqual(true);
@@ -53,12 +58,12 @@ test.provider(
       });
       expect(fetched.accessId).toEqual(created.accessId);
       expect(fetched.state).toEqual("ACTIVE");
-      expect(fetched.serviceAccountEmail).toEqual(SERVICE_ACCOUNT_EMAIL);
+      expect(fetched.serviceAccountEmail).toEqual(serviceAccountEmail);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Storage.HmacKey("Interop", {
-            serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
+            serviceAccountEmail,
             state: "INACTIVE",
           });
         }),

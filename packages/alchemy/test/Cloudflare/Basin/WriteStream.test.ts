@@ -131,9 +131,8 @@ test.provider(
   },
 );
 
-// WriteStreamHttp/StreamSinkHttp mint a scoped `Pipelines Send` API token;
-// gate behind an env var for accounts whose credentials can mint tokens.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PIPELINES_HTTP)(
+// WriteStreamHttp/StreamSinkHttp mint a scoped `Pipelines Send` API token.
+test.provider(
   "WriteStreamHttp and StreamSinkHttp send through a scoped token",
   (stack) =>
     Effect.gen(function* () {

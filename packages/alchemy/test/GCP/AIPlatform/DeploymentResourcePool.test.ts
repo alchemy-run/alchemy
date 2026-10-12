@@ -11,7 +11,10 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Pool create + update + delete takes ~1.5 minutes.
+// Pool create + update + delete takes ~10s. The very first Vertex AI
+// creates on a freshly provisioned project take 4–9 minutes (one-time
+// service provisioning); that exceeds the test timeout once, and the
+// provider's recovery settles the pending create so cleanup still deletes it.
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>

@@ -1103,6 +1103,7 @@ const resolveWorkerMetadataHash = ({
     bindings: bindings.map((binding) => ({ sid: binding.sid, data: binding.data })),
     assets: workerAssetConfigForHash(props.assets),
     cache: props.cache,
+    entrypoints: props.entrypoints,
     limits: props.limits,
     logpush: props.logpush,
     observability: props.observability,
@@ -2805,7 +2806,14 @@ export const LiveWorkerProvider = () =>
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               cacheOptions: news.cache ?? getCacheBinding(bindings),
-              exports: parentExports,
+              exports: nonEmptyExports({
+                ...parentExports,
+                ...(yield* workerEntrypointExports(
+                  parentName,
+                  news.entrypoints,
+                  Object.keys(parentExports ?? {}),
+                )),
+              }),
               annotations:
                 alias !== undefined || version.message !== undefined || version.tag !== undefined
                   ? {
@@ -3194,6 +3202,9 @@ export const LiveWorkerProvider = () =>
             cacheOptions: news.cache ?? getCacheBinding(bindings),
             annotations,
             migrations,
+            exports: nonEmptyExports(
+              yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
+            ),
             env: bindingsToPreviewEnv(metadataBindings),
           },
           files: bundle.files,
@@ -3715,6 +3726,10 @@ export const LiveWorkerProvider = () =>
           deletedClasses,
           transferredClasses,
         });
+        Object.assign(
+          exportsMap,
+          yield* workerEntrypointExports(name, news.entrypoints, Object.keys(exportsMap)),
+        );
         const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
 
         const metadataContainers = [...containerClasses.values()];
@@ -3739,7 +3754,7 @@ export const LiveWorkerProvider = () =>
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
-          exports: Object.keys(exportsMap).length === 0 ? undefined : exportsMap,
+          exports: nonEmptyExports(exportsMap),
           observability,
           placement: news.placement,
           tags: metadataTags,
@@ -5550,6 +5565,37 @@ const buildDurableObjectExports = (params: {
 };
 
 /**
+ * The `{ type: "worker", cache }` export entries for a Worker's configured
+ * entrypoints. Fails when a name is also a Durable Object class: one export
+ * name has exactly one type.
+ *
+ * @internal
+ */
+const workerEntrypointExports = (
+  scriptName: string,
+  entrypoints: WorkerProps["entrypoints"],
+  durableObjectClasses: Iterable<string>,
+) =>
+  Effect.gen(function* () {
+    const reserved = new Set(durableObjectClasses);
+    const exports: Record<string, workers.PutScriptMetadataExport> = {};
+    for (const [name, settings] of Object.entries(entrypoints ?? {})) {
+      if (reserved.has(name)) {
+        return yield* new InvalidWorkerEntrypoints({
+          scriptName,
+          reason: `worker "${scriptName}" configures entrypoint "${name}", but "${name}" is a Durable Object export of this Worker. Entrypoint settings apply to WorkerEntrypoint exports and the default export only.`,
+        });
+      }
+      exports[name] = { type: "worker", cache: settings.cache };
+    }
+    return exports;
+  });
+
+/** `undefined` for an empty `exports` map, so the field is omitted on upload. */
+const nonEmptyExports = (exports: Record<string, workers.PutScriptMetadataExport>) =>
+  Object.keys(exports).length > 0 ? exports : undefined;
+
+/**
  * The Durable Object `exports` of the version serving most of a script's
  * traffic, as live entries (Cloudflare omits tombstones). `undefined` when
  * nothing is deployed or the live version predates `exports` (the legacy
@@ -5808,6 +5854,11 @@ const LEGACY_DO_TAG_PREFIX = "alchemy:do:";
 const PACKED_DO_TAG_PREFIX = "alchemy:dos:";
 
 class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
+  scriptName: string;
+  reason: string;
+}> {}
+
+class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoints")<{
   scriptName: string;
   reason: string;
 }> {}

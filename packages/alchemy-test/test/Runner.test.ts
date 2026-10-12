@@ -483,3 +483,75 @@ it(
   },
   { tags: ["unit", "local"], timeout: 90_000 },
 );
+
+it(
+  "fails and abandons test bodies, retries and hooks that outlive their timeout",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-deadline-"));
+    const header = `
+      import { describe, it, registerHook } from ${JSON.stringify(apiUrl)};
+      import * as Effect from ${JSON.stringify(effectUrl)};
+      const hang = () => Effect.uninterruptible(Effect.never);
+    `;
+    const hookFixture = (kind: string, timeout = ", timeout: 300") => `${header}
+      describe(${JSON.stringify(kind)}, () => {
+        registerHook(${JSON.stringify(kind)}, { body: hang${timeout} });
+        it("body", () => {});
+      });
+    `;
+    try {
+      await Promise.all([
+        writeFile(
+          resolve(root, "body.test.ts"),
+          `${header}
+          it.effect("uninterruptible body", hang, { timeout: 300 });
+          it("never-resolving promise body", () => new Promise(() => {}), { timeout: 300 });
+          it.effect("hung finalizer body", () =>
+            Effect.addFinalizer(() => Effect.never).pipe(Effect.andThen(Effect.never)),
+            { timeout: 300 });
+          it.effect("retried uninterruptible body", hang, { timeout: 300, retry: 2 });
+          `,
+        ),
+        writeFile(resolve(root, "before-all.test.ts"), hookFixture("beforeAll")),
+        writeFile(resolve(root, "before-each.test.ts"), hookFixture("beforeEach")),
+        writeFile(resolve(root, "after-each.test.ts"), hookFixture("afterEach")),
+        // No hook timeout: falls back to the run's --timeout.
+        writeFile(resolve(root, "after-all.test.ts"), hookFixture("afterAll", "")),
+      ]);
+
+      const started = Date.now();
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--timeout", "300"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1", ALCHEMY_TEST_TEARDOWN_GRACE_MS: "500" },
+        // A regression hangs forever; kill it so the assertion fails instead.
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      const elapsed = Date.now() - started;
+      const output = `${stdout}\n${stderr}`;
+
+      expect(exitCode).toBe(1);
+      const abandoned = "(teardown did not settle within 500ms and was abandoned)";
+      expect(output).toContain(`test timed out after 300ms ${abandoned}`);
+      expect(output).toContain("test timed out after 300ms\n");
+      expect(output).toContain(`hook timed out after 300ms ${abandoned}`);
+      for (const hook of ["beforeAll", "beforeEach", "afterEach", "afterAll"]) {
+        expect(output).toContain(`${hook} hook failed:`);
+      }
+      expect(output).toMatch(/retried uninterruptible body \([\d.]+m?s\) \[retried x2\]/);
+      expect(output).toContain("Tests: 8 failed | 1 passed");
+      // Every hang is bounded by (timeout + grace) per attempt.
+      expect(elapsed).toBeLessThan(30_000);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"], timeout: 90_000 },
+);

@@ -27,10 +27,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // The flagship ELBv2 e2e: one internet-facing ALB routes two path patterns to
 // two different Lambda targets (no VPC targets, no NAT — Lambda targets prove
-// the rule routing end-to-end). AWS kept new ALBs in `provisioning` with
-// unresolvable DNS beyond the factory's bounded readiness budget under c128,
-// so this slow live lifecycle is opt-in. Set AWS_TEST_SLOW=1 to run it.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// the rule routing end-to-end). A new ALB stays in `provisioning` with an
+// unresolvable hostname for ~1-3 minutes, so the test waits for `active`
+// before resolving DNS (~2.5 min end to end) and is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "ALB routes two paths to two Lambda targets",
   (stack) =>
     Effect.gen(function* () {
@@ -159,6 +159,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
           return {
             dnsName: lb.dnsName,
+            loadBalancerArn: lb.loadBalancerArn,
             apiTargetGroupArn: apiAttachment.targetGroupArn,
             webTargetGroupArn: webAttachment.targetGroupArn,
             apiFunctionArn: apiAttachment.targetId,
@@ -180,6 +181,18 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(
         webHealth.TargetHealthDescriptions?.some((d) => d.Target?.Id === out.webFunctionArn),
       ).toBe(true);
+
+      // A new ALB sits in `provisioning` (hostname not yet in DNS) for ~1-3
+      // minutes. Wait until AWS reports it `active` before touching DNS so a
+      // negative lookup is never cached (bounded: 18 × 10s).
+      yield* elbv2.describeLoadBalancers({ LoadBalancerArns: [out.loadBalancerArn] }).pipe(
+        Effect.flatMap((r) =>
+          r.LoadBalancers?.[0]?.State?.Code === "active"
+            ? Effect.void
+            : Effect.fail(new Error(`ALB ${out.dnsName} is not active yet`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 18 }),
+      );
 
       // Resolve the newly-created ALB explicitly before the first HTTP
       // request. Starting fetch while its hostname is still propagating can
@@ -233,6 +246,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     }).pipe(logLevel),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:elbv2", "provider:aws:lambda", "live"],
-    timeout: 240_000,
+    timeout: 420_000,
   },
 );

@@ -518,17 +518,19 @@ export const FleetProvider = () =>
             news.configuration !== undefined;
           if (needsUpdate) {
             yield* retryWhileConflict(
-              deadline.updateFleet({
-                farmId,
-                fleetId: state.attrs.fleetId,
-                displayName,
-                description: news.description,
-                roleArn: news.roleArn,
-                minWorkerCount: news.minWorkerCount,
-                maxWorkerCount: news.maxWorkerCount,
-                configuration: toWireConfiguration(news.configuration),
-                hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
-              }),
+              deadline
+                .updateFleet({
+                  farmId,
+                  fleetId: state.attrs.fleetId,
+                  displayName,
+                  description: news.description,
+                  roleArn: news.roleArn,
+                  minWorkerCount: news.minWorkerCount,
+                  maxWorkerCount: news.maxWorkerCount,
+                  configuration: toWireConfiguration(news.configuration),
+                  hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
+                })
+                .pipe(retryThroughIamPropagation),
             );
             state = yield* waitForFleetActive(farmId, state.attrs.fleetId, arnOf);
             yield* session.note(`Updated fleet ${displayName}`);

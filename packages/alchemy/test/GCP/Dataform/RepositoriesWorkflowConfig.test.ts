@@ -3,7 +3,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { logLevel, currentProject, waitUntilGone } from "./common.ts";
+import { logLevel, currentProject, testServiceAccount, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -31,11 +31,10 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const serviceAccount = yield* testServiceAccount;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const serviceAccount =
-            "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com";
           const repo = yield* GCP.Dataform.Repository("WorkflowRepo", {
             location: "us-central1",
             displayName: "workflow-repo",
@@ -69,8 +68,6 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const serviceAccount =
-            "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com";
           const repo = yield* GCP.Dataform.Repository("WorkflowRepo", {
             repositoryId: created.repo.repositoryId,
             location: "us-central1",

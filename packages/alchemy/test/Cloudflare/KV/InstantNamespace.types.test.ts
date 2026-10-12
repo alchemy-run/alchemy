@@ -49,8 +49,11 @@ const typeCases = (
     bound.put("key", "value", { metadata: {} });
   });
 
-test.effect("KV capability overloads preserve classic and Instant APIs", () =>
-  Effect.sync(() => {
-    expect(typeof typeCases).toBe("function");
-  }),
+test.effect(
+  "KV capability overloads preserve classic and Instant APIs",
+  () =>
+    Effect.sync(() => {
+      expect(typeof typeCases).toBe("function");
+    }),
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:kv", "local"] },
 );

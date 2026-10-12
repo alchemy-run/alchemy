@@ -454,9 +454,29 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // ConflictException — retry (bounded) while it settles. A cluster
           // already deleting (or gone) is success.
-          const observed = yield* getByArn(output.clusterArn);
-          if (observed === undefined || observed.status === "DELETING") {
+          //
+          // Only an ACTIVE cluster is deletable: STOPPING, STOPPED and
+          // STARTING all reject DeleteCluster with a ValidationException
+          // ("Can't delete the cluster because it is in STOPPED state"). Wait
+          // (bounded) for a stop/start to settle, then start a STOPPED
+          // cluster and wait for ACTIVE before deleting it.
+          const settled = yield* getByArn(output.clusterArn).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("15 seconds"),
+              until: (cluster) =>
+                cluster === undefined ||
+                (cluster.status !== "STOPPING" && cluster.status !== "STARTING"),
+              times: 60,
+            }),
+          );
+          if (settled === undefined || settled.status === "DELETING") {
             return;
+          }
+          if (settled.status === "STOPPED") {
+            yield* docdbelastic
+              .startCluster({ clusterArn: output.clusterArn })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+            yield* waitForActive(settled.clusterName, output.clusterArn);
           }
           yield* docdbelastic.deleteCluster({ clusterArn: output.clusterArn }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),

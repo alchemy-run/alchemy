@@ -114,7 +114,10 @@ const assertPermissions = Effect.gen(function* () {
   ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
   const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
-    pages.flatMap((page) => page.PolicyNames),
+    // Skip the function's log-group guard; only binding grants count.
+    pages
+      .flatMap((page) => page.PolicyNames)
+      .filter((name) => name !== "AlchemyDenyLogGroupCreate"),
     (PolicyName) =>
       Effect.gen(function* () {
         const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });

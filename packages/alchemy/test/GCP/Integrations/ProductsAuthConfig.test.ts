@@ -9,6 +9,12 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
+// Project setup (one-time): Application Integration must be provisioned in
+// us-central1, else calls fail with `Found zero or more than one active
+// project` / `Failed to client for project`:
+//   POST https://integrations.googleapis.com/v1/projects/PROJECT_ID/locations/us-central1/clients:provision
+//   {"createSampleWorkflows": false}
+
 // Product-scoped (`products/IP`) auth configs are rejected on a standard
 // project with Forbidden ("User is not authorized to create AuthConfig with
 // name … as they don't have membership of project {number}"), and product

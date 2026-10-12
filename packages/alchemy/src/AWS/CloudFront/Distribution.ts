@@ -767,12 +767,16 @@ export const DistributionProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.distributionId) {
-            return undefined;
-          }
-
-          const current = yield* getCurrent(output.distributionId);
+        read: Effect.fn(function* ({ instanceId, output }) {
+          // Without cached attributes, fall back to the deterministic
+          // caller reference (= instanceId). A create interrupted during
+          // its multi-minute deployment wait leaves a `creating` row with
+          // no attributes; the engine asks `read` to recover it before
+          // deleting, so returning `undefined` here would drop the row and
+          // orphan the (already created) distribution.
+          const current = output?.distributionId
+            ? yield* getCurrent(output.distributionId)
+            : yield* getByCallerReference(instanceId);
           if (!current) {
             return undefined;
           }

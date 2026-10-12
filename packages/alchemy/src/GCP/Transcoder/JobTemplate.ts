@@ -22,6 +22,7 @@ import {
   resourceName,
   toJobTemplateId,
   userLabels,
+  waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
 
@@ -253,7 +254,11 @@ export const JobTemplateProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => getJobTemplate(name)));
+          // ALREADY_EXISTS proves the template exists (a lost race, or a
+          // retried create whose first attempt landed) — wait for it to
+          // become readable instead of failing, so the attempt converges
+          // rather than leaving an untracked template behind.
+          .pipe(Effect.catchTag("Conflict", () => waitUntilExists(name)));
         current = created ?? undefined;
       }
 
