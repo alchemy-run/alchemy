@@ -141,6 +141,11 @@ export const mountGitRepository = (options: {
    * instead of `runtimeCredentials` — e.g. a deploy key. `https://<host>/`
    * remotes are rewritten to `git@<host>:` so fetch and push use it.
    */
+  /**
+   * Git authenticates outside the container (a Durable Object's egress adds
+   * credentials to requests to the host): no credentials inside it.
+   */
+  readonly egressAuth?: boolean;
   readonly runtimeSshKey?: {
     readonly host: string;
     /** Absent at runtime, where the key is read from the bound environment. */
@@ -180,7 +185,7 @@ export const mountGitRepository = (options: {
       return { path: mount.path };
     }
     const ssh = access !== "none" ? options.runtimeSshKey : undefined;
-    if (access !== "none" && !options.runtimeCredentials && !ssh) {
+    if (access !== "none" && !options.runtimeCredentials && !ssh && !options.egressAuth) {
       return yield* Effect.die(
         new Error(`${options.kind}: access "${access}" needs credentials for ${mount.path}`),
       );
@@ -192,7 +197,7 @@ export const mountGitRepository = (options: {
       `git config --system --add safe.directory ${path}`,
       // Read-only mounts keep fetch working but refuse to push.
       ...(access === "write" ? [] : [`git -C ${path} remote set-url --push origin DISABLED`]),
-      ...(access === "none"
+      ...(access === "none" || options.egressAuth
         ? []
         : ssh
           ? [
@@ -236,7 +241,11 @@ export const mountGitRepository = (options: {
       {
         image: [
           gitCliLayer,
-          ...(access === "none" ? [] : ssh ? [sshLayer] : [credentialHelperLayer]),
+          ...(access === "none" || options.egressAuth
+            ? []
+            : ssh
+              ? [sshLayer]
+              : [credentialHelperLayer]),
           ...(options.tooling ?? []),
           layer,
         ],

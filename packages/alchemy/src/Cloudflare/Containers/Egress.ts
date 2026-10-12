@@ -12,6 +12,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
+import type { ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as Output from "../../Output.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
@@ -38,6 +39,8 @@ export interface EgressRoute {
 /** Env the container gets from the egress (placeholders, the CA trust switch). */
 export interface EgressContainerConfig {
   readonly env?: Record<string, string>;
+  /** Tools the container needs for this egress (e.g. the `gh` CLI). */
+  readonly image?: ReadonlyArray<ImageLayer>;
 }
 
 /**
@@ -141,6 +144,7 @@ export const bindEgressIntoContainer = (
       .Application) as ContainerApplication;
     yield* application.bind`Egress(${key})`({
       env: { ...config.env, ALCHEMY_EGRESS_CA: "1" },
+      ...(config.image?.length ? { image: [...config.image] } : {}),
     });
   });
 
@@ -184,12 +188,16 @@ export const Egress = <R = never>(
   container: unknown,
   hosts: string | ReadonlyArray<string>,
   handler: EgressHandler<R>,
-  options: { readonly key?: string; readonly env?: Record<string, string> } = {},
+  options: {
+    readonly key?: string;
+    readonly env?: Record<string, string>;
+    readonly image?: ReadonlyArray<ImageLayer>;
+  } = {},
 ): Effect.Effect<Egress, never, R> =>
   Effect.gen(function* () {
     const list = typeof hosts === "string" ? [hosts] : hosts;
     const key = options.key ?? list.join(",");
-    yield* bindEgressIntoContainer(container, key, { env: options.env });
+    yield* bindEgressIntoContainer(container, key, { env: options.env, image: options.image });
     const context = yield* Effect.context<R>();
     return makeEgress({
       key,
@@ -212,13 +220,26 @@ export type EgressSecret =
 export const egressSecret = (
   secret: EgressSecret,
   name: string,
-): Effect.Effect<Effect.Effect<Redacted.Redacted<string>>, Config.ConfigError, any> =>
+): Effect.Effect<Effect.Effect<Redacted.Redacted<string>>> =>
   Effect.gen(function* () {
     if (Output.isOutput(secret)) {
-      return (yield* Output.named(secret, name)) as Effect.Effect<Redacted.Redacted<string>>;
+      // Resolved by the stack while planning (where the Output's services,
+      // e.g. GitHub credentials, are provided); read from the Worker's env at
+      // runtime.
+      const bound = Output.named(secret, name).asEffect() as unknown as Effect.Effect<
+        Effect.Effect<Redacted.Redacted<string>>
+      >;
+      return yield* bound;
     }
     if (Config.isConfig(secret)) {
-      const value = yield* secret;
+      // A missing secret is a misconfigured deployment, not a runtime error.
+      const config = secret;
+      const value = yield* Effect.gen(function* () {
+        return yield* config;
+      }).pipe(
+        Effect.mapError((cause) => new Error(`egress secret ${name}: ${cause.message}`)),
+        Effect.orDie,
+      );
       return Effect.succeed(value);
     }
     return Effect.succeed(secret);

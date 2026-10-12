@@ -27,10 +27,17 @@ export interface MountRepositoryOptions extends MountGitOptions {
    * (e.g. `gh auth setup-git`).
    */
   readonly token?: Redacted.Redacted<string>;
+  /**
+   * Git authenticates through the container's `GitHub.Egress` (declared by
+   * the Durable Object that owns it): the checkout keeps its HTTPS remote and
+   * holds no token or key. `access` still decides whether `git push` is
+   * enabled; the egress decides what is actually allowed.
+   */
+  readonly egress?: boolean;
 }
 
 /** The GitHub CLI, so agents can work with issues and pull requests. */
-const ghCliLayer: ImageLayer = {
+export const ghCliLayer: ImageLayer = {
   id: "gh-cli",
   stage: "setup",
   instructions: [
@@ -116,7 +123,10 @@ export const MountRepository = (
     const access = options.access ?? "none";
     // No token: a deploy key on the repository gives git its access.
     const deployKey =
-      options.token === undefined && access !== "none" && !globalThis.__ALCHEMY_RUNTIME__
+      options.token === undefined &&
+      !options.egress &&
+      access !== "none" &&
+      !globalThis.__ALCHEMY_RUNTIME__
         ? yield* deployKeyFor(repository, options.path, access === "read")
         : undefined;
     return yield* mountGitRepository({
@@ -129,15 +139,17 @@ export const MountRepository = (
             tooling: [ghCliLayer],
             env: { GH_TOKEN: options.token },
           }
-        : access !== "none"
-          ? {
-              // At runtime the key is read from the environment it was bound to.
-              runtimeSshKey: {
-                host: "github.com",
-                ...(deployKey ? { privateKey: deployKey.privateKey } : {}),
-              },
-            }
-          : {}),
+        : options.egress
+          ? { egressAuth: true }
+          : access !== "none"
+            ? {
+                // At runtime the key is read from the environment it was bound to.
+                runtimeSshKey: {
+                  host: "github.com",
+                  ...(deployKey ? { privateKey: deployKey.privateKey } : {}),
+                },
+              }
+            : {}),
       mount: options,
     });
   });
