@@ -36,6 +36,7 @@ import {
 } from "../../AI/Session.ts";
 import { connectHarness } from "../../AI/SessionRpcs.ts";
 import { SessionStore } from "../../AI/SessionStore.ts";
+import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { toHttpClient } from "../Fetcher.ts";
 import { callInstance, registerInternal } from "../Workers/DurableObjectInternal.ts";
@@ -183,6 +184,23 @@ git read-tree --reset -u "$ckpt"
 git reset -q
 git for-each-ref --format='delete %(refname)' refs/alchemy/restore | git update-ref --stdin
 rm -f $BUNDLES`;
+
+/**
+ * Commands run with `exec` don't inherit the container program's
+ * environment: trust the egress interception CA here too (see
+ * Runtime/Bootstrap/EgressCa.ts), building the bundle if the program hasn't
+ * yet.
+ */
+const TRUST_EGRESS_CA = `if [ -f ${EGRESS_CA} ]; then
+  if [ ! -s ${EGRESS_CA_BUNDLE} ]; then
+    for roots in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+      if [ -f "$roots" ]; then cat "$roots" > ${EGRESS_CA_BUNDLE}; break; fi
+    done
+    cat ${EGRESS_CA} >> ${EGRESS_CA_BUNDLE}
+  fi
+  export SSL_CERT_FILE=${EGRESS_CA_BUNDLE} GIT_SSL_CAINFO=${EGRESS_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EGRESS_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EGRESS_CA_BUNDLE} CURL_CA_BUNDLE=${EGRESS_CA_BUNDLE}
+fi
+`;
 
 /** A tarball (to stdout) of the state directories that exist. */
 const stateTarScript = (paths: ReadonlyArray<string>) => `set -e
@@ -471,7 +489,7 @@ export const Harness = (
       Effect.scoped(
         Effect.gen(function* () {
           const stdin = execOptions.stdin;
-          const child = yield* sandbox.exec(["sh", "-c", script], {
+          const child = yield* sandbox.exec(["sh", "-c", `${TRUST_EGRESS_CA}${script}`], {
             env: { ...GIT_IDENTITY, ...execOptions.env },
             stdout: "pipe",
             stderr: "pipe",

@@ -41,7 +41,8 @@ describe.each([
             : r.text,
         ),
         Effect.timeout("150 seconds"),
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 5 }),
+        // A fresh workers.dev URL answers 404 for a few seconds.
+        Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
       );
     });
 

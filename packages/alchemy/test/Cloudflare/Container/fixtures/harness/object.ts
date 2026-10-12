@@ -19,7 +19,11 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
       prepare: {
         commands: [
           "cd /workspace/repo && git init -q -b main && echo prepared > base.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm base",
+          // Through the egress, over intercepted TLS: fails unless the
+          // command trusts the interception CA.
+          `node -e "fetch('https://api.anthropic.com/v1/models').then(() => process.exit(0), (e) => { console.error(e.cause ?? e); process.exit(1); })"`,
         ],
+        egress: [model],
       },
     });
     const box = yield* HarnessBox;
