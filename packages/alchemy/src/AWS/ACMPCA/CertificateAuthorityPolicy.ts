@@ -100,6 +100,7 @@ export const CertificateAuthorityPolicyProvider = () =>
       return {
         stables: ["certificateAuthorityArn"],
         diff: Effect.fn(function* ({ news, olds }) {
+          if (!("certificateAuthorityArn" in news)) return;
           // The CA's ARN is stable across its updates, so an unresolved ARN
           // means the CA is being replaced: the policy moves with it.
           if (
