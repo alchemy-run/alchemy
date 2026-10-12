@@ -63,7 +63,7 @@
     "./Cloudflare/Workers/*": "./src/Cloudflare/Workers/*.ts",
     "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
     "./Drizzle": "./src/Drizzle/index.ts",
-    "./Fold": "./src/Fold/index.ts",
+    "./Domain": "./src/Domain/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
@@ -258,10 +258,10 @@
         "bun": "./src/Drizzle/index.ts",
         "default": "./lib/Drizzle/index.js"
       },
-      "./Fold": {
-        "types": "./lib/Fold/index.d.ts",
-        "bun": "./src/Fold/index.ts",
-        "default": "./lib/Fold/index.js"
+      "./Domain": {
+        "types": "./lib/Domain/index.d.ts",
+        "bun": "./src/Domain/index.ts",
+        "default": "./lib/Domain/index.js"
       },
       "./Axiom": {
         "types": "./lib/Axiom/index.d.ts",

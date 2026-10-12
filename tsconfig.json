@@ -209,7 +209,7 @@
       "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-fold/tsconfig.json"
+      "path": "./examples/cloudflare-domain/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
