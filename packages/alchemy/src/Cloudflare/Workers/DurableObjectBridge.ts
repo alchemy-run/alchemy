@@ -17,6 +17,7 @@ import {
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
+import { dispatchInternal, INTERNAL_METHOD } from "./DurableObjectInternal.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
@@ -198,6 +199,11 @@ export const makeDurableObjectBridge =
               ? exit.value
               : new Response(`alchemy egress: ${Cause.pretty(exit.cause)}`, { status: 500 }),
         );
+      }
+
+      /** A call from another instance of this class (see DurableObjectInternal.ts). */
+      async [INTERNAL_METHOD](name: string, payload: unknown): Promise<unknown> {
+        return this.#execute(() => dispatchInternal(this.#state, name, payload));
       }
 
       async fetch(request: Request): Promise<any> {

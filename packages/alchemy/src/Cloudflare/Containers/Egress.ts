@@ -257,6 +257,9 @@ export const registerDurableObjectClass = (state: object, className: string) => 
   classNames.set(state, className);
 };
 
+/** @internal The class name of this Durable Object instance, as its bridge registered it. */
+export const durableObjectClassName = (state: object) => classNames.get(state);
+
 /** @internal Make `egress` answerable for this Durable Object's container. */
 export const registerEgress = (state: object, egress: Egress) => {
   let registry = registries.get(state);

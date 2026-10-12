@@ -24,6 +24,13 @@ export default class HarnessWorker extends Cloudflare.Worker<HarnessWorker>()(
           yield* object.stop();
           return HttpServerResponse.text("stopped");
         }
+        if (url.pathname === "/read") {
+          return HttpServerResponse.text(yield* object.read(url.searchParams.get("path") ?? ""));
+        }
+        if (url.pathname === "/crash") {
+          yield* object.crash();
+          return HttpServerResponse.text("crashed");
+        }
         if (url.pathname === "/turns") {
           return HttpServerResponse.text(String(yield* object.completedTurns(session)));
         }

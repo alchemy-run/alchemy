@@ -9,10 +9,10 @@ import HarnessStack, { state } from "./fixtures/harness/stack.ts";
 const HOOK_TIMEOUT = 600_000;
 
 /**
- * `Cloudflare.Containers.Harness` keeps a session working across a
- * container restart: `stop()` snapshots the container, the next turn
- * restores it, and the session resumes with its files and conversation,
- * while its history stays in the Durable Object.
+ * `Cloudflare.Containers.Harness` keeps a session working across container
+ * restarts: from the container's snapshot after `stop()`, and from the
+ * prepared workspace plus the session's checkpoints when the container was
+ * lost without one. History stays in the Durable Object either way.
  */
 describe.each([
   { dev: true, mode: "local" },
@@ -52,13 +52,13 @@ describe.each([
       yield* get("/turn", {
         session,
         prompt:
-          "Run the shell command `echo banana-42 > /workspace/note.txt`. Remember the word 'otter'. Reply with only: done",
+          "Run the shell command `echo banana-42 > /workspace/repo/note.txt`. Remember the word 'otter'. Reply with only: done",
       });
       yield* get("/stop");
 
       const file = yield* get("/turn", {
         session,
-        prompt: "Run `cat /workspace/note.txt` and reply with only its output.",
+        prompt: "Run `cat /workspace/repo/note.txt` and reply with only its output.",
       });
       expect(file).toContain("banana-42");
 
@@ -69,6 +69,40 @@ describe.each([
       expect(recalled.toLowerCase()).toContain("otter");
 
       expect(yield* get("/turns", { session })).toBe("3");
+    }),
+    { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 600_000 },
+  );
+
+  test(
+    "a session lost without a snapshot comes back from its checkpoint",
+    Effect.gen(function* () {
+      const session = "crash";
+      const params = { object: `${mode}-crash`, session };
+      yield* get("/turn", {
+        ...params,
+        prompt:
+          "Run the shell commands `echo kiwi-7 > /workspace/repo/fruit.txt` and `echo old > /root/outside.txt`. Remember the word 'heron'. Reply with only: done",
+      });
+      expect(yield* get("/read", { ...params, path: "/root/outside.txt" })).toContain("old");
+      yield* get("/crash", params);
+
+      const files = yield* get("/turn", {
+        ...params,
+        prompt:
+          "Run `cat /workspace/repo/fruit.txt /workspace/repo/base.txt` and reply with only the output.",
+      });
+      // The uncommitted file came back from the checkpoint; base.txt from
+      // the prepared workspace.
+      expect(files).toContain("kiwi-7");
+      expect(files).toContain("prepared");
+      // A new container: what was outside the workspace is gone.
+      expect(yield* get("/read", { ...params, path: "/root/outside.txt" })).toBe("");
+
+      const recalled = yield* get("/turn", {
+        ...params,
+        prompt: "Which word did I ask you to remember? Reply with only that word.",
+      });
+      expect(recalled.toLowerCase()).toContain("heron");
     }),
     { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 600_000 },
   );
