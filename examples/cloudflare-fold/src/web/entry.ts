@@ -54,5 +54,11 @@ Runtime.run(
     resources: BankConnection,
     container: document.getElementById("root"),
   }),
-  { flags: signedIn.pipe(Effect.map((customerId) => ({ customerId }))) },
+  {
+    flags: Effect.all({
+      customerId: signedIn,
+      // Names this page's commands, so each is unique even across reloads.
+      session: Effect.sync(() => crypto.randomUUID()),
+    }),
+  },
 );
