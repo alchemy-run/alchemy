@@ -6,6 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { subsetDiffers } from "../../Util/equal.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -15,7 +16,6 @@ import {
   isDomainDeletable,
   readDomainTags,
   repeatUntilDomainState,
-  subsetDiffers,
 } from "./internal.ts";
 
 export interface DomainClusterConfig {
