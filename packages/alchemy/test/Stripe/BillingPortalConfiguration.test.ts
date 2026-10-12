@@ -173,11 +173,18 @@ test.provider(
       expect(found?.name).toEqual(deployed.name);
       expect(found?.features.invoiceHistory.enabled).toEqual(true);
       expect(found?.metadata).toMatchObject({ kind: "list" });
+      // The account default is a Stripe singleton and is never enumerated.
+      expect(all.every((configuration) => !configuration.isDefault)).toEqual(true);
 
       yield* stack.destroy();
 
       const deactivated = yield* waitUntilDeactivated(deployed.id);
       expect(deactivated).toEqual("inactive");
+
+      // Deactivated configurations are effectively deleted and must not
+      // re-enter nuke.
+      const after = yield* provider.list();
+      expect(after.find((configuration) => configuration.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:billingportalconfiguration", "live"],

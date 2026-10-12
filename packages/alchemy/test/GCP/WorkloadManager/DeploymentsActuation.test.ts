@@ -17,7 +17,7 @@ const missingDeploymentOf = (project: string) =>
 
 // Workload Manager API is entitlement-gated on the default testing project
 // (`ServiceDisabled`: "Workload Manager API has not been used in project
-// alchemy-gcp-testing-83661 before or it is disabled."). Set
+// <project> before or it is disabled."). Set
 // GCP_TEST_WORKLOADMANAGER=1 on an entitled project to run the lifecycle.
 const entitled = process.env.GCP_TEST_WORKLOADMANAGER === "1";
 const runLifecycle = entitled && !process.env.FAST;

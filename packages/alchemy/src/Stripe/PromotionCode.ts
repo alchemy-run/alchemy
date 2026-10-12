@@ -349,20 +349,6 @@ const listByActive = Effect.fn(function* (active: boolean) {
   return items;
 });
 
-const listAllPromotionCodes = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
-    concurrency: 2,
-  });
-  const seen = new Set<string>();
-  const items: StripePromotionCode[] = [];
-  for (const item of [...active, ...inactive]) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    items.push(item);
-  }
-  return items;
-});
-
 const observe = Effect.fn(function* (input: { id?: string; code: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
@@ -429,7 +415,9 @@ export const PromotionCodeProvider = () =>
     stables: ["id", "code", "couponId", "created", "livemode"],
 
     list: Effect.fn(function* () {
-      const items = yield* listAllPromotionCodes();
+      // Promotion codes cannot be deleted; delete deactivates them. Inactive
+      // rows are effectively deleted and must not re-enter nuke.
+      const items = yield* listByActive(true);
       return items
         .filter((item) => tagRecord(item.metadata)[alchemyMetadataKeys.stack] !== undefined)
         .map(toAttrs);

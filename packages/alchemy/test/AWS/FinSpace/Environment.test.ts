@@ -9,11 +9,22 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// Amazon FinSpace reached end of support on 2026-10-07
+// (https://docs.aws.amazon.com/finspace/latest/userguide/amazon-finspace-end-of-support.html).
+// The control-plane hostname finspace.<region>.amazonaws.com no longer has
+// A records in any region, so every control-plane call fails before reaching
+// AWS with:
+//   HttpClientError: Transport error (GET https://finspace.us-west-2.amazonaws.com/kx/environments)
+//   (cause: getaddrinfo ENOTFOUND finspace.us-west-2.amazonaws.com)
+// A transport failure can't be patched into a typed tag, so all control-plane
+// tests are gated behind AWS_TEST_FINSPACE=1 for accounts that still have access.
+const finspaceRetired = !process.env.AWS_TEST_FINSPACE;
+
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag the Environment provider's read/delete paths depend on.
 // (environmentId must match ^[a-zA-Z0-9]{1,26}$ — malformed ids fail earlier
 // with ValidationException.)
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getEnvironment on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -72,7 +83,7 @@ const assertEnvironmentDeleting = (environmentId: string) =>
 // exists, and FinSpace is closed to non-onboarded accounts. The full
 // lifecycle is gated behind AWS_TEST_FINSPACE=1 and always destroys what it
 // created.
-test.provider.skipIf(!process.env.AWS_TEST_FINSPACE)(
+test.provider.skipIf(finspaceRetired)(
   "create FinSpace environment, verify, update, destroy",
   (stack) =>
     Effect.gen(function* () {

@@ -11,7 +11,22 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { fetchObservedTags, jobArn, retryWhileRoleNotAssumable, syncTags } from "./internal.ts";
+import {
+  fetchObservedTags,
+  jobArn,
+  reapGlueLogStreams,
+  retryWhileRoleNotAssumable,
+  syncTags,
+} from "./internal.ts";
+
+/** Shared, service-managed log groups Glue writes job-run streams to. */
+const GLUE_JOB_LOG_GROUPS = [
+  "/aws-glue/python-jobs/output",
+  "/aws-glue/python-jobs/error",
+  "/aws-glue/jobs/output",
+  "/aws-glue/jobs/error",
+  "/aws-glue/jobs/logs-v2",
+];
 
 export interface JobCommand {
   /**
@@ -296,6 +311,30 @@ export const JobProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // Glue writes each run's logs to streams prefixed by the run id in
+          // SHARED, service-managed groups (`/aws-glue/python-jobs/output`,
+          // `/aws-glue/jobs/logs-v2`, …). deleteJob leaves them behind and
+          // drops the run history, so enumerate our runs and reap their
+          // streams first (never the shared groups themselves).
+          const job = yield* observe(output.jobName);
+          const runIds = yield* glue.getJobRuns.items({ JobName: output.jobName }).pipe(
+            Stream.map((run) => run.Id),
+            Stream.filter((runId): runId is string => runId !== undefined),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed([] as string[])),
+          );
+          if (runIds.length > 0) {
+            const continuousLogGroup = job?.DefaultArguments?.["--continuous-log-logGroup"];
+            yield* reapGlueLogStreams(
+              [
+                ...GLUE_JOB_LOG_GROUPS,
+                ...(continuousLogGroup === undefined ? [] : [continuousLogGroup]),
+              ],
+              runIds,
+            );
+          }
+
           // DeleteJob is idempotent — the API returns success (not an error)
           // when the job definition is already gone.
           yield* glue.deleteJob({ JobName: output.jobName });

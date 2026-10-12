@@ -27,7 +27,7 @@ const waitForAvailable = (replicationGroupId: string) =>
     }),
   );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "adds a Valkey replica online and enables high availability",
   (stack) =>
     Effect.gen(function* () {
@@ -68,7 +68,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "scales shards online for a cluster-mode-enabled Valkey group",
   (stack) =>
     Effect.gen(function* () {
@@ -106,7 +106,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "reconciles a highly available replication group",
   (stack) =>
     Effect.gen(function* () {

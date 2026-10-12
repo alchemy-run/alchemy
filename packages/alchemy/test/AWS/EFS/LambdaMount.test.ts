@@ -109,13 +109,13 @@ const getJsonWithRetry = (url: string, times: number) =>
     Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]) }),
   );
 
-// Gated behind AWS_TEST_SLOW: the suite's wall clock is ~6–8 minutes end to
+// Skipped under `--fast`: the suite's wall clock is ~6–8 minutes end to
 // end — the beforeAll deploy alone is ~250s (file system + mount-target ENI
 // provisioning + VPC-attached Lambda with EFS mount validation) and the
 // afterAll teardown waits out the mount-target/ENI release (~2–4 min). That
 // is genuinely slow platform provisioning, not a failure mode; the suite was
-// verified green in wave 1C (commit e77b9fd83). Run with AWS_TEST_SLOW=1.
-describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
+// verified green in wave 1C (commit e77b9fd83). Skipped under `--fast`.
+describe.skipIf(!!process.env.FAST).sequential(
   "EFS Lambda mount",
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:efs", "provider:aws:lambda", "live"],

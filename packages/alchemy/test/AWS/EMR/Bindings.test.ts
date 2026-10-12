@@ -151,13 +151,13 @@ describe.sequential(
 // ---------------------------------------------------------------------------
 // Cluster-scoped bindings (steps data plane, inspection reads, managed
 // scaling) need a real EMR cluster (~10-15 min to WAITING, billed per
-// instance-hour) — gated behind AWS_TEST_SLOW=1 like the Cluster lifecycle
+// instance-hour) — skipped under `--fast` like the Cluster lifecycle
 // test.
 // ---------------------------------------------------------------------------
 
 const slowStack = Core.scratchStack(testOptions, "EMRSlowBindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "steps + inspection + managed-scaling bindings against a live cluster",
   () =>
     Effect.gen(function* () {

@@ -21,8 +21,10 @@ const fetchOk = (url: string) =>
         res.status === 200 ? Effect.succeed(res) : Effect.fail(new Error(`HTTP ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 20,
+        // Back off, but keep polling every 3s: a new fly.dev hostname can
+        // take a minute or more to start serving.
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+        times: 35,
       }),
     );
   });

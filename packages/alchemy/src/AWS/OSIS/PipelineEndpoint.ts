@@ -40,7 +40,7 @@ export interface PipelineEndpoint extends Resource<
   PipelineEndpointProps,
   {
     /**
-     * Id of the pipeline endpoint (`pe-…`), assigned by OSIS on create.
+     * Opaque id of the pipeline endpoint, assigned by OSIS on create.
      */
     endpointId: string;
     /**
@@ -68,6 +68,12 @@ export interface PipelineEndpoint extends Resource<
  * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline — lets
  * clients inside a VPC ingest data into a pipeline privately, without
  * traversing the public ingest endpoint.
+ *
+ * The target pipeline must itself be a VPC pipeline (`vpcOptions` set), and
+ * the endpoint must live in a different VPC than the pipeline — within the
+ * pipeline's own VPC, use its ingest URL instead. Every VPC involved needs
+ * `enableDnsSupport` and `enableDnsHostnames`. Cross-account endpoints also
+ * need an {@link ResourcePolicy} granting `osis:CreatePipelineEndpoint`.
  *
  * All properties are create-only; any change replaces the endpoint. The
  * endpoint id is assigned by OSIS on create.

@@ -2,6 +2,7 @@ import * as chromemanagement from "@distilled.cloud/gcp/chromemanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import {
   customerName,
@@ -14,18 +15,20 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const probeBody: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfig = {
+const probeBody = (
+  project: string,
+): chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfig => ({
   displayName: "Alchemy Probe",
   type: "REPORTING",
   details: {
     pubSubConfig: {
-      topicFullPath: "projects/alchemy-gcp-testing-83661/topics/alchemy-probe",
+      topicFullPath: `projects/${project}/topics/alchemy-probe`,
       reportingSettings: {
         enabledDefaultEvents: ["ALL_DEFAULT_EVENTS"],
       },
     },
   },
-};
+});
 
 test.provider.skipIf(!runLifecycle)(
   "getCustomersConnectorConfigs on a missing connector config fails with a typed tag",
@@ -52,13 +55,14 @@ test.provider.skipIf(runLifecycle)(
   "createCustomersConnectorConfigs without Chrome Management access fails with InsufficientScopes",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         chromemanagement.createCustomersConnectorConfigs({
           parent: probeParent,
           connectorConfigId: "alchemy-probe",
-          body: probeBody,
+          body: probeBody(project),
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

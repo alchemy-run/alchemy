@@ -117,8 +117,11 @@ test.provider(
   },
 );
 
-// A live job run is billed and takes ~1-2 minutes — gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// A live job run is billed (≈1 DPU-minute) and takes ~1-2 minutes. Under
+// concurrent load startJobRun has failed right after create with
+// `EntityNotFoundException: Failed to start job run due to missing metadata`
+// (2026-10-09), so it stays skipped under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
   "run a live Python shell job to success",
   (stack) =>
     Effect.gen(function* () {

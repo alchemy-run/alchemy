@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // proves the SDK's typed error mapping and that the binding's callable is wired
 // against the real batch API, at zero cost (no S3 media, no job). The full
 // start→poll lifecycle needs an S3 audio input and multi-minute async
-// processing; it is gated behind AWS_TEST_SLOW=1.
+// processing; it is skipped under `--fast`.
 //
 // NOTE: AWS Transcribe reports a missing job as `BadRequestException` ("The
 // requested job couldn't be found."), NOT `NotFoundException` — a documented

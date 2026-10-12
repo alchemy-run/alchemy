@@ -18,9 +18,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // them left external bun dies at module load under systemd and the app port
 // never answers.
 //
-// Heavy (instance boot + bun install + S3 sync + systemd), so gated behind
-// AWS_TEST_SLOW=1 alongside the other isolated-project e2e tests.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Heavy (instance boot + bun install + S3 sync + systemd, ~2 min), so
+// skipped under --fast alongside the other isolated-project e2e tests.
+test.provider.skipIf(!!process.env.FAST)(
   "instance program bundled from an isolated project serves HTTP",
   (stack) =>
     Effect.gen(function* () {
