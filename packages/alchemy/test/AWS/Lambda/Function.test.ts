@@ -246,10 +246,11 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 360_000 },
 );
 
-// Alchemy owns `/aws/lambda/<name>` and the execution role can write to it
-// but cannot create log groups, so destroy deletes the group exactly once:
-// Lambda's asynchronous flush of an invocation that ran right before the
-// delete is dropped instead of silently recreating the group.
+// Alchemy owns `/aws/lambda/<name>`: the execution role keeps the managed
+// AWSLambdaBasicExecutionRole but is denied logs:CreateLogGroup on its own
+// group, so destroy deletes the group exactly once — Lambda's asynchronous
+// flush of an invocation that ran right before the delete is dropped instead
+// of silently recreating the group.
 test.provider(
   "destroy right after an invoke removes the log group for good",
   (stack) =>
@@ -272,21 +273,25 @@ test.provider(
       // Created by Alchemy before any invocation.
       expect(yield* describeGroup).toBeDefined();
 
-      // No managed policy (AWSLambdaBasicExecutionRole grants
-      // logs:CreateLogGroup on *); logging rides an inline policy scoped to
-      // this function's group.
+      // The managed policy stays; an inline Deny scoped to this function's
+      // group overrides its logs:CreateLogGroup on *.
       const attached = yield* iam.listAttachedRolePolicies({ RoleName: fn.roleName });
-      expect(attached.AttachedPolicies ?? []).toEqual([]);
+      expect((attached.AttachedPolicies ?? []).map((p) => p.PolicyArn)).toEqual([
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      ]);
       const { PolicyDocument } = yield* iam.getRolePolicy({
         RoleName: fn.roleName,
-        PolicyName: "AlchemyLambdaExecution",
+        PolicyName: "AlchemyDenyLogGroupCreate",
       });
-      const document = JSON.parse(decodeURIComponent(PolicyDocument)) as {
-        Statement: { Action: string[]; Resource: string }[];
+      const guard = JSON.parse(decodeURIComponent(PolicyDocument)) as {
+        Statement: { Effect: string; Action: string; Resource: string }[];
       };
-      expect(document.Statement).toHaveLength(1);
-      expect(document.Statement[0]!.Action).toEqual(["logs:CreateLogStream", "logs:PutLogEvents"]);
-      expect(document.Statement[0]!.Resource).toMatch(
+      expect(guard.Statement).toHaveLength(1);
+      expect(guard.Statement[0]).toMatchObject({
+        Effect: "Deny",
+        Action: "logs:CreateLogGroup",
+      });
+      expect(guard.Statement[0]!.Resource).toMatch(
         new RegExp(`:log-group:${logGroupName.replaceAll("/", "\\/")}:\\*$`),
       );
 
@@ -305,18 +310,17 @@ test.provider(
       expect(yield* describeGroup).toBeUndefined();
 
       // Lambda flushes the final batches up to ~35s after the last invoke;
-      // without logs:CreateLogGroup they are dropped and the group stays gone.
+      // the role could never create the group, so it stays gone.
       yield* Effect.sleep("60 seconds");
       expect(yield* describeGroup).toBeUndefined();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 180_000 },
 );
 
-// Roles deployed by older Alchemy versions carry the managed
-// AWSLambdaBasicExecutionRole (logs:CreateLogGroup on *); the next deploy
-// swaps it for the scoped inline policy.
+// Roles deployed by older Alchemy versions have no guard; the next deploy
+// adds it (and creates the log group if Lambda never did).
 test.provider(
-  "migrates a legacy managed execution policy to the inline policy",
+  "adds the log-group guard to an existing role on the next deploy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -332,21 +336,21 @@ test.provider(
           }),
         );
       const fn = yield* deploy("v1");
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
 
-      // Recreate the pre-migration role shape out-of-band.
-      yield* iam.attachRolePolicy({
+      // Recreate the pre-guard shape out-of-band.
+      yield* iam.deleteRolePolicy({
         RoleName: fn.roleName,
-        PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        PolicyName: "AlchemyDenyLogGroupCreate",
       });
-      yield* iam.deleteRolePolicy({ RoleName: fn.roleName, PolicyName: "AlchemyLambdaExecution" });
+      yield* Logs.deleteLogGroup({ logGroupName });
 
-      // Any update runs reconcile, which converges the role.
       yield* deploy("v2");
 
-      const attached = yield* iam.listAttachedRolePolicies({ RoleName: fn.roleName });
-      expect(attached.AttachedPolicies ?? []).toEqual([]);
       const { PolicyNames } = yield* iam.listRolePolicies({ RoleName: fn.roleName });
-      expect(PolicyNames).toContain("AlchemyLambdaExecution");
+      expect(PolicyNames).toContain("AlchemyDenyLogGroupCreate");
+      const groups = yield* Logs.describeLogGroups({ logGroupNamePrefix: logGroupName });
+      expect((groups.logGroups ?? []).map((g) => g.logGroupName)).toContain(logGroupName);
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(fn.functionName);

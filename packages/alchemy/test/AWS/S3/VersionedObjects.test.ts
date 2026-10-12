@@ -219,15 +219,15 @@ describe.sequential(
             .pipe(Stream.runCollect);
           expect(
             attached.flatMap((page) => page.AttachedPolicies ?? []).map((p) => p.PolicyArn),
-          ).toEqual([]);
+          ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
           const pages = yield* IAM.listRolePolicies
             .pages({ RoleName: roleName })
             .pipe(Stream.runCollect);
           const documents = yield* Effect.forEach(
-            // Skip the function's baseline logging policy; only binding grants count.
+            // Skip the function's log-group guard; only binding grants count.
             pages
               .flatMap((page) => page.PolicyNames)
-              .filter((name) => name !== "AlchemyLambdaExecution"),
+              .filter((name) => name !== "AlchemyDenyLogGroupCreate"),
             (PolicyName) =>
               Effect.gen(function* () {
                 const result = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });

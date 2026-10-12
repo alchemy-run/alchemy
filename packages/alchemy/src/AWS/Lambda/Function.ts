@@ -177,6 +177,9 @@ export const layerVersionArnOf = (layer: LayerRef): string =>
  * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
  * `fileSystemConfigs` entry to the access point ARN.
  */
+/** Inline policy denying the execution role `logs:CreateLogGroup` on its own group. */
+const logGroupGuardPolicyName = "AlchemyDenyLogGroupCreate";
+
 const accessPointArnOf = (config: {
   accessPoint?: AccessPointRef;
   arn?: string;
@@ -314,12 +317,10 @@ export interface FunctionCommonProps extends PlatformProps {
   /**
    * Retention for the function's CloudWatch log group
    * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
-   * `{ retention: "forever" }`. Alchemy always creates (or adopts) this log
-   * group before the function can be invoked and deletes it with the
-   * function; the execution role may write to it but cannot create log
-   * groups, so logs flushed after destroy are dropped rather than leaving a
-   * re-created group behind. When omitted the group's retention is left
-   * untouched (new groups never expire).
+   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
+   * log group so the policy applies before the first invocation, and
+   * deletes it with the function. When omitted the log group is left to
+   * Lambda, which creates it on first invoke with no expiry.
    */
   logging?: LogRetentionConfig;
 }
@@ -1248,12 +1249,6 @@ export const FunctionProvider = () =>
       });
 
       const xrayWriteAccessPolicyArn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
-      const basicExecutionPolicyArn =
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole";
-      const vpcAccessExecutionPolicyArn =
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
-      /** Inline policy holding the role's baseline (logs + ENI) permissions. */
-      const executionPolicyName = "AlchemyLambdaExecution";
 
       /**
        * Converge the X-Ray write managed policy on the execution role with
@@ -1289,9 +1284,11 @@ export const FunctionProvider = () =>
       const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
+        vpc,
       }: {
         id: string;
         roleName: string;
+        vpc?: FunctionProps["vpc"];
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
@@ -1330,111 +1327,73 @@ export const FunctionProvider = () =>
             );
         }
 
+        yield* Effect.logDebug(`attaching policy ${id}`);
+        yield* iam
+          .attachRolePolicy({
+            RoleName: roleName,
+            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          })
+          .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
+
+        if (vpc) {
+          yield* iam
+            .attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            })
+            .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
+        }
+
+        yield* Effect.logDebug(`attached policy ${id}`);
         return role;
       });
 
       /**
-       * Converge the execution role's baseline permissions: an inline policy
-       * that lets the function write to ITS log group, plus the Hyperplane
-       * ENI actions for VPC-attached functions.
-       *
-       * Deliberately NOT the AWS managed `AWSLambdaBasicExecutionRole` /
-       * `AWSLambdaVPCAccessExecutionRole` policies: both grant
-       * `logs:CreateLogGroup` on `*`. Alchemy creates and owns
-       * `/aws/lambda/<name>` (see {@link ensureLogGroup}), so the function
-       * never needs to create it — and without that permission Lambda's
-       * asynchronous flush of an invocation that ran just before
-       * `deleteFunction` is dropped instead of silently re-creating the
-       * just-deleted group. That is what lets `delete` remove the group once
-       * instead of waiting out a ~40s flush window.
-       *
-       * Roles deployed before this change carry the managed policies; they
-       * are swapped for the inline policy here (the role is the function's
-       * own deterministic, Alchemy-created role, so any attachment of these
-       * two policies is ours). The ENI grant is sticky: once the function has
-       * been VPC-attached it is kept, since Lambda may still be releasing
-       * Hyperplane ENIs after the VPC config is removed (matching the prior
-       * behaviour of never detaching the managed VPC policy).
+       * Deny the execution role `logs:CreateLogGroup` on the function's own
+       * `/aws/lambda/<name>` group. The managed `AWSLambdaBasicExecutionRole`
+       * allows it on `*`, which lets Lambda create the group with no tags or
+       * retention on first invoke, and lets a log batch flushed after
+       * `deleteFunction` silently re-create a group we just deleted. With the
+       * Deny, Alchemy owns the group (see {@link ensureLogGroup}): Lambda only
+       * writes into it, and `delete` removes it once.
        */
-      const syncExecutionPolicy = Effect.fn(function* ({
+      const syncLogGroupGuard = Effect.fn(function* ({
         roleName,
         functionName,
-        vpc,
       }: {
         roleName: string;
         functionName: string;
-        vpc: boolean;
       }) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const attached = (
-          (yield* iam.listAttachedRolePolicies({ RoleName: roleName })).AttachedPolicies ?? []
-        ).flatMap((policy) => (policy.PolicyArn ? [policy.PolicyArn] : []));
-        const current = yield* iam
-          .getRolePolicy({ RoleName: roleName, PolicyName: executionPolicyName })
+        const document = JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Deny",
+              Action: "logs:CreateLogGroup",
+              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+            },
+          ],
+        });
+        const observed = yield* iam
+          .getRolePolicy({ RoleName: roleName, PolicyName: logGroupGuardPolicyName })
           .pipe(
             Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
             Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           );
-        const eni =
-          vpc ||
-          attached.includes(vpcAccessExecutionPolicyArn) ||
-          (current?.includes("ec2:CreateNetworkInterface") ?? false);
-        const document = {
-          Version: "2012-10-17",
-          Statement: [
-            {
-              Sid: "FunctionLogs",
-              Effect: "Allow" as const,
-              Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
-            },
-            ...(eni
-              ? [
-                  {
-                    Sid: "VpcNetworkInterfaces",
-                    Effect: "Allow" as const,
-                    // AWSLambdaVPCAccessExecutionRole minus the logs actions.
-                    Action: [
-                      "ec2:CreateNetworkInterface",
-                      "ec2:DescribeNetworkInterfaces",
-                      "ec2:DescribeSubnets",
-                      "ec2:DeleteNetworkInterface",
-                      "ec2:AssignPrivateIpAddresses",
-                      "ec2:UnassignPrivateIpAddresses",
-                    ],
-                    Resource: "*",
-                  },
-                ]
-              : []),
-          ],
-        } satisfies IAM.PolicyDocument;
-        const observed =
-          current === undefined
-            ? undefined
-            : yield* Effect.try(() => JSON.parse(current) as unknown).pipe(
-                Effect.orElseSucceed(() => undefined),
-              );
-        if (!deepEqual(observed, document)) {
+        if (observed !== document) {
           yield* iam.putRolePolicy({
             RoleName: roleName,
-            PolicyName: executionPolicyName,
-            PolicyDocument: JSON.stringify(document),
+            PolicyName: logGroupGuardPolicyName,
+            PolicyDocument: document,
           });
-        }
-        for (const legacy of [basicExecutionPolicyArn, vpcAccessExecutionPolicyArn]) {
-          if (attached.includes(legacy)) {
-            yield* iam
-              .detachRolePolicy({ RoleName: roleName, PolicyArn: legacy })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-          }
         }
       });
 
       /**
-       * Create (or adopt) the function's `/aws/lambda/<name>` log group
-       * before the function can be invoked. The execution role cannot create
-       * log groups (see {@link syncExecutionPolicy}), so this group is the
-       * only one the function ever writes to.
+       * Create (or adopt) `/aws/lambda/<name>` before the function can run.
+       * The execution role cannot create it (see {@link syncLogGroupGuard}),
+       * so without this the function's logs would be dropped.
        */
       const ensureLogGroup = Effect.fn(function* ({
         id,
@@ -1443,7 +1402,7 @@ export const FunctionProvider = () =>
       }: {
         id: string;
         functionName: string;
-        retention: LogRetentionConfig["retention"];
+        retention: LogRetentionConfig["retention"] | undefined;
       }) {
         const logGroupName = `/aws/lambda/${functionName}`;
         yield* logs
@@ -2326,8 +2285,12 @@ export const FunctionProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(id, news.functionName);
 
-          const role = yield* createRoleIfNotExists({ id, roleName });
-          yield* syncExecutionPolicy({ roleName, functionName, vpc: news.vpc !== undefined });
+          const role = yield* createRoleIfNotExists({
+            id,
+            roleName,
+            vpc: news.vpc,
+          });
+          yield* syncLogGroupGuard({ roleName, functionName });
           yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           const prepared = yield* preparePrecreatedFunctionCode({
@@ -2376,8 +2339,14 @@ export const FunctionProvider = () =>
           // deterministic role before syncing binding policies so reconcile
           // can recover from that partial state instead of failing the first
           // `putRolePolicy` with `NoSuchEntityException`.
-          const ensuredRole = yield* createRoleIfNotExists({ id, roleName });
+          const ensuredRole = yield* createRoleIfNotExists({
+            id,
+            roleName,
+            vpc: news.vpc,
+          });
           const roleArn = ensuredRole.Role.Arn ?? output?.roleArn;
+          yield* syncLogGroupGuard({ roleName, functionName });
+          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           const {
             env,
@@ -2412,13 +2381,13 @@ export const FunctionProvider = () =>
           // The role may predate the VPC request (precreate stub, or a
           // binding newly asking for attachment) — the ENI permissions must
           // be on the role before the function config references the VPC.
-          // Also migrates roles that still carry the managed execution
-          // policies (which grant logs:CreateLogGroup) to the inline policy.
-          yield* syncExecutionPolicy({ roleName, functionName, vpc: vpc !== undefined });
-
-          // Alchemy owns the log group: it must exist before the function
-          // can be invoked, since the role cannot create it.
-          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
+          // Attaching is idempotent.
+          if (vpc) {
+            yield* iam.attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            });
+          }
 
           yield* syncTracingPolicy({
             roleName,
@@ -2569,14 +2538,17 @@ export const FunctionProvider = () =>
             .pipe(
               Effect.flatMap((policies) =>
                 Effect.all(
-                  (policies.PolicyNames ?? []).map((policyName) =>
-                    iam
-                      .deleteRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyName: policyName,
-                      })
-                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                  ),
+                  // The log-group guard stays until the function is deleted.
+                  (policies.PolicyNames ?? [])
+                    .filter((policyName) => policyName !== logGroupGuardPolicyName)
+                    .map((policyName) =>
+                      iam
+                        .deleteRolePolicy({
+                          RoleName: output.roleName,
+                          PolicyName: policyName,
+                        })
+                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+                    ),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -2613,9 +2585,13 @@ export const FunctionProvider = () =>
             yield* functionImage.deleteRepository(output.code.image.repositoryName);
           }
 
-          // IAM can briefly report the just-detached role as still in use,
-          // so retry those eventual-consistency conflicts on a bounded
-          // schedule.
+          // The managed policies were detached before deleteFunction, so the
+          // role no longer allows logs:CreateLogGroup and the guard can go with
+          // it. IAM can briefly report a just-detached role as still in use, so
+          // retry those eventual-consistency conflicts on a bounded schedule.
+          yield* iam
+            .deleteRolePolicy({ RoleName: output.roleName, PolicyName: logGroupGuardPolicyName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
             Effect.retry({
@@ -2627,30 +2603,13 @@ export const FunctionProvider = () =>
             }),
           );
 
-          // deleteFunction does NOT remove /aws/lambda/<name>. One delete is
-          // enough: the execution role has no logs:CreateLogGroup (see
-          // `syncExecutionPolicy`), so Lambda's asynchronous flush of an
-          // invocation that ran just before deleteFunction is dropped rather
-          // than re-creating the group — there is no flush window to wait
-          // out. (A role last deployed by an older Alchemy still held the
-          // managed AWSLambdaBasicExecutionRole until the detach above; such
-          // a function invoked within ~40s of its destroy can leave an empty
-          // re-created group behind, which the account census reaps.)
-          const logGroupName = `/aws/lambda/${output.functionName}`;
-          yield* logs.deleteLogGroup({ logGroupName }).pipe(
-            Effect.retry({
-              while: (error) =>
-                error._tag === "OperationAbortedException" ||
-                error._tag === "ServiceUnavailableException",
-              schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.timeoutOrElse({
-              duration: "45 seconds",
-              orElse: () =>
-                Effect.die(new Error(`Timed out deleting Lambda log group ${logGroupName}`)),
-            }),
-          );
+          // Alchemy created /aws/lambda/<name> and the role could never
+          // create it (see `syncLogGroupGuard`), so a late log flush after
+          // deleteFunction is dropped instead of re-creating the group: one
+          // delete is enough.
+          yield* logs
+            .deleteLogGroup({ logGroupName: `/aws/lambda/${output.functionName}` })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           return null as any;
         }),
