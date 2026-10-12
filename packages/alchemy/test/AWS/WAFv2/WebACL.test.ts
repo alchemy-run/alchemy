@@ -191,9 +191,9 @@ test.provider(
 );
 
 // CLOUDFRONT-scoped web ACLs are pinned to us-east-1 by the provider. The
-// lifecycle is identical to REGIONAL; gate the live run to keep the default
-// suite regional-only.
-test.provider.skipIf(!process.env.AWS_TEST_WAF_CLOUDFRONT)(
+// lifecycle is identical to REGIONAL (~2s; a web ACL bills $5/month prorated
+// hourly). Opt out with AWS_TEST_WAF_CLOUDFRONT=0.
+test.provider.skipIf(process.env.AWS_TEST_WAF_CLOUDFRONT === "0")(
   "CLOUDFRONT scope provisions in us-east-1",
   (stack) =>
     Effect.gen(function* () {

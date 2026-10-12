@@ -44,9 +44,9 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 // The fixture deploys an AgentCore Memory, which takes ~2.5 minutes to reach
-// ACTIVE — gate the suite behind AWS_TEST_SLOW to keep the default CI pass
-// fast. Run with AWS_TEST_SLOW=1 to exercise it.
-describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
+// ACTIVE — skip the suite under `--fast` to keep quick runs
+// quick.
+describe.skipIf(!!process.env.FAST).sequential(
   "BedrockAgentCore Bindings",
   {
     tags: [

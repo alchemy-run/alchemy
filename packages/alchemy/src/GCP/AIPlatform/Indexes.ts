@@ -27,7 +27,7 @@ import {
   toLabels,
   userLabels,
 } from "./names.ts";
-import { waitForOperation } from "./operations.ts";
+import { settlePendingCreates, waitForOperation } from "./operations.ts";
 
 export type IndexProps = {
   /**
@@ -178,10 +178,28 @@ const listPage = (parent: string, filter?: string) =>
     ),
   );
 
-const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+const findVisible = (project: string, location: string, labels: Record<string, string>) =>
   listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
     Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
+
+/**
+ * Find our resource by its ownership labels. Ids are server-assigned and the
+ * resource is invisible to `list` while its create operation is pending
+ * (minutes on a fresh project), so on a miss wait for pending creates in
+ * this location and look again — otherwise an interrupted create's
+ * recovery read reports it gone and leaks it.
+ */
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  Effect.gen(function* () {
+    const visible = yield* findVisible(project, location, labels);
+    if (visible !== undefined) return visible;
+    const settled = yield* settlePendingCreates({
+      parent: `projects/${project}/locations/${location}`,
+      collection: "indexes",
+    });
+    return settled ? yield* findVisible(project, location, labels) : undefined;
+  });
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(

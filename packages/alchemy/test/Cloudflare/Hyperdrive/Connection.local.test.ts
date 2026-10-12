@@ -4,9 +4,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { HyperdriveDevOriginUnsupported } from "@/Cloudflare/Hyperdrive/ConnectBinding.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -178,5 +181,58 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+  },
+);
+
+/**
+ * A Workers VPC origin is only reachable from Cloudflare's network, so a dev
+ * run binding it without a `dev` override must die with the typed
+ * `HyperdriveDevOriginUnsupported` defect instead of starting a Worker that
+ * can never connect.
+ */
+test.provider(
+  "VPC Service origin without a dev override dies with HyperdriveDevOriginUnsupported",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const defect = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const connection = yield* Cloudflare.Hyperdrive.Connection(
+              "HyperdriveVpcDevConnection",
+              {
+                origin: {
+                  scheme: "postgres",
+                  serviceId: "00000000-0000-4000-8000-000000000000",
+                  database: "postgres",
+                  user: "postgres",
+                  password: Redacted.make("unused"),
+                },
+              },
+            );
+            return yield* Cloudflare.Worker("HyperdriveVpcDevWorker", {
+              main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
+              env: { HD: connection },
+            });
+          }),
+        )
+        .pipe(
+          Effect.flatMap(() => Effect.die(new Error("expected the dev deploy to die"))),
+          Effect.catchDefect((defect) => Effect.succeed(defect)),
+        );
+
+      expect(defect).toBeInstanceOf(HyperdriveDevOriginUnsupported);
+      expect(defect).toMatchObject({
+        _tag: "HyperdriveDevOriginUnsupported",
+        logicalId: "HyperdriveVpcDevConnection",
+        origin: "vpc",
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:hyperdrive", "provider:cloudflare:worker"],
+    timeout: 120_000,
   },
 );

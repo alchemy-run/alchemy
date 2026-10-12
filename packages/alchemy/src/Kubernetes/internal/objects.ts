@@ -23,6 +23,16 @@ export interface KubernetesObjectRef {
   kind: string;
   name: string;
   namespace?: string;
+  /**
+   * Fingerprint of the declared fields last applied. Reads compare a GET
+   * projected through {@link driftMask} to this.
+   */
+  baselineHash?: string;
+  /**
+   * Declared-field mask from the last apply. Absent on state written before
+   * selections existed; those rows still detect a deleted object.
+   */
+  driftMask?: unknown;
 }
 
 export interface KubernetesObjectBinding {

@@ -5,7 +5,7 @@ import type { Collection } from "./Collection.ts";
 
 /**
  * Runtime binding for the `DeleteIndex` operation scoped to one collection
- * (IAM action `aoss:APIAccessAll` on the collection ARN).
+ * (IAM actions `aoss:DeleteIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
  * Deletes an index from the bound {@link Collection} — the teardown half of
  * the runtime multi-tenant pattern built with {@link CreateIndex}. Deleting

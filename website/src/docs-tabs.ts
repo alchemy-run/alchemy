@@ -79,6 +79,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Turso",
+    href: "/turso",
+    prefixes: ["/turso", "/providers/turso"],
+    slot: "primary",
+  },
+  {
     label: "Prisma",
     href: "/prisma",
     prefixes: ["/prisma", "/providers/prisma"],

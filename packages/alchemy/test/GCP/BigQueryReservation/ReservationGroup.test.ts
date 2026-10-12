@@ -11,11 +11,11 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Reservation groups need reservation-based fairness on the project;
-// otherwise create fails with BadRequest "Can not use Reservation Groups
-// without Reservation Based Fairness enabled on the project." Set
-// GCP_TEST_BIGQUERY_RESERVATION_GROUPS=1 on such a project.
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_BIGQUERY_RESERVATION_GROUPS === "1";
+// Reservation groups are free, empty containers. Projects without
+// reservation-based fairness reject create with the typed
+// `ReservationBasedFairnessRequired` (BadRequest "Can not use Reservation
+// Groups without Reservation Based Fairness enabled on the project."); the
+// testing project accepts them, so the lifecycle runs by default.
 
 const waitUntilGone = (name: string) =>
   bigqueryreservation.getProjectsLocationsReservationGroups({ name }).pipe(
@@ -59,30 +59,6 @@ test.provider(
 );
 
 test.provider(
-  "createProjectsLocationsReservationGroups is gated on reservation-based fairness",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        bigqueryreservation.createProjectsLocationsReservationGroups({
-          parent: `projects/${project}/locations/us-central1`,
-          reservationGroupId: "alchemy-bq-rg-fairness-probe",
-          body: {},
-        }),
-      );
-      expect(error._tag).toEqual("ReservationBasedFairnessRequired");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
   "create, re-deploy, and delete a reservation group",
   (stack) =>
     Effect.gen(function* () {

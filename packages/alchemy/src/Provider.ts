@@ -8,7 +8,6 @@ import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
 import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ScopedPlanStatusSession } from "./Report.ts";
@@ -18,6 +17,7 @@ import type {
   ResourceClassLike,
   ResourceLike,
 } from "./Resource.ts";
+import type { ResourceContext } from "./ResourceContext.ts";
 import type { State } from "./State/State.ts";
 
 export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
@@ -67,7 +67,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
 // Supplied by the engine to every lifecycle operation (the stack's `state`
 // layer is merged into the context lifecycle ops run under), so they are not
 // requirements of the provider layer itself.
-type LifecycleServices = InstanceId | Artifacts | State;
+type LifecycleServices = ResourceContext | Artifacts | State;
 
 export const Provider = <R extends ResourceLike>(type: R["Type"]): Provider<R> =>
   Context.Service<Provider<R>, ProviderService<R>>()(type) as any;

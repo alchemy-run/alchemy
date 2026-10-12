@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
@@ -27,7 +28,7 @@ import {
 } from "./Auth/Demand.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
 import {
@@ -46,6 +47,7 @@ import {
 } from "./Report.ts";
 import type { ApplyStatus } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -90,15 +92,17 @@ interface ResourceTracker {
 }
 
 const provideLifecycleScope =
-  (fqn: string, instanceId: string) =>
+  (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
+          failCredentialsRequired(resource.fqn),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.fqn)),
+            Layer.succeed(ResourceContext, resource),
+          ]),
         ),
       ),
     );
@@ -106,7 +110,7 @@ const provideLifecycleScope =
 /**
  * Instruments a single provider lifecycle call with an OTel span
  * (`provider.<op>`), the resource counter / duration histogram, and the
- * scoped artifacts/instance services normally supplied by
+ * scoped artifacts/resource context normally supplied by
  * {@link provideLifecycleScope}.
  *
  * This is the only call site through which provider lifecycle methods
@@ -117,7 +121,7 @@ const instrumentLifecycle =
   (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
-      provideLifecycleScope(fqn, instanceId),
+      provideLifecycleScope({ logicalId, fqn, instanceId, type: resourceType }),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
         attributes: {

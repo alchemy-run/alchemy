@@ -209,6 +209,21 @@ export const Network = (id: string, props: NetworkProps) =>
         );
       }
 
+      // A "public subnet" is usable for public IPv4 only after both its
+      // route-table association and the route through the internet gateway
+      // exist. Preserve those dependencies in the IDs handed to NAT gateways
+      // and downstream resources. Besides preventing a launch/readiness race,
+      // this makes teardown order those consumers before the route and IGW;
+      // EC2 refuses to detach an IGW while a NAT gateway (or an instance) in
+      // the VPC still maps a public IPv4 address.
+      const publicSubnetIds = publicSubnets.map((subnet, index) =>
+        Output.all(
+          subnet.subnetId,
+          publicRouteAssociations[index].associationId,
+          publicInternetRoute.routeTableId,
+        ).pipe(Output.map(([subnetId]) => subnetId)),
+      );
+
       const nat = props.nat ?? "none";
       const elasticIps: EIPResource[] = [];
       const natGateways: NatGatewayResource[] = [];
@@ -217,7 +232,7 @@ export const Network = (id: string, props: NetworkProps) =>
       const privateRouteAssociations: RouteTableAssociationResource[] = [];
 
       if (nat === "per-az") {
-        for (const [index, subnet] of publicSubnets.entries()) {
+        for (const index of publicSubnets.keys()) {
           const eip = yield* EIP(`NatEip${index + 1}`, {
             domain: "vpc",
             tags,
@@ -225,7 +240,7 @@ export const Network = (id: string, props: NetworkProps) =>
           elasticIps.push(eip);
 
           const natGateway = yield* NatGateway(`NatGateway${index + 1}`, {
-            subnetId: subnet.subnetId,
+            subnetId: publicSubnetIds[index],
             allocationId: eip.allocationId,
             connectivityType: "public",
             tags,
@@ -274,7 +289,7 @@ export const Network = (id: string, props: NetworkProps) =>
           elasticIps.push(eip);
 
           const natGateway = yield* NatGateway("NatGateway", {
-            subnetId: publicSubnets[0].subnetId,
+            subnetId: publicSubnetIds[0],
             allocationId: eip.allocationId,
             connectivityType: "public",
             tags,
@@ -338,20 +353,7 @@ export const Network = (id: string, props: NetworkProps) =>
         privateRouteAssociations,
         gatewayEndpoints,
         vpcId: vpc.vpcId,
-        // A "public subnet" is usable for public IPv4 only after both its
-        // route-table association and the route through the internet gateway
-        // exist. Preserve those dependencies in the convenience IDs returned
-        // to downstream resources. Besides preventing a launch/readiness race,
-        // this makes teardown order those consumers before the route and IGW;
-        // EC2 refuses to detach an IGW while an instance in the VPC still owns
-        // a public IPv4 address.
-        publicSubnetIds: publicSubnets.map((subnet, index) =>
-          Output.all(
-            subnet.subnetId,
-            publicRouteAssociations[index].associationId,
-            publicInternetRoute.routeTableId,
-          ).pipe(Output.map(([subnetId]) => subnetId)),
-        ),
+        publicSubnetIds,
         privateSubnetIds: privateSubnets.map((subnet) => subnet.subnetId),
       } satisfies NetworkResources;
     }).pipe(Effect.orDie),

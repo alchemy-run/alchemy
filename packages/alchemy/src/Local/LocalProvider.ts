@@ -112,7 +112,7 @@ export interface LocalProviderSpec<
    * records it on the registry entry, and passes it to {@link start} so a
    * restart consumes exactly what was compared.
    *
-   * Lifecycle-scoped services (`Stack`, `Stage`, `InstanceId`, `Artifacts`)
+   * Lifecycle-scoped services (`Stack`, `Stage`, `ResourceContext`, `Artifacts`)
    * are available ambiently (e.g. for `createPhysicalName`); resolve
    * anything else in the spec effect and close over it.
    *
@@ -165,7 +165,7 @@ export interface LocalProviderSpec<
 /**
  * {@link ProviderService} with every requirement channel widened to `any` —
  * passthrough spec hooks may use lifecycle-scoped services (`Stack`,
- * `InstanceId`, ...) that the RpcProvider wrapper provides per call.
+ * `ResourceContext`, ...) that the RpcProvider wrapper provides per call.
  */
 type AnyReqProviderService<R extends ResourceLike> = ProviderService<
   R,

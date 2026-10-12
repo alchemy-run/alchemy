@@ -6,11 +6,30 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "../../SQL/Migrations/index.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { runDsqlMigrations } from "./Migrations.ts";
+import { validateDsqlMigrations } from "./MigrationSql.ts";
 
 export interface ClusterProps {
+  /**
+   * SQL migrations directory, `{ dir, table? }`, or a Drizzle.Schema output.
+   * Applied as admin using the deploy identity (requires dsql:DbConnectAdmin
+   * and the optional `pg` peer). Files are checked before cluster mutation.
+   * DDL runs one statement at a time; completed statements survive retries.
+   * CREATE INDEX is adapted to ASYNC and awaited. Explicit transaction
+   * control and serial columns are rejected. Use UUIDs or bigint identity
+   * columns with an explicit CACHE. Applied migration files are immutable.
+   */
+  migrations?: MigrationsInput;
   /**
    * Enables deletion protection. While enabled the cluster cannot be deleted;
    * the provider automatically disables it during delete so `stack.destroy()`
@@ -34,6 +53,12 @@ export interface Cluster extends Resource<
   "AWS.DSQL.Cluster",
   ClusterProps,
   {
+    /** Directory used by the current migration configuration. */
+    migrationsDir: string | undefined;
+    /** Applied-migrations bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** SHA256 hashes used to detect migration file changes during plan. */
+    migrationsHashes: Record<string, string>;
     /** The unique cluster identifier assigned by DSQL. */
     clusterId: string;
     /** The ARN of the cluster. */
@@ -82,6 +107,35 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * ### Applying SQL migrations
+ * **Example:** Drizzle-generated PostgreSQL migrations
+ * ```typescript
+ * const schema = yield* Drizzle.Schema("Schema", {
+ *   schema: "./src/schema.ts",
+ *   dialect: "postgres",
+ * });
+ * const cluster = yield* Cluster("Database", { migrations: schema.out });
+ * ```
+ *
+ * **Example:** Hand-written SQL migrations
+ * ```typescript
+ * const cluster = yield* Cluster("Database", { migrations: "./migrations" });
+ * ```
+ *
+ * ### Recovering an interrupted migration <!-- api-prose -->
+ * DSQL cannot roll back a whole migration. Alchemy records completed statements
+ * in `<migrationsTable>__progress` and serializes deploys with
+ * `__alchemy_dsql_migration_lock`. Server-rejected statements can be retried;
+ * a running index job is resumed on the next deploy. After a disconnect with
+ * an uncertain outcome, inspect the indicated statement and database first.
+ * With all migrators stopped, set the progress row to `ready`, advancing
+ * `next_statement` only if that statement committed (it is zero-based), then
+ * remove a stale lock row if one remains. Never clear progress blindly.
+ *
+ * Automatic conversion of a different tool's existing history is refused
+ * because DSQL cannot atomically combine the table DDL and history copy.
+ * Convert that history explicitly before adopting an already-migrated database.
+ *
  * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.DSQL.Cluster");
@@ -104,7 +158,7 @@ export const ClusterProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dsql
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.orElseSucceed(() => undefined));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return Object.fromEntries(
           Object.entries(response?.tags ?? {}).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -112,11 +166,19 @@ export const ClusterProvider = () =>
         );
       });
 
-      // Bounded readiness wait. DSQL clusters usually reach ACTIVE within a
-      // minute; budget ~5 min (60 * 5s) so slow provisioning still converges
-      // without risking the test wall.
+      const findCluster = Effect.fn(function* (id: string, instanceId: string) {
+        const summaries = yield* dsql.listClusters.items({}).pipe(Stream.runCollect);
+        for (const summary of summaries) {
+          const tags = yield* readTags(summary.arn);
+          if (tags["alchemy::instance"] === instanceId && (yield* hasAlchemyTags(id, tags))) {
+            return yield* readCluster(summary.identifier);
+          }
+        }
+      });
+
+      // Bound readiness to 50 seconds; a later deploy can resume provisioning.
       const waitForActive = Effect.fn(function* (identifier: string) {
-        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]);
         return yield* readCluster(identifier).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
@@ -136,50 +198,73 @@ export const ClusterProvider = () =>
       const toAttrs = (
         cluster: dsql.GetClusterOutput | dsql.CreateClusterOutput,
         region: string,
-      ) => ({
+      ): Cluster["Attributes"] => ({
         clusterId: cluster.identifier,
         clusterArn: cluster.arn,
         status: cluster.status,
         endpoint: cluster.endpoint ?? endpointFor(cluster.identifier, region),
         deletionProtectionEnabled: cluster.deletionProtectionEnabled,
+        migrationsDir: undefined,
+        migrationsTable: undefined,
+        migrationsHashes: {},
       });
 
       return {
         stables: ["clusterId", "clusterArn", "endpoint"],
 
-        diff: Effect.fn(function* ({ olds = {}, news }) {
+        diff: Effect.fn(function* ({ olds = {}, news, output }) {
           if (!isResolved(news)) return undefined;
+          const input = migrationsInputOf(news);
+          if (input) yield* validateDsqlMigrations(input, output?.migrationsHashes);
           // KMS key is create-only; changing it forces a replacement.
           if ((news.kmsEncryptionKey ?? undefined) !== (olds.kmsEncryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
+          }
         }),
 
-        read: Effect.fn(function* ({ id, output }) {
-          if (output?.clusterId === undefined) return undefined;
+        read: Effect.fn(function* ({ id, instanceId, output }) {
           const { region } = yield* AWSEnvironment.current;
-          const cluster = yield* readCluster(output.clusterId);
+          const cluster = output?.clusterId
+            ? yield* readCluster(output.clusterId)
+            : yield* findCluster(id, instanceId);
           if (cluster === undefined || cluster.status === "DELETED") {
             return undefined;
           }
           const tags = yield* readTags(cluster.arn);
-          const attrs = toAttrs(cluster, region);
+          const attrs = {
+            ...toAttrs(cluster, region),
+            migrationsDir: output?.migrationsDir,
+            migrationsTable: output?.migrationsTable,
+            migrationsHashes: output?.migrationsHashes ?? {},
+          };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news = {}, output, session }) {
+          const input = migrationsInputOf(news);
+          if (input) yield* validateDsqlMigrations(input, output?.migrationsHashes);
           const { region } = yield* AWSEnvironment.current;
           const internalTags = yield* createInternalTags(id);
-          const desiredTags = { ...internalTags, ...news.tags };
+          const desiredTags = {
+            ...news.tags,
+            ...internalTags,
+            "alchemy::instance": instanceId,
+          };
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let observed =
-            output?.clusterId === undefined ? undefined : yield* readCluster(output.clusterId);
+            output?.clusterId === undefined
+              ? yield* findCluster(id, instanceId)
+              : yield* readCluster(output.clusterId);
 
           // 2. Ensure — create if missing. DSQL assigns the identifier.
           let identifier = observed?.identifier ?? output?.clusterId;
           if (observed === undefined) {
             const created = yield* dsql.createCluster({
+              clientToken: instanceId,
               deletionProtectionEnabled: news.deletionProtectionEnabled ?? false,
               kmsEncryptionKey: news.kmsEncryptionKey,
               tags: desiredTags,
@@ -220,7 +305,15 @@ export const ClusterProvider = () =>
           }
 
           yield* session.note(identifier!);
-          return toAttrs(observed, region);
+          const attrs = toAttrs(observed, region);
+          const run = input
+            ? yield* runDsqlMigrations({
+                endpoint: attrs.endpoint,
+                input,
+                stamped: stampedOf(output),
+              })
+            : undefined;
+          return { ...attrs, ...migrationsAttrs({ input, run, output }) };
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -242,7 +335,7 @@ export const ClusterProvider = () =>
             // retry briefly until it settles into a deletable state.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
             }),
           );
         }),

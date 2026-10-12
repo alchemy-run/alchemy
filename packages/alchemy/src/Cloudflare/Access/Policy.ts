@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { stripNullFields } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -140,6 +141,14 @@ export type PolicyDecision =
   // outside the closed set still narrow cleanly.
   | (string & {});
 
+export type PolicyApprovalGroup = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["approvalGroups"]
+>[number];
+export type PolicyConnectionRules = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["connectionRules"]
+>;
+export type PolicyMfaConfig = NonNullable<zeroTrust.CreateAccessPolicyRequest["mfaConfig"]>;
+
 export type PolicyProps = {
   /**
    * Display name for the policy. Treated as a stable identifier so the
@@ -190,6 +199,35 @@ export type PolicyProps = {
    */
   purposeJustificationRequired?: boolean;
   /**
+   * Custom message shown on the purpose justification screen.
+   */
+  purposeJustificationPrompt?: string;
+  /**
+   * Administrators who can approve a temporary authentication request.
+   */
+  approvalGroups?: PolicyApprovalGroup[];
+  /**
+   * Serve applications in an isolated browser for users matching this
+   * policy. Requires Clientless Web Isolation on the account.
+   *
+   * @default false
+   */
+  isolationRequired?: boolean;
+  /**
+   * How users may connect to targets secured by an infrastructure
+   * application: allowed SSH usernames, RDP clipboard formats.
+   *
+   * @example
+   * ```ts
+   * connectionRules: { ssh: { usernames: ["root", "ubuntu"] } }
+   * ```
+   */
+  connectionRules?: PolicyConnectionRules;
+  /**
+   * Multi-factor authentication settings enforced by this policy.
+   */
+  mfaConfig?: PolicyMfaConfig;
+  /**
    * Adopt an existing reusable policy with the same name when the engine has
    * no prior state for this logical id.
    *
@@ -233,6 +271,11 @@ export type Policy = Resource<
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
  * inline policies attached directly to an `Application` — a reusable
  * policy can be referenced by multiple applications by id.
+ *
+ * Optional fields you leave out keep their live value on update, so adopting
+ * a policy never drops rules you did not declare. Pass `[]` or `false` to
+ * clear one.
+ *
  * ### Creating a Policy
  * **Example:** Allow a single email domain
  * ```typescript
@@ -260,6 +303,18 @@ export type Policy = Resource<
  *   include: [{ emailDomain: { domain: "example.com" } }],
  *   exclude: [{ email: { email: "intern@example.com" } }],
  *   require: [{ geo: { countryCode: "US" } }],
+ * });
+ * ```
+ *
+ * ### Infrastructure access
+ * **Example:** Allow SSH as specific Unix users
+ * ```typescript
+ * const policy = yield* Cloudflare.Access.Policy("SshOps", {
+ *   decision: "allow",
+ *   include: [{ emailDomain: "example.com" }],
+ *   connectionRules: {
+ *     ssh: { usernames: ["root", "ubuntu"], allowEmailAlias: true },
+ *   },
  * });
  * ```
  *
@@ -303,17 +358,14 @@ export const PolicyProvider = () =>
       // Observe — prefer cached policyId, fall back to a name lookup so
       // we recover from out-of-band deletes and partial state-persistence
       // failures.
-      let observed: ObservedPolicy | undefined;
+      let observed: RawPolicy | undefined;
       if (output?.policyId) {
         observed = yield* zeroTrust
           .getAccessPolicy({
             accountId: acct,
             policyId: output.policyId,
           })
-          .pipe(
-            Effect.map(toObserved),
-            Effect.orElseSucceed((): ObservedPolicy | undefined => undefined),
-          );
+          .pipe(Effect.orElseSucceed((): RawPolicy | undefined => undefined));
       }
       if (!observed) {
         observed = yield* findPolicyByName(acct, name);
@@ -324,17 +376,7 @@ export const PolicyProvider = () =>
       let ensured: ObservedPolicy;
       if (!observed || !observed.id) {
         ensured = yield* zeroTrust
-          .createAccessPolicy({
-            accountId: acct,
-            name,
-            decision: news.decision,
-            include: normalizePolicyRules(news.include),
-            exclude: normalizePolicyRules(news.exclude),
-            require: normalizePolicyRules(news.require),
-            sessionDuration: news.sessionDuration,
-            approvalRequired: news.approvalRequired,
-            purposeJustificationRequired: news.purposeJustificationRequired,
-          })
+          .createAccessPolicy({ accountId: acct, ...policyBody(name, news) })
           .pipe(
             Effect.map(toObserved),
             Effect.catch((err) =>
@@ -346,22 +388,14 @@ export const PolicyProvider = () =>
             ),
           );
       } else {
-        // Sync — Cloudflare PUTs the policy as a whole replacement, so a
-        // single update converges every mutable field. Always issuing the
-        // PUT keeps the resource convergent against drift; the API is
-        // idempotent for equal payloads.
+        // Sync — Cloudflare PUTs the policy as a whole replacement and
+        // resets every field the body omits, so undeclared optional fields
+        // are sent back with their live value.
         const prior = observed;
         const updated = yield* zeroTrust.updateAccessPolicy({
           accountId: acct,
           policyId: prior.id!,
-          name,
-          decision: news.decision,
-          include: normalizePolicyRules(news.include),
-          exclude: normalizePolicyRules(news.exclude),
-          require: normalizePolicyRules(news.require),
-          sessionDuration: news.sessionDuration,
-          approvalRequired: news.approvalRequired,
-          purposeJustificationRequired: news.purposeJustificationRequired,
+          ...withLiveFields(policyBody(name, news), prior),
         });
         ensured = {
           id: updated.id ?? prior.id,
@@ -455,6 +489,48 @@ export const PolicyProvider = () =>
     }),
   });
 
+const policyBody = (name: string, news: PolicyProps) => ({
+  name,
+  decision: news.decision,
+  include: normalizePolicyRules(news.include),
+  exclude: normalizePolicyRules(news.exclude),
+  require: normalizePolicyRules(news.require),
+  sessionDuration: news.sessionDuration,
+  approvalRequired: news.approvalRequired,
+  approvalGroups: news.approvalGroups,
+  isolationRequired: news.isolationRequired,
+  purposeJustificationRequired: news.purposeJustificationRequired,
+  purposeJustificationPrompt: news.purposeJustificationPrompt,
+  connectionRules: news.connectionRules,
+  mfaConfig: news.mfaConfig,
+});
+
+// Optional fields a whole-replacement PUT would reset when omitted.
+const PRESERVED_FIELDS = [
+  "exclude",
+  "require",
+  "sessionDuration",
+  "approvalRequired",
+  "approvalGroups",
+  "isolationRequired",
+  "purposeJustificationRequired",
+  "purposeJustificationPrompt",
+  "connectionRules",
+  "mfaConfig",
+] as const;
+
+const withLiveFields = (
+  body: ReturnType<typeof policyBody>,
+  live: RawPolicy,
+): ReturnType<typeof policyBody> => ({
+  ...body,
+  ...Object.fromEntries(
+    PRESERVED_FIELDS.flatMap((key) =>
+      body[key] === undefined && live[key] != null ? [[key, stripNullFields(live[key])]] : [],
+    ),
+  ),
+});
+
 const createPolicyName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     if (name) return name;
@@ -477,16 +553,16 @@ type ObservedPolicy = {
   updatedAt?: string | null;
 };
 
-// Distilled response shapes (Get / Create / Update) all carry the same set
-// of fields we care about, but typed wider than `ObservedPolicy`. Narrow at
-// the API boundary so the rest of the reconciler stays in our shape.
+// Distilled response shapes (Get / List / Create / Update) all carry the same
+// set of fields we care about, but typed wider than `ObservedPolicy`. Narrow
+// at the API boundary so the rest of the reconciler stays in our shape.
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
   decision?: PolicyDecision | null | string;
   createdAt?: string | null;
   updatedAt?: string | null;
-};
+} & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };
 
 const toObserved = (r: RawPolicy): ObservedPolicy => ({
   id: r.id,

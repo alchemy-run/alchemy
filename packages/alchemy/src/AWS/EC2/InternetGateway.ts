@@ -435,6 +435,10 @@ const describeInternetGateway = (internetGatewayId: string) =>
     }),
   );
 
+class InternetGatewayStillListed extends Data.TaggedError("InternetGatewayStillListed")<{
+  internetGatewayId: string;
+}> {}
+
 class InternetGatewayNotVisible extends Data.TaggedError("InternetGatewayNotVisible")<{
   internetGatewayId: string;
 }> {}
@@ -498,13 +502,16 @@ const waitForInternetGatewayDeleted = (
         return; // Successfully deleted
       }
 
-      // Still exists, fail to trigger retry
-      return yield* Effect.fail(new Error("Internet gateway still exists"));
+      // Still listed: EC2 is eventually consistent after a delete.
+      return yield* new InternetGatewayStillListed({ internetGatewayId });
     }),
     {
-      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+      while: (error) => error._tag === "InternetGatewayStillListed",
+      // EC2 can keep listing a deleted gateway for minutes, so bound the
+      // wait like NatGateway: 5s x 60 = ~5 min.
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
+          session.note(`Waiting for internet gateway deletion... (${attempt * 5}s)`),
         ),
       ),
     },

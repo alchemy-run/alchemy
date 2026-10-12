@@ -16,6 +16,7 @@ import {
   type ApiTokenBinding,
   type Props,
 } from "./Common.ts";
+import { uniqueTokens } from "./internal.ts";
 
 export type UserApiToken = Resource<
   "Cloudflare.ApiToken.UserApiToken",
@@ -200,11 +201,14 @@ export const UserApiTokenProvider = () =>
     // hydrate the read shape with an empty Redacted value, matching what
     // `read` produces when the secret was never captured.
     list: () =>
-      user.listTokens.pages({}).pipe(
+      // Offset-paginated over a name-sorted list: concurrent creates/deletes
+      // between page fetches duplicate or skip tokens. Use the API's maximum
+      // page size (1000) for a single-snapshot read and de-duplicate by id.
+      user.listTokens.pages({ perPage: 1000 }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) => buildAttributes(token, Redacted.make(""))),
+          uniqueTokens(Array.from(chunk).flatMap((page) => page.result ?? [])).map((token) =>
+            buildAttributes(token, Redacted.make("")),
           ),
         ),
         // User-scoped tokens require user-level auth; an account-scoped token

@@ -2,14 +2,16 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { isPlainObject } from "../Util/data.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   applyObject,
   connectCluster,
   deleteObject,
+  ifClusterExists,
   readObject,
-  KubernetesApiError,
 } from "./internal/client.ts";
+import { driftMask, hashDriftSelection } from "./internal/declared.ts";
 import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
@@ -66,6 +68,21 @@ export interface Manifest extends Resource<
     ref: KubernetesObjectRef;
     /** The server-assigned UID of the applied object, when returned. */
     uid: string | undefined;
+    /**
+     * Fingerprint of the declared fields last applied. `read` compares a GET
+     * projected through {@link driftMask} to this.
+     */
+    baselineHash?: string;
+    /**
+     * Declared-field mask from the last apply. Older state omits it and is
+     * compared with the same selection against the stored manifest.
+     */
+    driftMask?: unknown;
+    /**
+     * Set by `read` when the live object diverges. Reconcile does not persist
+     * it; the extra field is what `alchemy drift` compares.
+     */
+    observedHash?: string;
   },
   {},
   Providers
@@ -165,9 +182,6 @@ const toObjectDefinition = (
   return Effect.succeed(manifest as KubernetesObjectDefinition);
 };
 
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
-
 export const ManifestProvider = () =>
   Provider.effect(
     Manifest,
@@ -196,22 +210,40 @@ export const ManifestProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ output, olds }) {
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
-          const transport = yield* connectCluster(connection).pipe(
-            // Cluster gone — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
-          );
-          if (!transport) return undefined;
+          // ClusterNotFound fails the drift row. undefined means this object is gone.
+          const transport = yield* connectCluster(connection);
           const observed = yield* readObject({
             transport,
             object: output.ref,
-          }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
           if (!observed) return undefined;
           const uid = (observed as { metadata?: { uid?: string } }).metadata?.uid;
-          return { ...output, uid };
+          const attrs = { ...output, uid };
+          const manifest = olds?.manifest;
+          // A stored mask is the apply-time selection. Older rows have the
+          // manifest and no mask; they use that same selection, not the
+          // previous whole-object hash.
+          const desired =
+            output.driftMask === undefined && manifest !== undefined
+              ? yield* toObjectDefinition(manifest)
+              : undefined;
+          const mask = output.driftMask ?? (desired === undefined ? undefined : driftMask(desired));
+          if (mask === undefined) return attrs;
+          const liveHash = yield* hashDriftSelection(mask, observed);
+          const baseline =
+            output.driftMask !== undefined && output.baselineHash !== undefined
+              ? output.baselineHash
+              : desired === undefined
+                ? undefined
+                : yield* hashDriftSelection(mask, desired);
+          if (baseline !== undefined && liveHash !== baseline) {
+            return { ...attrs, observedHash: liveHash };
+          }
+          return attrs;
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const connection = toConnection(news.cluster);
@@ -228,6 +260,8 @@ export const ManifestProvider = () =>
           // converge-if-present in one call, `force: true` so alchemy owns
           // the fields it manages regardless of prior managers.
           const applied = yield* applyObject({ transport, object });
+          const witnessed = isPlainObject(applied) ? applied : undefined;
+          const baselineHash = yield* hashDriftSelection(object, witnessed ?? object);
 
           yield* session.note(
             `Applied ${ref.apiVersion}/${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ""}${ref.name}`,
@@ -243,21 +277,18 @@ export const ManifestProvider = () =>
             namespace: ref.namespace,
             ref,
             uid,
+            baselineHash,
+            driftMask: driftMask(object, witnessed),
           };
         }),
         delete: Effect.fn(function* ({ output }) {
           const connection = connectionOfOutput(output);
           if (!connection) return;
-          const transport = yield* connectCluster(connection).pipe(
-            // Cluster already destroyed — nothing left to delete.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
-          );
+          const transport = yield* ifClusterExists(connectCluster(connection));
           if (!transport) return;
-          yield* deleteObject({ transport, object: output.ref }).pipe(
-            // Tolerate any residual API failure so delete stays idempotent
-            // (e.g. the CRD backing an object was removed before the object).
-            Effect.ignore,
-          );
+          // 404 (including a removed CRD's discovery 404) is already success.
+          // 403/5xx must surface: the object is still there.
+          yield* deleteObject({ transport, object: output.ref });
         }),
       };
     }),

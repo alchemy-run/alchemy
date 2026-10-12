@@ -1,5 +1,5 @@
 import type {
-  Checkpoint as FlyCheckpoint,
+  CheckpointInfo as FlyCheckpoint,
   CreateCheckpointError,
   GetCheckpointError,
   ListCheckpointsError,

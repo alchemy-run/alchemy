@@ -421,14 +421,19 @@ export const EksKubernetesAdapter = () =>
       const context = yield* Effect.context<EksAdapterDeps>();
 
       // Discharge the layer-captured AWS services; per-resource engine
-      // services (InstanceId/Stack/Stage) stay ambient — they are provided
+      // services (ResourceContext/Stack/Stage) stay ambient — they are provided
       // by the invoking lifecycle operation, never captured here.
       const withAws =
         (region: string | undefined) =>
         <A, E, R>(self: Effect.Effect<A, E, R>) =>
           Effect.provideContext(withRegion(region)(self), context);
 
-      /** Describe the cluster; NotFound / DELETING → ClusterNotFoundError. */
+      /**
+       * Describe the cluster. NotFound is gone. DELETING is gone only when
+       * the API endpoint is gone. A live endpoint still needs Service
+       * deletion so a load balancer finalizer can release the NLB. A missing
+       * CA with that endpoint is not "gone": connect fails and destroy retries.
+       */
       const describeLiveCluster = Effect.fn(function* (auth: {
         clusterName: string;
         region?: string | undefined;
@@ -438,7 +443,8 @@ export const EksKubernetesAdapter = () =>
           withAws(auth.region),
         );
         const cluster = described?.cluster;
-        if (!cluster || cluster.status === "DELETING") {
+        const apiGone = cluster?.status === "DELETING" && !cluster.endpoint;
+        if (!cluster || apiGone) {
           return yield* new ClusterNotFoundError({
             message: `EKS cluster '${auth.clusterName}' no longer exists`,
           });
@@ -448,23 +454,20 @@ export const EksKubernetesAdapter = () =>
 
       const connect = Effect.fn(function* (connection: Connection) {
         const auth = yield* narrowEksAuth(connection);
-        let endpoint = connection.endpoint;
-        let certificateAuthorityData = connection.certificateAuthorityData;
+        // Always describe. A persisted endpoint does not prove the cluster
+        // still exists, and delete uses ClusterNotFoundError to skip
+        // in-cluster objects and still remove the pod role and repository.
+        // Describe also picks up an endpoint rotation.
+        const cluster = yield* describeLiveCluster(auth);
+        const endpoint = cluster.endpoint;
+        const certificateAuthorityData = cluster.certificateAuthority?.data;
         if (!endpoint || !certificateAuthorityData) {
-          // Re-describe for a fresh endpoint + CA (persisted attributes
-          // may predate them, and EKS can rotate the endpoint DNS on
-          // recreate-with-same-name).
-          const cluster = yield* describeLiveCluster(auth);
-          endpoint = cluster.endpoint;
-          certificateAuthorityData = cluster.certificateAuthority?.data;
-          if (!endpoint || !certificateAuthorityData) {
-            return yield* Effect.fail(
-              new Error(
-                `EKS cluster '${auth.clusterName}' has no endpoint or ` +
-                  "certificate authority data yet (still creating?)",
-              ),
-            );
-          }
+          return yield* Effect.fail(
+            new Error(
+              `EKS cluster '${auth.clusterName}' has no endpoint or ` +
+                "certificate authority data yet (still creating?)",
+            ),
+          );
         }
         return yield* makeEksTransport({
           clusterName: auth.clusterName,
@@ -561,7 +564,7 @@ export const EksKubernetesAdapter = () =>
           typeof state?.repositoryName === "string"
             ? state.repositoryName
             : // Physical-name generation reads the resource's ambient
-              // InstanceId/Stack/Stage — do not shadow them with the
+              // ResourceContext/Stack/Stage — do not shadow them with the
               // layer-captured context.
               yield* createRepositoryName(options.id);
         const repositoryUri =

@@ -5,6 +5,7 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { asEffect } from ".//Util/types.ts";
@@ -29,7 +30,7 @@ import {
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
   tryFindProviderRegistrationByType,
@@ -52,6 +53,7 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import {
   InvalidResourceSelection,
   UnsafeSelectionBoundary,
@@ -801,7 +803,7 @@ const makePlan = <A>(
                     oldBindings,
                     newBindings,
                   })
-                  .pipe(providePlanScope(resource.FQN, oldState.instanceId))
+                  .pipe(providePlanScope(resource, oldState.instanceId))
               : Effect.succeed(undefined);
 
             // A present `diff.stables` is authoritative for this update and
@@ -1387,7 +1389,7 @@ const makePlan = <A>(
             olds: news,
             output: undefined,
           })
-          .pipe(providePlanScope(fqn, adoptInstanceId));
+          .pipe(providePlanScope(resource, adoptInstanceId));
         if (readResult !== undefined) {
           const isUnowned = Unowned.is(readResult);
           // A resource-scoped `adopt(...)` (captured on the resource at
@@ -1515,7 +1517,7 @@ const makePlan = <A>(
               output: oldState.attr,
             })
             .pipe(
-              providePlanScope(fqn, oldState.instanceId),
+              providePlanScope(resource, oldState.instanceId),
               // `creating` props pass `isResolved` yet can still carry
               // holes where unresolved Outputs were stripped at commit
               // time (see stripUnresolved) — e.g. a parent reference
@@ -1592,7 +1594,7 @@ const makePlan = <A>(
                 oldBindings,
                 newBindings,
               })
-              .pipe(providePlanScope(fqn, oldState.instanceId)),
+              .pipe(providePlanScope(resource, oldState.instanceId)),
           ).pipe(
             Effect.map(
               (diff) =>
@@ -2300,15 +2302,22 @@ const capturedEnvChanged = (
 };
 
 const providePlanScope =
-  (fqn: string, instanceId: string) =>
+  (resource: ResourceLike, instanceId: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
+          failCredentialsRequired(resource.FQN),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.FQN)),
+            Layer.succeed(ResourceContext, {
+              logicalId: resource.LogicalId,
+              fqn: resource.FQN,
+              instanceId,
+              type: resource.Type,
+            }),
+          ]),
         ),
       ),
     );
