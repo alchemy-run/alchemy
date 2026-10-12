@@ -153,8 +153,9 @@ export interface ApplicationProps {
   /**
    * Cloudflare id of an existing application to manage. The first deploy
    * takes that application over — keeping its `aud` — instead of creating a
-   * new one. The application must exist; changing the id replaces the
-   * resource.
+   * new one. The application must exist — a missing id fails the deploy
+   * with `DeclaredApplicationNotFound` instead of creating one. Changing
+   * the id replaces the resource.
    */
   applicationId?: string;
   /**
