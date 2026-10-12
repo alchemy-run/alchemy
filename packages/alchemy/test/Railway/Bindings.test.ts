@@ -90,7 +90,12 @@ const firstCredentials = (bucketId: string, environmentId: string, projectId: st
   );
 
 const withBucketS3 = <A, E, R>(
-  creds: { accessKeyId: string; secretAccessKey: string; endpoint: string; region: string },
+  creds: {
+    accessKeyId: string;
+    secretAccessKey: Redacted.Redacted<string>;
+    endpoint: string;
+    region: string;
+  },
   operation: Effect.Effect<A, E, R>,
 ) =>
   operation.pipe(
@@ -99,7 +104,7 @@ const withBucketS3 = <A, E, R>(
         fromCredentials(
           {
             accessKeyId: Redacted.make(creds.accessKeyId),
-            secretAccessKey: Redacted.make(creds.secretAccessKey),
+            secretAccessKey: creds.secretAccessKey,
           },
           creds.region as RegionName,
         ),
