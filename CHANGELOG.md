@@ -1,3 +1,14 @@
+## v2.0.0-beta.83
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**:
+  - **containers**: One Durable Object Container is one image; beta.83 release notes &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/2223 [<samp>(e3fd8)</samp>](https://github.com/alchemy-run/alchemy/commit/e3fd86053)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.82...HEAD)
+
+---
+
 ## v2.0.0-beta.82
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
