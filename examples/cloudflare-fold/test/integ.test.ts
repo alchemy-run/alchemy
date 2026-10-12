@@ -14,6 +14,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import Stack from "../alchemy.run.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
@@ -30,12 +31,20 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-/** A typed CustomerApi client over HTTP, signed in as `customerId`. */
+/**
+ * A typed CustomerApi client signed in as `customerId`: commands over HTTP,
+ * every watch a WebSocket to the Durable Object that owns what it reads.
+ */
 const customerClient = (url: string, customerId: string) =>
   CustomerApi.client.pipe(
     Effect.provide(
-      Layer.mergeAll(Api.protocolHttp(`${url}/api`), sessionClient(`customer:${customerId}`)).pipe(
-        Layer.provide(FetchHttpClient.layer),
+      Layer.mergeAll(
+        Api.protocolWebSocket(`${url}/api`),
+        sessionClient(`customer:${customerId}`),
+      ).pipe(
+        Layer.provide(
+          Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal),
+        ),
       ),
     ),
   );
@@ -117,7 +126,7 @@ test(
       "deposit",
     ]);
 
-    // a live view (AccountSummary → CustomerDashboard, view to view), streamed over NDJSON
+    // a live view (AccountSummary → CustomerDashboard, view to view), pushed by its Durable Object
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 50),
       Stream.runHead,

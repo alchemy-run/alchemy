@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
+import type { HttpEffect } from "../Http.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
 import type * as View from "./View.ts";
@@ -55,6 +56,38 @@ export interface Delivery {
   readonly state?: Json | null;
   /** Seeded history (story `given`): views apply it, policies ignore it. */
   readonly history?: boolean;
+}
+
+/**
+ * A client's live read (`watch` or `events`) of one key, in JSON form. A
+ * platform that pushes keeps it with the connection (on a WebSocket's
+ * attachment, so a hibernated object can resume pushing) and asks the kit's
+ * `push` what to send after each commit.
+ */
+export interface Subscription {
+  /** The client's request id, echoed as is (the client matches it by identity). */
+  readonly requestId: string | number;
+  readonly mode: "watch" | "events";
+  /** The client's filter: it narrows what a permitted read sends. */
+  readonly where?: Json;
+  /** The context the read's middleware provided (see `Command.Context`), for `validate`. */
+  readonly context: Readonly<Record<string, Json>>;
+  /** Progress: the last state version (`watch`) or event `seq` (`events`) sent. */
+  readonly cursor: number;
+  /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
+  readonly refused?: Json;
+}
+
+/**
+ * What to send a subscriber, from a kit's `push`.
+ */
+export interface Push {
+  /** Effect RPC messages (a `Chunk`, then an `Exit` if the read ended), in JSON form. */
+  readonly messages: ReadonlyArray<Json>;
+  /** The subscription with its progress after these messages. */
+  readonly subscription: Subscription;
+  /** `validate` rejected the read: send the messages, then close the connection. */
+  readonly done: boolean;
 }
 
 /**
@@ -121,6 +154,16 @@ export interface AggregateKit {
   readonly seed: (input: SeedInput) => SeedResult;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /**
+   * What a subscriber of instance `id` receives, given its current state and
+   * the events committed since (at least those after the subscription's cursor).
+   */
+  readonly push: (
+    id: string,
+    subscription: Subscription,
+    current: { readonly state: Json | null; readonly version: number },
+    events: ReadonlyArray<StoredEvent>,
+  ) => Effect.Effect<Push>;
 }
 
 /**
@@ -184,6 +227,12 @@ export interface AggregateStore {
    * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
+  /**
+   * Accept a WebSocket upgrade (the current request) for a live read of
+   * `key`, then push to it on every commit. Optional: without it, live reads
+   * are streamed responses over `changes` and `tail`.
+   */
+  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /**
@@ -236,6 +285,16 @@ export interface ViewKit {
   };
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /**
+   * What a subscriber of `key` receives, given its snapshot and the entries
+   * emitted since (at least those after the subscription's cursor).
+   */
+  readonly push: (
+    key: string,
+    subscription: Subscription,
+    snapshot: ViewSnapshot,
+    entries: ReadonlyArray<ViewEntry>,
+  ) => Effect.Effect<Push>;
 }
 
 /**
@@ -251,6 +310,12 @@ export interface ViewStore {
   readonly list: (key: string) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<ViewEntry>;
+  /**
+   * Accept a WebSocket upgrade (the current request) for a live read of
+   * `key`, then push to it on every commit. Optional: without it, live reads
+   * are streamed responses over `changes` and `tail`.
+   */
+  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /**

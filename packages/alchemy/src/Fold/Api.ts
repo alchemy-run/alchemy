@@ -1,31 +1,43 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type * as Headers from "effect/http/Headers";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as Exit from "effect/Exit";
+import * as Headers from "effect/http/Headers";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
-import type * as RpcClientError from "effect/rpc/RpcClientError";
+import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcMessage from "effect/rpc/RpcMessage";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as RpcTest from "effect/rpc/RpcTest";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "../Http.ts";
 import type * as Aggregate from "./Aggregate.ts";
-import type * as Command from "./Command.ts";
+import * as Command from "./Command.ts";
 import * as Domain from "./Domain.ts";
 import type * as Event from "./Event.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Middleware from "./Middleware.ts";
+import type { AggregateStore, Subscription, ViewStore } from "./Platform.ts";
 import type * as Read from "./Read.ts";
+import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import type * as View from "./View.ts";
+import * as Watch from "./Watch.ts";
 
 /**
  * What an Api exposes: commands (writes), views (reads), and aggregates that
@@ -169,7 +181,7 @@ export interface ApiClass<Name extends string, Entries extends ReadonlyArray<Ent
     never,
     Domain.Internals | MiddlewareServices<Entries>
   >;
-  /** A typed client. Provide a protocol with {@link protocolHttp}. */
+  /** A typed client. Provide a protocol: {@link protocolWebSocket} or {@link protocolHttp}. */
   readonly client: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
@@ -219,154 +231,6 @@ type MiddlewareClients<Entries extends ReadonlyArray<Entry>> =
         : never
       : never
     : never;
-
-// ---------------------------------------------------------------- rpc schemas
-
-const EnvelopeSchema = Schema.Struct({
-  id: Schema.String,
-  stream: Schema.String,
-  seq: Schema.Number,
-  at: Schema.DateTimeUtc,
-  commandId: Schema.String,
-});
-
-const nameOf = (entry: View.Any | Aggregate.Any) =>
-  entry.kind === "View" ? entry.viewName : entry.aggregateName;
-
-const union = (members: ReadonlyArray<Schema.Top>) =>
-  members.length === 0 ? Schema.Never : Schema.Union(members as ReadonlyArray<Schema.Top>);
-
-/** The events a view emits: its declared events, or the events it applies. */
-const outputEvents = (view: View.Any): ReadonlyArray<Event.Any> => {
-  const def = view.definition;
-  if (def.events) return def.events;
-  const handles = (tag: string, source: string) =>
-    Boolean(def.evolve?.[tag] || def.evolve?.[source] || def.emit?.[tag] || def.emit?.[source]);
-  const out = new Set<Event.Any>();
-  for (const source of def.from) {
-    const name = nameOf(source);
-    const events =
-      source.kind === "View"
-        ? outputEvents(source as View.Any)
-        : (source as Aggregate.Any).definition.events;
-    for (const event of events) if (handles(event.tag, name)) out.add(event);
-  }
-  return [...out];
-};
-
-interface ReadRpcs {
-  readonly get: Rpc.Any;
-  readonly watch: Rpc.Any;
-  readonly events: Rpc.Any;
-  readonly list?: Rpc.Any;
-}
-
-const contractOf = (entry: View.Any | Aggregate.Any): Read.AnyContract => {
-  if (entry.kind === "View") return entry.definition;
-  const read = entry.definition.read;
-  if (!read) {
-    throw new Error(`${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`);
-  }
-  return read;
-};
-
-const rpcCache = new WeakMap<object, ReadRpcs>();
-
-/** The RPCs of a view or aggregate exposed in an Api. */
-const readRpcs = (entry: View.Any | Aggregate.Any): ReadRpcs => {
-  const cached = rpcCache.get(entry);
-  if (cached) return cached;
-  const name = nameOf(entry);
-  const contract = contractOf(entry);
-  const guard = (rpc: Rpc.Any) => Middleware.apply(rpc, contract.middleware ?? []);
-  const error = union(contract.rejects ?? []);
-  let rpcs: ReadRpcs;
-  if (entry.kind === "View") {
-    const def = entry.definition;
-    const key = def.key.definition.id;
-    const state = Schema.NullOr(def.state ?? Schema.Null);
-    const recorded = Schema.Struct({
-      event: union(outputEvents(entry)),
-      state,
-      envelope: EnvelopeSchema,
-    });
-    rpcs = {
-      get: guard(
-        Rpc.make(`${name}.get`, {
-          payload: {
-            key,
-            atLeast: Schema.optional(
-              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
-            ),
-            where: Schema.optional(Schema.Unknown),
-          },
-          success: state,
-          error,
-        }),
-      ),
-      watch: guard(
-        Rpc.make(`${name}.watch`, {
-          payload: { key, where: Schema.optional(Schema.Unknown) },
-          success: state,
-          error,
-          stream: true,
-        }),
-      ),
-      events: guard(
-        Rpc.make(`${name}.events`, {
-          payload: {
-            key,
-            after: Schema.optional(Schema.String),
-            where: Schema.optional(Schema.Unknown),
-          },
-          success: recorded,
-          error,
-          stream: true,
-        }),
-      ),
-      list: guard(
-        Rpc.make(`${name}.list`, {
-          payload: {
-            key,
-            where: Schema.optional(Schema.Unknown),
-            order: Schema.optional(Schema.Literals(["asc", "desc"])),
-            take: Schema.optional(Schema.Number),
-            after: Schema.optional(Schema.String),
-          },
-          success: Schema.Struct({
-            entries: Schema.Array(recorded),
-            cursor: Schema.NullOr(Schema.String),
-          }),
-          error,
-        }),
-      ),
-    };
-  } else {
-    const def = entry.definition;
-    const recorded = Schema.Struct({ event: union(def.events), envelope: EnvelopeSchema });
-    rpcs = {
-      get: guard(Rpc.make(`${name}.get`, { payload: { key: def.id }, success: def.state, error })),
-      watch: guard(
-        Rpc.make(`${name}.watch`, {
-          payload: { key: def.id },
-          success: def.state,
-          error,
-          stream: true,
-        }),
-      ),
-      events: guard(
-        Rpc.make(`${name}.events`, {
-          payload: { key: def.id, after: Schema.optional(Schema.Number) },
-          success: recorded,
-          error,
-          stream: true,
-        }),
-      ),
-    };
-  }
-  rpcCache.set(entry, rpcs);
-  return rpcs;
-};
 
 const rpcsOf = (entry: Entry): ReadonlyArray<Rpc.Any> =>
   entry.kind === "Command" ? [entry.rpc] : Object.values(readRpcs(entry));
@@ -547,6 +411,106 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
     return handlers;
   }) as Effect.Effect<Record<string, Handler>>;
 
+// ---------------------------------------------------------------- live reads
+
+/** The query parameter carrying a live read's request (a WebSocket upgrade cannot carry a body). */
+const LIVE_PARAM = "read";
+
+/**
+ * A live read as the client sends it: the Effect RPC request, plus the
+ * cursor to resume from after a reconnect.
+ */
+interface LiveRequest {
+  readonly id: string | number;
+  readonly tag: string;
+  readonly payload: unknown;
+  readonly headers: ReadonlyArray<readonly [string, string]>;
+  readonly cursor?: number;
+}
+
+/**
+ * Serve live reads (`watch` and `events`) as WebSockets. The read's
+ * middleware runs here, in the Worker, against the upgrade's headers merged
+ * with the ones the client attached; the context it provides travels with
+ * the subscription to the object that owns the key, which pushes to the
+ * socket on every commit. A refused read still connects, to deliver its
+ * typed rejection.
+ */
+const liveReads = (
+  entries: ReadonlyArray<Entry>,
+  internals: Domain.Internals["Service"],
+  middleware: Context.Context<never>,
+) => {
+  const reads = new Map<
+    string,
+    {
+      readonly rpc: Rpc.AnyWithProps;
+      readonly mode: "watch" | "events";
+      readonly store?: AggregateStore | ViewStore;
+    }
+  >();
+  for (const entry of entries) {
+    if (entry.kind === "Command") continue;
+    const name = nameOf(entry);
+    const store =
+      entry.kind === "View" ? internals.views.get(name) : internals.aggregates.get(name);
+    const rpcs = readRpcs(entry);
+    reads.set(`${name}.watch`, { rpc: rpcs.watch as Rpc.AnyWithProps, mode: "watch", store });
+    reads.set(`${name}.events`, { rpc: rpcs.events as Rpc.AnyWithProps, mode: "events", store });
+  }
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
+    const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+    const read = live && reads.get(live.tag);
+    if (!live || !read) return HttpServerResponse.text("Unknown live read", { status: 400 });
+    if (!read.store?.connect) {
+      return HttpServerResponse.text("This platform streams live reads as responses", {
+        status: 501,
+      });
+    }
+    const payload = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(read.rpc.payloadSchema))(
+      live.payload,
+    ).pipe(Effect.option);
+    if (Option.isNone(payload))
+      return HttpServerResponse.text("Invalid live read", { status: 400 });
+    const { key, where, after } = payload.value as ReadPayload;
+    const headers = Headers.merge(request.headers, Headers.fromInput(live.headers));
+    // Run the read's middleware, as the RPC server would, around capturing what it provides.
+    let authorized: Effect.Effect<Command.ContextJson, unknown> = Command.captureContext;
+    for (const service of read.rpc.middlewares) {
+      const run = Context.getUnsafe(middleware, service) as unknown as (
+        effect: Effect.Effect<Command.ContextJson, unknown>,
+        options: unknown,
+      ) => Effect.Effect<Command.ContextJson, unknown>;
+      authorized = run(authorized, {
+        rpc: read.rpc,
+        client: new Rpc.ServerClient(0),
+        requestId: RpcMessage.RequestId(live.id),
+        headers,
+        payload: payload.value,
+      });
+    }
+    const subscription: Subscription = {
+      requestId: live.id,
+      mode: read.mode,
+      where: where as Subscription["where"],
+      context: {},
+      cursor: live.cursor ?? (read.mode === "watch" ? -1 : after === undefined ? 0 : Number(after)),
+    };
+    const judged = yield* authorized.pipe(
+      Effect.map((context): Subscription => ({ ...subscription, context })),
+      Effect.catch((error) =>
+        Watch.refuse(read.rpc, error).pipe(
+          Effect.orDie,
+          Effect.map((refused): Subscription => ({ ...subscription, refused })),
+        ),
+      ),
+    );
+    return yield* read.store.connect(String(key), judged);
+  });
+};
+
 // ---------------------------------------------------------------- client
 
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
@@ -601,10 +565,12 @@ const build = (
         Layer.succeedContext(middleware),
       );
       // One server per request: Workers forbid sharing I/O objects across requests.
-      return RpcServer.toHttpEffect(group).pipe(
-        Effect.flatten,
-        Effect.provide(layer),
-      ) as unknown as HttpEffect;
+      const rpc = RpcServer.toHttpEffect(group).pipe(Effect.flatten, Effect.provide(layer));
+      const live = liveReads(entries, yield* Domain.Internals, middleware);
+      return Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        return request.headers.upgrade?.toLowerCase() === "websocket" ? yield* live : yield* rpc;
+      }) as unknown as HttpEffect;
     }),
     client,
     Client,
@@ -653,10 +619,140 @@ export const make = <const Name extends string, const Entries extends ReadonlyAr
   ) as ApiClass<Name, Entries>;
 
 /**
- * The HTTP protocol for an Api client (NDJSON, so streams work). Requires an
+ * The HTTP protocol for an Api client (NDJSON, so streams work). Live reads
+ * are streamed responses, which the platform feeds by polling the key; use
+ * {@link protocolWebSocket} to have them pushed instead. Requires an
  * `HttpClient`, e.g. `FetchHttpClient.layer`.
  */
 export const protocolHttp = (
   url: string,
 ): Layer.Layer<RpcClient.Protocol, never, HttpClient.HttpClient> =>
   RpcClient.layerProtocolHttp({ url }).pipe(Layer.provide(RpcSerialization.layerNdjson));
+
+/** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
+type LiveFrame = RpcMessage.FromServerEncoded & { readonly cursor?: number };
+
+/** The RPCs served as live reads. */
+const isLiveRead = (tag: string) => tag.endsWith(".watch") || tag.endsWith(".events");
+
+/** Attempts in a row a live read may fail to (re)connect before it fails. */
+const RECONNECTS = 8;
+
+/**
+ * The WebSocket protocol for an Api client. Calls (commands, `get`, `list`)
+ * go over HTTP like {@link protocolHttp}; every live read (`watch`,
+ * `events`) opens its own WebSocket, which the Api hands to the object that
+ * owns the key (on Cloudflare, its Durable Object). Each commit is pushed
+ * down the socket, so nothing polls and the object hibernates in between. A
+ * dropped socket reconnects and resumes after the last value it delivered.
+ *
+ * A WebSocket cannot carry request headers from a browser, so the headers
+ * client middleware attaches (a session token) travel in the URL, while
+ * cookies travel as usual. Requires an `HttpClient` and a
+ * `Socket.WebSocketConstructor` (`Socket.layerWebSocketConstructorGlobal`
+ * in browsers and Workers).
+ *
+ * **Example:** Watching a view over a WebSocket
+ * ```typescript
+ * const BankConnection = CustomerApi.layerClient.pipe(
+ *   Layer.provide(Api.protocolWebSocket("https://bank.example.com/api")),
+ *   Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+ * );
+ * ```
+ */
+export const protocolWebSocket = (
+  url: string,
+): Layer.Layer<RpcClient.Protocol, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =>
+  Layer.effect(
+    RpcClient.Protocol,
+    Effect.gen(function* () {
+      const client = HttpClient.mapRequest(
+        yield* HttpClient.HttpClient,
+        HttpClientRequest.prependUrl(url),
+      );
+      const http = yield* RpcClient.makeProtocolHttp(client).pipe(
+        Effect.provide(RpcSerialization.layerNdjson),
+      );
+      const constructor = yield* Socket.WebSocketConstructor;
+      const socketUrl = url.replace(/^http/, "ws");
+      const writers = new Map<
+        number,
+        (message: RpcMessage.FromServerEncoded) => Effect.Effect<void>
+      >();
+      const stops = new Map<string, Deferred.Deferred<void>>();
+
+      const liveRead = (clientId: number, request: RpcMessage.RequestEncoded) =>
+        Effect.gen(function* () {
+          let cursor: number | undefined;
+          let ended = false;
+          let failures = 0;
+          const connect = Effect.gen(function* () {
+            const live: LiveRequest = {
+              id: request.id,
+              tag: request.tag,
+              payload: request.payload,
+              headers: request.headers,
+              cursor,
+            };
+            const socket = yield* Socket.makeWebSocket(
+              `${socketUrl}?${LIVE_PARAM}=${encodeURIComponent(JSON.stringify(live))}`,
+            );
+            const pull = yield* Socket.readerString(socket);
+            while (!ended) {
+              for (const text of yield* pull) {
+                const { cursor: next, ...message } = JSON.parse(text) as LiveFrame;
+                failures = 0;
+                if (next !== undefined) cursor = next;
+                if (message._tag === "Exit") ended = true;
+                yield* Effect.suspend(
+                  () =>
+                    writers.get(clientId)?.(message as RpcMessage.FromServerEncoded) ?? Effect.void,
+                );
+              }
+            }
+          }).pipe(Effect.scoped, Effect.provideService(Socket.WebSocketConstructor, constructor));
+
+          while (!ended) {
+            const exit = yield* Effect.exit(connect);
+            if (ended) return;
+            // A close without an `Exit` (a deploy, an evicted object) reconnects and resumes.
+            if (++failures > RECONNECTS) {
+              return yield* new RpcClientError.RpcClientError({
+                reason: new RpcClientError.RpcClientDefect({
+                  message: `Live read ${request.tag} lost its connection`,
+                  cause: Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
+                }),
+              });
+            }
+            yield* Effect.sleep(Duration.millis(Math.min(5_000, 100 * 2 ** failures)));
+          }
+        });
+
+      return RpcClient.Protocol.of({
+        run: (clientId, write) =>
+          Effect.suspend(() => {
+            writers.set(clientId, write);
+            return http.run(clientId, write);
+          }).pipe(Effect.ensuring(Effect.sync(() => writers.delete(clientId)))),
+        send: (clientId, request, transferables) => {
+          if (request._tag === "Request" && isLiveRead(request.tag)) {
+            return Effect.gen(function* () {
+              const stop = yield* Deferred.make<void>();
+              stops.set(String(request.id), stop);
+              yield* Effect.raceFirst(liveRead(clientId, request), Deferred.await(stop)).pipe(
+                Effect.ensuring(Effect.sync(() => stops.delete(String(request.id)))),
+              );
+            });
+          }
+          if (request._tag === "Interrupt") {
+            const stop = stops.get(String(request.requestId));
+            if (stop) return Deferred.succeed(stop, undefined).pipe(Effect.asVoid);
+          }
+          return http.send(clientId, request, transferables);
+        },
+        supportsAck: false,
+        supportsTransferables: false,
+        codecFor: http.codecFor,
+      });
+    }),
+  );

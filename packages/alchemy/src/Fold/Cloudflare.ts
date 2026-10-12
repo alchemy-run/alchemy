@@ -1,5 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -8,6 +11,7 @@ import * as Stream from "effect/Stream";
 import { makeCallback } from "../Callback.ts";
 import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Aggregate from "./Aggregate.ts";
@@ -19,8 +23,10 @@ import {
   FoldPlatform,
   type Json,
   type PolicyKit,
+  type Push,
   type SendResult,
   type StoredEvent,
+  type Subscription,
   type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
@@ -78,7 +84,11 @@ interface Stub {
 }
 
 interface Namespace {
-  readonly getByName: (name: string) => Stub;
+  readonly getByName: (name: string) => Stub & {
+    readonly fetch: (
+      request: HttpServerRequest,
+    ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
+  };
 }
 
 /** What an instance's methods and constructor run with. */
@@ -171,11 +181,139 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     };
   });
 
+// ---------------------------------------------------------------- live reads
+
+/** What a live read's WebSocket carries across hibernation. */
+interface Attachment {
+  readonly key: string;
+  readonly subscription: Subscription;
+}
+
+const SUBSCRIPTION_HEADER = "x-fold-subscription";
+
+/** Send a push to its socket; close it when the read ended or could not be judged. */
+const deliverPush = <R>(socket: WebSocket, key: string, push: Effect.Effect<Push, never, R>) =>
+  push.pipe(
+    Effect.flatMap((pushed) =>
+      Effect.gen(function* () {
+        // Each frame carries the cursor a reconnecting client resumes from.
+        const cursor = pushed.subscription.cursor;
+        for (const message of pushed.messages) {
+          yield* socket.send(JSON.stringify({ ...(message as object), cursor }));
+        }
+        if (pushed.done) return yield* socket.close(1000, "");
+        yield* Effect.sync(() =>
+          socket.serializeAttachment({
+            key,
+            subscription: pushed.subscription,
+          } satisfies Attachment),
+        );
+      }),
+    ),
+    Effect.catchCause(() => socket.close(1011, "Fold could not push to this read")),
+  );
+
+/**
+ * Accept a live read's WebSocket (the current request, forwarded by
+ * {@link connectTo}) with the hibernation API, and send what it starts with.
+ * Runs exclusively, so no commit's push interleaves with the first one.
+ */
+const accept = (
+  initial: (
+    key: string,
+    subscription: Subscription,
+  ) => Effect.Effect<Push, never, DurableObjectState | RuntimeContext>,
+) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const header = request.headers[SUBSCRIPTION_HEADER];
+    if (header === undefined || request.headers.upgrade?.toLowerCase() !== "websocket") {
+      return HttpServerResponse.empty({ status: 426, headers: { Upgrade: "websocket" } });
+    }
+    const { key, subscription } = JSON.parse(header) as Attachment;
+    return yield* exclusively(
+      Effect.gen(function* () {
+        const [response, socket] = yield* upgrade();
+        if (subscription.refused !== undefined) {
+          yield* socket.send(
+            JSON.stringify({
+              _tag: "Exit",
+              requestId: subscription.requestId,
+              exit: subscription.refused,
+            }),
+          );
+          yield* socket.close(1000, "");
+          return response;
+        }
+        yield* deliverPush(socket, key, initial(key, subscription));
+        return response;
+      }),
+    );
+  });
+
+/** Push to every live read of this instance after a commit. Runs inside the commit's exclusive section. */
+const broadcast = (
+  push: (attachment: Attachment) => Effect.Effect<Push, never, DurableObjectState | RuntimeContext>,
+) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    for (const socket of yield* state.getWebSockets()) {
+      const attachment = socket.deserializeAttachment<Attachment>();
+      if (attachment === null) continue;
+      yield* deliverPush(socket, attachment.key, push(attachment));
+    }
+  });
+
+/** Live reads only receive; a client message or close needs no work beyond ending the socket. */
+const socketHandlers = {
+  webSocketMessage: () => Effect.void,
+  webSocketClose: (socket: WebSocket) => socket.close(1000, "").pipe(Effect.ignoreCause),
+  webSocketError: (socket: WebSocket) => socket.close(1011, "").pipe(Effect.ignoreCause),
+};
+
+/**
+ * Forward a WebSocket upgrade (the current request) to the instance that owns
+ * `key`, carrying the subscription. The Worker sets the header, overwriting
+ * any a client sent, so the object can trust it.
+ */
+const connectTo = (namespace: Namespace) => (key: string, subscription: Subscription) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const forwarded = request.modify({
+      headers: Headers.set(
+        request.headers,
+        SUBSCRIPTION_HEADER,
+        JSON.stringify({ key, subscription } satisfies Attachment),
+      ),
+    });
+    const response = yield* namespace.getByName(key).fetch(forwarded).pipe(Effect.orDie);
+    // A fetched Response's headers are immutable; re-wrap the socket so
+    // middleware (CORS) can still add headers to the upgrade.
+    const body = response.body;
+    if (body._tag === "Raw" && body.body instanceof Response) {
+      const webSocket = (body.body as unknown as { readonly webSocket: unknown }).webSocket;
+      if (webSocket) {
+        return HttpServerResponse.raw(
+          new Response(null, { status: 101, webSocket } as ResponseInit),
+          { status: 101 },
+        );
+      }
+    }
+    return response;
+  });
+
 const aggregateObject = (kit: AggregateKit) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
+      const currentMeta = state.storage
+        .get<{ state: Json | null; version: number }>("meta")
+        .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
+      const eventsAfter = (after: number) =>
+        state.storage
+          .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
+          .pipe(Effect.map((rows) => [...rows.values()]));
       const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
           const { sent, kick } = yield* exclusively(
@@ -224,6 +362,18 @@ const aggregateObject = (kit: AggregateKit) =>
                   yield* outbox.stage(result.deliveries);
                 }),
               );
+              const committed = { state: result.state, version: result.version };
+              yield* broadcast(({ key, subscription }) =>
+                Effect.gen(function* () {
+                  // A subscriber behind this commit's first event reads the gap from storage.
+                  const first = result.events[0]?.envelope.seq ?? Infinity;
+                  const events =
+                    subscription.mode === "events" && subscription.cursor < first - 1
+                      ? yield* eventsAfter(subscription.cursor)
+                      : result.events;
+                  return yield* kit.push(key, subscription, committed, events);
+                }),
+              );
               return { sent, kick: result.deliveries.length > 0 };
             }),
           );
@@ -248,18 +398,18 @@ const aggregateObject = (kit: AggregateKit) =>
                 : { after: due.afterMillis, payload: { id, command, meta } },
             ),
           ),
-        state: () =>
-          reportDefects(
-            state.storage
-              .get<{ state: Json | null; version: number }>("meta")
-              .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 })),
-          ),
-        after: (after: number) =>
-          reportDefects(
-            state.storage
-              .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
-              .pipe(Effect.map((rows) => [...rows.values()])),
-          ),
+        state: () => reportDefects(currentMeta),
+        after: (after: number) => reportDefects(eventsAfter(after)),
+        // A live read of this instance: accept its WebSocket, then push on every commit.
+        fetch: accept((id, subscription) =>
+          Effect.gen(function* () {
+            const current = yield* currentMeta;
+            const events =
+              subscription.mode === "events" ? yield* eventsAfter(subscription.cursor) : [];
+            return yield* kit.push(id, subscription, current, events);
+          }),
+        ),
+        ...socketHandlers,
       };
     });
   });
@@ -293,6 +443,17 @@ const viewObject = (kit: ViewKit) =>
                       yield* outbox.stage(result.downstream);
                     }),
                   );
+                  yield* broadcast(({ key, subscription }) =>
+                    Effect.gen(function* () {
+                      // A subscriber behind this commit's first entry reads the gap from storage.
+                      const first = result.entries[0]?.seq ?? Infinity;
+                      const entries =
+                        subscription.mode === "events" && subscription.cursor < first - 1
+                          ? yield* entriesAfter(subscription.cursor)
+                          : result.entries;
+                      return yield* kit.push(key, subscription, result.snapshot, entries);
+                    }),
+                  );
                   return result.downstream.length > 0;
                 }),
               );
@@ -301,6 +462,16 @@ const viewObject = (kit: ViewKit) =>
           ),
         read: () => reportDefects(read),
         after: (after: number) => reportDefects(entriesAfter(after)),
+        // A live read of this key: accept its WebSocket, then push on every commit.
+        fetch: accept((key, subscription) =>
+          Effect.gen(function* () {
+            const snapshot = yield* read;
+            const entries =
+              subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
+            return yield* kit.push(key, subscription, snapshot, entries);
+          }),
+        ),
+        ...socketHandlers,
       };
     });
   });
@@ -373,8 +544,11 @@ const pollAfter = <A>(
  *   callbacks on the target instance.
  * - **Views**: one instance per key, with per-source checkpoints so repeated
  *   deliveries are harmless. State, emitted events and the outbox to
- *   downstream views and policies commit together. `watch` and `events` poll
- *   the instance that owns the key.
+ *   downstream views and policies commit together.
+ * - **Live reads**: a client's `watch` or `events` (over
+ *   `Api.protocolWebSocket`) is a WebSocket to the instance that owns the
+ *   key, accepted with the hibernation API. Each commit pushes to it, judged
+ *   by the read's `validate` again, and the instance hibernates in between.
  * - **Policies**: one instance per (policy, source instance), running
  *   triggers in order from a durable inbox.
  *
@@ -409,7 +583,7 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
               schedule: (id, command, meta, due) =>
                 unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
-              // Polls from the caller; push to watchers is the next step.
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
                   unwrapDefects<{ state: Json | null; version: number }>(
@@ -426,6 +600,7 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
                     ),
                   (event) => event.envelope.seq,
                 ),
+              connect: connectTo(namespace),
             };
           }),
         ),
@@ -441,12 +616,13 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
               receive: (key, deliveries) =>
                 unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
               read,
-              // Polls from the caller; push over hibernatable WebSockets is the next step.
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (key) =>
                 Stream.fromEffectSchedule(read(key), POLL).pipe(
                   Stream.changesWith((a, b) => a.version === b.version),
                 ),
               list: (key) => after(key, 0),
+              connect: connectTo(namespace),
               tail: (key, from) =>
                 Stream.suspend(() => {
                   let first = true;

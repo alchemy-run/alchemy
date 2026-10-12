@@ -20,6 +20,7 @@ import {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import * as View from "./View.ts";
+import * as Watch from "./Watch.ts";
 
 type Identifier<T> = T extends Context.Key<infer I, unknown> ? I : never;
 
@@ -157,11 +158,20 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
     for (const aggregate of definitions.aggregates) {
       aggregateStores.set(
         aggregate.aggregateName,
-        yield* platform.aggregate(aggregate, kernel.aggregateKit(aggregate, deliver)),
+        yield* platform.aggregate(aggregate, {
+          ...kernel.aggregateKit(aggregate, deliver),
+          push: Watch.aggregatePush(kernel, aggregate),
+        }),
       );
     }
     for (const view of definitions.views) {
-      viewStores.set(view.viewName, yield* platform.view(view, kernel.viewKit(view, deliver)));
+      viewStores.set(
+        view.viewName,
+        yield* platform.view(view, {
+          ...kernel.viewKit(view, deliver),
+          push: Watch.viewPush(kernel, view),
+        }),
+      );
     }
 
     let hosts = Context.empty() as Context.Context<unknown>;

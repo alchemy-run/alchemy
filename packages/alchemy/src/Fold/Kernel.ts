@@ -80,8 +80,11 @@ export interface Kernel {
   readonly aggregateKit: (
     aggregate: Aggregate.Any,
     deliver: (d: Delivery) => Effect.Effect<void>,
-  ) => AggregateKit;
-  readonly viewKit: (view: View.Any, deliver: (d: Delivery) => Effect.Effect<void>) => ViewKit;
+  ) => Omit<AggregateKit, "push">;
+  readonly viewKit: (
+    view: View.Any,
+    deliver: (d: Delivery) => Effect.Effect<void>,
+  ) => Omit<ViewKit, "push">;
   readonly policyKit: (policy: Policy.Any, handler: Policy.Handler<unknown>) => PolicyKit;
   readonly encodeCommand: (aggregate: Aggregate.Any, command: { readonly _tag: string }) => Json;
   readonly decodeRejection: (aggregate: Aggregate.Any, json: Json) => unknown;
@@ -393,7 +396,7 @@ export const make = (definitions: Definitions): Kernel => {
   const aggregateKit = (
     aggregate: Aggregate.Any,
     deliver: (d: Delivery) => Effect.Effect<void>,
-  ): AggregateKit => {
+  ): Omit<AggregateKit, "push"> => {
     const def = aggregate.definition;
     const codecs = codecsOf(aggregate);
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
@@ -564,7 +567,10 @@ export const make = (definitions: Definitions): Kernel => {
     return handler && route !== undefined ? handler[route] : undefined;
   };
 
-  const viewKit = (view: View.Any, deliver: (d: Delivery) => Effect.Effect<void>): ViewKit => {
+  const viewKit = (
+    view: View.Any,
+    deliver: (d: Delivery) => Effect.Effect<void>,
+  ): Omit<ViewKit, "push"> => {
     const def = view.definition;
     const stateful = def.state !== undefined;
     const codec = stateful ? viewCodec(view) : undefined;
