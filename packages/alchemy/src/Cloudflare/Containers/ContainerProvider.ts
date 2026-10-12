@@ -15,6 +15,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { hashDockerBuildInputs } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
+import { materializeImageContext } from "../../Docker/ImageContext.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
@@ -376,6 +377,27 @@ export const LiveContainerProvider = () =>
         };
       });
 
+      /**
+       * Copy the image layers' context sources (mounted files, folders, git
+       * checkouts) into a program's build context, returning their digest
+       * (undefined without any). Shared with the local provider's build context.
+       */
+      const materializeLayerContext = (id: string, props: AnyContainerApplicationProps) =>
+        Effect.gen(function* () {
+          const sources = (props.imageLayers ?? []).flatMap((layer) => layer.context ?? []);
+          if (sources.length === 0) return undefined;
+          const { dotAlchemy } = yield* AlchemyContext;
+          const path = yield* Path.Path;
+          const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
+          const materialized = yield* materializeImageContext({
+            context,
+            cacheDir: path.join(dotAlchemy, "git-cache"),
+            reposDir: path.join(dotAlchemy, "repos"),
+            sources,
+          });
+          return materialized.digest;
+        });
+
       const computeImage = Effect.fn(function* (
         id: string,
         props: AnyContainerApplicationProps,
@@ -411,10 +433,13 @@ export const LiveContainerProvider = () =>
             props.external,
             props.autoInstallExternals,
           );
+          // Mounted sources (files, folders, git checkouts) are part of the image.
+          const contextDigest = yield* materializeLayerContext(id, props);
           const imageHash = (yield* sha256Object({
             bundleHash,
             dockerfile: finalDockerfile,
             imageName: props.publish?.repository?.toLowerCase(),
+            ...(contextDigest !== undefined ? { contextDigest } : {}),
           })).slice(0, 16);
           // The dev image is the deterministic build-context directory that
           // `buildAndPushImage` materializes into (and that the local provider
@@ -641,6 +666,8 @@ export const LiveContainerProvider = () =>
               content: f.content,
             })),
           });
+          // The layers' mounted sources, next to the program (cached per digest).
+          yield* materializeLayerContext(id, props);
           yield* docker.image
             .build(
               {
