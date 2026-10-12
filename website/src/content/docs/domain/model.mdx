@@ -1,0 +1,143 @@
+---
+title: Domain model
+description: Host aggregates, views and policies together, on Cloudflare or in memory.
+---
+
+A domain model is the set of aggregates, views and policies you host together. Declare it with `Domain.Model`, and give it the policies' implementations and a platform to run on.
+
+## Declare a model
+
+List every aggregate, view and policy the model hosts.
+
+```typescript
+// src/Bank.ts
+import * as Domain from "alchemy/Domain";
+import * as Layer from "effect/Layer";
+import { Account } from "./Account/Account.ts";
+import { AccountActivity } from "./Account/AccountActivity.ts";
+import { AccountSummary } from "./Account/AccountSummary.ts";
+import { Statement } from "./Account/Statement.ts";
+import { Customer } from "./Customer/Customer.ts";
+import { CustomerDashboard } from "./Customer/CustomerDashboard.ts";
+import {
+  MainAccountProvisioning,
+  MainAccountProvisioningLive,
+} from "./Customer/MainAccountProvisioning.ts";
+import { UsernameClaim } from "./Customer/UsernameClaim.ts";
+import { UsernameReservation, UsernameReservationLive } from "./Customer/UsernameReservation.ts";
+import { DailyOutflow } from "./Fraud/DailyOutflow.ts";
+import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
+import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
+import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
+import { Transfer } from "./Transfer/Transfer.ts";
+import {
+  TransferApprovalDeadline,
+  TransferApprovalDeadlineLive,
+} from "./Transfer/TransferApprovalDeadline.ts";
+import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
+import { TransferStatus } from "./Transfer/TransferStatus.ts";
+
+/** The bank: every aggregate, view and policy, hosted together. */
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Customer, UsernameClaim, Account, Transfer],
+  views: [
+    AccountSummary,
+    CustomerDashboard,
+    Statement,
+    AccountActivity,
+    TransferStatus,
+    AccountTransfers,
+    DailyOutflow,
+  ],
+  policies: [
+    UsernameReservation,
+    MainAccountProvisioning,
+    TransferExecution,
+    TransferApprovalDeadline,
+    FraudReview,
+    SettlementRefund,
+  ],
+}) {}
+
+/** The policies' implementations. They require the FraudCheck and Payments ports. */
+export const BankPolicies = Layer.mergeAll(
+  UsernameReservationLive,
+  MainAccountProvisioningLive,
+  TransferExecutionLive,
+  TransferApprovalDeadlineLive,
+  FraudReviewLive,
+  SettlementRefundLive,
+);
+```
+
+`BankPolicies` collects each policy's implementation. A policy is declared in one place and implemented with `toLayer`, so the model can be hosted with different implementations in different places.
+
+## Host it in memory
+
+`Bank.layer(BankPolicies)` builds the whole model. It needs a platform, plus whatever the policies need, such as ports.
+
+```typescript
+// src/BankInMemory.ts
+import * as Domain from "alchemy/Domain";
+import * as Layer from "effect/Layer";
+import { Bank, BankPolicies } from "./Bank.ts";
+import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+import { StripePayments } from "./Settlement/StripePayments.ts";
+
+export const BankInMemory = Bank.layer(BankPolicies).pipe(
+  Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments)),
+);
+```
+
+`Domain.InMemory` keeps everything in the process. Use it in tests and single-process apps.
+
+## Host it on Cloudflare
+
+Swap the platform for `DomainCloudflare.DurableObjects`, and nothing else changes.
+
+```typescript
+// src/BankOnCloudflare.ts
+import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Bank, BankPolicies } from "./Bank.ts";
+import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+import { StripePayments } from "./Settlement/StripePayments.ts";
+
+export const BankOnCloudflare = Bank.layer(BankPolicies).pipe(
+  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, StripePayments)),
+);
+```
+
+Provide this Layer to a Worker. Every aggregate, view and policy becomes a Durable Object class on that Worker, with no bindings to write. See [Cloudflare Durable Objects](/domain/cloudflare).
+
+## Use what the model provides
+
+The model provides every aggregate and view as a service. `yield* Account` gives you the account client, and `yield* AccountSummary` gives you the view.
+
+```typescript
+// src/depositAndRead.ts
+import * as Effect from "effect/Effect";
+import { Account } from "./Account/Account.ts";
+import type { AccountId } from "./Account/AccountId.ts";
+import { AccountSummary } from "./Account/AccountSummary.ts";
+import { DepositMoney } from "./Account/DepositMoney.ts";
+import { customer } from "./Actor.ts";
+import { CurrentActor } from "./CurrentActor.ts";
+import type { CustomerId } from "./Customer/CustomerId.ts";
+
+export const depositAndRead = Effect.fn(function* (customerId: CustomerId, accountId: AccountId) {
+  const accounts = yield* Account;
+  const summaries = yield* AccountSummary;
+  const receipt = yield* accounts
+    .send(accountId, new DepositMoney({ amount: 1_000 }))
+    .pipe(Effect.provideService(CurrentActor, customer(customerId)));
+  // Wait until the view has applied this deposit, then read it.
+  return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+});
+```
+
+`send` needs what the command's middleware would provide. Here that's the `CurrentActor`, provided directly. Views catch up shortly after a command commits, so `atLeast` waits for the receipt's version before reading.
+
+:::note
+Reference: [`Domain.Model`](/providers/domain/reference#model). Build a model step by step in [Part 3 of the tutorial](/domain/tutorial/part-3).
+:::

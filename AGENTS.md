@@ -189,7 +189,7 @@ This is the only doc generator that produces user-facing output. ([scripts/gener
 
 1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
 2. Parses TypeScript with the native TypeScript API (`typescript-api` tooling alias)
-3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
+3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, `@layer`, or `@primitive` (a building block exported as its module's `make`, e.g. `Domain.Event`; its page is named after the file)
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
 **Layer pages** (`@layer`) document exported Layer factories — the pluggable implementations of a Context service (e.g. better-auth's database layers). Alongside the shared tags, a Layer declares what it satisfies and needs:
@@ -218,7 +218,7 @@ export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<
 Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
 Keep all API-generator metadata tags (`@resource`, `@binding`, `@layer`,
-`@product`, `@category`, `@provides`, and `@peer`) together at the very end of
+`@primitive`, `@product`, `@category`, `@provides`, and `@peer`) together at the very end of
 the JSDoc block. Do not put prose, sections, or examples after them: TypeScript
 treats subsequent content as part of the block tag, which breaks editor JSDoc
 rendering. The generator also supports `@group` as an alias for `@category` and

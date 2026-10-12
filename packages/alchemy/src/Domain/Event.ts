@@ -25,22 +25,28 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * Declare an Event: an immutable fact recorded on an aggregate's stream.
+ * A fact your domain recorded, named in the past tense. Aggregates record
+ * events; their state, every view and every policy follow from them.
  *
- * Events are past-tense facts. They are produced by an aggregate's `decide`,
- * folded into state by `evolve`, and delivered to Views and Policies.
- *
- * **Example:** Declaring events
+ * ### Declaring events
+ * **Example:** An event with data
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ *
  * export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
- *   data: { amount: Cents, balanceAfter: Cents },
+ *   data: { amount: Schema.Int, balanceAfter: Schema.Int },
  * }) {}
+ * ```
+ *
+ * **Example:** An event with no data
+ * ```typescript
+ * import * as Domain from "alchemy/Domain";
  *
  * export class AccountClosed extends Domain.Event("AccountClosed") {}
- *
- * new MoneyDeposited({ amount: 100, balanceAfter: 100 });
- * new AccountClosed();
  * ```
+ *
+ * @primitive
  */
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,

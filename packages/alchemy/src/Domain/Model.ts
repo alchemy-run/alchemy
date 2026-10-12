@@ -88,26 +88,32 @@ export interface Any {
 }
 
 /**
- * Declare a domain model: the complete set of aggregates, views and policies
- * hosted together.
+ * The aggregates, views and policies you host together. `layer(policies)`
+ * builds them all on the Platform you provide, and provides each aggregate
+ * and view as a service.
  *
- * `Bank.layer(policies)` builds every entity on the ambient
- * {@link Platform} and provides each aggregate and view as a
- * service. The policies' Layers are part of the call because they are built
- * with those services available.
- *
- * **Example:** Declaring and hosting a domain model
+ * ### Declaring and hosting a model
+ * **Example:** In memory, with its policies and ports
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Layer from "effect/Layer";
+ * import { Account } from "./Account.ts";
+ * import { AccountSummary } from "./AccountSummary.ts";
+ * import { Customer } from "./Customer.ts";
+ * import { MainAccountProvisioning, MainAccountProvisioningLive } from "./MainAccountProvisioning.ts";
+ *
  * export class Bank extends Domain.Model("Bank", {
- *   aggregates: [Customer, Account, Transfer],
- *   views: [AccountSummary, TransferStatus, Statement],
- *   policies: [TransferExecution, FraudReview],
+ *   aggregates: [Account, Customer],
+ *   views: [AccountSummary],
+ *   policies: [MainAccountProvisioning],
  * }) {}
  *
- * const BankLive = Bank.layer(Layer.mergeAll(TransferExecutionLive, FraudReviewLive)).pipe(
- *   Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck)),
+ * export const BankInMemory = Bank.layer(MainAccountProvisioningLive).pipe(
+ *   Layer.provide(Domain.InMemory),
  * );
  * ```
+ *
+ * @primitive
  */
 export const make = <
   const Name extends string,

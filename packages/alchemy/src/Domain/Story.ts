@@ -202,6 +202,14 @@ interface PendingCall {
   expected: boolean;
 }
 
+/** Options for {@link make}. */
+interface StoryOptions<Policies, LE, LR, Ports> {
+  /** The policies' Layers. Required when the model has policies. */
+  readonly layer?: Layer.Layer<Policies, LE, LR>;
+  /** Ports the policies call. Each is replaced by a scripted implementation. */
+  readonly ports?: ReadonlyArray<Ports>;
+}
+
 /**
  * Create a story runner for a Domain. A story is a sequence of steps run
  * against an in-memory host: policies run for real, Port calls suspend until
@@ -225,12 +233,9 @@ interface PendingCall {
 const make =
   <Name extends string, Provided, Policies, LE = never, LR = never, Ports extends Port.Any = never>(
     domain: Model.ModelClass<Name, Provided, Policies>,
-    options: {
-      /** Layers for the Domain's policies. */
-      readonly layer?: Layer.Layer<Policies, LE, LR>;
-      /** Ports the policies call. Each is replaced by a scripted implementation. */
-      readonly ports?: ReadonlyArray<Ports>;
-    } = {},
+    ...[options = {}]: [Policies] extends [never]
+      ? [options?: StoryOptions<Policies, LE, LR, Ports>]
+      : [options: StoryOptions<Policies, LE, LR, Ports> & { readonly layer: unknown }]
   ) =>
   (
     ...steps: ReadonlyArray<Step>
@@ -503,14 +508,47 @@ const make =
     }) as Effect.Effect<void, StoryFailure | LE, Exclude<LR, Provided | Port.Identifier<Ports>>>;
 
 /**
- * Stories: given / when / then specifications of a Domain, run against an
- * in-memory host. Policies run for real, Port calls suspend until resolved,
- * and nothing outside the Domain is executed.
+ * Given / when / then specifications of a domain model, run against the real
+ * model in memory: policies run for real, port calls wait until you resolve
+ * them, and a clock you control stamps commands and fires scheduled ones. A
+ * story fails on any rejection or port call it doesn't account for.
  *
- * The steps live on this object rather than as module exports: a module that
- * exports `then` is "thenable", and loaders that await module namespaces
- * would hang on it.
+ * ### Writing a story
+ * **Example:** A withdrawal and an overdraft
+ * ```typescript
+ * import { it } from "@effect/vitest";
+ * import { Story } from "alchemy/Domain/Story";
+ * import { Account, InsufficientFunds, MoneyDeposited, MoneyWithdrawn, WithdrawMoney } from "../src/Account.ts";
+ * import { Bank, BankPolicies } from "../src/Bank.ts";
+ *
+ * const story = Story.make(Bank, { layer: BankPolicies });
+ * const account = Account.ref("a-1");
+ *
+ * it.effect("withdraws within the balance, and refuses beyond it", () =>
+ *   story(
+ *     Story.given(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
+ *     Story.when(account, new WithdrawMoney({ amount: 30 })),
+ *     Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
+ *     Story.replied({ balance: 70 }),
+ *     Story.when(account, new WithdrawMoney({ amount: 100 })),
+ *     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
+ *   ),
+ * );
+ * ```
+ *
+ * ### Ports and the clock
+ * **Example:** Answer a port call, then move the clock
+ * ```typescript
+ * Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
+ * Story.resolve(FraudCheck.score, { risk: 0.95 }),
+ * Story.clock("2026-01-02T09:00:00Z"),
+ * ```
+ *
+ * @primitive
  */
+// The steps live on this object rather than as module exports: a module that
+// exports `then` is "thenable", and loaders that await module namespaces
+// would hang on it.
 // oxlint-disable-next-line unicorn/no-thenable -- `Story.then` is the given/when/then vocabulary
 export const Story = {
   make,

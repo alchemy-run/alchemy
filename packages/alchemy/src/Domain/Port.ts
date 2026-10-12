@@ -72,22 +72,28 @@ const RESERVED = new Set([
 ]);
 
 /**
- * Declare a Port: the interface of an external system a policy calls.
+ * A typed boundary to an outside system: the calls your policies make to it.
+ * Adapters implement it as a Layer, and stories answer its calls themselves.
  *
- * Ports are declared with Schema so stories can intercept their calls
- * (`expectCall` / `resolve`) without mocks. Production adapters are Layers
- * built with `toLayer`.
- *
- * **Example:** Declaring a port and an adapter
+ * ### Declaring a port and an adapter
+ * **Example:** A fraud scorer
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
+ *
  * export class FraudCheck extends Domain.Port("FraudCheck", {
- *   score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
+ *   score: { args: { accountId: Schema.String, amount: Schema.Int }, success: { risk: Schema.Number } },
  * }) {}
  *
  * export const SiftFraudCheck = FraudCheck.toLayer(
- *   Effect.succeed({ score: ({ amount }) => Effect.succeed({ risk: amount > 50_000 ? 0.9 : 0.1 }) }),
+ *   Effect.succeed({
+ *     score: ({ amount }) => Effect.succeed({ risk: amount >= 80_000 ? 0.95 : 0.05 }),
+ *   }),
  * );
  * ```
+ *
+ * @primitive
  */
 export const make = <const Name extends string, const Ops extends Record<string, OpSpec>>(
   name: Name,

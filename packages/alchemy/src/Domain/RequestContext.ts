@@ -27,16 +27,40 @@ export interface RequestContextClass<
 }
 
 /**
- * Declare a service that middleware provides to a request, such as the
- * current actor. It belongs to the request, not to any one entity: a
- * command carries it to its aggregate's `decide`, and a read carries it to
- * `validate`. Both may run elsewhere (e.g. in a Durable Object), so it has a
- * schema. Policies provide it themselves when they send commands.
+ * A service middleware provides to a request, such as the current actor. It
+ * belongs to the request: a command carries it to its aggregate's `decide`,
+ * and a read carries it to `validate`. Both may run elsewhere, such as in a
+ * Durable Object, so it has a schema. Policies provide it themselves when
+ * they send commands.
  *
+ * ### Declaring a request context
  * **Example:** The current actor
  * ```typescript
- * export class CurrentActor extends Domain.RequestContext<CurrentActor>()("Bank/CurrentActor", Actor) {}
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ *
+ * export class CurrentActor extends Domain.RequestContext<CurrentActor>()(
+ *   "Bank/CurrentActor",
+ *   Schema.Struct({ customerId: Schema.String }),
+ * ) {}
  * ```
+ *
+ * ### Providing it from middleware
+ * **Example:** A session middleware that provides it
+ * ```typescript
+ * import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+ * import * as Schema from "effect/Schema";
+ * import { CurrentActor } from "./CurrentActor.ts";
+ *
+ * export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+ *
+ * export class Session extends RpcMiddleware.Service<Session, { provides: CurrentActor }>()(
+ *   "Bank/Session",
+ *   { error: Unauthorized },
+ * ) {}
+ * ```
+ *
+ * @primitive
  */
 export const make =
   <Self>() =>

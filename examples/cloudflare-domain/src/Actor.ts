@@ -2,8 +2,8 @@ import * as Schema from "effect/Schema";
 import { CustomerId } from "./Customer/CustomerId.ts";
 
 /**
- * Who is acting. Commands that need authorization carry it as `by`; events
- * that need an audit trail record it.
+ * Who is acting. `Session` provides it as the `CurrentActor` of each
+ * request; events that need an audit trail record it as `by`.
  */
 export const Actor = Schema.Union([
   Schema.TaggedStruct("Customer", { customerId: CustomerId }),

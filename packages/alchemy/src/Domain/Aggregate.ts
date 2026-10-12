@@ -222,7 +222,7 @@ type ReplyOf<C> = C extends { readonly reply: infer R }
  * **Example:** Sending a command
  * ```typescript
  * const accounts = yield* Account;
- * const { reply } = yield* accounts.send(accountId, new Withdraw({ amount: 30, by }));
+ * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
  * ```
  */
 export interface Client<Def extends AnyDefinition> {
@@ -316,7 +316,97 @@ export interface Ref<A extends Any = Any> {
 /** @internal */
 export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
 
-/** @internal */
+/**
+ * One entity that decides, such as a bank account: a consistency boundary.
+ * It takes a command, checks it against its current state, and records events
+ * or returns a rejection. Each instance handles one command at a time, and
+ * its events, new state and reply commit together.
+ *
+ * ### Deciding and evolving
+ * **Example:** An account that refuses overdrafts
+ * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ *
+ * export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+ *
+ * export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+ *   data: { amount: Schema.Int, balanceAfter: Schema.Int },
+ * }) {}
+ *
+ * export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+ *   data: { balance: Schema.Int, requested: Schema.Int },
+ * }) {}
+ *
+ * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+ *   target: AccountId,
+ *   input: { amount: Schema.Int },
+ *   events: [MoneyWithdrawn],
+ *   rejects: [InsufficientFunds],
+ *   reply: { balance: Schema.Int },
+ * }) {}
+ *
+ * export class Account extends Domain.Aggregate("Account", {
+ *   id: AccountId,
+ *   state: Schema.Struct({ balance: Schema.Int }),
+ *   initial: { balance: 0 },
+ *   commands: [WithdrawMoney],
+ *   decide: {
+ *     WithdrawMoney: (s, cmd) =>
+ *       cmd.amount > s.balance
+ *         ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+ *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+ *   },
+ *   evolve: {
+ *     MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
+ *   },
+ *   reply: {
+ *     WithdrawMoney: (s) => ({ balance: s.balance }),
+ *   },
+ * }) {}
+ * ```
+ *
+ * ### Authorizing in decide
+ * A handler can be an `Effect.fn` that reads what the command's middleware
+ * provides.
+ *
+ * **Example:** Only the owner may withdraw
+ * ```typescript
+ * decide: {
+ *   WithdrawMoney: Effect.fn(function* (s, cmd) {
+ *     const actor = yield* CurrentActor;
+ *     if (actor.customerId !== s.owner) return yield* new NotOwner();
+ *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })];
+ *   }),
+ * },
+ * ```
+ *
+ * ### Exposing reads
+ * `read` lets an Api expose the aggregate itself, so a client can get it,
+ * watch it, and follow its events. `validate` judges every read.
+ *
+ * **Example:** A read contract
+ * ```typescript
+ * read: {
+ *   middleware: [Session],
+ *   rejects: [NotOwner],
+ *   validate: Effect.fn(function* (_request, s) {
+ *     const actor = yield* CurrentActor;
+ *     if (actor.customerId !== s.owner) return yield* new NotOwner();
+ *   }),
+ * },
+ * ```
+ *
+ * ### Sending and scheduling
+ * **Example:** From a policy or your own code
+ * ```typescript
+ * const accounts = yield* Account;
+ * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
+ * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days" });
+ * ```
+ *
+ * @primitive
+ */
 export const makeRef = <A extends Any>(aggregate: A, id: IdOf<A>): Ref<A> => {
   const ref = { aggregate: aggregate.aggregateName, id } as Ref<A>;
   Object.defineProperty(ref, RefClass, { value: aggregate, enumerable: false });

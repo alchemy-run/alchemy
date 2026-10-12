@@ -1,0 +1,283 @@
+---
+title: Sessions and middleware
+description: Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
+---
+
+Every command and read starts with a question: who is asking? Middleware answers it before the request reaches the domain, and provides the answer as a request context that `decide` and `validate` read.
+
+## Declare who is asking
+
+A request context is a service that travels with the request into the domain. It has a schema, because a command carries it to wherever its aggregate runs.
+
+```typescript
+// src/CurrentActor.ts
+import * as Domain from "alchemy/Domain";
+import { Actor } from "./Actor.ts";
+
+/**
+ * Who is making the current request. `Session` provides it; commands read it
+ * in `decide` and views in `validate`. Senders without a session (policies)
+ * provide it themselves.
+ */
+export class CurrentActor extends Domain.RequestContext<CurrentActor>()(
+  "Bank/CurrentActor",
+  Actor,
+) {}
+```
+
+```typescript
+// src/Actor.ts
+import * as Schema from "effect/Schema";
+import { CustomerId } from "./Customer/CustomerId.ts";
+
+/**
+ * Who is acting. `Session` provides it as the `CurrentActor` of each
+ * request; events that need an audit trail record it as `by`.
+ */
+export const Actor = Schema.Union([
+  Schema.TaggedStruct("Customer", { customerId: CustomerId }),
+  Schema.TaggedStruct("Agent", { agentId: Schema.String }),
+  Schema.TaggedStruct("System", { name: Schema.String }),
+]);
+export type Actor = typeof Actor.Type;
+
+export const customer = (customerId: string): Actor => ({
+  _tag: "Customer",
+  customerId: CustomerId.make(customerId),
+});
+export const agent = (agentId: string): Actor => ({ _tag: "Agent", agentId });
+export const system = (name: string): Actor => ({ _tag: "System", name });
+```
+
+## Authenticate with middleware
+
+`Session` is middleware that provides `CurrentActor`. Browsers send a session cookie; scripts and tests send an `Authorization` header.
+
+```typescript
+// src/Session.ts
+import * as Effect from "effect/Effect";
+import * as Cookies from "effect/http/Cookies";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as Schema from "effect/Schema";
+import { type Actor, agent, customer } from "./Actor.ts";
+import { CurrentActor } from "./CurrentActor.ts";
+import { CustomerId } from "./Customer/CustomerId.ts";
+import { Unauthorized } from "./Unauthorized.ts";
+
+/** The cookie that carries a customer's session in a browser. */
+export const SESSION_COOKIE = "bank_session";
+
+/**
+ * Authenticates a request, from a customer or a support agent, and provides
+ * who is making it as the {@link CurrentActor}. Authorization is up to each
+ * command's `decide` and each view's `validate`.
+ *
+ * Browsers authenticate with the session cookie, which also reaches live
+ * reads: a WebSocket upgrade carries cookies, never a header a client sets.
+ * Other clients (tests, support tooling) send `Authorization` instead.
+ */
+export class Session extends RpcMiddleware.Service<Session, { provides: CurrentActor }>()(
+  "Bank/Session",
+  { error: Unauthorized },
+) {}
+
+const parse = (token: string): Option.Option<Actor> => {
+  const match = /^(customer|agent):(.+)$/.exec(token);
+  if (!match) return Option.none();
+  return Option.some(match[1] === "customer" ? customer(match[2]!) : agent(match[2]!));
+};
+
+const fromCookie = (headers: Headers.Headers): Option.Option<Actor> =>
+  Option.flatMap(Headers.get(headers, "cookie"), (cookie) =>
+    Option.flatMap(Option.fromNullishOr(Cookies.parseHeader(cookie)[SESSION_COOKIE]), (token) =>
+      Option.filter(parse(token), (actor) => actor._tag === "Customer"),
+    ),
+  );
+
+const fromAuthorization = (headers: Headers.Headers): Option.Option<Actor> =>
+  Option.flatMap(Headers.get(headers, "authorization"), (value) =>
+    value.startsWith("Bearer ") ? parse(value.slice("Bearer ".length)) : Option.none(),
+  );
+
+/**
+ * Demo verifier: the session cookie (`customer:<id>`, from {@link sessionRoute}),
+ * or `Authorization: Bearer customer:<id>` / `Bearer agent:<id>`. In
+ * production, sign the cookie (or keep sessions server-side) and verify a
+ * Cloudflare Access JWT for agents.
+ */
+export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
+  Option.match(
+    Option.orElse(fromCookie(headers), () => fromAuthorization(headers)),
+    {
+      onNone: () => Effect.fail(new Unauthorized()),
+      onSome: (actor) => Effect.provideService(effect, CurrentActor, actor),
+    },
+  ),
+);
+
+const SignIn = Schema.Struct({ customerId: CustomerId });
+
+/**
+ * `POST /api/session` signs a customer in by setting the session cookie;
+ * `DELETE` signs them out. `HttpOnly` keeps it from scripts, and
+ * `SameSite=Strict` keeps it off cross-site requests, WebSocket upgrades
+ * included. Demo only: anyone may sign in as anyone.
+ */
+export const sessionRoute = Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  const options = { httpOnly: true, secure: true, sameSite: "strict", path: "/" } as const;
+  if (request.method === "DELETE") {
+    return HttpServerResponse.empty({ status: 204 }).pipe(
+      HttpServerResponse.setCookieUnsafe(SESSION_COOKIE, "", { ...options, maxAge: 0 }),
+    );
+  }
+  if (request.method !== "POST") return HttpServerResponse.empty({ status: 405 });
+  const body = yield* request.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SignIn)),
+    Effect.option,
+  );
+  if (Option.isNone(body))
+    return HttpServerResponse.text("Expected { customerId }", { status: 400 });
+  return HttpServerResponse.empty({ status: 204 }).pipe(
+    HttpServerResponse.setCookieUnsafe(
+      SESSION_COOKIE,
+      `customer:${body.value.customerId}`,
+      options,
+    ),
+  );
+});
+
+/** Client side, for clients that are not browsers: send this token with every call. */
+export const sessionClient = (token: string) =>
+  RpcMiddleware.layerClient(Session, ({ request, next }) =>
+    next({ ...request, headers: Headers.set(request.headers, "authorization", `Bearer ${token}`) }),
+  );
+```
+
+The Worker that serves the Api provides `SessionLive`. A client that isn't a browser adds `sessionClient` to attach its header.
+
+## Guard commands and views
+
+List the middleware on each command and view that needs it. Middleware runs in order, and what it provides is what `decide` and `validate` may read.
+
+```typescript
+// src/Account/SetNickname.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { Session } from "../Session.ts";
+import { AccountId } from "./AccountId.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+export class NicknameSet extends Domain.Event("NicknameSet", {
+  data: { nickname: Schema.String },
+}) {}
+
+export class SetNickname extends Domain.Command("SetNickname", {
+  target: AccountId,
+  middleware: [Session],
+  input: { nickname: Schema.String },
+  events: [NicknameSet],
+  rejects: [NotOwner],
+}) {}
+```
+
+`decide` then checks the actor against the account. See [Aggregate](/domain/aggregate#decide).
+
+## Sign browsers in with a cookie
+
+`sessionRoute` sets the session cookie. `HttpOnly` keeps it from scripts, and `SameSite=Strict` keeps it off requests from other sites, WebSocket upgrades included. The Worker sends `/api/session` to it.
+
+Cookies only work when the app and the Api share an origin. The app's Worker serves the page and forwards `/api` to the bank.
+
+```typescript
+// src/web/worker.ts
+interface Fetcher {
+  fetch(request: Request): Promise<Response>;
+}
+
+/**
+ * The app's Worker: the client build, plus `/api` forwarded to the bank over
+ * a service binding. One origin for both, so the session cookie is
+ * first-party and reaches every call and every live read's WebSocket.
+ */
+export default {
+  fetch(request: Request, env: { readonly ASSETS: Fetcher; readonly BANK: Fetcher }) {
+    const { pathname } = new URL(request.url);
+    return pathname.startsWith("/api") ? env.BANK.fetch(request) : env.ASSETS.fetch(request);
+  },
+};
+```
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import BankWorker from "./src/BankWorker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareDomainExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const bank = yield* BankWorker;
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the bank, so the app and the Api share one origin.
+    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
+      main: "src/web/worker.ts",
+      env: { BANK: bank },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
+    });
+    return { url: bank.url.as<string>(), app: app.url.as<string>() };
+  }),
+);
+```
+
+`env: { BANK: bank }` gives the app's Worker a binding to the bank, and `runWorkerFirst` sends `/api` through it.
+
+## Keep tokens out of URLs
+
+A browser can't set headers on a WebSocket, and a URL ends up in logs. A live read authenticates with what its WebSocket upgrade carries: in a browser, the session cookie. Scripts and tests send `Authorization`, which they can set on their WebSockets too. See [Testing an Api](/domain/testing-apis#test-a-deployment).
+
+## Ask for a second factor
+
+Add middleware for anything that needs more than a session. `WithdrawMoney` lists `[Session, MfaChallenge]`, so a withdrawal needs both.
+
+```typescript
+// src/MfaChallenge.ts
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import { MfaRequired } from "./MfaRequired.ts";
+
+/** Requires a second factor for sensitive operations. */
+export class MfaChallenge extends RpcMiddleware.Service<MfaChallenge>()("Bank/MfaChallenge", {
+  error: MfaRequired,
+}) {}
+
+/** Demo check: accepts `x-mfa-code: 000000`. Replace with a real TOTP or WebAuthn check. */
+export const MfaChallengeLive = Layer.succeed(MfaChallenge, (effect, { headers }) =>
+  Option.getOrUndefined(Headers.get(headers, "x-mfa-code")) === "000000"
+    ? effect
+    : Effect.fail(new MfaRequired()),
+);
+```
+
+## Act without a session
+
+A policy has no request, so it provides `CurrentActor` itself before sending a command that needs one, usually as the system. See [Policy](/domain/policy#react-to-a-view).
+
+:::note
+Guard reads with [Views as security boundaries](/domain/view-security).
+:::

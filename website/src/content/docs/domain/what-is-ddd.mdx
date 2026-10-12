@@ -1,0 +1,86 @@
+---
+title: What is Domain-Driven Design?
+description: The ideas behind aggregates, commands, events, views and policies, and how they map to alchemy/Domain.
+---
+
+Domain-Driven Design (DDD) models software around the business it serves, in the words the business uses. A bank talks about accounts, deposits and transfers, so the code does too.
+
+## Map an Event Storming session to code
+
+Teams often discover a domain with [Event Storming](https://www.eventstorming.com): sticky notes on a wall, one colour per kind of thing. Each colour becomes one building block.
+
+| Sticky note | Meaning | Building block |
+| --- | --- | --- |
+| Orange | Something happened: "Money deposited" | [`Domain.Event`](/domain/event) |
+| Blue | Someone asks for a change: "Deposit money" | [`Domain.Command`](/domain/command) |
+| Large yellow | The thing that decides: "Account" | [`Domain.Aggregate`](/domain/aggregate) |
+| Green | What someone needs to see: "Account summary" | [`Domain.View`](/domain/view) |
+| Lilac | Whenever this happens, do that: "When a customer registers, open an account" | [`Domain.Policy`](/domain/policy) |
+| Pink | An outside system: "Fraud check" | [`Domain.Port`](/domain/policy#call-outside-systems-through-ports) |
+
+## Decide with commands, record with events
+
+A command is a request, and it can be refused. An event is a fact, and it can't be undone. An aggregate takes a command, checks it against its current state, and records events or returns a rejection.
+
+```typescript
+// src/Account.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+
+export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  data: { balance: Schema.Int, requested: Schema.Int },
+}) {}
+
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [InsufficientFunds],
+}) {}
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [WithdrawMoney],
+  decide: {
+    WithdrawMoney: (s, cmd) =>
+      cmd.amount > s.balance
+        ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+  },
+  evolve: {
+    MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
+  },
+}) {}
+```
+
+The events are the record of truth. The account's state is whatever its events add up to.
+
+## Draw consistency boundaries
+
+An aggregate is a consistency boundary. Each account handles one command at a time, and its rules always hold, because nothing else can change it at the same moment.
+
+Nothing spans two aggregates at once. A transfer debits one account and credits another as separate steps, each in its own boundary, and the transfer itself tracks where it got to. That's a [saga](/domain/sagas). Make each aggregate as small as the rules it protects, and let everything between aggregates catch up shortly after.
+
+## Separate reading from deciding
+
+Aggregates decide, and views answer questions. A view folds events into whatever shape a screen needs: a balance, a statement, a dashboard across several accounts. Keeping the two apart is called CQRS (Command Query Responsibility Segregation). It lets each view be fast for its own question without changing how decisions are made.
+
+## React with policies
+
+A policy is the "whenever this happens, do that" note. It listens to events and sends commands to other aggregates or calls outside systems. Policies run shortly after the event, never in the same step. Use them for work that may happen eventually, and put any rule that must hold immediately in the aggregate's `decide`.
+
+## Name the boundary of the whole model
+
+A bounded context is one model with one consistent language. In `alchemy/Domain` it's a [`Domain.Model`](/domain/model): the aggregates, views and policies you host together, behind the [Apis](/domain/api) you expose to clients.
+
+:::note
+Put these ideas to work in [Get started](/domain/getting-started), or build a whole bank in the [tutorial](/domain/tutorial/part-1).
+:::

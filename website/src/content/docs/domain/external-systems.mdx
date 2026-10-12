@@ -1,0 +1,183 @@
+---
+title: External systems
+description: Call outside systems through ports, and turn their events into commands.
+---
+
+A bank talks to a fraud scorer and a payment processor. Your model talks to them through ports, so it depends on what it asks for and never on a vendor. Events from outside become commands.
+
+## Name the call with a port
+
+A port lists the calls you make to one outside system, with their arguments and results.
+
+```typescript
+// src/Settlement/Payments.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { Cents } from "../Money.ts";
+
+/** The external payment processor. */
+export class Payments extends Domain.Port("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+  },
+}) {}
+```
+
+## Implement the port
+
+An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
+
+```typescript
+// src/Settlement/StripePayments.ts
+import * as Effect from "effect/Effect";
+import { Payments } from "./Payments.ts";
+
+/**
+ * A stand-in adapter for a payment processor. Swap it for a Stripe HTTP
+ * adapter in production.
+ */
+export const StripePayments = Payments.toLayer(
+  Effect.succeed({
+    refund: ({ settlementId }) => Effect.succeed({ refundId: `re_${settlementId}` }),
+  }),
+);
+```
+
+## Call it from a policy
+
+A policy uses the port like any other service. This one refunds money that settled on an account that had already closed.
+
+```typescript
+// src/Settlement/SettlementRefund.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import { Account } from "../Account/Account.ts";
+import { SettlementOnClosedAccount } from "../Account/RecordSettlement.ts";
+import { Payments } from "./Payments.ts";
+
+/** Whenever money settles on a closed account, refund it. */
+export class SettlementRefund extends Domain.Policy("SettlementRefund", {
+  from: Account,
+  on: [SettlementOnClosedAccount],
+}) {}
+
+export const SettlementRefundLive = SettlementRefund.toLayer(
+  Effect.gen(function* () {
+    const payments = yield* Payments;
+    return Effect.fn(function* ({ event }) {
+      yield* payments.refund({ settlementId: event.settlementId, amount: event.amount });
+    });
+  }),
+);
+```
+
+Provide the adapters where you host the model, next to the platform: see [Domain model](/domain/model#host-it-in-memory).
+
+## Turn outside events into commands
+
+Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, a command that reports a fact and so never rejects.
+
+```typescript
+// src/Account/RecordSettlement.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { Cents } from "../Money.ts";
+import { AccountId } from "./AccountId.ts";
+
+export class SettlementReceived extends Domain.Event("SettlementReceived", {
+  data: { settlementId: Schema.String, amount: Cents, balanceAfter: Cents },
+}) {}
+
+/** Money settled on an account that is no longer open; `SettlementRefund` returns it. */
+export class SettlementOnClosedAccount extends Domain.Event("SettlementOnClosedAccount", {
+  data: { settlementId: Schema.String, amount: Cents },
+}) {}
+
+/** Reports a fact that already happened, so it never rejects. */
+export class RecordSettlement extends Domain.Command("RecordSettlement", {
+  target: AccountId,
+  input: { settlementId: Schema.String, amount: Cents },
+  events: [SettlementReceived, SettlementOnClosedAccount],
+}) {}
+```
+
+`Stripe.consumeEvents` receives the webhooks, checks their signatures, and sends the command. The payment's id is the command id, so a webhook delivered twice settles once.
+
+```typescript
+// src/Settlement/StripeSettlements.ts
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import { Account } from "../Account/Account.ts";
+import { AccountId } from "../Account/AccountId.ts";
+import { RecordSettlement } from "../Account/RecordSettlement.ts";
+
+/**
+ * Card top-ups settle through Stripe. Every `payment_intent.succeeded` whose
+ * metadata names an account becomes a `RecordSettlement`, a command that
+ * never rejects (money that settled on a closed account is refunded by
+ * `SettlementRefund`).
+ *
+ * `consumeEvents` provisions the Stripe webhook endpoint pointed at this
+ * Worker, binds its signing secret, and verifies every delivery. The payment
+ * intent id is the command id, so a redelivered event is a no-op.
+ */
+export const StripeSettlements = Effect.gen(function* () {
+  const accounts = yield* Account;
+  yield* Stripe.consumeEvents(
+    "Settlements",
+    { events: [Stripe.PaymentIntentSucceeded] },
+    Effect.fn(function* (event) {
+      const intent = event.object;
+      const accountId = intent.metadata?.accountId;
+      if (!accountId) return;
+      yield* accounts.send(
+        AccountId.make(accountId),
+        new RecordSettlement({ settlementId: intent.id, amount: intent.amount_received }),
+        { commandId: `settlement:${intent.id}` },
+      );
+    }),
+  );
+});
+```
+
+## Test port calls
+
+In a story, a port call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it.
+
+```typescript
+// test/settlements.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "alchemy/Domain/Story";
+import { Account } from "../src/Account/Account.ts";
+import { AccountClosed } from "../src/Account/CloseAccount.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.ts";
+import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.ts";
+import { Bank, BankPolicies } from "../src/Bank.ts";
+import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
+import { Payments } from "../src/Settlement/Payments.ts";
+
+const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+const account = Account.ref("a-1");
+
+it.effect("money that settles on a closed account is refunded", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
+      new AccountClosed(),
+    ),
+    Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
+    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.resolve(Payments.refund, { refundId: "re_1" }),
+  ),
+);
+```
+
+`Story.make` replaces every port you list with one you control. A story fails if a port call is left unresolved, so every outside call is accounted for.
+
+:::note
+Ports are declared and implemented like the fraud check in [Policy](/domain/policy#call-outside-systems-through-ports).
+:::

@@ -590,27 +590,69 @@ const build = (
 };
 
 /**
- * Declare an Api: the public surface of a Domain for one client. Commands are
- * writes, sent to their aggregate after their middleware runs; views and
- * aggregates (with a `read` contract) are reads, judged by their `validate`.
- * Nothing needs a handler: aggregates implement commands, and the Domain
- * hosts views.
+ * The public surface of a domain for one kind of client: the commands it may
+ * send, and the views and aggregates (with a `read` contract) it may read.
+ * Nothing in an Api needs a handler. Serve it from a Worker with
+ * `httpEffect`, and call it with a typed client over `Domain.protocolWebSocket`
+ * or `Domain.protocolHttp`.
  *
- * The Api is built from contracts only, so it is safe to import in a
- * browser; the server provides the Domain and the middleware Layers.
- *
- * **Example:** Declaring an Api and calling it
+ * ### Declaring an Api
+ * **Example:** What customers may reach
  * ```typescript
- * export class BankApi extends Domain.Api("BankApi", OpenAccount, DepositMoney, Account, AccountSummary) {}
+ * import * as Domain from "alchemy/Domain";
+ * import { Account, DepositMoney, WithdrawMoney } from "./Account.ts";
+ * import { AccountSummary } from "./AccountSummary.ts";
  *
- * export const followBalance = Effect.fn(function* (accountId: AccountId) {
- *   const bank = yield* BankApi.Client;
- *   yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
- *   yield* bank.AccountSummary.watch(accountId).pipe(
- *     Stream.runForEach((summary) => Effect.log(summary?.balance)),
- *   );
- * });
+ * export class CustomerApi extends Domain.Api(
+ *   "CustomerApi",
+ *   DepositMoney,
+ *   WithdrawMoney,
+ *   Account,
+ *   AccountSummary,
+ * ) {}
  * ```
+ *
+ * ### Serving it from a Worker
+ * **Example:** The Api as a Worker's fetch
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ * import { CustomerApi } from "./CustomerApi.ts";
+ * import { SessionLive } from "./Session.ts";
+ *
+ * const BankLive = SessionLive.pipe(
+ *   Layer.provideMerge(Bank.layer(BankPolicies)),
+ *   Layer.provide(DomainCloudflare.DurableObjects),
+ * );
+ *
+ * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+ *   "BankWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return { fetch: yield* CustomerApi.httpEffect };
+ *   }).pipe(Effect.provide(BankLive)),
+ * ) {}
+ * ```
+ *
+ * ### Calling it
+ * `Domain.protocolWebSocket` sends commands, `get` and `list` over HTTP, and
+ * opens a WebSocket for each `watch` and `events`, pushed by the object that
+ * owns the key. `Domain.protocolHttp` sends everything over HTTP.
+ *
+ * **Example:** A typed client
+ * ```typescript
+ * const bank = yield* CustomerApi.client;
+ * const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * const summary = yield* bank.AccountSummary.get(accountId);
+ * yield* bank.AccountSummary.watch(accountId).pipe(
+ *   Stream.runForEach((s) => Effect.log(s?.balance)),
+ * );
+ * ```
+ *
+ * @primitive
  */
 export const make = <const Name extends string, const Entries extends ReadonlyArray<Entry>>(
   name: Name,

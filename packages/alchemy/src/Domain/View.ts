@@ -329,74 +329,74 @@ export interface ViewKey<Name extends string> {
 }
 
 /**
- * Declare a View: a keyed fold over the events of aggregates and other views.
- * A view keeps state per key (`evolve`) and emits events (`emit`), each with
- * its state after it. Downstream views and policies consume those events.
- * Views are pure, so every platform rebuilds them identically.
+ * A read model: events folded into state per key, kept up to date as new
+ * events arrive. A view can emit events of its own, route one event to
+ * several keys, and decide who may read it.
  *
- * The class is also a service tag: `yield* AccountSummary` gives its read API
- * (`query`, `waitFor`, `watch`, `watchEach`, `events`, `list`).
- *
- * An Api can expose a view to clients (`get`, `watch`, `events`, `list`). Its
- * `middleware` authenticates them and `validate` judges every read, from the
- * actor, the key and the key's state; see {@link Read.Contract}.
- *
- * **Example:** A view clients may read, each customer only their own accounts
+ * ### Folding events into state
+ * **Example:** An account's balance
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ * import { Account } from "./Account.ts";
+ *
  * export class AccountSummary extends Domain.View("AccountSummary", {
  *   from: [Account],
  *   key: Account,
- *   middleware: [Session],
- *   rejects: [NotOwner],
- *   state: Schema.Struct({ customerId: Schema.NullOr(CustomerId), balance: Cents }),
- *   initial: { customerId: null, balance: 0 },
- *   evolve: {
- *     AccountOpened: (v, e) => ({ ...v, customerId: e.customerId }),
- *     MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
- *   },
- *   validate: Effect.fn(function* (_request, summary) {
- *     const actor = yield* CurrentActor;
- *     if (actor._tag === "Customer" && summary?.customerId !== actor.customerId) {
- *       return yield* new NotOwner();
- *     }
- *   }),
- * }) {}
- * ```
- *
- * **Example:** A read model keyed by its source
- * ```typescript
- * export class AccountSummary extends Domain.View("AccountSummary", {
- *   from: [Account],
- *   key: Account,
- *   state: Schema.Struct({ balance: Cents, frozen: Schema.Boolean }),
- *   initial: { balance: 0, frozen: false },
+ *   state: Schema.Struct({ balance: Schema.Int }),
+ *   initial: { balance: 0 },
  *   evolve: {
  *     MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
- *     AccountFrozen: (v) => ({ ...v, frozen: true }),
+ *     MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
  *   },
  * }) {}
  * ```
  *
- * **Example:** A view that maps events, routed to two keys
+ * ### Emitting events
+ * **Example:** One statement line per movement
  * ```typescript
- * export class AccountTransfers extends Domain.View("AccountTransfers", {
- *   from: [Transfer],
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ * import { Account } from "./Account.ts";
+ *
+ * export class StatementLine extends Domain.Event("StatementLine", {
+ *   data: { kind: Schema.Literals(["deposit", "withdrawal"]), amount: Schema.Int },
+ * }) {}
+ *
+ * export class Statement extends Domain.View("Statement", {
+ *   from: [Account],
  *   key: Account,
- *   keyOf: {
- *     TransferRequested: {
- *       out: ({ event }) => Account.ref(event.from),
- *       in: ({ event }) => Account.ref(event.to),
- *     },
- *   },
- *   events: [TransferMoved],
+ *   events: [StatementLine],
  *   emit: {
- *     TransferRequested: {
- *       out: (e) => new TransferMoved({ transferId: e.transferId, amount: e.amount, direction: "out" }),
- *       in: (e) => new TransferMoved({ transferId: e.transferId, amount: e.amount, direction: "in" }),
- *     },
+ *     MoneyDeposited: (e) => new StatementLine({ kind: "deposit", amount: e.amount }),
+ *     MoneyWithdrawn: (e) => new StatementLine({ kind: "withdrawal", amount: e.amount }),
  *   },
  * }) {}
  * ```
+ *
+ * ### Routing one event to several keys
+ * **Example:** A transfer appears on both accounts
+ * ```typescript
+ * keyOf: {
+ *   TransferRequested: {
+ *     out: ({ event }) => Account.ref(event.from),
+ *     in: ({ event }) => Account.ref(event.to),
+ *   },
+ * },
+ * ```
+ *
+ * ### Validating reads
+ * **Example:** Only the owner may read
+ * ```typescript
+ * middleware: [Session],
+ * rejects: [NotOwner],
+ * validate: Effect.fn(function* (_request, summary) {
+ *   const actor = yield* CurrentActor;
+ *   if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
+ * }),
+ * ```
+ *
+ * @primitive
  */
 export const make = <
   const Name extends string,

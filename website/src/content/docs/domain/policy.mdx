@@ -1,0 +1,138 @@
+---
+title: Policy
+description: React to events with commands and calls to outside systems, shortly after they happen.
+---
+
+A policy is "whenever this happens, do that". It listens to events from an aggregate or a view, and sends commands or calls outside systems. Policies run shortly after the event, never in the same step, so use them only for work that may happen eventually.
+
+## Declare a policy
+
+Name the source it listens to, and the events it reacts to.
+
+```typescript
+// src/Customer/MainAccountProvisioning.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import { Account } from "../Account/Account.ts";
+import { mainAccountId } from "../Account/AccountId.ts";
+import { OpenAccount } from "../Account/OpenAccount.ts";
+import { CustomerRegistered } from "./ConfirmRegistration.ts";
+import { Customer } from "./Customer.ts";
+
+/** Whenever a customer registers, open their main account. */
+export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
+  from: Customer,
+  on: [CustomerRegistered],
+}) {}
+
+export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    return Effect.fn(function* ({ source, event }) {
+      yield* accounts
+        .send(
+          mainAccountId(source.id),
+          new OpenAccount({ customerId: source.id, owner: event.name }),
+        )
+        .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+    });
+  }),
+);
+```
+
+`toLayer` implements it. Resolve what the policy needs once, here the `Account` client, and return the handler that runs for each event. `source` is the instance that recorded the event.
+
+Add the policy to the model's `policies`, and its Layer to the Layer you host the model with. See [Domain model](/domain/model).
+
+## React to a view
+
+A policy can listen to a view's events, including events the view emits itself. `FraudReview` reacts when `DailyOutflow` sees an account's money out cross a threshold.
+
+```typescript
+// src/Fraud/FraudReview.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import { Account } from "../Account/Account.ts";
+import { FreezeAccount } from "../Account/FreezeAccount.ts";
+import { system } from "../Actor.ts";
+import { CurrentActor } from "../CurrentActor.ts";
+import { DailyOutflow, DailyOutflowExceeded } from "./DailyOutflow.ts";
+import { FraudCheck } from "./FraudCheck.ts";
+
+/** Whenever an account's daily outflow crosses the threshold, score it and freeze the account if risky. */
+export class FraudReview extends Domain.Policy("FraudReview", {
+  from: DailyOutflow,
+  on: [DailyOutflowExceeded],
+}) {}
+
+export const FraudReviewLive = FraudReview.toLayer(
+  Effect.gen(function* () {
+    const fraud = yield* FraudCheck;
+    const accounts = yield* Account;
+    return Effect.fn(function* ({ source, event }) {
+      const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
+      if (risk > 0.8) {
+        // No session here: the policy acts as the system, in place of FreezeAccount's middleware.
+        yield* accounts.send(source, new FreezeAccount({ reason: `fraud risk ${risk}` })).pipe(
+          Effect.provideService(CurrentActor, system("FraudReview")),
+          Effect.catchTag("NotOpen", () => Effect.void),
+          Effect.catchTag("NotOwner", () => Effect.void),
+        );
+      }
+    });
+  }),
+);
+```
+
+A policy has no session. When a command's middleware would provide the current actor, the policy provides it itself, here as the system.
+
+## Call outside systems through ports
+
+A port names an outside system and the calls you make to it, so a policy depends on the port and not on a vendor.
+
+```typescript
+// src/Fraud/FraudCheck.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "../Account/AccountId.ts";
+import { Cents } from "../Money.ts";
+
+/** The external fraud-scoring system. */
+export class FraudCheck extends Domain.Port("FraudCheck", {
+  score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
+}) {}
+```
+
+Implement the port as a Layer, and provide it where you host the model.
+
+```typescript
+// src/Fraud/SiftFraudCheck.ts
+import * as Effect from "effect/Effect";
+import { FraudCheck } from "./FraudCheck.ts";
+
+/**
+ * A stand-in adapter for a fraud vendor: large withdrawals score as risky.
+ * Swap it for an HTTP adapter in production.
+ */
+export const SiftFraudCheck = FraudCheck.toLayer(
+  Effect.succeed({
+    score: ({ amount }) => Effect.succeed({ risk: amount >= 80_000 ? 0.95 : 0.05 }),
+  }),
+);
+```
+
+In a story, port calls wait for you to resolve them, so you can test every outcome. See [External systems](/domain/external-systems).
+
+## Count on at-least-once delivery
+
+Every event reaches a policy, in order for each source instance, even across restarts. An event can reach it more than once, so the commands a policy sends get ids derived from the event that caused them. A second run sends the same commands, and each aggregate applies them once.
+
+Handle a rejection you expect, like `AlreadyOpen` when an account already exists, so a redelivery succeeds quietly. Events you seed as history in a story reach views but never policies.
+
+## Keep immediate rules out of policies
+
+A rule that must hold the moment a command commits belongs in the aggregate's `decide`, even when it reacts to that instance's own events. A policy is for the next step: another aggregate, an outside system, a reminder. See [Aggregate](/domain/aggregate#keep-it-consistent).
+
+:::note
+Reference: [`Domain.Policy`](/providers/domain/reference#policy) and [`Domain.Port`](/providers/domain/reference#port). Build one in [Part 3 of the tutorial](/domain/tutorial/part-3), and chain several into a [saga](/domain/sagas).
+:::

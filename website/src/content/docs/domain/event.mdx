@@ -1,0 +1,111 @@
+---
+title: Event
+description: Record facts in the past tense; they are the only source of an aggregate's state.
+---
+
+An event is a fact: something that happened and can't be undone. Aggregates record events, and everything else, an aggregate's state, every view, every policy, follows from them.
+
+## Declare an event
+
+Name it in the past tense, and give it the data a reader needs.
+
+```typescript
+// src/Account/FreezeAccount.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { Actor } from "../Actor.ts";
+import { Session } from "../Session.ts";
+import { AccountId } from "./AccountId.ts";
+import { NotOpen } from "./NotOpen.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+export class AccountFrozen extends Domain.Event("AccountFrozen", {
+  data: { reason: Schema.String, by: Actor },
+}) {}
+
+/** Stop money leaving an account. Freezing a frozen account records nothing. */
+export class FreezeAccount extends Domain.Command("FreezeAccount", {
+  target: AccountId,
+  middleware: [Session],
+  input: { reason: Schema.String },
+  events: [AccountFrozen],
+  rejects: [NotOpen, NotOwner],
+}) {}
+```
+
+`by` records who froze the account, so the history explains itself. An event can carry no data at all: `Domain.Event("AccountClosed")`.
+
+## Fold events into state
+
+An aggregate's `evolve` turns each event into its next state. The third argument gives you the event's envelope, including when it happened.
+
+```typescript
+// src/Account.ts
+import * as Domain from "alchemy/Domain";
+import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
+
+export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
+
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+}) {}
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: Schema.Struct({ balance: Schema.Int, lastWithdrawal: Schema.NullOr(Schema.String) }),
+  initial: { balance: 0, lastWithdrawal: null },
+  commands: [WithdrawMoney],
+  decide: {
+    WithdrawMoney: (s, cmd) => [
+      new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount }),
+    ],
+  },
+  evolve: {
+    MoneyWithdrawn: (_, e, { at }) => ({
+      balance: e.balanceAfter,
+      lastWithdrawal: DateTime.formatIsoDateUtc(at),
+    }),
+  },
+}) {}
+```
+
+`evolve` never refuses an event: by the time it runs, the event has happened. Only `decide` can say no.
+
+## Read the envelope
+
+Every recorded event comes in an envelope. `id` is the aggregate instance, `stream` and `seq` place the event in that instance's history, `at` is when it was recorded, and `commandId` is the command that caused it.
+
+```typescript
+// test/followAccount.ts
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import type { AccountId } from "../src/Account/AccountId.ts";
+import type { CustomerClient } from "./flows.ts";
+
+export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  yield* bank.Account.events(accountId).pipe(
+    Stream.runForEach(({ event, envelope }) =>
+      Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),
+    ),
+  );
+});
+```
+
+`events` replays the history first, then keeps going with each new event. Pass `after` with a `seq` to start later.
+
+The `commandId` is how a client recognizes the event its own command caused. See [Optimistic updates](/domain/optimistic-updates).
+
+## React to events
+
+Views fold events into read models, and policies react to them with more commands. A view can emit events of its own, each with the view's state after it, which other views and policies consume like any other event. See [View](/domain/view) and [Policy](/domain/policy).
+
+:::note
+Reference: [`Domain.Event`](/providers/domain/reference#event).
+:::

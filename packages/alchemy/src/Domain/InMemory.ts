@@ -342,7 +342,21 @@ export const make = (
 };
 
 /**
- * An in-memory platform: every aggregate, view and policy lives in the
- * current process. Use it for tests and single-process servers.
+ * Host a domain model in the current process: aggregates, views and policies,
+ * with nothing to deploy. Use it in tests and single-process apps; swap it
+ * for `DomainCloudflare.DurableObjects` and nothing else changes.
+ *
+ * ### Hosting in memory
+ * **Example:** A model with its policies
+ * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * export const BankInMemory = Bank.layer(BankPolicies).pipe(Layer.provide(Domain.InMemory));
+ * ```
+ *
+ * @layer
+ * @provides Domain.Platform
  */
 export const InMemory: Layer.Layer<Platform> = Layer.suspend(() => make().layer);

@@ -1,0 +1,60 @@
+---
+title: In memory
+description: Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
+---
+
+`Domain.InMemory` runs your whole model in the current process: aggregates, views and policies, with nothing to deploy. Swap it for `DomainCloudflare.DurableObjects` and nothing else changes.
+
+## Host the model in memory
+
+```typescript
+// test/bankInMemory.ts
+import * as Domain from "alchemy/Domain";
+import * as Layer from "effect/Layer";
+import { Bank, BankPolicies } from "../src/Bank.ts";
+import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
+import { MfaChallengeLive } from "../src/MfaChallenge.ts";
+import { SessionLive } from "../src/Session.ts";
+import { StripePayments } from "../src/Settlement/StripePayments.ts";
+
+// The model, its ports, and the middleware its Apis declare: what a Worker would serve.
+export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
+  Layer.provideMerge(Bank.layer(BankPolicies)),
+  Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments)),
+);
+```
+
+Policies run for real, and views catch up just after each command, as they do on Cloudflare.
+
+## Call it through an Api
+
+`testClient` calls an Api in the same process, through its real middleware. Provide the in-memory model, and sign in with `sessionClient`.
+
+```typescript
+// test/inMemory.test.ts
+import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
+import { sessionClient } from "../src/Session.ts";
+import { BankInMemory } from "./bankInMemory.ts";
+import { register } from "./flows.ts";
+
+it.live("a customer registers and deposits", () =>
+  Effect.gen(function* () {
+    const sam = yield* CustomerApi.testClient.pipe(Effect.provide(sessionClient("customer:c-1")));
+    const accountId = yield* register(sam, "c-1", "sam");
+    const { reply } = yield* sam.DepositMoney({ target: accountId, amount: 100 });
+    expect(reply.balance).toBe(100);
+  }).pipe(Effect.scoped, Effect.provide(BankInMemory)),
+);
+```
+
+Each test that provides `BankInMemory` gets a fresh, empty bank.
+
+## Keep stories separate
+
+Stories run on their own in-memory model with a controlled clock and scripted ports, so you don't provide `Domain.InMemory` to them. See [Stories](/domain/stories).
+
+:::note
+Test more of an Api in [Testing an Api](/domain/testing-apis).
+:::

@@ -51,6 +51,7 @@ function providersSidebarEntry() {
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
+      { label: "Domain", link: "/domain" },
     ],
   };
 }
@@ -1424,6 +1425,70 @@ export default defineConfig({
               ],
             },
             { ...providerResourcesEntry("BetterAuth"), label: "Reference" },
+          ],
+        },
+        {
+          label: "Domain",
+          items: [
+            { label: "Overview", link: "/domain" },
+            { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
+            { label: "Get started", link: "/domain/getting-started" },
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "domain/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Domain model", link: "/domain/model" },
+                { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "Command", link: "/domain/command" },
+                { label: "Event", link: "/domain/event" },
+                { label: "View", link: "/domain/view" },
+                { label: "Policy", link: "/domain/policy" },
+                { label: "Api", link: "/domain/api" },
+              ],
+            },
+            {
+              label: "Frontends",
+              items: [
+                { label: "Integrate with foldkit", link: "/domain/foldkit" },
+                { label: "Optimistic updates", link: "/domain/optimistic-updates" },
+                { label: "Offline and local first", link: "/domain/local-first" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Views as security boundaries", link: "/domain/view-security" },
+              ],
+            },
+            {
+              label: "Consistency patterns",
+              items: [
+                { label: "Unique values", link: "/domain/unique-values" },
+                { label: "Sagas and compensation", link: "/domain/sagas" },
+                { label: "Deadlines", link: "/domain/deadlines" },
+                { label: "External systems", link: "/domain/external-systems" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "In memory", link: "/domain/in-memory" },
+              ],
+            },
+            {
+              label: "Testing",
+              items: [
+                { label: "Stories", link: "/domain/stories" },
+                { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            { ...providerResourcesEntry("Domain"), label: "Reference" },
           ],
         },
         {

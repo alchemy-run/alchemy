@@ -1,0 +1,68 @@
+---
+title: Domain
+description: Model a backend as commands, events, aggregates, views and policies, and host it on Cloudflare Durable Objects or in memory.
+---
+
+Model your backend the way [foldkit](https://foldkit.dev) models a UI: typed messages, pure state changes, and side effects as explicit steps you can test. Run the same model in memory for tests and on Cloudflare Durable Objects in production.
+
+```typescript
+// src/Account.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+
+export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
+
+export class DepositMoney extends Domain.Command("DepositMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyDeposited],
+  reply: { balance: Schema.Int },
+}) {}
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [DepositMoney],
+  decide: {
+    DepositMoney: (s, cmd) => [
+      new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount }),
+    ],
+  },
+  evolve: {
+    MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }),
+  },
+  reply: {
+    DepositMoney: (s) => ({ balance: s.balance }),
+  },
+}) {}
+```
+
+New to this way of modelling? Start with [What is Domain-Driven Design?](/domain/what-is-ddd). To run something in five minutes, follow [Get started](/domain/getting-started).
+
+## Build a bank
+
+The [six-part tutorial](/domain/tutorial/part-1) builds a small bank, from one aggregate to a deployed app with live balances.
+
+| Part | Build |
+| --- | --- |
+| [1. Model an account](/domain/tutorial/part-1) | Commands, events, rejections and an aggregate, checked with stories |
+| [2. Read it with a view](/domain/tutorial/part-2) | A balance and a statement that update as events arrive |
+| [3. React with a policy](/domain/tutorial/part-3) | Open an account whenever a customer registers |
+| [4. Expose an Api](/domain/tutorial/part-4) | Sessions, ownership checks, and a typed client |
+| [5. Deploy to Cloudflare](/domain/tutorial/part-5) | Durable Objects and live updates over WebSockets |
+| [6. Build the UI with foldkit](/domain/tutorial/part-6) | A browser app that signs in and watches its balance |
+
+## Learn the building blocks
+
+Each concept page covers one building block: the [domain model](/domain/model), [aggregates](/domain/aggregate), [commands](/domain/command), [events](/domain/event), [views](/domain/view), [policies](/domain/policy), and [Apis](/domain/api).
+
+## Solve a specific problem
+
+Show changes before the server confirms them with [optimistic updates](/domain/optimistic-updates), and keep working offline with [local first](/domain/local-first). Protect data with [sessions](/domain/sessions) and [views as security boundaries](/domain/view-security). Keep values unique, run multi-step processes, and set deadlines with the [consistency patterns](/domain/sagas).
+
+The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) puts every piece together.

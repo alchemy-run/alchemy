@@ -1,0 +1,139 @@
+---
+title: "Part 5: Deploy to Cloudflare"
+description: Host the bank on Durable Objects behind a Worker, run it locally, deploy it, and watch a balance change live.
+sidebar:
+  order: 5
+---
+
+Put the bank on Cloudflare. Every account, customer, view and policy becomes a Durable Object, and a Worker serves the Api. You need a [configured Cloudflare profile](/cloudflare/setup).
+
+## Serve the Api from a Worker
+
+```typescript
+// src/BankWorker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Bank, BankPolicies } from "./Bank.ts";
+import { BankApi } from "./BankApi.ts";
+import { SessionLive } from "./Session.ts";
+
+const BankLive = SessionLive.pipe(
+  Layer.provideMerge(Bank.layer(BankPolicies)),
+  Layer.provide(DomainCloudflare.DurableObjects),
+);
+
+export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+  "BankWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* BankApi.httpEffect;
+    return { fetch: api };
+  }).pipe(Effect.provide(BankLive)),
+) {}
+```
+
+`DomainCloudflare.DurableObjects` hosts the model: every aggregate, view and policy becomes a Durable Object class on this Worker, with no bindings to write. `SessionLive` is the middleware the Api's entries declare, and `httpEffect` serves the Api.
+
+## Declare the stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import BankWorker from "./src/BankWorker.ts";
+
+export default Alchemy.Stack(
+  "Bank",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const bank = yield* BankWorker;
+    return { url: bank.url.as<string>() };
+  }),
+);
+```
+
+The stack deploys the Worker and returns its URL.
+
+## Run it locally
+
+```sh
+bun alchemy dev
+```
+
+`alchemy dev` runs the Worker and its Durable Objects on your machine and prints the URL, such as `http://localhost:1337`.
+
+## Call it
+
+```typescript
+// scripts/try.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { AccountId } from "../src/Account.ts";
+import { BankApi } from "../src/BankApi.ts";
+import { CustomerId } from "../src/Customer.ts";
+import { sessionClient } from "../src/Session.ts";
+
+const [url, customerId = "c-1"] = process.argv.slice(2);
+const accountId = AccountId.make(`${customerId}-main`);
+
+const program = Effect.gen(function* () {
+  const bank = yield* BankApi.client;
+  yield* bank.RegisterCustomer({ target: CustomerId.make(customerId), name: customerId }).pipe(
+    Effect.catchTag("AlreadyRegistered", () => Effect.void),
+  );
+  // Print the balance now and after every change, in the background.
+  yield* bank.AccountSummary.watch(accountId).pipe(
+    Stream.filter((summary) => summary !== null && summary.owner !== null),
+    Stream.runForEach((summary) => Effect.log(`balance: ${summary?.balance}`)),
+    Effect.forkChild,
+  );
+  yield* Effect.sleep("1 second");
+  yield* bank.DepositMoney({ target: accountId, amount: 100 });
+  yield* bank.WithdrawMoney({ target: accountId, amount: 30 });
+  yield* Effect.sleep("1 second");
+});
+
+const Connection = Layer.mergeAll(Domain.protocolHttp(url!), sessionClient(customerId)).pipe(
+  Layer.provide(FetchHttpClient.layer),
+);
+
+Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(Connection)));
+```
+
+The script registers a customer, watches their balance in the background, then deposits and withdraws. The policy opens the account shortly after registration, so the watch waits for it to have an owner.
+
+```sh
+bun scripts/try.ts http://localhost:1337
+```
+
+```
+balance: 0
+balance: 100
+balance: 70
+```
+
+Each change arrives as it happens: the view streams its new state after every deposit and withdrawal.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The deploy prints the Worker's `url`. Run the same script against it.
+
+```sh
+bun scripts/try.ts https://bank-bankworker-….workers.dev
+```
+
+The bank now runs on Cloudflare, with one Durable Object per account.
+
+:::note
+Next, [build the browser app](/domain/tutorial/part-6). How the model maps onto Durable Objects is in [Cloudflare Durable Objects](/domain/cloudflare).
+:::

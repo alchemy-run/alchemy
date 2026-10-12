@@ -56,15 +56,45 @@ export interface PolicyKey<Name extends string> {
 }
 
 /**
- * Declare a Policy: "whenever these events happen, do this". A policy reacts
- * by sending commands and calling Ports. It listens to an aggregate, or to a
- * view's emitted events (receiving the view's state with each).
+ * "Whenever this happens, do that": a reaction to events from an aggregate or
+ * a view that sends commands and calls ports. Policies run shortly after the
+ * event, never in the same step, so use them only for eventually consistent
+ * work. Delivery is at least once; the commands a policy sends get ids
+ * derived from the event, so a second run sends the same commands.
  *
- * The class is the contract; its implementation is a Layer built with
- * `toLayer`, so it can depend on Ports and other services.
- *
- * **Example:** A policy with a Port call
+ * ### Reacting to an aggregate
+ * **Example:** Open an account for every new customer
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Effect from "effect/Effect";
+ * import { Account, AccountId, OpenAccount } from "./Account.ts";
+ * import { Customer, CustomerRegistered } from "./Customer.ts";
+ *
+ * export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
+ *   from: Customer,
+ *   on: [CustomerRegistered],
+ * }) {}
+ *
+ * export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+ *   Effect.gen(function* () {
+ *     const accounts = yield* Account;
+ *     return Effect.fn(function* ({ source }) {
+ *       yield* accounts
+ *         .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+ *         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * ### Calling a port
+ * **Example:** Score risky withdrawals
+ * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Effect from "effect/Effect";
+ * import { Account, MoneyWithdrawn } from "./Account.ts";
+ * import { FraudCheck } from "./FraudCheck.ts";
+ *
  * export class FraudReview extends Domain.Policy("FraudReview", {
  *   from: Account,
  *   on: [MoneyWithdrawn],
@@ -73,14 +103,15 @@ export interface PolicyKey<Name extends string> {
  * export const FraudReviewLive = FraudReview.toLayer(
  *   Effect.gen(function* () {
  *     const fraud = yield* FraudCheck;
- *     const accounts = yield* Account;
  *     return Effect.fn(function* ({ source, event }) {
  *       const { risk } = yield* fraud.score({ accountId: source.id, amount: event.amount });
- *       if (risk > 0.8) yield* accounts.send(source, new Freeze({ reason: "fraud" }));
+ *       yield* Effect.log(`risk ${risk} for ${source.id}`);
  *     });
  *   }),
  * );
  * ```
+ *
+ * @primitive
  */
 export const make = <
   const Name extends string,

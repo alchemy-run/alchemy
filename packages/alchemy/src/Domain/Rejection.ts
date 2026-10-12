@@ -17,21 +17,24 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * Declare a Rejection: a deterministic "no" returned by an aggregate's
- * `decide` when a command is invalid against the current state.
+ * A typed reason a command or read was refused. Nothing is recorded when a
+ * command is rejected, and the caller receives the rejection exactly as
+ * declared, through an Api too.
  *
- * A Rejection is a typed, yieldable error. Nothing is recorded when a
- * command is rejected, and retrying the same command against the same state
- * rejects again. Infrastructure failures are never Rejections.
- *
- * **Example:** Declaring rejections
+ * ### Declaring rejections
+ * **Example:** A rejection with and without data
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ *
  * export class NotOpen extends Domain.Rejection("NotOpen") {}
  *
  * export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
- *   data: { balance: Cents, requested: Cents },
+ *   data: { balance: Schema.Int, requested: Schema.Int },
  * }) {}
  * ```
+ *
+ * @primitive
  */
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,

@@ -1,0 +1,172 @@
+---
+title: Command
+description: Ask one aggregate for a change, with the events it may record, the rejections it may return, and the middleware that guards it.
+---
+
+A command asks one aggregate instance for a change. It names the events it may record and the rejections it may return, so callers know every outcome before they send it.
+
+## Declare a command
+
+Keep a command in its own file, with the events it records and the rejections only it returns.
+
+```typescript
+// src/Account/WithdrawMoney.ts
+import * as Domain from "alchemy/Domain";
+import { MfaChallenge } from "../MfaChallenge.ts";
+import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
+import { AccountId } from "./AccountId.ts";
+import { Frozen } from "./Frozen.ts";
+import { InsufficientFunds } from "./InsufficientFunds.ts";
+import { NotOpen } from "./NotOpen.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+/** Daily withdrawal limit, in cents. */
+export const DAILY_LIMIT = 100_000;
+
+export class DailyLimitExceeded extends Domain.Rejection("DailyLimitExceeded", {
+  data: { remaining: Cents },
+}) {}
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  data: { amount: Cents, balanceAfter: Cents },
+}) {}
+
+/** Take money out of an account, within the balance and the daily limit. */
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  middleware: [Session, MfaChallenge],
+  input: { amount: Cents },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
+  reply: { balance: Cents },
+}) {}
+```
+
+`target` is the id of the aggregate instance the command addresses. `input` is the command's data. `reply` is what the caller gets back once the events are committed.
+
+Name commands `<Verb><Noun>`, as a request: `WithdrawMoney`, `RequestTransfer`, `CloseAccount`. Name their events in the past tense: `MoneyWithdrawn`.
+
+## Declare its rejections
+
+A rejection is a typed refusal. A caller receives it exactly as declared, through the Api too.
+
+```typescript
+// src/Account/InsufficientFunds.ts
+import * as Domain from "alchemy/Domain";
+import { Cents } from "../Money.ts";
+
+/** The balance does not cover the amount. */
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  data: { balance: Cents, requested: Cents },
+}) {}
+```
+
+Give a rejection its own file when several commands share it, like `NotOpen` and `InsufficientFunds`. Keep it in the command's file when only that command returns it, like `DailyLimitExceeded`.
+
+## Guard it with middleware
+
+`middleware` lists what runs before the command reaches its aggregate, in order. `WithdrawMoney` authenticates the caller with `Session`, then asks for a second factor with `MfaChallenge`.
+
+```typescript
+// src/MfaChallenge.ts
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import { MfaRequired } from "./MfaRequired.ts";
+
+/** Requires a second factor for sensitive operations. */
+export class MfaChallenge extends RpcMiddleware.Service<MfaChallenge>()("Bank/MfaChallenge", {
+  error: MfaRequired,
+}) {}
+
+/** Demo check: accepts `x-mfa-code: 000000`. Replace with a real TOTP or WebAuthn check. */
+export const MfaChallengeLive = Layer.succeed(MfaChallenge, (effect, { headers }) =>
+  Option.getOrUndefined(Headers.get(headers, "x-mfa-code")) === "000000"
+    ? effect
+    : Effect.fail(new MfaRequired()),
+);
+```
+
+What middleware provides, such as the current actor, travels with the command to its aggregate, where `decide` reads it. See [Sessions and middleware](/domain/sessions).
+
+## Send it
+
+From an Api client, a command is a method. The receipt carries the reply, plus the stream and version it committed at.
+
+```typescript
+// test/withdraw.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "../src/Account/AccountId.ts";
+import { type CustomerClient, mfa } from "./flows.ts";
+
+export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000 }, mfa).pipe(
+    Effect.catchTag("InsufficientFunds", (rejection) =>
+      Effect.fail(`only ${rejection.balance} available`),
+    ),
+  );
+  return receipt.reply.balance;
+});
+```
+
+`mfa` adds the `x-mfa-code` header that `MfaChallenge` checks.
+
+## Send it exactly once
+
+Every command has an id. Choose it yourself, and a resend with the same id returns the first receipt instead of withdrawing twice.
+
+```typescript
+// test/withdrawOnce.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "../src/Account/AccountId.ts";
+import { type CustomerClient, mfa } from "./flows.ts";
+
+export const withdrawOnce = Effect.fn(function* (
+  bank: CustomerClient,
+  accountId: AccountId,
+  requestId: string,
+) {
+  const first = yield* bank.WithdrawMoney(
+    { target: accountId, amount: 2_000, commandId: requestId },
+    mfa,
+  );
+  // A retry after a dropped connection: same id, same receipt, one withdrawal.
+  const again = yield* bank.WithdrawMoney(
+    { target: accountId, amount: 2_000, commandId: requestId },
+    mfa,
+  );
+  return first.version === again.version;
+});
+```
+
+Without a `commandId`, each send gets a new one. Commands sent from a policy get ids derived from the event they react to, so a policy that runs twice sends the same commands.
+
+## Schedule it
+
+A command that never rejects can be sent later. It reports a fact, and records nothing when the fact no longer applies.
+
+```typescript
+// src/Transfer/ExpireTransfer.ts
+import * as Domain from "alchemy/Domain";
+import { TransferFailed } from "./FailTransfer.ts";
+import { TransferId } from "./TransferId.ts";
+
+/**
+ * The approval window closed. Scheduled by `TransferApprovalDeadline`; it
+ * reports a fact, so it never rejects, and it records nothing if the transfer
+ * was approved in time.
+ */
+export class ExpireTransfer extends Domain.Command("ExpireTransfer", {
+  target: TransferId,
+  events: [TransferFailed],
+}) {}
+```
+
+`TransferApprovalDeadline` schedules it with `transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW })`. See [Deadlines](/domain/deadlines).
+
+:::note
+Reference: [`Domain.Command`](/providers/domain/reference#command) and [`Domain.Rejection`](/providers/domain/reference#rejection). Commands meet aggregates in [Part 1 of the tutorial](/domain/tutorial/part-1).
+:::

@@ -124,29 +124,66 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
 };
 
 /**
- * Declare a Command: an intent addressed to one instance of an aggregate.
+ * A request to change one aggregate instance. It names the instance it
+ * targets, its input, the events it may record, the rejections it may return,
+ * the middleware that guards it, and the reply its caller receives.
  *
- * A command names the aggregate id it targets, its input, the events it may
- * record, the Rejections its handler may return and, optionally, the reply
- * its caller receives. A command with its events and rejections is one
- * behaviour of an aggregate, so they usually live together in one file.
- *
- * `middleware` authenticates callers and provides context (such as the
- * current actor) that the aggregate's `decide` reads with `yield*`. An Api
- * exposes a command directly; senders without the middleware (policies,
- * stories) provide that context themselves.
- *
- * **Example:** Declaring a command with middleware
+ * ### Declaring a command
+ * **Example:** A command with its event and rejection
  * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ *
+ * export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+ *
+ * export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+ *   data: { amount: Schema.Int, balanceAfter: Schema.Int },
+ * }) {}
+ *
+ * export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+ *   data: { balance: Schema.Int, requested: Schema.Int },
+ * }) {}
+ *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
  *   target: AccountId,
- *   input: { amount: Cents },
- *   middleware: [Session, MfaChallenge],
+ *   input: { amount: Schema.Int },
  *   events: [MoneyWithdrawn],
- *   rejects: [NotOpen, NotOwner, InsufficientFunds],
- *   reply: { balance: Cents },
+ *   rejects: [InsufficientFunds],
+ *   reply: { balance: Schema.Int },
  * }) {}
  * ```
+ *
+ * ### Guarding it with middleware
+ * `middleware` runs in order before the command reaches its aggregate. What
+ * it provides, such as the current actor, is what `decide` may read.
+ *
+ * **Example:** Requiring a session and a second factor
+ * ```typescript
+ * import * as Domain from "alchemy/Domain";
+ * import * as Schema from "effect/Schema";
+ * import { AccountId, MoneyWithdrawn } from "./Account.ts";
+ * import { MfaChallenge } from "./MfaChallenge.ts";
+ * import { Session } from "./Session.ts";
+ *
+ * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+ *   target: AccountId,
+ *   middleware: [Session, MfaChallenge],
+ *   input: { amount: Schema.Int },
+ *   events: [MoneyWithdrawn],
+ *   reply: { balance: Schema.Int },
+ * }) {}
+ * ```
+ *
+ * ### Sending it once
+ * Pass a `commandId`, and a resend with the same id returns the first
+ * receipt instead of applying the command again.
+ *
+ * **Example:** An idempotent send through an Api
+ * ```typescript
+ * const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId });
+ * ```
+ *
+ * @primitive
  */
 export const make = <
   const Tag extends string,

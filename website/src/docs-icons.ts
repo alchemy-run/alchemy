@@ -105,6 +105,12 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Clusters: l("network"),
   Workloads: l("container"),
   Objects: l("file-code"),
+  Frontends: l("monitor-smartphone"),
+  Security: l("shield-check"),
+  "Consistency patterns": l("git-merge"),
+  Hosting: l("server"),
+  Testing: l("flask-conical"),
+  Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
   Cloudflare: b("cloudflare"),

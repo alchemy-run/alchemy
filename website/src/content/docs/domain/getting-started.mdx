@@ -1,0 +1,209 @@
+---
+title: Get started
+description: Model a bank account, test it with a story, and deploy it to Cloudflare behind a typed Api.
+---
+
+Build a bank account that takes deposits, check it with a story, deploy it to Cloudflare, and call it with a typed client. You need an Alchemy project with a [configured Cloudflare profile](/cloudflare/setup).
+
+## Install
+
+```sh
+bun add alchemy effect
+bun add -d vitest @effect/vitest
+```
+
+## Model an account
+
+An event records what happened, a command asks for a change, and an aggregate decides whether it happens.
+
+```typescript
+// src/Account.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+
+export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
+
+export class AmountNotPositive extends Domain.Rejection("AmountNotPositive") {}
+
+export class DepositMoney extends Domain.Command("DepositMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyDeposited],
+  rejects: [AmountNotPositive],
+  reply: { balance: Schema.Int },
+}) {}
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [DepositMoney],
+  decide: {
+    DepositMoney: (s, cmd) =>
+      cmd.amount <= 0
+        ? new AmountNotPositive()
+        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+  },
+  evolve: {
+    MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }),
+  },
+  reply: {
+    DepositMoney: (s) => ({ balance: s.balance }),
+  },
+  read: {},
+}) {}
+```
+
+`decide` returns the events to record, or a rejection. `evolve` folds each event into the account's state, and `reply` answers the caller from the new state.
+
+## Test it with a story
+
+A story sends commands to an in-memory model and checks what it recorded and replied.
+
+```typescript
+// test/Account.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "alchemy/Domain/Story";
+import { Account, AmountNotPositive, DepositMoney, MoneyDeposited } from "../src/Account.ts";
+import { Bank } from "../src/Bank.ts";
+
+const story = Story.make(Bank);
+const account = Account.ref("a-1");
+
+it.effect("a deposit is recorded and replies with the balance", () =>
+  story(
+    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.then(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
+    Story.replied({ balance: 100 }),
+  ),
+);
+
+it.effect("a deposit must be positive", () =>
+  story(
+    Story.when(account, new DepositMoney({ amount: 0 })),
+    Story.rejected(new AmountNotPositive()),
+  ),
+);
+```
+
+```sh
+bun vitest run
+```
+
+Both stories pass without deploying anything.
+
+## Expose it as an Api
+
+A model groups the aggregates you host together. An Api is what clients may call.
+
+```typescript
+// src/Bank.ts
+import * as Domain from "alchemy/Domain";
+import { Account, DepositMoney } from "./Account.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+}) {}
+
+export class BankApi extends Domain.Api("BankApi", DepositMoney, Account) {}
+```
+
+`BankApi` exposes `DepositMoney` as a command, and `Account` for reading, since it declares a `read` contract.
+
+## Serve the Api from a Worker
+
+```typescript
+// src/BankWorker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Bank, BankApi } from "./Bank.ts";
+
+const BankLive = Bank.layer(Layer.empty).pipe(Layer.provide(DomainCloudflare.DurableObjects));
+
+export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+  "BankWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* BankApi.httpEffect;
+    return { fetch: api };
+  }).pipe(Effect.provide(BankLive)),
+) {}
+```
+
+Each account becomes a Durable Object. Deposits to one account run one at a time.
+
+## Deploy
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import BankWorker from "./src/BankWorker.ts";
+
+export default Alchemy.Stack(
+  "Bank",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const bank = yield* BankWorker;
+    return { url: bank.url.as<string>() };
+  }),
+);
+```
+
+```sh
+bun alchemy deploy
+```
+
+The deploy prints the Worker's `url`.
+
+## Call it
+
+The client is typed from `BankApi`: commands are methods, and `Account` is a namespace you read from.
+
+```typescript
+// scripts/deposit.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Socket from "effect/socket/Socket";
+import { AccountId } from "../src/Account.ts";
+import { BankApi } from "../src/Bank.ts";
+
+const url = process.argv[2]!;
+const accountId = AccountId.make("a-1");
+
+const program = Effect.gen(function* () {
+  const bank = yield* BankApi.client;
+  const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 100 });
+  yield* Effect.log(`deposited, balance: ${reply.balance}`);
+  const account = yield* bank.Account.get(accountId);
+  yield* Effect.log(`read back, balance: ${account.balance}`);
+});
+
+const Connection = Domain.protocolWebSocket(`${url}`).pipe(
+  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+);
+
+Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(Connection)));
+```
+
+```sh
+bun scripts/deposit.ts https://bank-bankworker-….workers.dev
+```
+
+```
+deposited, balance: 100
+read back, balance: 100
+```
+
+:::note
+The [tutorial](/domain/tutorial/part-1) grows this into a bank with views, a policy, sessions, and a foldkit app.
+:::

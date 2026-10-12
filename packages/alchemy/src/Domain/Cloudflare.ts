@@ -542,35 +542,44 @@ const pollAfter = <A>(
   });
 
 /**
- * Host a Domain on Cloudflare Durable Objects.
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
+ * and policy becomes a Durable Object class on the host Worker, declared
+ * while the model's Layer is built, so there are no bindings to write. One
+ * instance per aggregate id, per view key, and per policy and source.
  *
- * Every aggregate, view and policy becomes a Durable Object class on the host
- * Worker (`AccountAggregate`, `AccountSummaryView`, `FraudReviewPolicy`),
- * declared while the Domain's Layer is built, so no bindings or exports are
- * written by hand:
+ * Commands to one instance run one at a time, and their events, state and
+ * outbox commit together. Deliveries to views and policies are at least once
+ * and in order per source, and survive restarts. Live reads over
+ * `Domain.protocolWebSocket` are WebSockets to the object that owns the key,
+ * pushed on every commit; the object hibernates in between.
  *
- * - **Aggregates**: one instance per id. Commands are serialized; events,
- *   state, the receipt (for idempotency) and an outbox commit in one storage
- *   transaction. The outbox is delivered right after the commit, in order,
- *   with a durable callback as the backstop. Scheduled commands are durable
- *   callbacks on the target instance.
- * - **Views**: one instance per key, with per-source checkpoints so repeated
- *   deliveries are harmless. State, emitted events and the outbox to
- *   downstream views and policies commit together.
- * - **Live reads**: a client's `watch` or `events` (over
- *   `Domain.protocolWebSocket`) is a WebSocket to the instance that owns the
- *   key, accepted with the hibernation API. Each commit pushes to it, judged
- *   by the read's `validate` again, and the instance hibernates in between.
- * - **Policies**: one instance per (policy, source instance), running
- *   triggers in order from a durable inbox.
- *
- * **Example:** Hosting a domain in a Worker
+ * ### Hosting on Cloudflare
+ * **Example:** A Worker serving an Api
  * ```typescript
- * const BankLive = Layer.mergeAll(CustomerApiLive, CustomerSessionLive).pipe(
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ * import { CustomerApi } from "./CustomerApi.ts";
+ * import { SessionLive } from "./Session.ts";
+ *
+ * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, Ports)),
+ *   Layer.provide(DomainCloudflare.DurableObjects),
  * );
+ *
+ * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+ *   "BankWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return { fetch: yield* CustomerApi.httpEffect };
+ *   }).pipe(Effect.provide(BankLive)),
+ * ) {}
  * ```
+ *
+ * @layer
+ * @provides Domain.Platform
  */
 export const DurableObjects: Layer.Layer<Platform, never, Worker> = Layer.effect(
   Platform,

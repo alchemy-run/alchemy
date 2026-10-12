@@ -1,0 +1,187 @@
+---
+title: "Part 3: React with a policy"
+description: Register customers, and open a main account for each one with a policy.
+sidebar:
+  order: 3
+---
+
+Every new customer should get a main account. Model customers, then add a policy that opens the account whenever a customer registers.
+
+## Model a customer
+
+```typescript
+// src/Customer.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+
+export const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
+
+export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
+  data: { name: Schema.String },
+}) {}
+
+export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
+
+export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
+  target: CustomerId,
+  input: { name: Schema.String },
+  events: [CustomerRegistered],
+  rejects: [AlreadyRegistered],
+}) {}
+
+export class Customer extends Domain.Aggregate("Customer", {
+  id: CustomerId,
+  state: Schema.Struct({ name: Schema.NullOr(Schema.String) }),
+  initial: { name: null },
+  commands: [RegisterCustomer],
+  decide: {
+    RegisterCustomer: (s, cmd) =>
+      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+  },
+  evolve: {
+    CustomerRegistered: (_, e) => ({ name: e.name }),
+  },
+}) {}
+```
+
+A customer is an aggregate with the same shape as the account: an id, an event, a rejection, a command, and `decide` and `evolve`.
+
+## Declare the policy
+
+```typescript
+// src/MainAccountProvisioning.ts
+import * as Domain from "alchemy/Domain";
+import { Customer, CustomerRegistered } from "./Customer.ts";
+
+export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
+  from: Customer,
+  on: [CustomerRegistered],
+}) {}
+```
+
+A policy is "whenever this happens, do that". This one listens to customers, for `CustomerRegistered`.
+
+## Implement it
+
+```diff lang="typescript"
+// src/MainAccountProvisioning.ts
+import * as Domain from "alchemy/Domain";
++import * as Effect from "effect/Effect";
++import { Account, AccountId, OpenAccount } from "./Account.ts";
+import { Customer, CustomerRegistered } from "./Customer.ts";
+
+```
+
+```diff lang="typescript"
+// src/MainAccountProvisioning.ts
+  on: [CustomerRegistered],
+}) {}
++
++export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
++  Effect.gen(function* () {
++    const accounts = yield* Account;
++    return Effect.fn(function* ({ source }) {
++      yield* accounts
++        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
++        .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
++    });
++  }),
++);
+```
+
+`toLayer` resolves the account client once, and returns the handler that runs for each registration. `source` is the customer who registered, and becomes the account's owner.
+
+A policy can see the same event twice. Its commands get ids derived from that event, so a second run opens nothing new, and catching `AlreadyOpen` lets it finish quietly.
+
+## Host the policy
+
+```diff lang="typescript"
+// src/Bank.ts
+import { Account } from "./Account.ts";
+import { AccountSummary } from "./AccountSummary.ts";
++import { Customer } from "./Customer.ts";
++import {
++  MainAccountProvisioning,
++  MainAccountProvisioningLive,
++} from "./MainAccountProvisioning.ts";
+import { Statement } from "./Statement.ts";
+
+export class Bank extends Domain.Model("Bank", {
+-  aggregates: [Account],
++  aggregates: [Account, Customer],
+  views: [AccountSummary, Statement],
++  policies: [MainAccountProvisioning],
+}) {}
++
++export const BankPolicies = MainAccountProvisioningLive;
+```
+
+The model lists the policy, and `BankPolicies` is its implementation. You provide it wherever you host the model.
+
+## Give every story the policies
+
+```diff lang="typescript"
+// test/Account.test.ts
+  WithdrawMoney,
+} from "../src/Account.ts";
+-import { Bank } from "../src/Bank.ts";
++import { Bank, BankPolicies } from "../src/Bank.ts";
+
+-const story = Story.make(Bank);
++const story = Story.make(Bank, { layer: BankPolicies });
+const account = Account.ref("a-1");
+
+```
+
+```diff lang="typescript"
+// test/views.test.ts
+import { Account, AccountOpened, DepositMoney, WithdrawMoney } from "../src/Account.ts";
+import { AccountSummary } from "../src/AccountSummary.ts";
+-import { Bank } from "../src/Bank.ts";
++import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Statement } from "../src/Statement.ts";
+
+-const story = Story.make(Bank);
++const story = Story.make(Bank, { layer: BankPolicies });
+const account = Account.ref("a-1");
+
+```
+
+A story runs the whole model, policies included, so every story now takes `BankPolicies`. Leave it out and the type checker tells you.
+
+## Test registration
+
+```typescript
+// test/registration.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "alchemy/Domain/Story";
+import { Account, AccountOpened } from "../src/Account.ts";
+import { AccountSummary } from "../src/AccountSummary.ts";
+import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Customer, CustomerRegistered, RegisterCustomer } from "../src/Customer.ts";
+
+const story = Story.make(Bank, { layer: BankPolicies });
+const sam = Customer.ref("c-1");
+const samsAccount = Account.ref("c-1-main");
+
+it.effect("registering opens a main account", () =>
+  story(
+    Story.when(sam, new RegisterCustomer({ name: "sam" })),
+    Story.then(sam, new CustomerRegistered({ name: "sam" })),
+    Story.then(samsAccount, new AccountOpened({ owner: "c-1" })),
+    Story.view(AccountSummary, samsAccount, { owner: "c-1", balance: 0 }),
+  ),
+);
+```
+
+The policy runs for real. The registration's events, the account the policy opened, and the summary that followed are all checked in one story.
+
+```sh
+bun vitest run
+```
+
+Three aggregates and views are now connected by a policy, and each step can be checked in a story.
+
+:::note
+Next, let customers reach the bank through an [Api](/domain/tutorial/part-4). Policies can also call outside systems through ports: see [Policy](/domain/policy).
+:::
