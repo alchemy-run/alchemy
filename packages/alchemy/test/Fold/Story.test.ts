@@ -1,9 +1,13 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import {
   Aggregate,
+  Api,
   Command,
   Domain,
   Event,
@@ -13,6 +17,7 @@ import {
   Story,
   View,
 } from "@/Fold/index.ts";
+import { InMemory } from "@/Fold/InMemory.ts";
 
 // A tiny counter domain exercising every concept the story runner supports.
 class Incremented extends Event.make("Incremented", {
@@ -20,20 +25,49 @@ class Incremented extends Event.make("Incremented", {
 }) {}
 class Capped extends Event.make("Capped") {}
 class TooBig extends Rejection.make("TooBig", { data: { max: Schema.Number } }) {}
+// Who is operating a counter: provided by middleware, read by `decide`.
+class Operator extends Command.Context<Operator>()("Test/Operator", Schema.String) {}
+class Unauthenticated extends Rejection.make("Unauthenticated") {}
+class OperatorSession extends RpcMiddleware.Service<OperatorSession, { provides: Operator }>()(
+  "Test/OperatorSession",
+  { error: Unauthenticated },
+) {}
+const OperatorSessionLive = Layer.succeed(OperatorSession, (effect, { headers }) =>
+  Option.match(Headers.get(headers, "x-operator"), {
+    onNone: () => Effect.fail(new Unauthenticated()),
+    onSome: (name) => Effect.provideService(effect, Operator, name),
+  }),
+);
+
+class WasReset extends Event.make("WasReset", { data: { by: Schema.String } }) {}
+class NotAnOperator extends Rejection.make("NotAnOperator") {}
+class ResetCounter extends Command.make("ResetCounter", {
+  target: Schema.String,
+  events: [WasReset],
+  rejects: [NotAnOperator],
+  reply: { total: Schema.Number },
+}).middleware(OperatorSession) {}
+
 class Increment extends Command.make("Increment", {
+  target: Schema.String,
   input: { by: Schema.Number },
   events: [Incremented],
   rejects: [TooBig],
   reply: { total: Schema.Number },
 }) {}
-class Cap extends Command.make("Cap", { events: [Capped] }) {}
+class Cap extends Command.make("Cap", { target: Schema.String, events: [Capped] }) {}
 
 class Counter extends Aggregate.make("Counter", {
   id: Schema.String,
   state: Schema.Struct({ total: Schema.Number, capped: Schema.Boolean }),
   initial: { total: 0, capped: false },
-  commands: [Increment, Cap],
+  commands: [Increment, Cap, ResetCounter],
   decide: {
+    ResetCounter: Effect.fn(function* () {
+      const operator = yield* Operator;
+      if (operator === "guest") return yield* new NotAnOperator();
+      return [new WasReset({ by: operator })];
+    }),
     Increment: (s, cmd) =>
       cmd.by > 10
         ? new TooBig({ max: 10 })
@@ -43,9 +77,11 @@ class Counter extends Aggregate.make("Counter", {
   evolve: {
     Incremented: (s, e) => ({ ...s, total: e.total }),
     Capped: (s) => ({ ...s, capped: true }),
+    WasReset: (s) => ({ ...s, total: 0 }),
   },
   reply: {
     Increment: (s) => ({ total: s.total }),
+    ResetCounter: (s) => ({ total: s.total }),
   },
 }) {}
 
@@ -75,6 +111,7 @@ class Moved extends Event.make("Moved", {
   data: { from: Schema.String, to: Schema.String, amount: Schema.Number },
 }) {}
 class MakeMove extends Command.make("MakeMove", {
+  target: Schema.String,
   input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
   events: [Moved],
 }) {}
@@ -248,6 +285,64 @@ describe("Fold Story", () => {
       Story.given(m1, new Moved({ from: "c-1", to: "c-2", amount: 30 })),
       Story.view(Flows, c1, { balance: -30 }),
       Story.then(c1),
+    ),
+  );
+
+  it.effect("decide reads the context its command's middleware provides", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 4, total: 4 })),
+      Story.provide(Operator, "sam"),
+      Story.when(c1, new ResetCounter()),
+      Story.then(c1, new WasReset({ by: "sam" })),
+      Story.replied({ total: 0 }),
+      Story.provide(Operator, "guest"),
+      Story.when(c1, new ResetCounter()),
+      Story.rejected(new NotAnOperator()),
+    ),
+  );
+
+  it.effect("a command without its context fails", () =>
+    story(Story.when(c1, new ResetCounter())).pipe(
+      Effect.flip,
+      Effect.map((failure) => expect(String(failure)).toContain("Test/Operator")),
+      Effect.catchDefect((defect) =>
+        Effect.sync(() => expect(String(defect)).toContain("Test/Operator")),
+      ),
+    ),
+  );
+
+  it.live("an Api exposes a command; its middleware provides the context", () =>
+    Effect.gen(function* () {
+      class CounterApi extends Api.make(ResetCounter) {}
+      const client = yield* CounterApi.testClient;
+      const counters = yield* Counter;
+      yield* counters.send(c1, new Increment({ by: 3 }));
+      const reset = yield* client.ResetCounter(
+        { target: "c-1" },
+        { headers: Headers.fromInput({ "x-operator": "sam" }) },
+      );
+      expect(reset).toEqual({ reply: { total: 0 }, stream: "Counter/c-1", version: 2 });
+      const denied = yield* client
+        .ResetCounter({ target: "c-1" }, { headers: Headers.fromInput({ "x-operator": "guest" }) })
+        .pipe(Effect.flip);
+      expect(denied._tag).toBe("NotAnOperator");
+      const anonymous = yield* client.ResetCounter({ target: "c-1" }).pipe(Effect.flip);
+      expect(anonymous._tag).toBe("Unauthenticated");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          OperatorSessionLive,
+          Counters.layer(Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive)),
+        ).pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              InMemory,
+              Approval.toLayer(Effect.succeed({ check: () => Effect.succeed({ ok: false }) })),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 });

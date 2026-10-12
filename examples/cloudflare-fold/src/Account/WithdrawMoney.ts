@@ -1,6 +1,8 @@
 import { Command, Event, Rejection } from "alchemy/Fold";
-import { Actor } from "../Actor.ts";
+import { CustomerSession } from "../CustomerApi/CustomerSession.ts";
+import { MfaChallenge } from "../CustomerApi/MfaChallenge.ts";
 import { Cents } from "../Money.ts";
+import { AccountId } from "./AccountId.ts";
 import { Frozen } from "./Frozen.ts";
 import { InsufficientFunds } from "./InsufficientFunds.ts";
 import { NotOpen } from "./NotOpen.ts";
@@ -18,9 +20,12 @@ export class MoneyWithdrawn extends Event.make("MoneyWithdrawn", {
 }) {}
 
 /** Take money out of an account, within the balance and the daily limit. */
-export class Withdraw extends Command.make("Withdraw", {
-  input: { amount: Cents, by: Actor },
+export class WithdrawMoney extends Command.make("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Cents },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },
-}) {}
+})
+  .middleware(CustomerSession)
+  .middleware(MfaChallenge) {}

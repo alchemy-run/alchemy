@@ -13,44 +13,52 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "../Http.ts";
+import type * as Aggregate from "./Aggregate.ts";
+import type * as Command from "./Command.ts";
+import * as Domain from "./Domain.ts";
 import { captureContext } from "./internal.ts";
 import type * as Operation from "./Operation.ts";
 
-type RpcsOf<Ops extends ReadonlyArray<Operation.Any>> = Ops[number]["rpc"];
+/** What an Api exposes: commands (writes), queries and subscriptions (reads). */
+export type Entry = Command.Any | Operation.Any;
+
+type RpcsOf<Entries extends ReadonlyArray<Entry>> = Entries[number]["rpc"];
+
+/** Queries and subscriptions need a handler Layer; commands are implemented by their aggregate. */
+type Handlers<E extends Entry> = E extends Operation.Any ? Operation.Identifier<E> : never;
 
 /** Shown when an Api-wide middleware provides services. */
-type ProvidesOnOperations =
-  "Middleware that provides services must be attached to each operation with `.middleware(...)`";
+type ProvidesOnEntries =
+  "Middleware that provides services must be attached to each command or operation with `.middleware(...)`";
 
 /**
  * The class type returned by {@link make}.
  */
-export interface ApiClass<Ops extends ReadonlyArray<Operation.Any>, Rpcs extends Rpc.Any> {
+export interface ApiClass<Entries extends ReadonlyArray<Entry>, Rpcs extends Rpc.Any> {
   new (_: never): {};
   readonly kind: "Api";
-  /** The operations this Api exposes. */
-  readonly operations: Ops;
+  /** The commands, queries and subscriptions this Api exposes. */
+  readonly entries: Entries;
   /** The underlying Effect RPC group. */
   readonly group: RpcGroup.RpcGroup<Rpcs>;
   /**
-   * Apply an `RpcMiddleware` to every operation (logging, rate limits).
-   * Middleware that provides services to handlers, such as a session, is
-   * attached to each operation instead, so handlers' requirements stay typed.
+   * Apply an `RpcMiddleware` to every entry (logging, rate limits).
+   * Middleware that provides services, such as a session, is attached to each
+   * command or operation instead, so what they may use stays typed.
    */
   middleware<M extends RpcMiddleware.AnyService>(
-    middleware: [RpcMiddleware.Provides<M["Identifier"]>] extends [never]
-      ? M
-      : ProvidesOnOperations,
-  ): ApiClass<Ops, Rpc.AddMiddleware<Rpcs, M>>;
+    middleware: [RpcMiddleware.Provides<M["Identifier"]>] extends [never] ? M : ProvidesOnEntries,
+  ): ApiClass<Entries, Rpc.AddMiddleware<Rpcs, M>>;
   /**
    * Serve the Api over HTTP (Effect RPC, NDJSON), returning an `HttpEffect`
-   * to use as a Worker's `fetch`. Requires every operation's Layer and every
+   * to use as a Worker's `fetch`. Requires the Domain (commands are sent to
+   * its aggregates), every query and subscription handler, and every
    * middleware's Layer.
    */
   readonly httpEffect: Effect.Effect<
     HttpEffect,
     never,
-    Operation.Identifier<Ops[number]> | Rpc.Middleware<Rpcs> | Rpc.ServicesServer<Rpcs>
+    Domain.Internals | Handlers<Entries[number]> | Rpc.Middleware<Rpcs> | Rpc.ServicesServer<Rpcs>
   >;
   /** A typed client. Provide a protocol with {@link protocolHttp}. */
   readonly client: Effect.Effect<
@@ -59,27 +67,27 @@ export interface ApiClass<Ops extends ReadonlyArray<Operation.Any>, Rpcs extends
     Scope.Scope | RpcClient.Protocol | Rpc.MiddlewareClient<Rpcs>
   >;
   /**
-   * An in-process client wired straight to the operations' handlers, for
-   * tests. Server middleware runs, so principals are provided by swapping
-   * middleware Layers.
+   * An in-process client wired straight to the handlers, for tests. Server
+   * middleware runs, so principals are provided by swapping middleware Layers.
    */
   readonly testClient: Effect.Effect<
     RpcClient.RpcClient<Rpcs>,
     never,
     | Scope.Scope
-    | Operation.Identifier<Ops[number]>
+    | Domain.Internals
+    | Handlers<Entries[number]>
     | Rpc.Middleware<Rpcs>
     | Rpc.MiddlewareClient<Rpcs>
   >;
 }
 
 /**
- * Only an operation's declared errors are public. Anything else a handler
- * fails with (an infrastructure error, an undeclared rejection) becomes a
- * defect, so it never leaks as a typed error the client cannot decode.
+ * Only an entry's declared errors are public. Anything else a handler fails
+ * with (an infrastructure error, an undeclared rejection) becomes a defect,
+ * so it never leaks as a typed error the client cannot decode.
  */
-const declaredOnly = (operation: Operation.Any) => {
-  const rpc = operation.rpc as Rpc.AnyWithProps;
+const declaredOnly = (entry: Entry) => {
+  const rpc = entry.rpc as Rpc.AnyWithProps;
   const isDeclared = Schema.is(rpc.errorSchema);
   const success = rpc.successSchema as Schema.Top & { readonly error?: Schema.Top };
   const isDeclaredInStream = success.error ? Schema.is(success.error) : isDeclared;
@@ -99,40 +107,70 @@ const declaredOnly = (operation: Operation.Any) => {
   };
 };
 
-type Handlers = Record<string, (input: unknown) => unknown>;
+/** The wire payload of a command: its target, an optional command id, and its input. */
+interface CommandPayload {
+  readonly target: string;
+  readonly commandId?: string;
+  readonly [field: string]: unknown;
+}
 
-const handlersOf = (operations: ReadonlyArray<Operation.Any>): Effect.Effect<Handlers> =>
+/**
+ * The endpoint of an exposed command. It runs inside the command's
+ * middleware, so the context the middleware provides (the session's actor)
+ * travels with the command to its aggregate.
+ */
+const commandHandler =
+  (command: Command.Any, aggregate: Aggregate.ClientImpl) =>
+  ({ target, commandId, ...input }: CommandPayload) =>
+    aggregate.send(target, new command(input), { commandId }).pipe(
+      Effect.map((receipt) => ({
+        reply: receipt.reply,
+        stream: receipt.stream,
+        version: receipt.version,
+      })),
+    );
+
+type Handler = (input: never) => unknown;
+
+const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string, Handler>> =>
   Effect.gen(function* () {
-    const handlers: Handlers = {};
-    for (const operation of operations) {
-      const handler = yield* operation as unknown as Context.Key<never, Operation.HandlerImpl>;
-      const declared = declaredOnly(operation);
-      handlers[operation.rpc._tag] =
-        operation.kind === "Subscription"
-          ? (input) =>
+    const internals = yield* Domain.Internals;
+    const handlers: Record<string, Handler> = {};
+    for (const entry of entries) {
+      const declared = declaredOnly(entry);
+      if (entry.kind === "Command") {
+        const aggregate = internals.commands.get(entry.tag);
+        if (!aggregate) {
+          return yield* Effect.die(new Error(`No aggregate in the Domain handles ${entry.tag}`));
+        }
+        const handle = commandHandler(entry, aggregate);
+        handlers[entry.tag] = (input: CommandPayload) => declared.effect(handle(input));
+        continue;
+      }
+      const handler = yield* entry as unknown as Context.Key<never, Operation.HandlerImpl>;
+      handlers[entry.rpc._tag] =
+        entry.kind === "Subscription"
+          ? (input: unknown) =>
               declared.stream(
                 Stream.unwrap(
                   handler(input) as Effect.Effect<Stream.Stream<unknown, unknown>, unknown>,
                 ),
               )
-          : (input) => declared.effect(handler(input));
+          : (input: unknown) => declared.effect(handler(input));
     }
     return handlers;
-  }) as Effect.Effect<Handlers>;
+  }) as Effect.Effect<Record<string, Handler>>;
 
 // A class so `class CustomerApi extends Api.make(...) {}` works.
-const build = (
-  operations: ReadonlyArray<Operation.Any>,
-  group: RpcGroup.RpcGroup<Rpc.Any>,
-): unknown =>
+const build = (entries: ReadonlyArray<Entry>, group: RpcGroup.RpcGroup<Rpc.Any>): unknown =>
   Object.assign(class {}, {
     kind: "Api" as const,
-    operations,
+    entries,
     group,
     middleware: (middleware: RpcMiddleware.AnyService) =>
-      build(operations, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
+      build(entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
     httpEffect: Effect.gen(function* () {
-      const handlers = yield* handlersOf(operations);
+      const handlers = yield* handlersOf(entries);
       // The middleware services (declared in `httpEffect`'s requirements), for every request.
       const middleware = yield* captureContext();
       const layer = Layer.mergeAll(
@@ -148,7 +186,7 @@ const build = (
     }),
     client: RpcClient.make(group),
     testClient: Effect.gen(function* () {
-      const handlers = yield* handlersOf(operations);
+      const handlers = yield* handlersOf(entries);
       return yield* RpcTest.makeClient(group).pipe(
         Effect.provide(group.toLayer(handlers as never)),
       );
@@ -156,35 +194,35 @@ const build = (
   });
 
 /**
- * Declare an Api: the public surface of a Domain for one audience. Only the
- * listed operations are reachable, and middleware (authentication, the
- * principal, MFA) applies to every one of them.
+ * Declare an Api: the public surface of a Domain for one audience. Commands
+ * are writes, sent to their aggregate after their middleware runs; queries
+ * and subscriptions are reads, implemented with `toLayer`. Only the listed
+ * entries are reachable.
  *
  * The Api is built from contracts only, so it is safe to import in a
- * browser; the server provides each operation's Layer.
+ * browser; the server provides the Domain and the read handlers.
  *
  * **Example:** Declaring and serving an Api
  * ```typescript
- * export class CustomerApi extends Api.make(RegisterCustomer, WithdrawFunds, AccountWatch)
- *   .middleware(CustomerSession) {}
+ * export class CustomerApi extends Api.make(WithdrawMoney, StatementHistory, AccountWatch) {}
  *
- * // Worker init
- * const fetch = yield* CustomerApi.httpEffect;
- *
- * // browser
- * const client = yield* CustomerApi.client;
- * yield* client.withdraw({ accountId, amount: 30 });
+ * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+ *   "BankWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const api = yield* CustomerApi.httpEffect;
+ *     return { fetch: api };
+ *   }).pipe(Effect.provide(BankLive)),
+ * ) {}
  * ```
  */
-export const make = <const Ops extends ReadonlyArray<Operation.Any>>(
-  ...operations: Ops
-): ApiClass<Ops, RpcsOf<Ops>> =>
+export const make = <const Entries extends ReadonlyArray<Entry>>(
+  ...entries: Entries
+): ApiClass<Entries, RpcsOf<Entries>> =>
   build(
-    operations,
-    RpcGroup.make(
-      ...operations.map((operation) => operation.rpc),
-    ) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
-  ) as ApiClass<Ops, RpcsOf<Ops>>;
+    entries,
+    RpcGroup.make(...entries.map((entry) => entry.rpc)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
+  ) as ApiClass<Entries, RpcsOf<Entries>>;
 
 /**
  * The HTTP protocol for an Api client (NDJSON, to stream subscriptions).

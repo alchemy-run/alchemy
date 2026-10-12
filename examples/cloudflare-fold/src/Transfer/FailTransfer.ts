@@ -8,6 +8,7 @@ export class TransferFailed extends Event.make("TransferFailed", {
 
 /** Reports an outcome, so it never rejects. */
 export class FailTransfer extends Command.make("FailTransfer", {
+  target: TransferId,
   input: { reason: Schema.String },
   events: [TransferFailed],
 }) {}

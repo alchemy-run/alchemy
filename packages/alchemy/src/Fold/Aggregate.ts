@@ -61,6 +61,16 @@ type ReplyTags<C extends Command.Any> = C extends {
 
 type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
 
+/** What `decide` returns for a command: events, a rejection, or an Effect of either. */
+export type Decision<C extends Command.Any> =
+  | ReadonlyArray<Inst<C["events"][number]>>
+  | Inst<C["rejects"][number]>
+  | Effect.Effect<
+      ReadonlyArray<Inst<C["events"][number]>>,
+      Inst<C["rejects"][number]>,
+      Command.ContextOf<C>
+    >;
+
 /** The event classes a set of commands may record. */
 export type EventsOf<C extends ReadonlyArray<Command.Any>> = C[number]["events"][number];
 
@@ -85,16 +95,16 @@ export interface Definition<
   /**
    * One handler per command: returns the events to commit (from the command's
    * declared events), an empty array for an accepted no-op, or one of the
-   * command's declared rejections.
+   * command's declared rejections. A handler may be an Effect that reads the
+   * context its command's middleware provides (e.g. `yield* CurrentActor`)
+   * and fails with a rejection; it may require nothing else.
    */
   readonly decide: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
       command: Inst<ByTag<C[number], T>>,
       ctx: DecideContext<Id["Type"]>,
-    ) =>
-      | ReadonlyArray<Inst<ByTag<C[number], T>["events"][number]>>
-      | Inst<ByTag<C[number], T>["rejects"][number]>;
+    ) => Decision<ByTag<C[number], T>>;
   };
   /**
    * One handler per event: folds a committed event into state. Throw when an
@@ -139,6 +149,8 @@ export interface SendOptions {
  */
 export interface SendMeta {
   readonly commandId: string;
+  /** The command context services the sender provided, encoded. */
+  readonly context: Command.ContextJson;
 }
 
 type AnyHandlers = { readonly [tag: string]: (...args: never[]) => unknown };
@@ -188,6 +200,8 @@ export interface Client<Def extends AnyDefinition> {
   /**
    * Send a command. Succeeds with a {@link Receipt} once the resulting events
    * are committed, or fails with one of the command's declared rejections.
+   * Requires the context the command's middleware provides (e.g. the current
+   * actor): an Api's middleware provides it, other senders provide it.
    */
   readonly send: <Cmd extends Inst<Def["commands"][number]>>(
     target: Target<Def>,
@@ -195,7 +209,8 @@ export interface Client<Def extends AnyDefinition> {
     options?: SendOptions,
   ) => Effect.Effect<
     Receipt<Inst<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
-    Inst<CommandClassOf<Def, Cmd>["rejects"][number]>
+    Inst<CommandClassOf<Def, Cmd>["rejects"][number]>,
+    Command.ContextOf<CommandClassOf<Def, Cmd>>
   >;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;

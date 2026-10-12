@@ -269,7 +269,11 @@ export interface Host<S, Key extends Aggregate.Any, E> {
   /** Read the current state of a key. `none` if it does not exist. */
   readonly query: (
     key: Aggregate.Ref<Key>,
-    options?: { readonly atLeast?: Aggregate.Receipt; readonly timeout?: Duration.Input },
+    options?: {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
+    },
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (

@@ -6,8 +6,8 @@ import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
 import { NotOwner } from "../Account/NotOwner.ts";
+import { currentCustomerId } from "../CurrentActor.ts";
 import { AccountRow } from "./AccountRow.ts";
-import { CurrentCustomer } from "./CurrentCustomer.ts";
 import { CustomerSession } from "./CustomerSession.ts";
 
 /** One account, live. Ends with `NotOwner` if the account is reassigned away. */
@@ -21,7 +21,7 @@ export const AccountWatchLive = AccountWatch.toLayer(
   Effect.gen(function* () {
     const summaries = yield* AccountSummary;
     return Effect.fn(function* ({ accountId }) {
-      const { customerId } = yield* CurrentCustomer;
+      const customerId = yield* currentCustomerId;
       return summaries.watch(Account.ref(accountId), { where: { customerId } }).pipe(
         Stream.mapEffect(
           Option.match({

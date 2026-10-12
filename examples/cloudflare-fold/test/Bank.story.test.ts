@@ -9,8 +9,8 @@ import { ChangeOwner, NotPermitted, OwnerChanged } from "../src/Account/ChangeOw
 import { AccountClosed, CloseAccount } from "../src/Account/CloseAccount.ts";
 import { TransferCredited } from "../src/Account/CreditTransfer.ts";
 import { TransferDebited } from "../src/Account/DebitTransfer.ts";
-import { MoneyDeposited } from "../src/Account/Deposit.ts";
-import { AccountFrozen, Freeze } from "../src/Account/Freeze.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.ts";
+import { AccountFrozen, FreezeAccount } from "../src/Account/FreezeAccount.ts";
 import { Frozen } from "../src/Account/Frozen.ts";
 import { InsufficientFunds } from "../src/Account/InsufficientFunds.ts";
 import { NotOwner } from "../src/Account/NotOwner.ts";
@@ -18,13 +18,14 @@ import { AccountOpened } from "../src/Account/OpenAccount.ts";
 import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.ts";
 import { TransferRefunded } from "../src/Account/RefundTransfer.ts";
 import { Statement } from "../src/Account/Statement.ts";
-import { DailyLimitExceeded, MoneyWithdrawn, Withdraw } from "../src/Account/Withdraw.ts";
-import { agent, customer, system } from "../src/Actor.ts";
+import { DailyLimitExceeded, MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
+import { type Actor, agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
+import { CurrentActor } from "../src/CurrentActor.ts";
 import { Customer } from "../src/Customer/Customer.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerRegistered, Register } from "../src/Customer/Register.ts";
+import { CustomerRegistered, RegisterCustomer } from "../src/Customer/RegisterCustomer.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
@@ -35,8 +36,23 @@ import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTrans
 import { Transfer } from "../src/Transfer/Transfer.ts";
 import { TransferStatus } from "../src/Transfer/TransferStatus.ts";
 
-const { clock, emitted, expectCall, given, rejected, replied, resolve, state, then, view, when } =
-  Story;
+const {
+  clock,
+  emitted,
+  expectCall,
+  given,
+  provide,
+  rejected,
+  replied,
+  resolve,
+  state,
+  then,
+  view,
+  when,
+} = Story;
+
+/** Act as this actor for the following commands, as their session middleware would. */
+const as = (actor: Actor) => provide(CurrentActor, actor);
 
 const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
 
@@ -52,7 +68,8 @@ const opened = (customerId = "c-1") =>
 
 it.effect("registering opens a main account (a pure policy runs for real)", () =>
   story(
-    when(c1, new Register({ name: "sam" })),
+    as(sam),
+    when(c1, new RegisterCustomer({ name: "sam" })),
     then(c1, new CustomerRegistered({ name: "sam" })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-1"))),
@@ -71,7 +88,8 @@ it.effect("registering opens a main account (a pure policy runs for real)", () =
 it.effect("withdraw replies with the new balance and updates projections", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
-    when(a1, new Withdraw({ amount: 30, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 30 })),
     then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     replied({ balance: 70 }),
     view(AccountSummary, a1, { balance: 70 }),
@@ -85,7 +103,8 @@ it.effect("withdraw replies with the new balance and updates projections", () =>
 it.effect("overdraft is rejected with evidence", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
-    when(a1, new Withdraw({ amount: 80, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 80 })),
     rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
   ),
 );
@@ -93,7 +112,8 @@ it.effect("overdraft is rejected with evidence", () =>
 it.effect("a customer can't withdraw from someone else's account", () =>
   story(
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
-    when(a1, new Withdraw({ amount: 30, by: alex })),
+    as(alex),
+    when(a1, new WithdrawMoney({ amount: 30 })),
     rejected(new NotOwner()),
   ),
 );
@@ -102,14 +122,15 @@ it.effect("the daily limit uses the story clock", () =>
   story(
     clock("2026-10-09T09:00:00Z"),
     given(a1, opened(), new MoneyDeposited({ amount: 300_000, balanceAfter: 300_000 })),
-    when(a1, new Withdraw({ amount: 40_000, by: sam })),
-    when(a1, new Withdraw({ amount: 40_000, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 40_000 })),
+    when(a1, new WithdrawMoney({ amount: 40_000 })),
     expectCall(FraudCheck.score, { accountId: a1.id, amount: 80_000 }),
     resolve(FraudCheck.score, { risk: 0.1 }),
-    when(a1, new Withdraw({ amount: 30_000, by: sam })),
+    when(a1, new WithdrawMoney({ amount: 30_000 })),
     rejected(new DailyLimitExceeded({ remaining: 20_000 })),
     clock("2026-10-10T00:00:01Z"),
-    when(a1, new Withdraw({ amount: 30_000, by: sam })),
+    when(a1, new WithdrawMoney({ amount: 30_000 })),
     then(
       a1,
       new MoneyWithdrawn({ amount: 40_000, balanceAfter: 260_000 }),
@@ -122,7 +143,8 @@ it.effect("the daily limit uses the story clock", () =>
 it.effect("freezing twice records nothing", () =>
   story(
     given(a1, opened(), new AccountFrozen({ reason: "kyc", by: agent("support-7") })),
-    when(a1, new Freeze({ reason: "again", by: agent("support-7") })),
+    as(agent("support-7")),
+    when(a1, new FreezeAccount({ reason: "again" })),
     then(a1),
     state(a1, (s) => expect(s).toMatchObject({ frozen: "kyc" })),
   ),
@@ -131,12 +153,13 @@ it.effect("freezing twice records nothing", () =>
 it.effect("a risky withdrawal freezes the account (a Port call suspends until resolved)", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
-    when(a1, new Withdraw({ amount: 60_000, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 60_000 })),
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
     expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
     resolve(FraudCheck.score, { risk: 0.95 }),
     then(a1, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
-    when(a1, new Withdraw({ amount: 10, by: sam })),
+    when(a1, new WithdrawMoney({ amount: 10 })),
     rejected(new Frozen({ reason: "fraud risk 0.95" })),
   ),
 );
@@ -146,8 +169,9 @@ it.effect(
   () =>
     story(
       given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
-      when(a1, new Withdraw({ amount: 30_000, by: sam })),
-      when(a1, new Withdraw({ amount: 30_000, by: sam })),
+      as(sam),
+      when(a1, new WithdrawMoney({ amount: 30_000 })),
+      when(a1, new WithdrawMoney({ amount: 30_000 })),
       then(
         a1,
         new MoneyWithdrawn({ amount: 30_000, balanceAfter: 60_000 }),
@@ -163,9 +187,10 @@ it.effect(
 it.effect("race: the account is closed while the fraud check is pending", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 60_000, balanceAfter: 60_000 })),
-    when(a1, new Withdraw({ amount: 60_000, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 60_000 })),
     expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-    when(a1, new CloseAccount({ by: sam })),
+    when(a1, new CloseAccount()),
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 0 }), new AccountClosed()),
     resolve(FraudCheck.score, { risk: 0.95 }),
     then(a1),
@@ -177,7 +202,8 @@ it.effect("a transfer completes: the process manager drives both accounts", () =
   story(
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2")),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40, by: sam })),
+    as(sam),
+    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -201,7 +227,8 @@ it.effect("a customer can't move money out of someone else's account with a tran
   story(
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2")),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40, by: alex })),
+    as(alex),
+    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -221,7 +248,8 @@ it.effect("a transfer to a closed account is compensated", () =>
   story(
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2"), new AccountClosed()),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40, by: sam })),
+    as(sam),
+    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -261,9 +289,11 @@ it.effect("only agents reassign accounts, and the dashboards re-key", () =>
     given(c2, new CustomerRegistered({ name: "alex" })),
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({ ["a-1"]: 100 } as any)),
-    when(a1, new ChangeOwner({ customerId: c2.id, by: sam })),
+    as(sam),
+    when(a1, new ChangeOwner({ customerId: c2.id })),
     rejected(new NotPermitted()),
-    when(a1, new ChangeOwner({ customerId: c2.id, by: agent("support-7") })),
+    as(agent("support-7")),
+    when(a1, new ChangeOwner({ customerId: c2.id })),
     then(a1, new OwnerChanged({ previous: c1.id, customerId: c2.id, by: agent("support-7") })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({} as any)),
     view(CustomerDashboard, c2, (d) =>
@@ -275,7 +305,8 @@ it.effect("only agents reassign accounts, and the dashboards re-key", () =>
 it.effect("an unasserted rejection fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 1, balanceAfter: 1 })),
-    when(a1, new Withdraw({ amount: 5, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 5 })),
   ).pipe(
     Effect.flip,
     Effect.map((failure) => expect(failure.message).toMatch(/InsufficientFunds/)),
@@ -285,7 +316,8 @@ it.effect("an unasserted rejection fails the story", () =>
 it.effect("an unresolved Port call fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
-    when(a1, new Withdraw({ amount: 60_000, by: sam })),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 60_000 })),
   ).pipe(
     Effect.flip,
     Effect.map((failure) => expect(failure.message).toMatch(/unresolved Port calls/)),

@@ -5,9 +5,9 @@ import * as Stream from "effect/Stream";
 import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
+import { currentCustomerId } from "../CurrentActor.ts";
 import { Customer } from "../Customer/Customer.ts";
 import { CustomerDashboard } from "../Customer/CustomerDashboard.ts";
-import { CurrentCustomer } from "./CurrentCustomer.ts";
 import { CustomerSession } from "./CustomerSession.ts";
 import { DashboardSnapshot } from "./DashboardSnapshot.ts";
 
@@ -21,7 +21,7 @@ export const DashboardFeedLive = DashboardFeed.toLayer(
     const dashboards = yield* CustomerDashboard;
     const summaries = yield* AccountSummary;
     return Effect.fn(function* () {
-      const { customerId } = yield* CurrentCustomer;
+      const customerId = yield* currentCustomerId;
       const dashboard = dashboards.watch(Customer.ref(customerId)).pipe(
         Stream.filter(Option.isSome),
         Stream.map((d) => d.value),

@@ -3,16 +3,17 @@ import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { CurrentCustomer } from "./CurrentCustomer.ts";
+import { customer } from "../Actor.ts";
+import { CurrentActor } from "../CurrentActor.ts";
 import { Unauthorized } from "./Unauthorized.ts";
 
 /**
- * Authenticates a customer request and provides {@link CurrentCustomer}.
+ * Authenticates a customer request and provides the customer as the
+ * {@link CurrentActor}.
  */
 export class CustomerSession extends RpcMiddleware.Service<
   CustomerSession,
-  { provides: CurrentCustomer }
+  { provides: CurrentActor }
 >()("Bank/CustomerSession", { error: Unauthorized, requiredForClient: true }) {}
 
 /**
@@ -25,7 +26,7 @@ export const CustomerSessionLive = Layer.succeed(CustomerSession, (effect, { hea
     onSome: (value) => {
       const match = /^Bearer customer:(.+)$/.exec(value);
       return match
-        ? Effect.provideService(effect, CurrentCustomer, { customerId: CustomerId.make(match[1]!) })
+        ? Effect.provideService(effect, CurrentActor, customer(match[1]!))
         : Effect.fail(new Unauthorized());
     },
   }),

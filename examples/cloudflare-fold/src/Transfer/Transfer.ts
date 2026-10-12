@@ -1,6 +1,8 @@
 import { Aggregate } from "alchemy/Fold";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/AccountId.ts";
+import { CurrentActor } from "../CurrentActor.ts";
 import { Cents } from "../Money.ts";
 import { CompleteTransfer, TransferCompleted } from "./CompleteTransfer.ts";
 import { FailTransfer, TransferFailed } from "./FailTransfer.ts";
@@ -24,20 +26,21 @@ export class Transfer extends Aggregate.make("Transfer", {
   initial: { _tag: "New" },
   commands: [RequestTransfer, CompleteTransfer, FailTransfer],
   decide: {
-    RequestTransfer: (s, cmd, { id }) =>
-      s._tag !== "New"
-        ? new AlreadyRequested()
-        : cmd.from === cmd.to
-          ? new SameAccount()
-          : [
-              new TransferRequested({
-                transferId: id,
-                from: cmd.from,
-                to: cmd.to,
-                amount: cmd.amount,
-                requestedBy: cmd.by,
-              }),
-            ],
+    // Records who asked, so TransferExecution debits the source on their behalf.
+    RequestTransfer: Effect.fn(function* (s, cmd, { id }) {
+      if (s._tag !== "New") return yield* new AlreadyRequested();
+      if (cmd.from === cmd.to) return yield* new SameAccount();
+      const requestedBy = yield* CurrentActor;
+      return [
+        new TransferRequested({
+          transferId: id,
+          from: cmd.from,
+          to: cmd.to,
+          amount: cmd.amount,
+          requestedBy,
+        }),
+      ];
+    }),
     CompleteTransfer: (s, _, { id }) =>
       s._tag === "Pending" ? [new TransferCompleted({ transferId: id })] : [],
     FailTransfer: (s, cmd, { id }) =>

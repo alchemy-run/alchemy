@@ -3,13 +3,14 @@ import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import { agent } from "../Actor.ts";
+import { CurrentActor } from "../CurrentActor.ts";
 import { Unauthorized } from "../CustomerApi/Unauthorized.ts";
-import { CurrentAgent } from "./CurrentAgent.ts";
 
-/** Authenticates a support agent and provides {@link CurrentAgent}. */
+/** Authenticates a support agent and provides the agent as the {@link CurrentActor}. */
 export class SupportAgentSession extends RpcMiddleware.Service<
   SupportAgentSession,
-  { provides: CurrentAgent }
+  { provides: CurrentActor }
 >()("Bank/SupportAgentSession", { error: Unauthorized, requiredForClient: true }) {}
 
 /**
@@ -22,7 +23,7 @@ export const SupportAgentSessionLive = Layer.succeed(SupportAgentSession, (effec
     onSome: (value) => {
       const match = /^Bearer agent:(.+)$/.exec(value);
       return match
-        ? Effect.provideService(effect, CurrentAgent, { agentId: match[1]! })
+        ? Effect.provideService(effect, CurrentActor, agent(match[1]!))
         : Effect.fail(new Unauthorized());
     },
   }),

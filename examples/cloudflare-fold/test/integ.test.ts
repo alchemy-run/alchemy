@@ -18,6 +18,7 @@ import * as Stream from "effect/Stream";
 import Stack from "../alchemy.run.ts";
 import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { customerSessionClient } from "../src/CustomerApi/CustomerSession.ts";
+import { mfa, register, transfer } from "./flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
@@ -26,8 +27,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
-
-const mfa = { headers: { "x-mfa-code": "000000" } };
 
 /** A typed CustomerApi client over HTTP, signed in as `customerId`. */
 const customerClient = (url: string, customerId: string) =>
@@ -56,31 +55,35 @@ test(
     const sam = yield* customerClient(base, "c-1");
     const alex = yield* customerClient(base, "c-2");
 
-    // a mutation that waits for a policy (MainAccountProvisioning) to open the account
-    const samMain = (yield* sam.register({ name: "sam" })).accountId;
-    const alexMain = (yield* alex.register({ name: "alex" })).accountId;
+    // a command, then a policy (MainAccountProvisioning) opens the account; the dashboard shows it
+    const samMain = yield* register(sam, "c-1", "sam");
+    const alexMain = yield* register(alex, "c-2", "alex");
 
-    // read-your-write through the AccountSummary view's Durable Object
-    expect(yield* sam.deposit({ accountId: samMain, amount: 100 })).toEqual({
-      accountId: samMain,
-      owner: "sam",
+    // a command's reply, computed from the committed state in the account's Durable Object
+    expect((yield* sam.DepositMoney({ target: samMain, amount: 100 })).reply).toEqual({
       balance: 100,
-      frozen: false,
     });
 
-    // MFA middleware, a reply, and ownership enforced by the aggregate
-    expect((yield* sam.withdraw({ accountId: samMain, amount: 10 }).pipe(Effect.flip))._tag).toBe(
+    // MFA middleware, and ownership enforced by the aggregate against the session's actor
+    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }).pipe(Effect.flip))._tag).toBe(
       "MfaRequired",
     );
-    expect(yield* sam.withdraw({ accountId: samMain, amount: 10 }, mfa)).toEqual({ balance: 90 });
+    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }, mfa)).reply).toEqual({
+      balance: 90,
+    });
     expect(
-      (yield* alex.withdraw({ accountId: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
+      (yield* alex.WithdrawMoney({ target: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
     ).toBe("NotOwner");
 
-    // a process manager across three aggregates; the mutation waits on a multi-source view
-    const transfer = yield* sam.transfer({ from: samMain, to: alexMain, amount: 40 }, mfa);
-    expect(transfer.status).toBe("completed");
-    expect((yield* alex.transferStatus({ transferId: transfer.transferId })).status).toBe(
+    // a process manager across three aggregates, followed through a multi-source view
+    const outcome = yield* transfer(sam, {
+      transferId: "t-1",
+      from: samMain,
+      to: alexMain,
+      amount: 40,
+    });
+    expect(outcome.status).toBe("completed");
+    expect((yield* alex.transferStatus({ transferId: outcome.transferId })).status).toBe(
       "completed",
     );
 
@@ -123,7 +126,7 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
     const sam = yield* customerClient(base, "c-3");
-    const { accountId } = yield* sam.register({ name: "sam" });
+    const accountId = yield* register(sam, "c-3", "sam");
 
     // a test-mode card payment whose metadata names the account
     yield* CreatePaymentIntent({

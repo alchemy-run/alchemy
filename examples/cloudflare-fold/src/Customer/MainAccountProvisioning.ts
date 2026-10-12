@@ -4,7 +4,7 @@ import { Account } from "../Account/Account.ts";
 import { mainAccountId } from "../Account/AccountId.ts";
 import { OpenAccount } from "../Account/OpenAccount.ts";
 import { Customer } from "./Customer.ts";
-import { CustomerRegistered } from "./Register.ts";
+import { CustomerRegistered } from "./RegisterCustomer.ts";
 
 /** Whenever a customer registers, open their main account. */
 export class MainAccountProvisioning extends Policy.make("MainAccountProvisioning", {

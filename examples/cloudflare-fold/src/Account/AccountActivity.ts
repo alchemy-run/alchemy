@@ -2,7 +2,7 @@ import { View } from "alchemy/Fold";
 import { Account } from "./Account.ts";
 import { OwnerChanged } from "./ChangeOwner.ts";
 import { AccountClosed } from "./CloseAccount.ts";
-import { AccountFrozen } from "./Freeze.ts";
+import { AccountFrozen } from "./FreezeAccount.ts";
 import { SettlementOnClosedAccount } from "./RecordSettlement.ts";
 import { RefundStranded } from "./RefundTransfer.ts";
 

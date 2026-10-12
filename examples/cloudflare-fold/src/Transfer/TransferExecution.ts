@@ -26,9 +26,9 @@ export const TransferExecutionLive = TransferExecution.toLayer(
       const fail = (reason: string) =>
         transfers.send(source, new FailTransfer({ reason })).pipe(Effect.as(false));
 
-      // `by: requestedBy` makes Account.decide check that the requester owns the source account.
+      // Account.decide checks that the requester owns the source account.
       const debited = yield* accounts
-        .send(from, new DebitTransfer({ transferId, amount, by: requestedBy }))
+        .send(from, new DebitTransfer({ transferId, amount, requestedBy }))
         .pipe(
           Effect.as(true),
           Effect.catchTags({

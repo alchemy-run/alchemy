@@ -8,9 +8,9 @@ import type * as Stream from "effect/Stream";
 import type { Fields } from "./Event.ts";
 
 /**
- * The kinds of public operation an Api exposes.
+ * The kinds of read an Api exposes alongside its commands.
  */
-export type Kind = "Mutation" | "Query" | "Subscription";
+export type Kind = "Query" | "Subscription";
 
 /** The schema of an operation's output. */
 export type OutputSchema<O> = O extends Schema.Top
@@ -25,7 +25,7 @@ export type ErrorSchema<Errors extends ReadonlyArray<Schema.Top>> = Errors exten
   : Schema.Union<Errors>;
 
 /**
- * The implementation of an operation. Mutations and queries return an Effect;
+ * The implementation of an operation. Queries return an Effect;
  * subscriptions return an Effect that builds the Stream (and can fail first,
  * e.g. on authorization).
  *

@@ -125,6 +125,7 @@ export const make = (
                   version: current.version,
                   command,
                   commandId: meta.commandId,
+                  context: meta.context,
                   now: now(),
                 });
                 if (result._tag === "Rejected") return result satisfies SendResult;

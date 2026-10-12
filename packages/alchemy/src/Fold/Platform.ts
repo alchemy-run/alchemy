@@ -67,6 +67,8 @@ export interface HandleInput {
   readonly version: number;
   readonly command: Json;
   readonly commandId: string;
+  /** The context the command was sent with (see `Command.Context`). */
+  readonly context: Readonly<Record<string, Json>>;
   /** Epoch milliseconds. */
   readonly now: number;
 }

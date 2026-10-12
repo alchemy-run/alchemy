@@ -60,7 +60,12 @@ export type Step =
     }
   | { readonly _tag: "ExpectCall"; readonly op: Port.Op; readonly args: unknown }
   | { readonly _tag: "Resolve"; readonly op: Port.Op; readonly value: unknown }
-  | { readonly _tag: "Clock"; readonly at: string | number };
+  | { readonly _tag: "Clock"; readonly at: string | number }
+  | {
+      readonly _tag: "Provide";
+      readonly service: Context.Key<unknown, unknown>;
+      readonly value: unknown;
+    };
 
 /** History: events already committed on a stream before the story starts. */
 const given = <A extends Aggregate.Any>(
@@ -149,6 +154,16 @@ const resolve = <Success>(op: Port.Op<any, Success>, value: Success): Step => ({
 /** Set the time used for subsequent commands. */
 const clock = (at: string | number): Step => ({ _tag: "Clock", at });
 
+/**
+ * Provide a service to subsequent commands, as their middleware would (for
+ * example the current actor). Replaces any earlier value of the same service.
+ */
+const provide = <I, S>(service: Context.Key<I, S>, value: S): Step => ({
+  _tag: "Provide",
+  service: service as unknown as Context.Key<unknown, unknown>,
+  value,
+});
+
 const normalize = (value: unknown): unknown => {
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
   if (Array.isArray(value)) return value.map(normalize);
@@ -199,7 +214,8 @@ interface PendingCall {
  * it.effect("withdraw replies with the new balance", () =>
  *   story(
  *     Story.given(a1, new AccountOpened({ ... }), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
- *     Story.when(a1, new Withdraw({ amount: 30, by: sam })),
+ *     Story.provide(CurrentActor, sam),
+ *     Story.when(a1, new WithdrawMoney({ amount: 30 })),
  *     Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
  *     Story.replied({ balance: 70 }),
  *   ),
@@ -257,6 +273,7 @@ const make =
           | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
           | undefined;
         let unassertedRejection: { readonly step: number; readonly tag: string } | undefined;
+        let provided = Context.empty() as Context.Context<unknown>;
 
         const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
         const committed = (ref: Aggregate.Ref) =>
@@ -302,6 +319,10 @@ const make =
               clockState.now = typeof s.at === "number" ? s.at : Date.parse(s.at);
               break;
             }
+            case "Provide": {
+              provided = Context.add(provided, s.service, s.value);
+              break;
+            }
             case "Given": {
               const store = storeOf(s.ref);
               if (!store.seed) return yield* fail("the platform cannot seed events");
@@ -320,7 +341,7 @@ const make =
               >;
               const result = yield* client
                 .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
-                .pipe(Effect.result);
+                .pipe(Effect.provide(provided), Effect.result);
               if (result._tag === "Success") {
                 last = { _tag: "Accepted", receipt: result.success };
               } else {
@@ -502,6 +523,7 @@ export const Story = {
   expectCall,
   resolve,
   clock,
+  provide,
   /** Marker for "the view key does not exist". */
   none,
 } as const;

@@ -7,5 +7,6 @@ export class TransferCompleted extends Event.make("TransferCompleted", {
 
 /** Reports an outcome, so it never rejects. */
 export class CompleteTransfer extends Command.make("CompleteTransfer", {
+  target: TransferId,
   events: [TransferCompleted],
 }) {}

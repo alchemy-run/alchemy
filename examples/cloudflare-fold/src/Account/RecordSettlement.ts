@@ -1,6 +1,7 @@
 import { Command, Event } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
+import { AccountId } from "./AccountId.ts";
 
 export class SettlementReceived extends Event.make("SettlementReceived", {
   data: { settlementId: Schema.String, amount: Cents, balanceAfter: Cents },
@@ -13,6 +14,7 @@ export class SettlementOnClosedAccount extends Event.make("SettlementOnClosedAcc
 
 /** Reports a fact that already happened, so it never rejects. */
 export class RecordSettlement extends Command.make("RecordSettlement", {
+  target: AccountId,
   input: { settlementId: Schema.String, amount: Cents },
   events: [SettlementReceived, SettlementOnClosedAccount],
 }) {}

@@ -1,15 +1,13 @@
 import { Api } from "alchemy/Fold";
-import * as Layer from "effect/Layer";
+import { ChangeOwner } from "../Account/ChangeOwner.ts";
+import { FreezeAccount } from "../Account/FreezeAccount.ts";
 import { ActivityLog, ActivityLogLive } from "./ActivityLog.ts";
-import { FreezeAccount, FreezeAccountLive } from "./FreezeAccount.ts";
-import { ReassignAccount, ReassignAccountLive } from "./ReassignAccount.ts";
 
-/** What support agents can do and see, over the same Bank. Each operation carries `SupportAgentSession`. */
-export class SupportApi extends Api.make(FreezeAccount, ReassignAccount, ActivityLog) {}
+/**
+ * What support agents can do and see, over the same Bank. Its commands carry
+ * `SupportAgentSession`, so `decide` sees the agent as the current actor.
+ */
+export class SupportApi extends Api.make(FreezeAccount, ChangeOwner, ActivityLog) {}
 
-/** Server-side implementations of every SupportApi operation (middleware Layers are provided separately). */
-export const SupportApiLive = Layer.mergeAll(
-  FreezeAccountLive,
-  ReassignAccountLive,
-  ActivityLogLive,
-);
+/** Handlers for the SupportApi's reads (commands are implemented by their aggregates). */
+export const SupportApiLive = ActivityLogLive;

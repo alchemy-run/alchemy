@@ -1,8 +1,10 @@
 import { Aggregate } from "alchemy/Fold";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
 import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
 import type { Actor } from "../Actor.ts";
+import { CurrentActor } from "../CurrentActor.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { Cents } from "../Money.ts";
 import { AccountId } from "./AccountId.ts";
@@ -10,8 +12,8 @@ import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.ts";
 import { AccountClosed, BalanceNotZero, CloseAccount } from "./CloseAccount.ts";
 import { CreditTransfer, TransferCredited } from "./CreditTransfer.ts";
 import { DebitTransfer, TransferDebited } from "./DebitTransfer.ts";
-import { Deposit, MoneyDeposited } from "./Deposit.ts";
-import { AccountFrozen, Freeze } from "./Freeze.ts";
+import { DepositMoney, MoneyDeposited } from "./DepositMoney.ts";
+import { AccountFrozen, FreezeAccount } from "./FreezeAccount.ts";
 import { Frozen } from "./Frozen.ts";
 import { InsufficientFunds } from "./InsufficientFunds.ts";
 import { NotOpen } from "./NotOpen.ts";
@@ -23,7 +25,7 @@ import {
   SettlementReceived,
 } from "./RecordSettlement.ts";
 import { RefundStranded, RefundTransfer, TransferRefunded } from "./RefundTransfer.ts";
-import { DAILY_LIMIT, DailyLimitExceeded, MoneyWithdrawn, Withdraw } from "./Withdraw.ts";
+import { DAILY_LIMIT, DailyLimitExceeded, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.ts";
 
 const Open = Schema.TaggedStruct("Open", {
   customerId: CustomerId,
@@ -45,13 +47,20 @@ type AccountState = typeof AccountState.Type;
 const balance = Optic.id<Open>().key("balance");
 const frozen = Optic.id<Open>().key("frozen");
 
-// decide helper: the narrowed state, or why the actor may not act on it.
-const openFor = (s: AccountState, by: Actor): Open | NotOpen | NotOwner =>
+// Authorization: customers may act on their own accounts; agents and the system on any.
+const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
   s._tag !== "Open"
     ? new NotOpen()
-    : by._tag === "Customer" && by.customerId !== s.customerId
+    : actor._tag === "Customer" && actor.customerId !== s.customerId
       ? new NotOwner()
       : s;
+
+// The open account, if the current actor (from the command's middleware) may act on it.
+const authorized = Effect.fn(function* (s: AccountState) {
+  const o = openFor(s, yield* CurrentActor);
+  if (o._tag !== "Open") return yield* o;
+  return o;
+});
 
 // evolve guard: an event in the wrong state is a bug, so the command rolls back.
 const mustBeOpen = (s: AccountState, what: string): Open => {
@@ -64,7 +73,8 @@ const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 /**
  * A bank account. Each command lives in its own file with the events it
  * records and the rejections only it returns; this file holds the state and
- * how commands and events change it.
+ * how commands and events change it. Commands sent by customers and agents
+ * read the current actor from their middleware to authorize it.
  */
 export class Account extends Aggregate.make("Account", {
   id: AccountId,
@@ -73,9 +83,9 @@ export class Account extends Aggregate.make("Account", {
   commands: [
     OpenAccount,
     ChangeOwner,
-    Deposit,
-    Withdraw,
-    Freeze,
+    DepositMoney,
+    WithdrawMoney,
+    FreezeAccount,
     CloseAccount,
     DebitTransfer,
     CreditTransfer,
@@ -88,45 +98,43 @@ export class Account extends Aggregate.make("Account", {
         ? new AlreadyOpen()
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
-    ChangeOwner: (s, cmd) =>
-      s._tag !== "Open"
-        ? new NotOpen()
-        : cmd.by._tag !== "Agent"
-          ? new NotPermitted()
-          : [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: cmd.by })],
+    ChangeOwner: Effect.fn(function* (s, cmd) {
+      if (s._tag !== "Open") return yield* new NotOpen();
+      const actor = yield* CurrentActor;
+      if (actor._tag !== "Agent") return yield* new NotPermitted();
+      return [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: actor })];
+    }),
 
-    Deposit: (s, cmd) => {
-      const o = openFor(s, cmd.by);
-      if (o._tag !== "Open") return o;
+    DepositMoney: Effect.fn(function* (s, cmd) {
+      const o = yield* authorized(s);
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
-    },
+    }),
 
-    Withdraw: (s, cmd, { now }) => {
-      const o = openFor(s, cmd.by);
-      if (o._tag !== "Open") return o;
-      if (o.frozen) return new Frozen({ reason: o.frozen });
+    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
+      const o = yield* authorized(s);
+      if (o.frozen) return yield* new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
-        return new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
+        return yield* new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
       const used = o.today.day === dayOf(now) ? o.today.withdrawn : 0;
       if (used + cmd.amount > DAILY_LIMIT)
-        return new DailyLimitExceeded({ remaining: DAILY_LIMIT - used });
+        return yield* new DailyLimitExceeded({ remaining: DAILY_LIMIT - used });
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
-    },
+    }),
 
-    Freeze: (s, cmd) => {
-      const o = openFor(s, cmd.by);
-      if (o._tag !== "Open") return o;
-      return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: cmd.by })];
-    },
+    FreezeAccount: Effect.fn(function* (s, cmd) {
+      const o = yield* authorized(s);
+      const actor = yield* CurrentActor;
+      return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
+    }),
 
-    CloseAccount: (s, cmd) => {
-      const o = openFor(s, cmd.by);
-      if (o._tag !== "Open") return o;
-      return o.balance !== 0 ? new BalanceNotZero({ balance: o.balance }) : [new AccountClosed()];
-    },
+    CloseAccount: Effect.fn(function* (s) {
+      const o = yield* authorized(s);
+      if (o.balance !== 0) return yield* new BalanceNotZero({ balance: o.balance });
+      return [new AccountClosed()];
+    }),
 
     DebitTransfer: (s, cmd) => {
-      const o = openFor(s, cmd.by);
+      const o = openFor(s, cmd.requestedBy);
       if (o._tag !== "Open") return o;
       if (o.frozen) return new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
@@ -203,7 +211,7 @@ export class Account extends Aggregate.make("Account", {
   },
 
   reply: {
-    Deposit: (s) => ({ balance: balance.get(mustBeOpen(s, "Deposit reply")) }),
-    Withdraw: (s) => ({ balance: balance.get(mustBeOpen(s, "Withdraw reply")) }),
+    DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
+    WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
   },
 }) {}

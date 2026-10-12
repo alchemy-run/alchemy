@@ -1,8 +1,9 @@
 import { Policy } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import { Account } from "../Account/Account.ts";
-import { Freeze } from "../Account/Freeze.ts";
+import { FreezeAccount } from "../Account/FreezeAccount.ts";
 import { system } from "../Actor.ts";
+import { CurrentActor } from "../CurrentActor.ts";
 import { DailyOutflow, DailyOutflowExceeded } from "./DailyOutflow.ts";
 import { FraudCheck } from "./FraudCheck.ts";
 
@@ -19,12 +20,12 @@ export const FraudReviewLive = FraudReview.toLayer(
     return Effect.fn(function* ({ source, event }) {
       const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
       if (risk > 0.8) {
-        yield* accounts
-          .send(source, new Freeze({ reason: `fraud risk ${risk}`, by: system("FraudReview") }))
-          .pipe(
-            Effect.catchTag("NotOpen", () => Effect.void),
-            Effect.catchTag("NotOwner", () => Effect.void),
-          );
+        // No session here: the policy acts as the system, in place of FreezeAccount's middleware.
+        yield* accounts.send(source, new FreezeAccount({ reason: `fraud risk ${risk}` })).pipe(
+          Effect.provideService(CurrentActor, system("FraudReview")),
+          Effect.catchTag("NotOpen", () => Effect.void),
+          Effect.catchTag("NotOwner", () => Effect.void),
+        );
       }
     });
   }),

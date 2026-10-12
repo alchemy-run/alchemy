@@ -1,9 +1,12 @@
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
-import type * as Command from "./Command.ts";
+import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import type {
   AggregateKit,
@@ -481,7 +484,7 @@ export const make = (definitions: Definitions): Kernel => {
         const state = codecs.state.decode(input.state ?? codecs.initial);
         const id = decodeId(input.id) as string;
         const now = DateTime.makeUnsafe(input.now);
-        const decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
+        let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
           state,
           decoded,
           {
@@ -489,6 +492,23 @@ export const make = (definitions: Definitions): Kernel => {
             now,
           },
         );
+        // An effectful decision reads the context the command was sent with.
+        if (Effect.isEffect(decision)) {
+          // The context is the decision's only requirement (enforced by `Aggregate.Decision`).
+          const exit = Effect.runSyncExit(
+            Effect.provideContext(
+              decision as Effect.Effect<unknown, unknown, never>,
+              Command.restoreContext(input.context),
+            ),
+          );
+          if (Exit.isSuccess(exit)) {
+            decision = exit.value;
+          } else {
+            const rejection = Cause.findErrorOption(exit.cause);
+            if (Option.isNone(rejection)) throw Cause.squash(exit.cause);
+            decision = rejection.value;
+          }
+        }
         if (!Array.isArray(decision)) {
           const rejection = decision as { readonly _tag: string };
           const codec = codecs.rejections.get(rejection._tag);

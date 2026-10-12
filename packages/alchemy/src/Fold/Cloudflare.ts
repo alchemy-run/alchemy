@@ -10,6 +10,7 @@ import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type * as Aggregate from "./Aggregate.ts";
 import { captureContext } from "./internal.ts";
 import {
   type AggregateKit,
@@ -156,7 +157,7 @@ const aggregateObject = (kit: AggregateKit) =>
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
       return {
-        send: (id: string, command: Json, meta: { readonly commandId: string }) =>
+        send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(
             Effect.gen(function* () {
               const { sent, kick } = yield* exclusively(
@@ -179,6 +180,7 @@ const aggregateObject = (kit: AggregateKit) =>
                       version: current.version,
                       command,
                       commandId: meta.commandId,
+                      context: meta.context,
                       now: Date.now(),
                     }),
                   );

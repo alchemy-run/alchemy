@@ -6,6 +6,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
+import * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import {
@@ -33,6 +34,8 @@ export class Internals extends Context.Service<
     readonly kernel: Kernel.Kernel;
     readonly aggregates: ReadonlyMap<string, AggregateStore>;
     readonly views: ReadonlyMap<string, ViewStore>;
+    /** The client of the aggregate that handles each command, by command tag. */
+    readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
   }
 >()("alchemy/Fold/DomainInternals") {}
 
@@ -159,12 +162,15 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
     }
 
     let hosts = Context.empty() as Context.Context<unknown>;
+    const commands = new Map<string, Aggregate.ClientImpl>();
     for (const aggregate of definitions.aggregates) {
-      hosts = Context.add(
-        hosts,
+      const client = aggregateClient(
+        kernel,
         aggregate,
-        aggregateClient(kernel, aggregate, aggregateStores.get(aggregate.aggregateName)!),
+        aggregateStores.get(aggregate.aggregateName)!,
       );
+      hosts = Context.add(hosts, aggregate, client);
+      for (const command of aggregate.definition.commands) commands.set(command.tag, client);
     }
     for (const view of definitions.views) {
       hosts = Context.add(hosts, view, viewHost(kernel, view, viewStores.get(view.viewName)!));
@@ -187,6 +193,7 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       kernel,
       aggregates: aggregateStores,
       views: viewStores,
+      commands,
     });
   });
 
@@ -198,10 +205,11 @@ const aggregateClient = (
   send: (target, command, options) =>
     Effect.gen(function* () {
       const commandId = yield* Aggregate.commandIdFor(options);
+      const context = yield* Command.captureContext;
       const result = yield* store.send(
         Aggregate.targetId(target),
         kernel.encodeCommand(aggregate, command),
-        { commandId },
+        { commandId, context },
       );
       return result._tag === "Rejected"
         ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))

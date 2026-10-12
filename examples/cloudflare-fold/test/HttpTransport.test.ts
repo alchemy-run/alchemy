@@ -12,6 +12,7 @@ import { CustomerSessionLive, customerSessionClient } from "../src/CustomerApi/C
 import { MfaChallengeLive } from "../src/CustomerApi/MfaChallenge.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
+import { register } from "./flows.ts";
 
 // The Worker's HTTP surface (`CustomerApi.httpEffect`) on a real HTTP server, over the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments);
@@ -30,8 +31,8 @@ const Client = Layer.mergeAll(Api.protocolHttp(""), customerSessionClient("custo
 it.live("the CustomerApi round-trips over HTTP, including a streamed subscription", () =>
   Effect.gen(function* () {
     const sam = yield* CustomerApi.client;
-    const { accountId } = yield* sam.register({ name: "sam" });
-    yield* sam.deposit({ accountId, amount: 70 });
+    const accountId = yield* register(sam, "c-1", "sam");
+    yield* sam.DepositMoney({ target: accountId, amount: 70 });
     const dashboard = yield* sam.dashboard({}).pipe(
       Stream.filter((d) => d.totalBalance === 70),
       Stream.runHead,

@@ -1,25 +1,27 @@
 import { Api } from "alchemy/Fold";
 import * as Layer from "effect/Layer";
+import { CloseAccount } from "../Account/CloseAccount.ts";
+import { DepositMoney } from "../Account/DepositMoney.ts";
+import { WithdrawMoney } from "../Account/WithdrawMoney.ts";
+import { RegisterCustomer } from "../Customer/RegisterCustomer.ts";
+import { RequestTransfer } from "../Transfer/RequestTransfer.ts";
 import { AccountWatch, AccountWatchLive } from "./AccountWatch.ts";
 import { DashboardFeed, DashboardFeedLive } from "./DashboardFeed.ts";
-import { DepositFunds, DepositFundsLive } from "./DepositFunds.ts";
 import { LiveStatement, LiveStatementLive } from "./LiveStatement.ts";
-import { RegisterCustomer, RegisterCustomerLive } from "./RegisterCustomer.ts";
 import { StatementHistory, StatementHistoryLive } from "./StatementHistory.ts";
-import { TransferFunds, TransferFundsLive } from "./TransferFunds.ts";
 import { TransferLookup, TransferLookupLive } from "./TransferLookup.ts";
-import { WithdrawFunds, WithdrawFundsLive } from "./WithdrawFunds.ts";
 
 /**
  * What customers can do and see. Everything else in the Bank is unreachable
- * from here. Each operation carries its own `CustomerSession`, so its handler
- * may read `CurrentCustomer`.
+ * from here. Its commands and reads carry `CustomerSession`, so `decide` and
+ * the read handlers see the customer as the current actor.
  */
 export class CustomerApi extends Api.make(
   RegisterCustomer,
-  DepositFunds,
-  WithdrawFunds,
-  TransferFunds,
+  DepositMoney,
+  WithdrawMoney,
+  CloseAccount,
+  RequestTransfer,
   StatementHistory,
   TransferLookup,
   DashboardFeed,
@@ -27,12 +29,8 @@ export class CustomerApi extends Api.make(
   LiveStatement,
 ) {}
 
-/** Server-side implementations of every CustomerApi operation (middleware Layers are provided separately). */
+/** Handlers for the CustomerApi's reads (commands are implemented by their aggregates). */
 export const CustomerApiLive = Layer.mergeAll(
-  RegisterCustomerLive,
-  DepositFundsLive,
-  WithdrawFundsLive,
-  TransferFundsLive,
   StatementHistoryLive,
   TransferLookupLive,
   DashboardFeedLive,
