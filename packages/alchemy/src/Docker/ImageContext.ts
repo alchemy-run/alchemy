@@ -220,6 +220,7 @@ export const prepareGit = (
       if (yield* fs.exists(done)) return { dir, digest };
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* copyTree(cache, dir);
+      yield* compactGit(dir, source);
       for (const command of [source.install, source.build]) {
         if (command) yield* shell(dir, command);
       }
@@ -227,6 +228,26 @@ export const prepareGit = (
       return { dir, digest };
     }),
   );
+
+/**
+ * Shrink a prepared checkout's git data before it's copied into images:
+ * submodules keep only their checked-out commit (no remote branches or
+ * tags), and history that's no longer reachable is dropped.
+ */
+const compactGit = (dir: string, source: GitSource) =>
+  Effect.gen(function* () {
+    const gc = "git reflog expire --expire=now --all && git gc --prune=now --quiet";
+    if (source.submodules) {
+      yield* git(dir, [
+        "submodule",
+        "foreach",
+        "--quiet",
+        "--recursive",
+        `git for-each-ref --format='delete %(refname)' refs/remotes refs/tags | git update-ref --no-deref --stdin && ${gc}`,
+      ]);
+    }
+    yield* shell(dir, gc);
+  });
 
 /** Run a shell command in `cwd` on the deploying machine; fail with its output. */
 const shell = (cwd: string, command: string) =>
@@ -364,7 +385,10 @@ const checkoutGitLocked = (cache: string, source: GitSource) =>
         "update",
         "--init",
         "--quiet",
-        ...depth,
+        // Only the pinned commit: a submodule's other branches and history
+        // can be many times its checkout (e.g. generated code).
+        "--depth=1",
+        "--single-branch",
         "--",
         ...(source.submodules === true ? [] : source.submodules),
       ]);

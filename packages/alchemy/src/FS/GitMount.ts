@@ -44,10 +44,19 @@ export interface MountGitOptions {
   readonly submodules?: boolean | ReadonlyArray<string>;
   /**
    * Installs dependencies, e.g. `pnpm install --frozen-lockfile`. Runs in
-   * the checkout on the deploying machine, and again in the image so
-   * native dependencies match the image's platform.
+   * the checkout on the deploying machine, and again in the image (see
+   * `imageInstall`) so native dependencies match the image's platform.
    */
   readonly install?: string;
+  /**
+   * Reinstalls dependencies in the image, for its OS and architecture. The
+   * build's outputs arrive from the deploying machine, so this should skip
+   * the project's own build scripts (e.g. `prepare`) and only build
+   * dependencies, e.g. `pnpm install --frozen-lockfile --ignore-scripts &&
+   * pnpm rebuild`.
+   * @default install
+   */
+  readonly imageInstall?: string;
   /**
    * Builds the checkout, e.g. `pnpm exec tsc -b`. Runs once per commit on
    * the deploying machine; the outputs are copied into the image (and into
@@ -219,7 +228,9 @@ export const mountGitRepository = (options: {
         `RUN ${setup.join(" && ")}`,
         // Dependencies are reinstalled for the image's platform; the build
         // outputs arrive with the checkout.
-        ...(mount.install ? [`RUN cd ${path} && CI=true ${mount.install}`] : []),
+        ...((mount.imageInstall ?? mount.install)
+          ? [`RUN cd ${path} && CI=true ${mount.imageInstall ?? mount.install}`]
+          : []),
       ].join("\n"),
       context: [
         {
