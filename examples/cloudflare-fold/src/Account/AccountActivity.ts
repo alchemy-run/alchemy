@@ -1,12 +1,10 @@
 import { View } from "alchemy/Fold";
-import {
-  Account,
-  AccountClosed,
-  AccountFrozen,
-  OwnerChanged,
-  RefundStranded,
-  SettlementOnClosedAccount,
-} from "./Account.ts";
+import { Account } from "./Account.ts";
+import { OwnerChanged } from "./ChangeOwner.ts";
+import { AccountClosed } from "./Close.ts";
+import { AccountFrozen } from "./Freeze.ts";
+import { SettlementOnClosedAccount } from "./RecordSettlement.ts";
+import { RefundStranded } from "./RefundTransfer.ts";
 
 /** Operational events for support tooling, passed through unchanged. */
 export class AccountActivity extends View.make("AccountActivity", {

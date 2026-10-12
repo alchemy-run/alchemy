@@ -1,8 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Account, NotOwner } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import type { AccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
+import { NotOwner } from "../Account/NotOwner.ts";
 import { CurrentCustomer } from "./CurrentCustomer.ts";
 
 /**

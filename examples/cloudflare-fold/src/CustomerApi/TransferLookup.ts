@@ -1,7 +1,7 @@
 import { Query } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { NotOwner } from "../Account/Account.ts";
+import { NotOwner } from "../Account/NotOwner.ts";
 import { Transfer } from "../Transfer/Transfer.ts";
 import { TransferId } from "../Transfer/TransferId.ts";
 import { TransferStatus } from "../Transfer/TransferStatus.ts";

@@ -4,8 +4,9 @@ import * as Schema from "effect/Schema";
 import { Account } from "../Account/Account.ts";
 import { AccountId, mainAccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
-import { AlreadyRegistered, Customer, Register } from "../Customer/Customer.ts";
+import { Customer } from "../Customer/Customer.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
+import { AlreadyRegistered, Register } from "../Customer/Register.ts";
 import { CurrentCustomer } from "./CurrentCustomer.ts";
 import { CustomerSession } from "./CustomerSession.ts";
 

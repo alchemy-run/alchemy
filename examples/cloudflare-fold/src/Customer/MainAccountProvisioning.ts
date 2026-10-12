@@ -1,8 +1,10 @@
 import { Policy } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import { Account, OpenAccount } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { mainAccountId } from "../Account/AccountId.ts";
-import { Customer, CustomerRegistered } from "./Customer.ts";
+import { OpenAccount } from "../Account/OpenAccount.ts";
+import { Customer } from "./Customer.ts";
+import { CustomerRegistered } from "./Register.ts";
 
 /** Whenever a customer registers, open their main account. */
 export class MainAccountProvisioning extends Policy.make("MainAccountProvisioning", {

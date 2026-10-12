@@ -1,8 +1,9 @@
 import { Query } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Account, NotOwner } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
+import { NotOwner } from "../Account/NotOwner.ts";
 import { Statement } from "../Account/Statement.ts";
 import { Cents } from "../Money.ts";
 import { CustomerSession } from "./CustomerSession.ts";

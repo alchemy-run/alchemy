@@ -61,15 +61,18 @@ type ReplyTags<C extends Command.Any> = C extends {
 
 type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
 
+/** The event classes a set of commands may record. */
+export type EventsOf<C extends ReadonlyArray<Command.Any>> = C[number]["events"][number];
+
 /**
  * The pure definition of an aggregate: identity, state, the commands it
- * decides and the events it folds.
+ * decides and the events it folds. Its events are those its commands declare.
  */
 export interface Definition<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  E extends ReadonlyArray<Event.Any>,
+  E extends Event.Any = EventsOf<C>,
 > {
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
@@ -77,29 +80,30 @@ export interface Definition<
   readonly state: S;
   /** The state of an instance that has never committed an event. */
   readonly initial: S["Type"];
-  /** Every command this aggregate handles. */
+  /** Every command this aggregate handles, each declaring the events it records. */
   readonly commands: C;
-  /** Every event this aggregate emits. */
-  readonly events: E;
   /**
-   * One handler per command: returns the events to commit, an empty array for
-   * an accepted no-op, or one of the command's declared rejections.
+   * One handler per command: returns the events to commit (from the command's
+   * declared events), an empty array for an accepted no-op, or one of the
+   * command's declared rejections.
    */
   readonly decide: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
       command: Inst<ByTag<C[number], T>>,
       ctx: DecideContext<Id["Type"]>,
-    ) => ReadonlyArray<Inst<E[number]>> | Inst<ByTag<C[number], T>["rejects"][number]>;
+    ) =>
+      | ReadonlyArray<Inst<ByTag<C[number], T>["events"][number]>>
+      | Inst<ByTag<C[number], T>["rejects"][number]>;
   };
   /**
    * One handler per event: folds a committed event into state. Throw when an
    * event cannot apply to the current state; that is a bug, not a rejection.
    */
   readonly evolve: {
-    readonly [T in E[number]["tag"]]: (
+    readonly [T in E["tag"]]: (
       state: S["Type"],
-      event: Inst<ByTag<E[number], T>>,
+      event: Inst<ByTag<E, T>>,
       envelope: Envelope<Id["Type"]>,
     ) => S["Type"];
   };
@@ -110,7 +114,7 @@ export interface Definition<
   readonly reply?: {
     readonly [T in ReplyTags<C[number]>]: (
       state: S["Type"],
-      events: ReadonlyArray<Inst<E[number]>>,
+      events: ReadonlyArray<Inst<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
 }
@@ -298,8 +302,7 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
  *   id: CustomerId,
  *   state: CustomerState,
  *   initial: { _tag: "New" },
- *   commands: [Register],
- *   events: [CustomerRegistered],
+ *   commands: [Register], // declares events: [CustomerRegistered]
  *   decide: {
  *     Register: (s, cmd) =>
  *       s._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
@@ -318,12 +321,11 @@ export const make = <
   Id extends IdSchema,
   S extends Schema.Top,
   const C extends ReadonlyArray<Command.Any>,
-  const E extends ReadonlyArray<Event.Any>,
 >(
   name: Name,
-  definition: Definition<Id, S, C, E>,
-): AggregateClass<Name, Definition<Id, S, C, E>> => {
-  const Tag = Context.Service<Key<Name>, Client<Definition<Id, S, C, E>>>()(
+  definition: Definition<Id, S, C>,
+): AggregateClass<Name, Resolved<Id, S, C>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C>>>()(
     `alchemy/Fold/Aggregate/${name}`,
   );
   const decodeId = Schema.decodeUnknownSync(
@@ -332,13 +334,23 @@ export const make = <
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly aggregateName: Name = name;
-    static readonly definition: Definition<Id, S, C, E> = definition;
+    static readonly definition: Resolved<Id, S, C> = {
+      ...definition,
+      events: [...new Set(definition.commands.flatMap((command) => command.events))],
+    } as unknown as Resolved<Id, S, C>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
     }
-  } as unknown as AggregateClass<Name, Definition<Id, S, C, E>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C>>;
 };
+
+/** A definition with its events collected from its commands. */
+export type Resolved<
+  Id extends IdSchema,
+  S extends Schema.Top,
+  C extends ReadonlyArray<Command.Any>,
+> = Definition<Id, S, C> & { readonly events: ReadonlyArray<EventsOf<C>> };
 
 /**
  * The class type returned by {@link make}.

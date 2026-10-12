@@ -2,13 +2,27 @@
 
 A bank built with `alchemy/Fold`: aggregates, views, policies and ports declared as pure, typed definitions, exposed through two Apis, and hosted on Cloudflare Durable Objects.
 
+Each command lives in its own file with the events it records and the rejections only it returns:
+
 ```ts
+// Account/Withdraw.ts
+export class Withdraw extends Command.make("Withdraw", {
+  input: { amount: Cents, by: Actor },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
+  reply: { balance: Cents },
+}) {}
+```
+
+The aggregate holds the state and the logic. Its events are the ones its commands declare:
+
+```ts
+// Account/Account.ts
 export class Account extends Aggregate.make("Account", {
   id: AccountId,
   state: AccountState,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, Deposit, Withdraw, ...],
-  events: [AccountOpened, MoneyDeposited, MoneyWithdrawn, ...],
   decide: {
     Withdraw: (s, cmd, { now }) => {
       const o = openFor(s, cmd.by);
@@ -29,10 +43,13 @@ Folders are subdomains; every file is named after the thing it declares.
 
 ```
 src/
-  Account/      Account (aggregate + its commands, events, rejections), AccountSummary (read model),
+  Account/      Account (aggregate: state, decide, evolve, reply), one file per command
+                (Withdraw: Withdraw + MoneyWithdrawn + DailyLimitExceeded, ...), shared rejections
+                (NotOpen, NotOwner, Frozen, InsufficientFunds), AccountSummary (read model),
                 Statement (maps six events to StatementLine), AccountActivity (pass-through), AccountId
-  Customer/     Customer, CustomerDashboard (view of a view), MainAccountProvisioning (policy)
-  Transfer/     Transfer (process manager state), TransferExecution (policy),
+  Customer/     Customer, Register, CustomerDashboard (view of a view), MainAccountProvisioning (policy)
+  Transfer/     Transfer (process manager state), RequestTransfer, CompleteTransfer, FailTransfer,
+                TransferExecution (policy),
                 TransferStatus (multi-source view), AccountTransfers (one event routed to two accounts)
   Fraud/        FraudCheck (port), SiftFraudCheck (adapter), DailyOutflow (stateful view emitting
                 DailyOutflowExceeded), FraudReview (policy on that view)

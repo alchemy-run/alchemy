@@ -1,15 +1,12 @@
 import { Mutation } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import {
-  Account,
-  DailyLimitExceeded,
-  Frozen,
-  InsufficientFunds,
-  NotOpen,
-  NotOwner,
-  Withdraw,
-} from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
+import { Frozen } from "../Account/Frozen.ts";
+import { InsufficientFunds } from "../Account/InsufficientFunds.ts";
+import { NotOpen } from "../Account/NotOpen.ts";
+import { NotOwner } from "../Account/NotOwner.ts";
+import { DailyLimitExceeded, Withdraw } from "../Account/Withdraw.ts";
 import { customer } from "../Actor.ts";
 import { Cents } from "../Money.ts";
 import { CurrentCustomer } from "./CurrentCustomer.ts";

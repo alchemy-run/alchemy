@@ -1,49 +1,38 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Story } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import {
-  Account,
-  AccountClosed,
-  AccountFrozen,
-  AccountOpened,
-  ChangeOwner,
-  Close,
-  DailyLimitExceeded,
-  Freeze,
-  Frozen,
-  InsufficientFunds,
-  MoneyDeposited,
-  MoneyWithdrawn,
-  NotOwner,
-  NotPermitted,
-  OwnerChanged,
-  RecordSettlement,
-  SettlementOnClosedAccount,
-  TransferCredited,
-  TransferDebited,
-  TransferRefunded,
-  Withdraw,
-} from "../src/Account/Account.ts";
+import { Account } from "../src/Account/Account.ts";
 import { AccountActivity } from "../src/Account/AccountActivity.ts";
 import { mainAccountId } from "../src/Account/AccountId.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.ts";
+import { ChangeOwner, NotPermitted, OwnerChanged } from "../src/Account/ChangeOwner.ts";
+import { AccountClosed, Close } from "../src/Account/Close.ts";
+import { TransferCredited } from "../src/Account/CreditTransfer.ts";
+import { TransferDebited } from "../src/Account/DebitTransfer.ts";
+import { MoneyDeposited } from "../src/Account/Deposit.ts";
+import { AccountFrozen, Freeze } from "../src/Account/Freeze.ts";
+import { Frozen } from "../src/Account/Frozen.ts";
+import { InsufficientFunds } from "../src/Account/InsufficientFunds.ts";
+import { NotOwner } from "../src/Account/NotOwner.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.ts";
+import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.ts";
+import { TransferRefunded } from "../src/Account/RefundTransfer.ts";
 import { Statement } from "../src/Account/Statement.ts";
+import { DailyLimitExceeded, MoneyWithdrawn, Withdraw } from "../src/Account/Withdraw.ts";
 import { agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
-import { Customer, CustomerRegistered, Register } from "../src/Customer/Customer.ts";
+import { Customer } from "../src/Customer/Customer.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { CustomerRegistered, Register } from "../src/Customer/Register.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 import { AccountTransfers } from "../src/Transfer/AccountTransfers.ts";
-import {
-  RequestTransfer,
-  Transfer,
-  TransferCompleted,
-  TransferFailed,
-  TransferRequested,
-} from "../src/Transfer/Transfer.ts";
+import { TransferCompleted } from "../src/Transfer/CompleteTransfer.ts";
+import { TransferFailed } from "../src/Transfer/FailTransfer.ts";
+import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTransfer.ts";
+import { Transfer } from "../src/Transfer/Transfer.ts";
 import { TransferStatus } from "../src/Transfer/TransferStatus.ts";
 
 const { clock, emitted, expectCall, given, rejected, replied, resolve, state, then, view, when } =

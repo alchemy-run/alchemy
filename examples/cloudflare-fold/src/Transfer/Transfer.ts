@@ -1,50 +1,16 @@
-import { Aggregate, Command, Event, Rejection } from "alchemy/Fold";
+import { Aggregate } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/AccountId.ts";
-import { Actor } from "../Actor.ts";
 import { Cents } from "../Money.ts";
+import { CompleteTransfer, TransferCompleted } from "./CompleteTransfer.ts";
+import { FailTransfer, TransferFailed } from "./FailTransfer.ts";
+import {
+  AlreadyRequested,
+  RequestTransfer,
+  SameAccount,
+  TransferRequested,
+} from "./RequestTransfer.ts";
 import { TransferId } from "./TransferId.ts";
-
-// ── Rejections ──────────────────────────────────────────────────
-
-export class AlreadyRequested extends Rejection.make("AlreadyRequested") {}
-
-export class SameAccount extends Rejection.make("SameAccount") {}
-
-// ── Events ──────────────────────────────────────────────────────
-
-export class TransferRequested extends Event.make("TransferRequested", {
-  data: {
-    transferId: TransferId,
-    from: AccountId,
-    to: AccountId,
-    amount: Cents,
-    requestedBy: Actor,
-  },
-}) {}
-
-export class TransferCompleted extends Event.make("TransferCompleted", {
-  data: { transferId: TransferId },
-}) {}
-
-export class TransferFailed extends Event.make("TransferFailed", {
-  data: { transferId: TransferId, reason: Schema.String },
-}) {}
-
-// ── Commands ────────────────────────────────────────────────────
-
-export class RequestTransfer extends Command.make("RequestTransfer", {
-  input: { from: AccountId, to: AccountId, amount: Cents, by: Actor },
-  rejects: [AlreadyRequested, SameAccount],
-}) {}
-
-/** Reports an outcome, so it never rejects. */
-export class CompleteTransfer extends Command.make("CompleteTransfer") {}
-
-/** Reports an outcome, so it never rejects. */
-export class FailTransfer extends Command.make("FailTransfer", {
-  input: { reason: Schema.String },
-}) {}
 
 /** A transfer between two accounts: the state of the TransferExecution process. */
 export class Transfer extends Aggregate.make("Transfer", {
@@ -57,7 +23,6 @@ export class Transfer extends Aggregate.make("Transfer", {
   ]),
   initial: { _tag: "New" },
   commands: [RequestTransfer, CompleteTransfer, FailTransfer],
-  events: [TransferRequested, TransferCompleted, TransferFailed],
   decide: {
     RequestTransfer: (s, cmd, { id }) =>
       s._tag !== "New"

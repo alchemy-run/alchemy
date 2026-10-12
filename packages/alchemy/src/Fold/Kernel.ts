@@ -499,6 +499,13 @@ export const make = (definitions: Definitions): Kernel => {
           }
           return { _tag: "Rejected", rejection: codec.encode(rejection) };
         }
+        for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
+          if (!command.cls.events.some((e) => e.tag === event._tag)) {
+            throw new DefinitionError(
+              `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
+            );
+          }
+        }
         const { next, events, deliveries } = commit(
           id,
           state,

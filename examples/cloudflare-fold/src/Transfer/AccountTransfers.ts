@@ -2,7 +2,8 @@ import { Event, View } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { Account } from "../Account/Account.ts";
 import { Cents } from "../Money.ts";
-import { Transfer, type TransferRequested } from "./Transfer.ts";
+import { type TransferRequested } from "./RequestTransfer.ts";
+import { Transfer } from "./Transfer.ts";
 import { TransferId } from "./TransferId.ts";
 
 /** Money moved in or out of an account by a transfer. */

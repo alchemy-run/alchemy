@@ -1,143 +1,29 @@
-import { Aggregate, Command, Event, Rejection } from "alchemy/Fold";
+import { Aggregate } from "alchemy/Fold";
 import * as DateTime from "effect/DateTime";
 import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
-import { Actor } from "../Actor.ts";
+import type { Actor } from "../Actor.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { Cents } from "../Money.ts";
-import { TransferId } from "../Transfer/TransferId.ts";
 import { AccountId } from "./AccountId.ts";
-
-// ── Rejections ──────────────────────────────────────────────────
-
-export class AlreadyOpen extends Rejection.make("AlreadyOpen") {}
-
-export class NotOpen extends Rejection.make("NotOpen") {}
-
-export class NotOwner extends Rejection.make("NotOwner") {}
-
-export class NotPermitted extends Rejection.make("NotPermitted") {}
-
-export class Frozen extends Rejection.make("Frozen", {
-  data: { reason: Schema.String },
-}) {}
-
-export class InsufficientFunds extends Rejection.make("InsufficientFunds", {
-  data: { balance: Cents, requested: Cents },
-}) {}
-
-export class DailyLimitExceeded extends Rejection.make("DailyLimitExceeded", {
-  data: { remaining: Cents },
-}) {}
-
-export class BalanceNotZero extends Rejection.make("BalanceNotZero", {
-  data: { balance: Cents },
-}) {}
-
-// ── Events ──────────────────────────────────────────────────────
-
-export class AccountOpened extends Event.make("AccountOpened", {
-  data: { customerId: CustomerId, owner: Schema.String },
-}) {}
-
-export class OwnerChanged extends Event.make("OwnerChanged", {
-  data: { previous: CustomerId, customerId: CustomerId, by: Actor },
-}) {}
-
-export class MoneyDeposited extends Event.make("MoneyDeposited", {
-  data: { amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class MoneyWithdrawn extends Event.make("MoneyWithdrawn", {
-  data: { amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class TransferDebited extends Event.make("TransferDebited", {
-  data: { transferId: TransferId, amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class TransferCredited extends Event.make("TransferCredited", {
-  data: { transferId: TransferId, amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class TransferRefunded extends Event.make("TransferRefunded", {
-  data: { transferId: TransferId, amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class RefundStranded extends Event.make("RefundStranded", {
-  data: { transferId: TransferId, amount: Cents },
-}) {}
-
-export class SettlementReceived extends Event.make("SettlementReceived", {
-  data: { settlementId: Schema.String, amount: Cents, balanceAfter: Cents },
-}) {}
-
-export class SettlementOnClosedAccount extends Event.make("SettlementOnClosedAccount", {
-  data: { settlementId: Schema.String, amount: Cents },
-}) {}
-
-export class AccountFrozen extends Event.make("AccountFrozen", {
-  data: { reason: Schema.String, by: Actor },
-}) {}
-
-export class AccountClosed extends Event.make("AccountClosed") {}
-
-// ── Commands ────────────────────────────────────────────────────
-
-export class OpenAccount extends Command.make("OpenAccount", {
-  input: { customerId: CustomerId, owner: Schema.String },
-  rejects: [AlreadyOpen],
-}) {}
-
-export class ChangeOwner extends Command.make("ChangeOwner", {
-  input: { customerId: CustomerId, by: Actor },
-  rejects: [NotOpen, NotPermitted],
-}) {}
-
-export class Deposit extends Command.make("Deposit", {
-  input: { amount: Cents, by: Actor },
-  rejects: [NotOpen, NotOwner],
-  reply: { balance: Cents },
-}) {}
-
-export class Withdraw extends Command.make("Withdraw", {
-  input: { amount: Cents, by: Actor },
-  rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
-  reply: { balance: Cents },
-}) {}
-
-export class Freeze extends Command.make("Freeze", {
-  input: { reason: Schema.String, by: Actor },
-  rejects: [NotOpen, NotOwner],
-}) {}
-
-export class Close extends Command.make("Close", {
-  input: { by: Actor },
-  rejects: [NotOpen, NotOwner, BalanceNotZero],
-}) {}
-
-export class DebitTransfer extends Command.make("DebitTransfer", {
-  input: { transferId: TransferId, amount: Cents, by: Actor },
-  rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds],
-}) {}
-
-export class CreditTransfer extends Command.make("CreditTransfer", {
-  input: { transferId: TransferId, amount: Cents },
-  rejects: [NotOpen],
-}) {}
-
-/** Reports a fact that already happened, so it never rejects. */
-export class RefundTransfer extends Command.make("RefundTransfer", {
-  input: { transferId: TransferId, amount: Cents },
-}) {}
-
-/** Reports a fact that already happened, so it never rejects. */
-export class RecordSettlement extends Command.make("RecordSettlement", {
-  input: { settlementId: Schema.String, amount: Cents },
-}) {}
-
-/** Daily withdrawal limit, in cents. */
-export const DAILY_LIMIT = 100_000;
+import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.ts";
+import { AccountClosed, BalanceNotZero, Close } from "./Close.ts";
+import { CreditTransfer, TransferCredited } from "./CreditTransfer.ts";
+import { DebitTransfer, TransferDebited } from "./DebitTransfer.ts";
+import { Deposit, MoneyDeposited } from "./Deposit.ts";
+import { AccountFrozen, Freeze } from "./Freeze.ts";
+import { Frozen } from "./Frozen.ts";
+import { InsufficientFunds } from "./InsufficientFunds.ts";
+import { NotOpen } from "./NotOpen.ts";
+import { NotOwner } from "./NotOwner.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
+import {
+  RecordSettlement,
+  SettlementOnClosedAccount,
+  SettlementReceived,
+} from "./RecordSettlement.ts";
+import { RefundStranded, RefundTransfer, TransferRefunded } from "./RefundTransfer.ts";
+import { DAILY_LIMIT, DailyLimitExceeded, MoneyWithdrawn, Withdraw } from "./Withdraw.ts";
 
 const Open = Schema.TaggedStruct("Open", {
   customerId: CustomerId,
@@ -175,6 +61,11 @@ const mustBeOpen = (s: AccountState, what: string): Open => {
 
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
+/**
+ * A bank account. Each command lives in its own file with the events it
+ * records and the rejections only it returns; this file holds the state and
+ * how commands and events change it.
+ */
 export class Account extends Aggregate.make("Account", {
   id: AccountId,
   state: AccountState,
@@ -191,21 +82,6 @@ export class Account extends Aggregate.make("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
-  events: [
-    AccountOpened,
-    OwnerChanged,
-    MoneyDeposited,
-    MoneyWithdrawn,
-    TransferDebited,
-    TransferCredited,
-    TransferRefunded,
-    RefundStranded,
-    SettlementReceived,
-    SettlementOnClosedAccount,
-    AccountFrozen,
-    AccountClosed,
-  ],
-
   decide: {
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened"

@@ -1,6 +1,7 @@
 import { Policy } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import { Account, Freeze } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
+import { Freeze } from "../Account/Freeze.ts";
 import { system } from "../Actor.ts";
 import { DailyOutflow, DailyOutflowExceeded } from "./DailyOutflow.ts";
 import { FraudCheck } from "./FraudCheck.ts";

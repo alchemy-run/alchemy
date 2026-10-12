@@ -1,7 +1,13 @@
 import { Policy } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import { Account, CreditTransfer, DebitTransfer, RefundTransfer } from "../Account/Account.ts";
-import { CompleteTransfer, FailTransfer, Transfer, TransferRequested } from "./Transfer.ts";
+import { Account } from "../Account/Account.ts";
+import { CreditTransfer } from "../Account/CreditTransfer.ts";
+import { DebitTransfer } from "../Account/DebitTransfer.ts";
+import { RefundTransfer } from "../Account/RefundTransfer.ts";
+import { CompleteTransfer } from "./CompleteTransfer.ts";
+import { FailTransfer } from "./FailTransfer.ts";
+import { TransferRequested } from "./RequestTransfer.ts";
+import { Transfer } from "./Transfer.ts";
 
 /**
  * Drives a transfer: debit the source on behalf of the requester, credit the

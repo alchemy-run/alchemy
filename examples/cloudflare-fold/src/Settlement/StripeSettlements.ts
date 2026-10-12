@@ -1,7 +1,8 @@
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
-import { Account, RecordSettlement } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
+import { RecordSettlement } from "../Account/RecordSettlement.ts";
 
 /**
  * Card top-ups settle through Stripe. Every `payment_intent.succeeded` whose

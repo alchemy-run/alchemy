@@ -1,23 +1,7 @@
-import { Aggregate, Command, Event, Rejection } from "alchemy/Fold";
+import { Aggregate } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "./CustomerId.ts";
-
-// ── Rejections ──────────────────────────────────────────────────
-
-export class AlreadyRegistered extends Rejection.make("AlreadyRegistered") {}
-
-// ── Events ──────────────────────────────────────────────────────
-
-export class CustomerRegistered extends Event.make("CustomerRegistered", {
-  data: { name: Schema.String },
-}) {}
-
-// ── Commands ────────────────────────────────────────────────────
-
-export class Register extends Command.make("Register", {
-  input: { name: Schema.String },
-  rejects: [AlreadyRegistered],
-}) {}
+import { AlreadyRegistered, CustomerRegistered, Register } from "./Register.ts";
 
 export class Customer extends Aggregate.make("Customer", {
   id: CustomerId,
@@ -27,7 +11,6 @@ export class Customer extends Aggregate.make("Customer", {
   ]),
   initial: { _tag: "New" },
   commands: [Register],
-  events: [CustomerRegistered],
   decide: {
     Register: (s, cmd) =>
       s._tag === "Registered"

@@ -1,8 +1,10 @@
 import { Mutation } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Account, Freeze, NotOpen } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
+import { Freeze } from "../Account/Freeze.ts";
+import { NotOpen } from "../Account/NotOpen.ts";
 import { agent } from "../Actor.ts";
 import { CurrentAgent } from "./CurrentAgent.ts";
 import { SupportAgentSession } from "./SupportAgentSession.ts";

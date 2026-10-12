@@ -1,7 +1,9 @@
 import { Mutation } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import { Account, ChangeOwner, NotOpen, NotPermitted } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
+import { ChangeOwner, NotPermitted } from "../Account/ChangeOwner.ts";
+import { NotOpen } from "../Account/NotOpen.ts";
 import { agent } from "../Actor.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { CurrentAgent } from "./CurrentAgent.ts";

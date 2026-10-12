@@ -22,17 +22,17 @@ class Capped extends Event.make("Capped") {}
 class TooBig extends Rejection.make("TooBig", { data: { max: Schema.Number } }) {}
 class Increment extends Command.make("Increment", {
   input: { by: Schema.Number },
+  events: [Incremented],
   rejects: [TooBig],
   reply: { total: Schema.Number },
 }) {}
-class Cap extends Command.make("Cap") {}
+class Cap extends Command.make("Cap", { events: [Capped] }) {}
 
 class Counter extends Aggregate.make("Counter", {
   id: Schema.String,
   state: Schema.Struct({ total: Schema.Number, capped: Schema.Boolean }),
   initial: { total: 0, capped: false },
   commands: [Increment, Cap],
-  events: [Incremented, Capped],
   decide: {
     Increment: (s, cmd) =>
       cmd.by > 10
@@ -76,13 +76,13 @@ class Moved extends Event.make("Moved", {
 }) {}
 class MakeMove extends Command.make("MakeMove", {
   input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+  events: [Moved],
 }) {}
 class Move extends Aggregate.make("Move", {
   id: Schema.String,
   state: Schema.Struct({}),
   initial: {},
   commands: [MakeMove],
-  events: [Moved],
   decide: { MakeMove: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
   evolve: { Moved: (s) => s },
 }) {}

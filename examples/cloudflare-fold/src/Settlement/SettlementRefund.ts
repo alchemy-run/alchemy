@@ -1,6 +1,7 @@
 import { Policy } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
-import { Account, SettlementOnClosedAccount } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
+import { SettlementOnClosedAccount } from "../Account/RecordSettlement.ts";
 import { Payments } from "./Payments.ts";
 
 /** Whenever money settles on a closed account, refund it. */

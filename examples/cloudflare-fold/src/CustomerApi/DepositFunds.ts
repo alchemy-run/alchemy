@@ -1,9 +1,12 @@
 import { Mutation } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Account, Deposit, NotOpen, NotOwner } from "../Account/Account.ts";
+import { Account } from "../Account/Account.ts";
 import { AccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
+import { Deposit } from "../Account/Deposit.ts";
+import { NotOpen } from "../Account/NotOpen.ts";
+import { NotOwner } from "../Account/NotOwner.ts";
 import { customer } from "../Actor.ts";
 import { Cents } from "../Money.ts";
 import { AccountRow } from "./AccountRow.ts";
