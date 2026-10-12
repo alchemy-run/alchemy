@@ -579,14 +579,17 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```
  *
  * ### Redeploying a Busy Durable Object
- * A redeploy reaches your Workers right away, but a Durable Object that
- * is still receiving requests can keep running its previous code. It
- * picks up the new code once it has been idle for about 20 seconds.
- * Until then a new Worker calling a method that only the new code
- * defines fails with `RpcCallError` ("The RPC receiver does not
- * implement the method"). Keep RPC changes backward compatible across a
- * deploy: add a method, ship the callers in a later deploy, and remove
- * old methods last.
+ * A redeploy reaches your Workers right away, but Cloudflare moves each
+ * Durable Object onto the new code separately. An object idle for about
+ * 10 seconds starts on the new code at its next call. An object that keeps
+ * receiving traffic (requests, an open WebSocket, or a recurring alarm)
+ * keeps running its previous code for up to about 5 minutes after the
+ * deploy, until Cloudflare restarts it; open WebSockets disconnect (code
+ * 1006) when that happens. Until then a new Worker calling a method that
+ * only the new code defines fails with `RpcCallError` ("The RPC receiver
+ * does not implement the method"). Keep RPC changes backward compatible
+ * across a deploy: add a method, ship the callers in a later deploy, and
+ * remove old methods last.
  *
  * **Example:** Tolerate an object that has not picked up a new method yet
  * ```typescript
