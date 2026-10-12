@@ -286,9 +286,21 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
         JSON.stringify({ key, subscription } satisfies Attachment),
       ),
     });
-    const response = yield* namespace.getByName(key).fetch(forwarded).pipe(Effect.orDie);
+    // Like every other call, ride out a deploy's rollout: an instance still
+    // running the previous script cannot upgrade, so retry until one does.
+    const response = yield* namespace
+      .getByName(key)
+      .fetch(forwarded)
+      .pipe(
+        Effect.filterOrFail(
+          (response) => response.status === 101,
+          (response) => new Error(`Live read upgrade answered ${response.status}`),
+        ),
+        Effect.retry(TRANSIT_RETRY),
+        Effect.orDie,
+      );
     // A fetched Response's headers are immutable; re-wrap the socket so
-    // middleware (CORS) can still add headers to the upgrade.
+    // middleware (CORS, cookies) can still add headers to the upgrade.
     const body = response.body;
     if (body._tag === "Raw" && body.body instanceof Response) {
       const webSocket = (body.body as unknown as { readonly webSocket: unknown }).webSocket;
