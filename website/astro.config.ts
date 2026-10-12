@@ -647,6 +647,10 @@ export default defineConfig({
                   link: "/cloudflare/data/r2-presigned-urls",
                 },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
