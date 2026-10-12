@@ -1,4 +1,5 @@
 import * as lcc from "@distilled.cloud/cloudflare/leaked-credential-checks";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
@@ -101,6 +102,18 @@ export type LeakedCredentialDetection = Resource<
  * @category Application Security
  */
 export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(TypeId);
+
+/**
+ * Creating a detection failed with `DetectionAlreadyExists`, but no detection
+ * with the same username/password expressions could be found on the zone.
+ */
+export class DetectionConflictUnresolved extends Data.TaggedError("DetectionConflictUnresolved")<{
+  readonly zoneId: string;
+}> {
+  override get message() {
+    return `Leaked credential detection reported as existing on zone ${this.zoneId} but was not found`;
+  }
+}
 
 /**
  * Returns true if the given value is a LeakedCredentialDetection resource.
@@ -218,11 +231,7 @@ export const LeakedCredentialDetectionProvider = () =>
             ),
           );
         if (!observed) {
-          return yield* Effect.fail(
-            new Error(
-              `Leaked credential detection reported as existing on zone ${zoneId} but was not found`,
-            ),
-          );
+          return yield* new DetectionConflictUnresolved({ zoneId });
         }
       }
 
