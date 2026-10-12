@@ -83,8 +83,8 @@ const executionRolePolicy = (
 // down), and are billed hourly (~$0.49/h for mw1.small, plus ~$0.045/h for the
 // test's single NAT gateway). The test builds its own private networking
 // (VPC + 2 private subnets in 2 AZs + IGW + one NAT gateway, see network.ts),
-// so the only reason for the AWS_TEST_MWAA=1 gate is time and cost.
-test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
+// so the only reason for the AWS_TEST_SLOW=1 gate is time and cost.
+test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "create environment, verify available, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

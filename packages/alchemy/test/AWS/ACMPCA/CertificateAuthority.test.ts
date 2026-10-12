@@ -76,54 +76,53 @@ const assertCaDeleted = (arn: string) =>
     Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]) }),
   );
 
-// A private CA bills a monthly fee (prorated) for as long as it exists, so
-// the live lifecycle is gated behind AWS_TEST_ACMPCA=1. It uses short-lived
-// certificate mode (the cheaper tier), never activates the CA (a
-// PENDING_CERTIFICATE CA deletes without disabling), and always destroys
-// what it created.
-test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
+// A private CA bills a prorated monthly fee while it exists. The lifecycle
+// keeps that to seconds: short-lived certificate mode (the cheaper tier), the
+// CA is never activated (a PENDING_CERTIFICATE CA deletes without disabling),
+// and the test always destroys what it created.
+test.provider(
   "create private CA + ACM permission, update, replace, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const { accountId } = yield* AWSEnvironment.current;
 
+      const caStack = (props: { commonName: string; tags: Record<string, string> }) =>
+        Effect.gen(function* () {
+          const ca = yield* CertificateAuthority("TestCA", {
+            subject: { commonName: props.commonName },
+            usageMode: "SHORT_LIVED_CERTIFICATE",
+            permanentDeletionTime: "7 days",
+            tags: props.tags,
+          });
+          const permission = yield* Permission("AcmRenewal", {
+            certificateAuthorityArn: ca.certificateAuthorityArn,
+          });
+          const policy = yield* CertificateAuthorityPolicy("SharePolicy", {
+            certificateAuthorityArn: ca.certificateAuthorityArn,
+            policy: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                  Action: [
+                    "acm-pca:DescribeCertificateAuthority",
+                    "acm-pca:GetCertificate",
+                    "acm-pca:GetCertificateAuthorityCertificate",
+                    "acm-pca:ListPermissions",
+                    "acm-pca:IssueCertificate",
+                    "acm-pca:RevokeCertificate",
+                  ],
+                  Resource: ca.certificateAuthorityArn,
+                },
+              ],
+            },
+          });
+          return { ca, permission, policy };
+        });
       const deployCa = (props: { commonName: string; tags: Record<string, string> }) =>
-        stack.deploy(
-          Effect.gen(function* () {
-            const ca = yield* CertificateAuthority("TestCA", {
-              subject: { commonName: props.commonName },
-              usageMode: "SHORT_LIVED_CERTIFICATE",
-              permanentDeletionTime: "7 days",
-              tags: props.tags,
-            });
-            const permission = yield* Permission("AcmRenewal", {
-              certificateAuthorityArn: ca.certificateAuthorityArn,
-            });
-            const policy = yield* CertificateAuthorityPolicy("SharePolicy", {
-              certificateAuthorityArn: ca.certificateAuthorityArn,
-              policy: {
-                Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-                    Action: [
-                      "acm-pca:DescribeCertificateAuthority",
-                      "acm-pca:GetCertificate",
-                      "acm-pca:GetCertificateAuthorityCertificate",
-                      "acm-pca:ListPermissions",
-                      "acm-pca:IssueCertificate",
-                      "acm-pca:RevokeCertificate",
-                    ],
-                    Resource: ca.certificateAuthorityArn,
-                  },
-                ],
-              },
-            });
-            return { ca, permission, policy };
-          }),
-        );
+        stack.deploy(caStack(props));
 
       // 1. CREATE — a fresh CA lands in PENDING_CERTIFICATE.
       const first = yield* deployCa({
@@ -177,11 +176,17 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
       expect(tags.Tags?.find((t) => t.Key === "updated")?.Value).toBe("true");
 
       // 3. REPLACE — changing the subject replaces the CA; the permission
-      // follows the new ARN and the old CA is deleted.
-      const third = yield* deployCa({
+      // follows the new ARN and the old CA is deleted. The new ARN is an
+      // unresolved Output at plan time, and the policy must still plan as a
+      // replace (not an in-place update that leaves it on the old CA).
+      const replaced = {
         commonName: "alchemy-test-replaced.internal",
         tags: { fixture: "acmpca" },
-      });
+      };
+      const replacePlan = yield* stack.plan(caStack(replaced));
+      expect(replacePlan.resources["TestCA"]).toMatchObject({ action: "replace" });
+      expect(replacePlan.resources["SharePolicy"]).toMatchObject({ action: "replace" });
+      const third = yield* deployCa(replaced);
       expect(third.ca.certificateAuthorityArn).not.toBe(first.ca.certificateAuthorityArn);
       expect(third.permission.certificateAuthorityArn).toBe(third.ca.certificateAuthorityArn);
       // The policy is replaced onto the new CA ...

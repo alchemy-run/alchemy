@@ -67,13 +67,13 @@ describe(
 // (VPC + 2 private subnets in 2 AZs + IGW + one NAT gateway). An environment
 // takes ~20-30 minutes to provision and ~20-30 minutes to delete and is billed
 // hourly while it exists (~$0.49/h + ~$0.045/h NAT), so this is gated behind
-// AWS_TEST_MWAA=1 (same gate as the Environment lifecycle test) and always
+// AWS_TEST_SLOW=1 (same gate as the Environment lifecycle test) and always
 // destroys what it created.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "MWAABindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_MWAA)(
+test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "token, REST API, and describe bindings against a live environment",
   () =>
     Effect.gen(function* () {

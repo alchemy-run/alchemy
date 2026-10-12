@@ -29,7 +29,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 /**
  * Environment-scoped binding fixture: deploys a real MWAA environment
  * (~20-30 minutes to provision, billed hourly while it exists — gated behind
- * AWS_TEST_MWAA) plus its supporting cast (private VPC networking with a NAT
+ * AWS_TEST_SLOW) plus its supporting cast (private VPC networking with a NAT
  * gateway, versioned DAGs bucket, execution role) and a Lambda bound to all
  * four MWAA bindings.
  */
