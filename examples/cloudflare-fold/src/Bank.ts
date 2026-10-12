@@ -15,6 +15,10 @@ import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
 import { Transfer } from "./Transfer/Transfer.ts";
+import {
+  TransferApprovalDeadline,
+  TransferApprovalDeadlineLive,
+} from "./Transfer/TransferApprovalDeadline.ts";
 import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.ts";
 
@@ -30,13 +34,20 @@ export class Bank extends Domain.make("Bank", {
     AccountTransfers,
     DailyOutflow,
   ],
-  policies: [MainAccountProvisioning, TransferExecution, FraudReview, SettlementRefund],
+  policies: [
+    MainAccountProvisioning,
+    TransferExecution,
+    TransferApprovalDeadline,
+    FraudReview,
+    SettlementRefund,
+  ],
 }) {}
 
 /** The policies' implementations. They require the FraudCheck and Payments ports. */
 export const BankPolicies = Layer.mergeAll(
   MainAccountProvisioningLive,
   TransferExecutionLive,
+  TransferApprovalDeadlineLive,
   FraudReviewLive,
   SettlementRefundLive,
 );

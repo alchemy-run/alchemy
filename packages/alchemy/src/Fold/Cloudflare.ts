@@ -156,65 +156,77 @@ const aggregateObject = (kit: AggregateKit) =>
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
-      return {
-        send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
-          reportDefects(
+      const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+        Effect.gen(function* () {
+          const { sent, kick } = yield* exclusively(
             Effect.gen(function* () {
-              const { sent, kick } = yield* exclusively(
-                Effect.gen(function* () {
-                  const duplicate = yield* state.storage.get<SendResult>(
-                    `receipt:${meta.commandId}`,
-                  );
-                  if (duplicate) return { sent: duplicate, kick: false };
-                  const current = (yield* state.storage.get<{
-                    state: Json | null;
-                    version: number;
-                  }>("meta")) ?? {
-                    state: null,
-                    version: 0,
-                  };
-                  const result = yield* Effect.sync(() =>
-                    kit.handle({
-                      id,
-                      state: current.state,
-                      version: current.version,
-                      command,
-                      commandId: meta.commandId,
-                      context: meta.context,
-                      now: Date.now(),
-                    }),
-                  );
-                  if (result._tag === "Rejected")
-                    return { sent: result as SendResult, kick: false };
-                  const sent: SendResult = {
-                    _tag: "Accepted",
-                    receipt: {
-                      stream: `${kit.name}/${id}`,
-                      version: result.version,
-                      events: result.events.map((e) => e.event),
-                      reply: result.reply,
-                    },
-                  };
-                  yield* state.storage.transaction(
-                    Effect.gen(function* () {
-                      const events: Record<string, StoredEvent> = {};
-                      for (const event of result.events)
-                        events[`event:${pad(event.envelope.seq)}`] = event;
-                      yield* state.storage.put(events);
-                      yield* state.storage.put("meta", {
-                        state: result.state,
-                        version: result.version,
-                      });
-                      yield* state.storage.put(`receipt:${meta.commandId}`, sent);
-                      yield* outbox.stage(result.deliveries);
-                    }),
-                  );
-                  return { sent, kick: result.deliveries.length > 0 };
+              const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+              if (duplicate) return { sent: duplicate, kick: false };
+              const current = (yield* state.storage.get<{
+                state: Json | null;
+                version: number;
+              }>("meta")) ?? {
+                state: null,
+                version: 0,
+              };
+              const result = yield* Effect.sync(() =>
+                kit.handle({
+                  id,
+                  state: current.state,
+                  version: current.version,
+                  command,
+                  commandId: meta.commandId,
+                  context: meta.context,
+                  now: Date.now(),
                 }),
               );
-              if (kick) yield* outbox.kick;
-              return sent;
+              if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+              const sent: SendResult = {
+                _tag: "Accepted",
+                receipt: {
+                  stream: `${kit.name}/${id}`,
+                  version: result.version,
+                  events: result.events.map((e) => e.event),
+                  reply: result.reply,
+                },
+              };
+              yield* state.storage.transaction(
+                Effect.gen(function* () {
+                  const events: Record<string, StoredEvent> = {};
+                  for (const event of result.events)
+                    events[`event:${pad(event.envelope.seq)}`] = event;
+                  yield* state.storage.put(events);
+                  yield* state.storage.put("meta", {
+                    state: result.state,
+                    version: result.version,
+                  });
+                  yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+                  yield* outbox.stage(result.deliveries);
+                }),
+              );
+              return { sent, kick: result.deliveries.length > 0 };
             }),
+          );
+          if (kick) yield* outbox.kick;
+          return sent;
+        });
+      // Scheduled commands: one durable callback job per command id, run here when due.
+      const timers = yield* makeCallback(
+        "fold:schedule",
+        (job: { readonly id: string; readonly command: Json; readonly meta: Aggregate.SendMeta }) =>
+          send(job.id, job.command, job.meta),
+      );
+      return {
+        send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
+          reportDefects(send(id, command, meta)),
+        schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
+          reportDefects(
+            timers.schedule(
+              meta.commandId,
+              "at" in due
+                ? { at: due.at, payload: { id, command, meta } }
+                : { after: due.afterMillis, payload: { id, command, meta } },
+            ),
           ),
         state: () =>
           reportDefects(
@@ -308,7 +320,8 @@ const POLL = Schedule.spaced("300 millis");
  * - **Aggregates**: one instance per id. Commands are serialized; events,
  *   state, the receipt (for idempotency) and an outbox commit in one storage
  *   transaction. The outbox is delivered right after the commit, in order,
- *   with a durable callback as the backstop.
+ *   with a durable callback as the backstop. Scheduled commands are durable
+ *   callbacks on the target instance.
  * - **Views**: one instance per key, with per-source checkpoints so repeated
  *   deliveries are harmless. State, emitted events and the outbox to
  *   downstream views and policies commit together. `watch` and `events` poll
@@ -344,6 +357,8 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
             return {
               send: (id, command, meta) =>
                 unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+              schedule: (id, command, meta, due) =>
+                unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
             };
           }),

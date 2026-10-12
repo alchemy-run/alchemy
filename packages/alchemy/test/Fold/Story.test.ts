@@ -56,12 +56,15 @@ class Increment extends Command.make("Increment", {
   reply: { total: Schema.Number },
 }) {}
 class Cap extends Command.make("Cap", { target: Schema.String, events: [Capped] }) {}
+class Reminded extends Event.make("Reminded") {}
+/** Never rejects, so it can be scheduled. */
+class Remind extends Command.make("Remind", { target: Schema.String, events: [Reminded] }) {}
 
 class Counter extends Aggregate.make("Counter", {
   id: Schema.String,
   state: Schema.Struct({ total: Schema.Number, capped: Schema.Boolean }),
   initial: { total: 0, capped: false },
-  commands: [Increment, Cap, ResetCounter],
+  commands: [Increment, Cap, ResetCounter, Remind],
   decide: {
     ResetCounter: Effect.fn(function* () {
       const operator = yield* Operator;
@@ -73,11 +76,13 @@ class Counter extends Aggregate.make("Counter", {
         ? new TooBig({ max: 10 })
         : [new Incremented({ by: cmd.by, total: s.total + cmd.by })],
     Cap: (s) => (s.capped ? [] : [new Capped()]),
+    Remind: (s) => (s.capped ? [new Reminded()] : []),
   },
   evolve: {
     Incremented: (s, e) => ({ ...s, total: e.total }),
     Capped: (s) => ({ ...s, capped: true }),
     WasReset: (s) => ({ ...s, total: 0 }),
+    Reminded: (s) => s,
   },
   reply: {
     Increment: (s) => ({ total: s.total }),
@@ -190,14 +195,25 @@ const CapWhenLargeLive = CapWhenLarge.toLayer(
   }),
 );
 
+// An hour after a counter is capped, remind someone.
+class RemindWhenCapped extends Policy.make("RemindWhenCapped", { from: Counter, on: [Capped] }) {}
+const RemindWhenCappedLive = RemindWhenCapped.toLayer(
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return Effect.fn(function* ({ source }) {
+      yield* counters.schedule(source, new Remind(), { after: "1 hour" });
+    });
+  }),
+);
+
 class Counters extends Domain.make("Counters", {
   aggregates: [Counter, Move],
   views: [Totals, History, Flows, Rich],
-  policies: [CapWhenLarge, CapWhenOverdrawn],
+  policies: [CapWhenLarge, CapWhenOverdrawn, RemindWhenCapped],
 }) {}
 
 const story = Story.make(Counters, {
-  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive),
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
   ports: [Approval],
 });
 const c1 = Counter.ref("c-1");
@@ -333,7 +349,9 @@ describe("Fold Story", () => {
       Effect.provide(
         Layer.mergeAll(
           OperatorSessionLive,
-          Counters.layer(Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive)),
+          Counters.layer(
+            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+          ),
         ).pipe(
           Layer.provide(
             Layer.mergeAll(
@@ -343,6 +361,18 @@ describe("Fold Story", () => {
           ),
         ),
       ),
+    ),
+  );
+
+  it.effect("a scheduled command fires when the clock reaches it", () =>
+    story(
+      Story.clock("2026-01-01T00:00:00Z"),
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Capped()),
+      Story.clock("2026-01-01T00:59:00Z"),
+      Story.then(c1),
+      Story.clock("2026-01-01T01:00:00Z"),
+      Story.then(c1, new Reminded()),
     ),
   );
 });

@@ -155,6 +155,18 @@ export interface AggregateStore {
    * then deliver at least once, in order.
    */
   readonly send: (id: string, command: Json, meta: Aggregate.SendMeta) => Effect.Effect<SendResult>;
+  /**
+   * Send a command to one instance when it is due, durably (it survives
+   * restarts) and at least once. Replaces a pending one with the same
+   * `commandId`. Rejections are impossible: only non-rejecting commands are
+   * scheduled.
+   */
+  readonly schedule: (
+    id: string,
+    command: Json,
+    meta: Aggregate.SendMeta,
+    due: Aggregate.Due,
+  ) => Effect.Effect<void>;
   /** Read the stored state of an instance. */
   readonly state: (
     id: string,

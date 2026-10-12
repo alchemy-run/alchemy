@@ -1,0 +1,13 @@
+import { Command } from "alchemy/Fold";
+import { TransferFailed } from "./FailTransfer.ts";
+import { TransferId } from "./TransferId.ts";
+
+/**
+ * The approval window closed. Scheduled by `TransferApprovalDeadline`; it
+ * reports a fact, so it never rejects, and it records nothing if the transfer
+ * was approved in time.
+ */
+export class ExpireTransfer extends Command.make("ExpireTransfer", {
+  target: TransferId,
+  events: [TransferFailed],
+}) {}

@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import type * as Aggregate from "./Aggregate.ts";
 import {
   type Delivery,
   emptySnapshot,
@@ -32,7 +33,10 @@ export interface Options {
  * Control surface of an in-memory platform.
  */
 export interface Control {
-  /** Deliver every queued delivery (and those it produces) until the queue is empty. */
+  /**
+   * Send due scheduled commands, then deliver every queued delivery (and
+   * those it produces) until the queue is empty.
+   */
   readonly drain: Effect.Effect<void>;
   /** `true` when nothing is queued and every running policy is suspended. */
   readonly idle: Effect.Effect<boolean>;
@@ -57,8 +61,17 @@ export const make = (
   let running = 0;
   let suspended = 0;
   const failures: Array<unknown> = [];
+  // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
+  const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
 
-  const drain: Effect.Effect<void> = Effect.suspend(function loop(): Effect.Effect<void> {
+  /** Send every scheduled command that is due on the platform's clock. */
+  const fireDue: Effect.Effect<void> = Effect.suspend(() => {
+    const due = [...timers].filter(([, timer]) => timer.at <= now());
+    for (const [key] of due) timers.delete(key);
+    return Effect.forEach(due, ([, timer]) => timer.fire, { discard: true });
+  });
+
+  const deliverAll: Effect.Effect<void> = Effect.suspend(function loop(): Effect.Effect<void> {
     const next = pending.shift();
     if (!next) {
       draining = false;
@@ -67,6 +80,8 @@ export const make = (
     draining = true;
     return next.deliver(next.delivery).pipe(Effect.flatMap(loop));
   });
+
+  const drain: Effect.Effect<void> = fireDue.pipe(Effect.andThen(deliverAll));
 
   const enqueue = (
     deliveries: ReadonlyArray<Delivery>,
@@ -112,40 +127,54 @@ export const make = (
             );
           return found;
         };
+        const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+          lock.withPermits(1)(
+            Effect.gen(function* () {
+              const current = instance(id);
+              const duplicate = current.receipts.get(meta.commandId);
+              if (duplicate) return duplicate;
+              const result = kit.handle({
+                id,
+                state: current.state,
+                version: current.version,
+                command,
+                commandId: meta.commandId,
+                context: meta.context,
+                now: now(),
+              });
+              if (result._tag === "Rejected") return result satisfies SendResult;
+              current.state = result.state;
+              current.version = result.version;
+              current.events.push(...result.events);
+              const sent: SendResult = {
+                _tag: "Accepted",
+                receipt: {
+                  stream: `${kit.name}/${id}`,
+                  version: result.version,
+                  events: result.events.map((e) => e.event),
+                  reply: result.reply,
+                },
+              };
+              current.receipts.set(meta.commandId, sent);
+              yield* enqueue(result.deliveries, kit.deliver);
+              return sent;
+            }),
+          );
         return {
-          send: (id, command, meta) =>
-            lock.withPermits(1)(
-              Effect.gen(function* () {
-                const current = instance(id);
-                const duplicate = current.receipts.get(meta.commandId);
-                if (duplicate) return duplicate;
-                const result = kit.handle({
-                  id,
-                  state: current.state,
-                  version: current.version,
-                  command,
-                  commandId: meta.commandId,
-                  context: meta.context,
-                  now: now(),
-                });
-                if (result._tag === "Rejected") return result satisfies SendResult;
-                current.state = result.state;
-                current.version = result.version;
-                current.events.push(...result.events);
-                const sent: SendResult = {
-                  _tag: "Accepted",
-                  receipt: {
-                    stream: `${kit.name}/${id}`,
-                    version: result.version,
-                    events: result.events.map((e) => e.event),
-                    reply: result.reply,
-                  },
-                };
-                current.receipts.set(meta.commandId, sent);
-                yield* enqueue(result.deliveries, kit.deliver);
-                return sent;
-              }),
-            ),
+          send,
+          schedule: (id, command, meta, due) =>
+            Effect.suspend(() => {
+              const at = "at" in due ? due.at : now() + due.afterMillis;
+              timers.set(`${kit.name}/${id}/${meta.commandId}`, {
+                at,
+                fire: send(id, command, meta).pipe(Effect.asVoid),
+              });
+              // Stories fire timers from `drain` as their clock moves; otherwise wait in real time.
+              if (options.manual) return Effect.void;
+              return Effect.forkDetach(
+                Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
+              ).pipe(Effect.asVoid);
+            }),
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
           events: (id) => Effect.sync(() => [...instance(id).events]),

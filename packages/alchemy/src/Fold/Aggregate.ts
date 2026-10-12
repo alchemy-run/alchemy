@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -145,6 +146,21 @@ export interface SendOptions {
 }
 
 /**
+ * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
+ */
+export type ScheduleOptions = SendOptions &
+  (
+    | { readonly at: DateTime.Utc; readonly after?: never }
+    | { readonly after: Duration.Input; readonly at?: never }
+  );
+
+/**
+ * When a scheduled command is due: an epoch-millisecond time, or a delay the
+ * platform measures on its own clock (stories control it with `clock`).
+ */
+export type Due = { readonly at: number } | { readonly afterMillis: number };
+
+/**
  * Metadata a platform receives with every command.
  */
 export interface SendMeta {
@@ -212,9 +228,27 @@ export interface Client<Def extends AnyDefinition> {
     Inst<CommandClassOf<Def, Cmd>["rejects"][number]>,
     Command.ContextOf<CommandClassOf<Def, Cmd>>
   >;
+  /**
+   * Send a command later, durably: a deadline or a reminder. Only commands
+   * that never reject can be scheduled, since nobody is waiting to handle a
+   * rejection when it fires; such a command reports a fact ("the approval
+   * window closed") and records nothing when it no longer applies.
+   * Scheduling again with the same command id replaces the earlier one.
+   */
+  readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
+    target: Target<Def>,
+    command: Cmd,
+    options: ScheduleOptions,
+  ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
+
+/** The commands of a definition that never reject, so can be scheduled. */
+export type Schedulable<Def extends AnyDefinition> = Extract<
+  Def["commands"][number],
+  { readonly rejects: readonly [] }
+>;
 
 /**
  * The untyped form of {@link Client} the framework implements.
@@ -227,6 +261,11 @@ export interface ClientImpl {
     command: { readonly _tag: string },
     options?: SendOptions,
   ) => Effect.Effect<Receipt, unknown>;
+  readonly schedule: (
+    target: unknown,
+    command: { readonly _tag: string },
+    options: ScheduleOptions,
+  ) => Effect.Effect<void>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 

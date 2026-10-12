@@ -30,6 +30,11 @@ import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 import { AccountTransfers } from "../src/Transfer/AccountTransfers.ts";
+import {
+  ApproveTransfer,
+  NotAwaitingApproval,
+  TransferApproved,
+} from "../src/Transfer/ApproveTransfer.ts";
 import { TransferCompleted } from "../src/Transfer/CompleteTransfer.ts";
 import { TransferFailed } from "../src/Transfer/FailTransfer.ts";
 import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTransfer.ts";
@@ -212,6 +217,7 @@ it.effect("a transfer completes: the process manager drives both accounts", () =
         to: a2.id,
         amount: 40,
         requestedBy: sam,
+        needsApproval: false,
       }),
     ),
     then(a1, new TransferDebited({ transferId: t1.id, amount: 40, balanceAfter: 60 })),
@@ -237,10 +243,81 @@ it.effect("a customer can't move money out of someone else's account with a tran
         to: a2.id,
         amount: 40,
         requestedBy: alex,
+        needsApproval: false,
       }),
     ),
     then(a1),
     then(t1, new TransferFailed({ transferId: t1.id, reason: "not your account" })),
+  ),
+);
+
+it.effect("a large transfer waits for a support agent's approval", () =>
+  story(
+    given(a1, opened("c-1"), new MoneyDeposited({ amount: 100_000, balanceAfter: 100_000 })),
+    given(a2, opened("c-2")),
+    as(sam),
+    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 20_000 })),
+    then(
+      t1,
+      new TransferRequested({
+        transferId: t1.id,
+        from: a1.id,
+        to: a2.id,
+        amount: 20_000,
+        requestedBy: sam,
+        needsApproval: true,
+      }),
+    ),
+    then(a1),
+    view(TransferStatus, t1, (v) =>
+      expect(TransferStatus.computed.status(v)).toBe("awaiting-approval"),
+    ),
+    as(agent("support-7")),
+    when(t1, new ApproveTransfer()),
+    then(
+      t1,
+      new TransferApproved({
+        transferId: t1.id,
+        from: a1.id,
+        to: a2.id,
+        amount: 20_000,
+        requestedBy: sam,
+        approvedBy: agent("support-7"),
+      }),
+      new TransferCompleted({ transferId: t1.id }),
+    ),
+    then(a1, new TransferDebited({ transferId: t1.id, amount: 20_000, balanceAfter: 80_000 })),
+    then(a2, new TransferCredited({ transferId: t1.id, amount: 20_000, balanceAfter: 20_000 })),
+  ),
+);
+
+it.effect("an unapproved transfer expires when its approval window closes", () =>
+  story(
+    clock("2026-01-01T09:00:00Z"),
+    given(a1, opened("c-1"), new MoneyDeposited({ amount: 100_000, balanceAfter: 100_000 })),
+    given(a2, opened("c-2")),
+    as(sam),
+    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 20_000 })),
+    then(
+      t1,
+      new TransferRequested({
+        transferId: t1.id,
+        from: a1.id,
+        to: a2.id,
+        amount: 20_000,
+        requestedBy: sam,
+        needsApproval: true,
+      }),
+    ),
+    clock("2026-01-02T08:59:00Z"),
+    then(t1),
+    clock("2026-01-02T09:00:00Z"),
+    then(t1, new TransferFailed({ transferId: t1.id, reason: "not approved in time" })),
+    // Approval and expiry race on the Transfer; expiry won, so approval is too late.
+    as(agent("support-7")),
+    when(t1, new ApproveTransfer()),
+    rejected(new NotAwaitingApproval()),
+    then(a1),
   ),
 );
 
@@ -258,6 +335,7 @@ it.effect("a transfer to a closed account is compensated", () =>
         to: a2.id,
         amount: 40,
         requestedBy: sam,
+        needsApproval: false,
       }),
     ),
     then(

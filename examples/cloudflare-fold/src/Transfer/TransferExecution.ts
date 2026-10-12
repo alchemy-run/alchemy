@@ -4,25 +4,29 @@ import { Account } from "../Account/Account.ts";
 import { CreditTransfer } from "../Account/CreditTransfer.ts";
 import { DebitTransfer } from "../Account/DebitTransfer.ts";
 import { RefundTransfer } from "../Account/RefundTransfer.ts";
+import { TransferApproved } from "./ApproveTransfer.ts";
 import { CompleteTransfer } from "./CompleteTransfer.ts";
 import { FailTransfer } from "./FailTransfer.ts";
 import { TransferRequested } from "./RequestTransfer.ts";
 import { Transfer } from "./Transfer.ts";
 
 /**
- * Drives a transfer: debit the source on behalf of the requester, credit the
+ * Drives a transfer once it may run (requested, or approved if it needed
+ * approval): debit the source on behalf of the requester, credit the
  * destination, then complete, or compensate and fail.
  */
 export class TransferExecution extends Policy.make("TransferExecution", {
   from: Transfer,
-  on: [TransferRequested],
+  on: [TransferRequested, TransferApproved],
 }) {}
 
 export const TransferExecutionLive = TransferExecution.toLayer(
   Effect.gen(function* () {
     const accounts = yield* Account;
     const transfers = yield* Transfer;
-    return Effect.fn(function* ({ source, event: { transferId, from, to, amount, requestedBy } }) {
+    return Effect.fn(function* ({ source, event }) {
+      if (event._tag === "TransferRequested" && event.needsApproval) return;
+      const { transferId, from, to, amount, requestedBy } = event;
       const fail = (reason: string) =>
         transfers.send(source, new FailTransfer({ reason })).pipe(Effect.as(false));
 

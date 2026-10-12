@@ -21,6 +21,7 @@ export class TransferStatus extends View.make("TransferStatus", {
     from: Schema.NullOr(AccountId),
     to: Schema.NullOr(AccountId),
     amount: Schema.NullOr(Cents),
+    awaitingApproval: Schema.Boolean,
     debited: Schema.Boolean,
     credited: Schema.Boolean,
     refunded: Schema.Boolean,
@@ -31,6 +32,7 @@ export class TransferStatus extends View.make("TransferStatus", {
     from: null,
     to: null,
     amount: null,
+    awaitingApproval: false,
     debited: false,
     credited: false,
     refunded: false,
@@ -38,15 +40,30 @@ export class TransferStatus extends View.make("TransferStatus", {
     failedReason: null,
   },
   evolve: {
-    TransferRequested: (v, e) => ({ ...v, from: e.from, to: e.to, amount: e.amount }),
+    TransferRequested: (v, e) => ({
+      ...v,
+      from: e.from,
+      to: e.to,
+      amount: e.amount,
+      awaitingApproval: e.needsApproval,
+    }),
+    TransferApproved: (v) => ({ ...v, awaitingApproval: false }),
     TransferDebited: (v) => ({ ...v, debited: true }),
     TransferCredited: (v) => ({ ...v, credited: true }),
     TransferRefunded: (v) => ({ ...v, refunded: true }),
     TransferCompleted: (v, _, { at }) => ({ ...v, completedAt: at }),
-    TransferFailed: (v, e) => ({ ...v, failedReason: e.reason }),
+    TransferFailed: (v, e) => ({ ...v, awaitingApproval: false, failedReason: e.reason }),
   },
   computed: {
-    status: (v): "completed" | "failed" | "in-flight" | "pending" =>
-      v.completedAt ? "completed" : v.failedReason ? "failed" : v.debited ? "in-flight" : "pending",
+    status: (v): "completed" | "failed" | "in-flight" | "awaiting-approval" | "pending" =>
+      v.completedAt
+        ? "completed"
+        : v.failedReason
+          ? "failed"
+          : v.debited
+            ? "in-flight"
+            : v.awaitingApproval
+              ? "awaiting-approval"
+              : "pending",
   },
 }) {}

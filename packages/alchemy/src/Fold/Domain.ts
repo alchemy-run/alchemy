@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -214,6 +215,19 @@ const aggregateClient = (
       return result._tag === "Rejected"
         ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
         : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+    }),
+  schedule: (target, command, options) =>
+    Effect.gen(function* () {
+      const commandId = yield* Aggregate.commandIdFor(options);
+      const context = yield* Command.captureContext;
+      yield* store.schedule(
+        Aggregate.targetId(target),
+        kernel.encodeCommand(aggregate, command),
+        { commandId, context },
+        options.at !== undefined
+          ? { at: DateTime.toEpochMillis(options.at) }
+          : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
+      );
     }),
   state: (target) =>
     store

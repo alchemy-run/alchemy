@@ -151,7 +151,7 @@ const resolve = <Success>(op: Port.Op<any, Success>, value: Success): Step => ({
   value,
 });
 
-/** Set the time used for subsequent commands. */
+/** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number): Step => ({ _tag: "Clock", at });
 
 /**
@@ -317,6 +317,8 @@ const make =
           switch (s._tag) {
             case "Clock": {
               clockState.now = typeof s.at === "number" ? s.at : Date.parse(s.at);
+              // Scheduled commands that are now due fire, and their policies run.
+              yield* settle(step);
               break;
             }
             case "Provide": {
