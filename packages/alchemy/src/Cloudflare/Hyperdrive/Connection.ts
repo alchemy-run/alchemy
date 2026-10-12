@@ -44,7 +44,33 @@ export type AccessOrigin = {
   accessClientSecret: Redacted.Redacted<string>;
 };
 
-export type Origin = PublicOrigin | AccessOrigin;
+/**
+ * Origin configuration for a private database reached through Workers VPC.
+ *
+ * Hyperdrive egresses through a TCP VPC Service
+ * ({@link https://developers.cloudflare.com/workers-vpc/ Workers VPC}), which
+ * routes over a Cloudflare Tunnel into the private network — e.g. an Aurora
+ * or RDS instance inside an AWS VPC. The host and port live on the VPC
+ * Service, so they are not repeated here. mTLS cannot be combined with a VPC
+ * origin; TLS is managed on the VPC Service.
+ */
+export type VpcOrigin = {
+  scheme: Scheme;
+  /**
+   * Identifier of the TCP VPC Service to connect through, e.g.
+   * `service.serviceId` of a `Cloudflare.Connectivity.DirectoryService`
+   * with `type: "tcp"`.
+   */
+  serviceId: string;
+  database: string;
+  user: string;
+  /**
+   * Database password.
+   */
+  password: Redacted.Redacted<string>;
+};
+
+export type Origin = PublicOrigin | AccessOrigin | VpcOrigin;
 
 export type Caching = {
   /**
@@ -89,7 +115,8 @@ export type Props = {
   name?: string;
   /**
    * Database connection origin. Hyperdrive supports public Postgres/MySQL
-   * databases and databases fronted by Cloudflare Access.
+   * databases, databases fronted by Cloudflare Access, and private databases
+   * reached through a Workers VPC Service.
    */
   origin: Origin;
   /**
@@ -141,6 +168,35 @@ export type Connection = Resource<
  *     scheme: "postgres",
  *     host: "db.example.com",
  *     port: 5432,
+ *     database: "app",
+ *     user: "app",
+ *     password: yield* Config.Redacted("DB_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Connecting to a private database
+ * A database inside a private network (e.g. Aurora or RDS in an AWS VPC) is
+ * reached through Workers VPC: run `cloudflared` inside the network with the
+ * Tunnel's token, expose the database as a TCP VPC Service, and point
+ * Hyperdrive at the service.
+ *
+ * **Example:** Aurora in an AWS VPC through Workers VPC
+ * ```typescript
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("VpcTunnel");
+ * const service = yield* Cloudflare.Connectivity.DirectoryService("Aurora", {
+ *   type: "tcp",
+ *   tcpPort: 5432,
+ *   appProtocol: "postgresql",
+ *   host: {
+ *     hostname: "my-cluster.cluster-abc123.us-east-1.rds.amazonaws.com",
+ *     resolverNetwork: { tunnelId: tunnel.tunnelId },
+ *   },
+ * });
+ * const hd = yield* Cloudflare.Hyperdrive.Connection("Aurora", {
+ *   origin: {
+ *     scheme: "postgres",
+ *     serviceId: service.serviceId,
  *     database: "app",
  *     user: "app",
  *     password: yield* Config.Redacted("DB_PASSWORD"),
@@ -399,6 +455,15 @@ const unwrap = (v: string | Redacted.Redacted<string>): string =>
  * runtime schema also accepts `Redacted<string>`.
  */
 const toRequestOrigin = (origin: Origin) => {
+  if ("serviceId" in origin) {
+    return {
+      database: origin.database,
+      password: unwrap(origin.password),
+      scheme: origin.scheme,
+      serviceId: origin.serviceId,
+      user: origin.user,
+    };
+  }
   if ("accessClientId" in origin) {
     return {
       accessClientId: unwrap(origin.accessClientId),

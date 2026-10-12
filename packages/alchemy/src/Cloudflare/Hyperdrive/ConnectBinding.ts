@@ -84,6 +84,12 @@ export const getHyperdriveDevOrigin = (connection: Connection) => {
             "Select a different origin or set the `dev` property to an origin that does not require Cloudflare Access.",
         );
       }
+      if ("serviceId" in origin) {
+        throw new Error(
+          `Hyperdrive instance ${connection.LogicalId} has an origin that is reached through a Workers VPC Service. This is not supported in development mode. ` +
+            "Set the `dev` property to an origin reachable from your machine.",
+        );
+      }
       return {
         scheme: origin.scheme,
         host: origin.host,
