@@ -22,6 +22,7 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -94,8 +95,25 @@ export interface HarnessPrepare {
   readonly instance?: ContainerStartOptions["instance"];
 }
 
-/** The instance of the Durable Object class that builds and keeps the prepared snapshot. */
+/**
+ * The instances of the Durable Object class that build and keep prepared
+ * snapshots: one per image and command set (`<prefix>:<hash>`), so changing
+ * either reaches a fresh instance running the current code.
+ */
 export const PREPARE_INSTANCE = "~alchemy-harness-prepare";
+
+/** Identifies a prepared snapshot: the image it's built on and the commands. */
+const preparedHash = (prepare: HarnessPrepare, image: string) =>
+  Effect.promise(async () => {
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${image}\n${JSON.stringify(prepare.commands)}`),
+    );
+    return [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32);
+  });
 
 const DEFAULT_STATE = ["~/.claude/projects", "~/.codex/sessions", "~/.local/share/opencode"];
 
@@ -185,20 +203,26 @@ git reset -q
 git for-each-ref --format='delete %(refname)' refs/alchemy/restore | git update-ref --stdin
 rm -f $BUNDLES`;
 
+/** The bundle commands run by the harness trust (system roots plus the egress CA). */
+const EXEC_CA_BUNDLE = `${EGRESS_CA_BUNDLE}.exec`;
+
 /**
  * Commands run with `exec` don't inherit the container program's
  * environment: trust the egress interception CA here too (see
- * Runtime/Bootstrap/EgressCa.ts), building the bundle if the program hasn't
- * yet.
+ * Runtime/Bootstrap/EgressCa.ts). The platform writes the CA shortly after
+ * the container starts with egress, so wait for it when egress is set
+ * ($ALCHEMY_EXPECT_EGRESS_CA).
  */
-const TRUST_EGRESS_CA = `if [ -f ${EGRESS_CA} ]; then
-  if [ ! -s ${EGRESS_CA_BUNDLE} ]; then
-    for roots in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
-      if [ -f "$roots" ]; then cat "$roots" > ${EGRESS_CA_BUNDLE}; break; fi
-    done
-    cat ${EGRESS_CA} >> ${EGRESS_CA_BUNDLE}
-  fi
-  export SSL_CERT_FILE=${EGRESS_CA_BUNDLE} GIT_SSL_CAINFO=${EGRESS_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EGRESS_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EGRESS_CA_BUNDLE} CURL_CA_BUNDLE=${EGRESS_CA_BUNDLE}
+const TRUST_EGRESS_CA = `if [ -n "$ALCHEMY_EXPECT_EGRESS_CA" ]; then
+  i=0
+  while [ ! -s ${EGRESS_CA} ] && [ $i -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
+fi
+if [ -s ${EGRESS_CA} ]; then
+  for roots in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+    if [ -f "$roots" ]; then cat "$roots" > ${EXEC_CA_BUNDLE}; break; fi
+  done
+  cat ${EGRESS_CA} >> ${EXEC_CA_BUNDLE}
+  export SSL_CERT_FILE=${EXEC_CA_BUNDLE} GIT_SSL_CAINFO=${EXEC_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EXEC_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EXEC_CA_BUNDLE} CURL_CA_BUNDLE=${EXEC_CA_BUNDLE}
 fi
 `;
 
@@ -479,6 +503,9 @@ export const Harness = (
 
     //#region running commands in the container
 
+    /** Whether the running container has egress (so its CA will appear). */
+    let expectEgressCa = false;
+
     const sh = (
       script: string,
       execOptions: {
@@ -490,7 +517,11 @@ export const Harness = (
         Effect.gen(function* () {
           const stdin = execOptions.stdin;
           const child = yield* sandbox.exec(["sh", "-c", `${TRUST_EGRESS_CA}${script}`], {
-            env: { ...GIT_IDENTITY, ...execOptions.env },
+            env: {
+              ...GIT_IDENTITY,
+              ...(expectEgressCa ? { ALCHEMY_EXPECT_EGRESS_CA: "1" } : {}),
+              ...execOptions.env,
+            },
             stdout: "pipe",
             stderr: "pipe",
             ...(stdin ? { stdin: new Blob([stdin as Uint8Array<ArrayBuffer>]).stream() } : {}),
@@ -688,80 +719,152 @@ export const Harness = (
 
     //#region the prepared workspace (a build cache, kept by one instance)
 
-    /** Builds in progress in this instance, by key. */
-    const preparing = new Map<string, Promise<{ readonly id: string }>>();
+    type PreparedStatus =
+      | { readonly status: "ready"; readonly id: string }
+      | { readonly status: "building" }
+      | { readonly status: "failed"; readonly message: string };
 
-    /** Build (or reuse) the prepared snapshot for `image`. Runs in {@link PREPARE_INSTANCE}. */
-    const buildPrepared = (prepare: HarnessPrepare, image: string) =>
+    /** Builds in this instance, by key: running, or failed (reported once). */
+    const builds = new Map<string, PreparedStatus>();
+
+    /**
+     * Run one prepare command detached in the container — writing its output
+     * and exit code to files — and poll for the exit code with short calls,
+     * so a long command never rides on one long-lived connection.
+     */
+    const runDetached = (command: string, index: number) =>
       Effect.gen(function* () {
-        const key = `prepared:${image}:${JSON.stringify(prepare.commands)}`;
-        const existing = yield* getJson<{ readonly id: string }>(key);
-        if (existing) return existing;
-        const build = Effect.gen(function* () {
-          // A build interrupted earlier may have left its container running.
-          yield* sandbox.destroy().pipe(Effect.ignore);
-          yield* sandbox
-            .start({
-              image,
-              egress: [...(prepare.egress ?? [])],
-              enableInternet: prepare.enableInternet ?? false,
-              ...(prepare.instance ? { instance: prepare.instance } : {}),
-            } as ContainerStartOptions)
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new SessionError({
-                    message: `starting the prepare container failed: ${String(cause)}`,
-                  }),
-              ),
-            );
-          for (const command of prepare.commands) {
-            yield* check(`prepare: ${command}`, yield* sh(command));
-          }
-          const taken = yield* sandbox.snapshotContainer({ name: "harness-prepared" }).pipe(
+        const log = `/tmp/alchemy-prepare-${index}.log`;
+        const exit = `/tmp/alchemy-prepare-${index}.exit`;
+        yield* check(
+          `prepare: starting ${command}`,
+          yield* sh(
+            `rm -f ${exit}
+if command -v setsid >/dev/null 2>&1; then detach=setsid; else detach=nohup; fi
+$detach sh -c 'sh -c "$PREPARE_COMMAND" > ${log} 2>&1; echo $? > ${exit}' </dev/null >/dev/null 2>&1 &`,
+            { env: { PREPARE_COMMAND: command } },
+          ),
+        );
+        const code = yield* sh(`cat ${exit} 2>/dev/null`).pipe(
+          Effect.map((result) => new TextDecoder().decode(result.stdout).trim()),
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (value) => value !== "",
+          }),
+          Effect.timeoutOrElse({
+            duration: "60 minutes",
+            orElse: () =>
+              Effect.fail(new SessionError({ message: `prepare: ${command} ran over 60 minutes` })),
+          }),
+        );
+        if (code !== "0") {
+          const tail = new TextDecoder().decode((yield* sh(`tail -c 4000 ${log}`)).stdout);
+          return yield* new SessionError({
+            message: `prepare: ${command} failed (${code}): ${tail}`,
+          });
+        }
+      });
+
+    /** Build the prepared snapshot for `image`. Runs in a prepare instance. */
+    const buildPrepared = (prepare: HarnessPrepare, image: string, key: string) =>
+      Effect.gen(function* () {
+        // A build interrupted earlier may have left its container running.
+        yield* sandbox.destroy().pipe(Effect.ignore);
+        expectEgressCa = (prepare.egress?.length ?? 0) > 0;
+        yield* sandbox
+          .start({
+            image,
+            egress: [...(prepare.egress ?? [])],
+            enableInternet: prepare.enableInternet ?? false,
+            ...(prepare.instance ? { instance: prepare.instance } : {}),
+          } as ContainerStartOptions)
+          .pipe(
             Effect.mapError(
               (cause) =>
                 new SessionError({
-                  message: `snapshotting the prepared workspace failed: ${cause.message}`,
+                  message: `starting the prepare container failed: ${String(cause)}`,
                 }),
             ),
           );
-          yield* sandbox.destroy().pipe(Effect.ignore);
-          const handle = { id: taken.id };
-          yield* setJson(key, handle);
-          return handle;
-        });
-        // Concurrent requests share one build.
-        let pending = preparing.get(key);
-        if (!pending) {
-          const context = yield* Effect.context<RuntimeContext>();
-          pending = Effect.runPromise(build.pipe(Effect.provideContext(context))).finally(() =>
-            preparing.delete(key),
-          );
-          preparing.set(key, pending);
+        for (const [index, command] of prepare.commands.entries()) {
+          yield* runDetached(command, index);
         }
-        const promise = pending;
-        return yield* Effect.tryPromise({
-          try: () => promise,
-          catch: (cause) =>
-            cause instanceof SessionError ? cause : new SessionError({ message: String(cause) }),
-        });
+        const taken = yield* sandbox.snapshotContainer({ name: "harness-prepared" }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new SessionError({
+                message: `snapshotting the prepared workspace failed: ${cause.message}`,
+              }),
+          ),
+        );
+        yield* setJson(key, { id: taken.id });
+        return taken.id;
+      }).pipe(
+        // Succeeded or failed, the build container is done.
+        Effect.ensuring(sandbox.destroy().pipe(Effect.ignore)),
+      );
+
+    /**
+     * The prepared snapshot's status, starting its build in the background
+     * if needed. Answers at once: callers poll, so no call lasts as long as
+     * the build. Runs in a prepare instance.
+     */
+    const preparedStatus = (prepare: HarnessPrepare, image: string) =>
+      Effect.gen(function* () {
+        const key = `prepared:${yield* preparedHash(prepare, image)}`;
+        const existing = yield* getJson<{ readonly id: string }>(key);
+        if (existing) return { status: "ready", id: existing.id } satisfies PreparedStatus;
+        const current = builds.get(key);
+        if (current?.status === "failed") {
+          // Report the failure once; the next request builds again.
+          builds.delete(key);
+          return current;
+        }
+        if (current === undefined) {
+          builds.set(key, { status: "building" });
+          const context = yield* Effect.context<RuntimeContext>();
+          void Effect.runPromise(
+            buildPrepared(prepare, image, key).pipe(
+              Effect.match({
+                onSuccess: () => builds.delete(key),
+                onFailure: (error) => builds.set(key, { status: "failed", message: error.message }),
+              }),
+              Effect.provideContext(context),
+            ),
+          );
+        }
+        return { status: "building" } satisfies PreparedStatus;
       });
 
     if (options.prepare && globalThis.__ALCHEMY_RUNTIME__) {
       const prepare = options.prepare;
       registerInternal(state.raw, "harness.prepare", (payload) =>
-        buildPrepared(prepare, (payload as { image: string }).image).pipe(
-          Effect.mapError((error) => new Error(error.message)),
-          Effect.orDie,
-        ),
+        preparedStatus(prepare, (payload as { image: string }).image),
       );
     }
 
-    /** The prepared snapshot for `image`, from the instance that keeps it. */
-    const prepared = (image: string) =>
-      callInstance<{ readonly id: string }>(state.raw, PREPARE_INSTANCE, "harness.prepare", {
-        image,
+    /** The prepared snapshot for `image`, from the instance that keeps it (polling its build). */
+    const prepared = (prepare: HarnessPrepare, image: string) =>
+      Effect.gen(function* () {
+        const hash = yield* preparedHash(prepare, image);
+        const ask = callInstance<PreparedStatus>(
+          state.raw,
+          `${PREPARE_INSTANCE}:${hash}`,
+          "harness.prepare",
+          { image },
+        );
+        const status = yield* ask.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (s) => s.status !== "building",
+          }),
+          Effect.timeoutOrElse({
+            duration: "90 minutes",
+            orElse: () => Effect.fail(new Error("the prepared workspace took over 90 minutes")),
+          }),
+        );
+        if (status.status === "failed") return yield* Effect.fail(new Error(status.message));
+        return { id: (status as { readonly id: string }).id };
       }).pipe(
         Effect.mapError(
           (cause) =>
@@ -788,6 +891,7 @@ export const Harness = (
     const startContainer = (startOptions: ContainerStartOptions | undefined) =>
       Effect.gen(function* () {
         const egress = [...(startOptions?.egress ?? []), control];
+        expectEgressCa = true;
         if (yield* sandbox.running.pipe(Effect.orElseSucceed(() => false))) {
           // Running: only the egress may have changed.
           yield* sandbox.start({ ...startOptions, egress });
@@ -825,7 +929,7 @@ export const Harness = (
 
         // 2. The prepared workspace for this image, then the checkpoints.
         if (options.prepare && image) {
-          const base = yield* Effect.exit(prepared(image));
+          const base = yield* Effect.exit(prepared(options.prepare, image));
           if (Exit.isSuccess(base)) {
             const restored = yield* startFrom(base.value.id);
             if (Exit.isSuccess(restored)) {

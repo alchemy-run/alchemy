@@ -18,10 +18,11 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
       // The build cache every session starts from.
       prepare: {
         commands: [
-          "cd /workspace/repo && git init -q -b main && echo prepared > base.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm base",
-          // Through the egress, over intercepted TLS: fails unless the
-          // command trusts the interception CA.
+          // First, right after the container starts: through the egress over
+          // intercepted TLS, which fails unless the command trusts the
+          // interception CA (written shortly after start).
           `node -e "fetch('https://api.anthropic.com/v1/models').then(() => process.exit(0), (e) => { console.error(e.cause ?? e); process.exit(1); })"`,
+          "cd /workspace/repo && git init -q -b main && echo prepared > base.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm base",
         ],
         egress: [model],
       },
