@@ -32,7 +32,7 @@ const Served = Layer.unwrap(
 // The test server serves the Api at its root; its HttpClient already targets the server.
 const Client = Layer.mergeAll(Domain.protocolHttp(""), sessionClient("customer:c-1"));
 
-it.live("the CustomerApi round-trips over HTTP, including a streamed subscription", () =>
+it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () =>
   Effect.gen(function* () {
     const sam = yield* CustomerApi.client;
     const accountId = yield* register(sam, "c-1", "sam");

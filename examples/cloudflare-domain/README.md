@@ -41,7 +41,7 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
 }) {}
 ```
 
-`Session` provides `CurrentActor`, a customer or a support agent, from the request's token:
+`Session` provides `CurrentActor`, a customer or a support agent: from the session cookie in a browser, or an `Authorization` header from other clients:
 
 ```ts
 // src/Session.ts
@@ -297,7 +297,7 @@ export const mustOwn = Effect.fn(function* (owner: CustomerId | null) {
 
 ## The Api
 
-Nothing in an Api needs a handler: aggregates implement commands and the Domain hosts views.
+Nothing in an Api needs a handler: aggregates implement commands and the model hosts views.
 
 ```ts
 // src/CustomerApi/CustomerApi.ts
@@ -337,11 +337,11 @@ export class CustomerApi extends Domain.Api(
 
 A client gets commands as methods and views and aggregates as namespaces: `bank.DepositMoney({ target, amount })`, `bank.AccountSummary.watch(accountId)`, `bank.Statement.list(accountId, { order: "desc" })`, `bank.Account.events(accountId)`.
 
-Watches are pushed. Over `Api.protocolWebSocket`, every `watch` and `events` call opens its own WebSocket. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. Each commit pushes the change down the socket after `validate` judges it again, and the object hibernates in between. Commands, `get` and `list` stay on HTTP.
+Watches are pushed. Over `Domain.protocolWebSocket`, every `watch` and `events` call opens its own WebSocket. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. Each commit pushes the change down the socket after `validate` judges it again, and the object hibernates in between. Commands, `get` and `list` stay on HTTP.
 
 ## A foldkit app
 
-The app's Commands run Fold commands, and its Subscriptions watch a view's snapshots and another's events. The client is a foldkit resource, provided once in [`src/web/entry.ts`](src/web/entry.ts).
+The app's Commands run domain commands, and its Subscriptions watch a view's snapshots and another's events. The client is a foldkit resource, provided once in [`src/web/entry.ts`](src/web/entry.ts).
 
 ```ts
 // src/web/Bank.ts
@@ -852,7 +852,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
 };
 ```
 
-The app signs in once, which sets an `HttpOnly`, `SameSite=Strict` session cookie, then connects with `Api.protocolWebSocket` on its own origin. The browser sends the cookie with every call and every watch's WebSocket upgrade, so no token appears in a URL or in script. Its subscriptions are pushed by the Durable Objects behind them.
+The app signs in once, which sets an `HttpOnly`, `SameSite=Strict` session cookie, then connects with `Domain.protocolWebSocket` on its own origin. The browser sends the cookie with every call and every watch's WebSocket upgrade, so no token appears in a URL or in script. Its subscriptions are pushed by the Durable Objects behind them.
 
 ```ts
 // src/web/entry.ts
@@ -942,7 +942,7 @@ Runtime.run(
 
 ## Local first
 
-How local an app is depends on who is the authority for what the user does. There are four variants. Fold supports the first two today, and this app does both in its foldkit code, with nothing extra in the framework.
+How local an app is depends on who is the authority for what the user does. There are four variants. `alchemy/Domain` supports the first two today, and this app does both in its foldkit code, with nothing extra in the framework.
 
 ### 1. Online, with optimistic UI
 
@@ -1115,9 +1115,10 @@ src/
   CustomerApi/  the customer app's Api
   SupportApi/   the support console's Api, over the same Bank
   Session.ts, CurrentActor.ts, MfaChallenge.ts   authentication and step-up
-  Bank.ts       the Domain
+  Bank.ts       the domain model (Domain.Model)
   BankWorker.ts the Worker: both Apis + Stripe events, hosted on Durable Objects
-  web/          the foldkit app: Bank.ts (model, messages, commands, subscriptions, view)
+  web/          the foldkit app: Bank.ts (model, messages, commands, subscriptions, view;
+                optimistic and offline intents)
                 entry.ts (signs in, then boots it with the bank client as a resource)
                 and worker.ts (serves the build, forwards /api to the bank)
 ```
@@ -1187,8 +1188,10 @@ bun test test/integ.test.ts                 # deploys to Cloudflare (+ a Stripe 
 STRIPE_TEST_REAL_DELIVERY=1 bun test test/integ.test.ts   # also pays with a test card and waits for the settlement
 ```
 
-## Deploy
+## Develop and deploy
 
 ```sh
-bun run deploy
+bun run dev       # alchemy dev: the bank and the app locally; open the app URL it prints
+bun run deploy    # to Cloudflare; open the app URL it prints, e.g. /?customer=c-1
+bun run destroy
 ```
