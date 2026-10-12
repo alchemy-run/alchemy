@@ -20,7 +20,7 @@ From the repository root:
 ```sh
 pnpm install
 cd examples/cloudflare-hyperdrive-aws-vpc
-pnpm deploy --profile testing --stage hyperdrive-vpc
+pnpm run deploy --profile testing --stage hyperdrive-vpc
 curl "<url>"
 ```
 
@@ -29,5 +29,5 @@ Aurora incurs charges until destroyed.
 ## Destroy
 
 ```sh
-pnpm destroy --profile testing --stage hyperdrive-vpc
+pnpm run destroy --profile testing --stage hyperdrive-vpc
 ```
