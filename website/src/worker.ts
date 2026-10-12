@@ -1,5 +1,6 @@
 import type { WorkerEnv } from "../alchemy.run.ts";
 import { referenceDestination } from "./reference-links.ts";
+import { handleSearch, type ExecutionContext } from "./search-api.ts";
 import { SOCIAL_REDIRECTS } from "./social-redirects.ts";
 
 // Minimal `HTMLRewriter` shape — the workers runtime exposes it as a
@@ -239,9 +240,12 @@ const resolveRedirect = (url: URL): string | undefined => {
 };
 
 export default {
-  fetch: async (request: Request, env: WorkerEnv) => {
+  fetch: async (request: Request, env: WorkerEnv, ctx: ExecutionContext) => {
     const url = new URL(request.url);
     const canonical = url.host === CANONICAL_HOST;
+    if (url.pathname === "/api/search") {
+      return handleSearch(request, env, ctx, CANONICAL_ORIGIN);
+    }
     const redirect = resolveRedirect(url);
     if (redirect !== undefined) {
       return Response.redirect(new URL(redirect, request.url), 301);

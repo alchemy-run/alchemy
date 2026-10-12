@@ -161,6 +161,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ (env.STAGE == 'main' || env.STAGE == 'prod') && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          # Only prod declares Axiom resources (the docs search query log).
+          AXIOM_TOKEN: ${{ env.STAGE == 'prod' && secrets.PROD_AXIOM_TOKEN || '' }}
+          AXIOM_ORG_ID: ${{ env.STAGE == 'prod' && secrets.PROD_AXIOM_ORG_ID || '' }}
 
       # PR builds upload zero-traffic versions of this Worker. Refresh the
       # parent from merged main using the same test account as PR previews.
