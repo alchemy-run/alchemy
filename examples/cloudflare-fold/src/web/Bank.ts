@@ -8,6 +8,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { AccountId, mainAccountId } from "../Account/AccountId.ts";
 import { StatementLine } from "../Account/Statement.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
+import { Username } from "../Customer/Username.ts";
 import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
 
 /** The bank client this app runs on, provided by the `resources` Layer in `entry.ts`. */
@@ -24,7 +25,9 @@ export type Flags = typeof Flags.Type;
 // MODEL
 
 export const Model = Schema.Struct({
+  customerId: CustomerId,
   accountId: AccountId,
+  /** `null` until the main account exists (register to open it). */
   balance: Schema.NullOr(Schema.Number),
   lines: Schema.Array(StatementLine),
   error: Schema.NullOr(Schema.String),
@@ -34,9 +37,10 @@ export type Model = typeof Model.Type;
 // MESSAGE
 
 export const Message = defineMessageUnion({
+  ClickedRegister: {},
   ClickedDeposit: {},
   ClickedWithdraw: {},
-  SucceededCommand: { balance: Schema.Number },
+  SucceededCommand: {},
   FailedCommand: { reason: Schema.String },
   GotBalance: { balance: Schema.NullOr(Schema.Number) },
   GotLine: { line: StatementLine },
@@ -46,14 +50,30 @@ export type Message = typeof Message.Type;
 
 // COMMANDS: each runs one Fold command over the app's connection.
 
+/** Register the signed-in customer; a policy then opens their main account. */
+export const Register = Command.define("Register", {
+  args: { customerId: CustomerId },
+  messages: [Message.SucceededCommand, Message.FailedCommand],
+  execute: ({ customerId }) =>
+    Effect.gen(function* () {
+      const bank = yield* CustomerApi.Client;
+      yield* bank.RegisterCustomer({
+        target: customerId,
+        name: customerId,
+        username: Username.make(customerId),
+      });
+      return Message.SucceededCommand();
+    }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
+});
+
 export const Deposit = Command.define("Deposit", {
   args: { accountId: AccountId, amount: Schema.Number },
   messages: [Message.SucceededCommand, Message.FailedCommand],
   execute: ({ accountId, amount }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      const { reply } = yield* bank.DepositMoney({ target: accountId, amount });
-      return Message.SucceededCommand({ balance: reply.balance });
+      yield* bank.DepositMoney({ target: accountId, amount });
+      return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });
 
@@ -63,8 +83,8 @@ export const Withdraw = Command.define("Withdraw", {
   execute: ({ accountId, amount }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      const { reply } = yield* bank.WithdrawMoney({ target: accountId, amount }, mfa);
-      return Message.SucceededCommand({ balance: reply.balance });
+      yield* bank.WithdrawMoney({ target: accountId, amount }, mfa);
+      return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });
 
@@ -72,6 +92,7 @@ export const Withdraw = Command.define("Withdraw", {
 
 export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
   Message.match<Update.Return<Model, Message, Bank>>(message, {
+    ClickedRegister: () => ({ model, commands: [Register({ customerId: model.customerId })] }),
     ClickedDeposit: () => ({
       model,
       commands: [Deposit({ accountId: model.accountId, amount: 1_000 })],
@@ -80,7 +101,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       model,
       commands: [Withdraw({ accountId: model.accountId, amount: 1_000 })],
     }),
-    // The balance arrives through the `summary` subscription; a reply only clears the error.
+    // State arrives through the subscriptions; a command's success only clears the error.
     SucceededCommand: () => ({ model: { ...model, error: null } }),
     FailedCommand: ({ reason }) => ({ model: { ...model, error: reason } }),
     GotBalance: ({ balance }) => ({ model: { ...model, balance } }),
@@ -91,7 +112,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 // INIT: the signed-in customer's main account.
 
 export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
-  model: { accountId: mainAccountId(flags.customerId), balance: null, lines: [], error: null },
+  model: {
+    customerId: flags.customerId,
+    accountId: mainAccountId(flags.customerId),
+    balance: null,
+    lines: [],
+    error: null,
+  },
 });
 
 // SUBSCRIPTIONS: the account's summary (snapshots) and statement (events), live.
@@ -142,14 +169,22 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   body: h.div(
     [h.Class("flex flex-col gap-4 p-8")],
     [
-      h.div([h.Class("text-4xl font-bold")], [model.balance === null ? "…" : cents(model.balance)]),
-      h.div(
-        [h.Class("flex gap-2")],
-        [
-          h.button([h.OnClick(Message.ClickedDeposit()), h.Class(button)], ["Deposit 10.00"]),
-          h.button([h.OnClick(Message.ClickedWithdraw()), h.Class(button)], ["Withdraw 10.00"]),
-        ],
-      ),
+      h.p([], [`Signed in as ${model.customerId}`]),
+      ...(model.balance === null
+        ? [h.button([h.OnClick(Message.ClickedRegister()), h.Class(button)], ["Open my account"])]
+        : [
+            h.div([h.Class("text-4xl font-bold")], [cents(model.balance)]),
+            h.div(
+              [h.Class("flex gap-2")],
+              [
+                h.button([h.OnClick(Message.ClickedDeposit()), h.Class(button)], ["Deposit 10.00"]),
+                h.button(
+                  [h.OnClick(Message.ClickedWithdraw()), h.Class(button)],
+                  ["Withdraw 10.00"],
+                ),
+              ],
+            ),
+          ]),
       h.p([h.Class("text-red-600")], [model.error ?? ""]),
       h.ul(
         [],

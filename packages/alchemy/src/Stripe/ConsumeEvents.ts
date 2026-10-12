@@ -3,7 +3,9 @@ import { Webhooks } from "@distilled.cloud/stripe";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../AlchemyContext.ts";
 import { Worker, isWorkerEvent } from "../Cloudflare/Workers/Worker.ts";
 import * as Namespace from "../Namespace.ts";
 import * as Output from "../Output.ts";
@@ -136,7 +138,8 @@ export class EventSource extends Context.Service<EventSource, EventSourceService
  *
  * Deploy-time: provisions a {@link WebhookEndpoint} pointing at this Worker
  * (at the subscribed path) and binds its minted signing secret onto the
- * Worker so deliveries can be verified. Runtime: registers a `fetch`
+ * Worker so deliveries can be verified. Under `alchemy dev` the Worker is
+ * not publicly reachable, so no endpoint is provisioned. Runtime: registers a `fetch`
  * listener that claims requests on that path, verifies `Stripe-Signature`,
  * and runs the handler once per event.
  *
@@ -162,6 +165,16 @@ export const ConsumeEventsLive = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
+            // Stripe only delivers to public URLs, and under `alchemy dev` the
+            // Worker is on localhost: skip the endpoint rather than fail the
+            // whole stack. Deliveries then answer 500 (no signing secret).
+            const context = yield* Effect.serviceOption(AlchemyContext);
+            if (Option.isSome(context) && context.value.dev) {
+              yield* Effect.logWarning(
+                `Stripe.consumeEvents: no webhook endpoint for ${path} under alchemy dev; Stripe only delivers to public URLs, so deploy to receive events.`,
+              );
+              return;
+            }
             const endpoint = yield* WebhookEndpoint(id, {
               url: Output.interpolate`${host.url}${path}`,
               enabledEvents: [...props.events],

@@ -2,9 +2,11 @@ import { expect, test } from "@effect/vitest";
 import * as Story from "foldkit/story";
 import { AccountId } from "../src/Account/AccountId.ts";
 import { StatementLine } from "../src/Account/Statement.ts";
-import { Deposit, Message, type Model, update, Withdraw } from "../src/web/Bank.ts";
+import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { Deposit, Message, type Model, Register, update, Withdraw } from "../src/web/Bank.ts";
 
 const account: Model = {
+  customerId: CustomerId.make("c-1"),
   accountId: AccountId.make("c-1-main"),
   balance: 5_000,
   lines: [],
@@ -16,7 +18,7 @@ test("depositing runs the DepositMoney command; the balance arrives by subscript
     update,
     Story.given(account),
     Story.message(Message.ClickedDeposit()),
-    Story.Command.resolve(Deposit, Message.SucceededCommand({ balance: 6_000 })),
+    Story.Command.resolve(Deposit, Message.SucceededCommand()),
     Story.model((model) => expect(model).toMatchObject({ balance: 5_000, error: null })),
     Story.message(Message.GotBalance({ balance: 6_000 })),
     Story.message(
@@ -37,4 +39,15 @@ test("a rejected withdrawal shows the rejection", () =>
     Story.message(Message.ClickedWithdraw()),
     Story.Command.resolve(Withdraw, Message.FailedCommand({ reason: "InsufficientFunds" })),
     Story.model((model) => expect(model.error).toBe("InsufficientFunds")),
+  ));
+
+test("a new customer opens their account; it appears through the subscription", () =>
+  Story.story(
+    update,
+    Story.given({ ...account, balance: null }),
+    Story.message(Message.ClickedRegister()),
+    Story.Command.resolve(Register, Message.SucceededCommand()),
+    Story.model((model) => expect(model.balance).toBeNull()),
+    Story.message(Message.GotBalance({ balance: 0 })),
+    Story.model((model) => expect(model.balance).toBe(0)),
   ));

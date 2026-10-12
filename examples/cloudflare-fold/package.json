@@ -28,6 +28,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@foldkit/vite-plugin": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }
