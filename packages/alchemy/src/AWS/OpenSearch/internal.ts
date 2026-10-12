@@ -30,8 +30,6 @@ export const readDomainTags = Effect.fn(function* (arn: string) {
   return toTagRecord(response?.TagList);
 });
 
-export { subsetDiffers } from "../../Util/equal.ts";
-
 /**
  * Poll an OpenSearch domain until `done` observes a settled state (bounded:
  * 15s x 120 = ~30 minutes; domain provisioning and blue/green config changes

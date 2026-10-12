@@ -1,4 +1,5 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -95,6 +96,16 @@ export interface OAuthConfiguration {
     allowAnyOnLoopback?: boolean;
   };
 }
+
+/**
+ * The `applicationId` declared on an {@link Application} does not exist in
+ * the account. Alchemy never creates an application in its place, so the
+ * declared id (and its `aud`) is never silently swapped for a new one.
+ */
+export class DeclaredApplicationNotFound extends Data.TaggedError("DeclaredApplicationNotFound")<{
+  applicationId: string;
+  message: string;
+}> {}
 
 /** SAML or OIDC configuration of a `saas` application. */
 export type SaasApp = zeroTrust.AccessApplicationsCreateRequestSaasApp;
@@ -680,7 +691,10 @@ export const ApplicationProvider = () =>
       }
       if (!observed && news.applicationId !== undefined) {
         return yield* Effect.fail(
-          new Error(`Cloudflare Access application ${news.applicationId} does not exist`),
+          new DeclaredApplicationNotFound({
+            applicationId: news.applicationId,
+            message: `Cloudflare Access application ${news.applicationId} does not exist`,
+          }),
         );
       }
       if (!observed && news.type === "warp") {
