@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
@@ -108,3 +109,17 @@ export const toKVNamespaceError = (error: unknown): NamespaceError =>
         : "Unknown KV error",
     cause: error instanceof Error ? error : new Error(String(error)),
   });
+
+/**
+ * Retry policy for KV value-API calls on a bound namespace. A namespace is
+ * visible to the control plane as soon as it is created, but the value API
+ * can answer `NamespaceNotFound` (code 10013) for a short window afterwards —
+ * long enough that a write right after deploy fails. The binding only ever
+ * targets the namespace it was deployed against, so `NamespaceNotFound` here
+ * is propagation lag: retry it, bounded (~12s), at the call that hit it.
+ */
+export const retryNamespacePropagation = {
+  while: (error: { readonly _tag: string }) => error._tag === "NamespaceNotFound",
+  schedule: Schedule.exponential("250 millis", 1.5),
+  times: 8,
+};

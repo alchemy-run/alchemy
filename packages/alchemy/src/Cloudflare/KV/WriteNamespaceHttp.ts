@@ -5,6 +5,7 @@ import {
   makeHttpKVNamespaceBinding,
   makeKVAuth,
   makeKVHttpScope,
+  retryNamespacePropagation,
   toKVNamespaceError,
   type KVAuth,
 } from "./NamespaceHttp.ts";
@@ -54,7 +55,8 @@ export const makeWriteKVHttpClient = (
                   expirationTtl: options?.expirationTtl,
                   metadata: options?.metadata,
                 }),
-              ),
+                // Retry only the API call: the body is materialized once.
+              ).pipe(Effect.retry(retryNamespacePropagation)),
             ),
           ),
         ),
@@ -66,6 +68,7 @@ export const makeWriteKVHttpClient = (
         Effect.flatMap(({ accountId, namespaceId }) =>
           authorize(kv.deleteNamespaceValue({ accountId, namespaceId, keyName: key })),
         ),
+        Effect.retry(retryNamespacePropagation),
         Effect.mapError(toKVNamespaceError),
         Effect.asVoid,
       )) as any,
