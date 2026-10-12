@@ -243,8 +243,10 @@ export const ClassificationJobProvider = () =>
               jobStatus: "CANCELLED",
             })
             .pipe(
-              Effect.catchTag("ConflictException", () => Effect.void),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.catchTags({
+                ConflictException: () => Effect.void,
+                ResourceNotFoundException: () => Effect.void,
+              }),
             );
         }),
       };

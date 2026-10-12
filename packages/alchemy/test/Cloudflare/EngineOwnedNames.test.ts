@@ -17,10 +17,11 @@ import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
 import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
 import { type Index, IndexProvider } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
-import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
+import { resourceContext } from "../Utils/ResourceContext.ts";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name
@@ -60,11 +61,14 @@ const env = Layer.mergeAll(
   Layer.succeed(CloudflareEnvironment, Effect.succeed(credentials)),
   Layer.succeed(Stack, stack),
   Layer.succeed(Stage, stack.stage),
-  Layer.succeed(InstanceId, "0123456789abcdef0123456789abcdef"),
+  Layer.succeed(ResourceContext, resourceContext("0123456789abcdef0123456789abcdef")),
   Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
   // The remaining layers only satisfy the provider layers' type-level
   // requirements (reconcile/read need clients); diff never touches them.
-  Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
+  Layer.succeed(
+    Credentials,
+    Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
+  ),
   Layer.sync(ArtifactStore, createArtifactStore),
   Layer.succeed(
     LocalRuntimeState,

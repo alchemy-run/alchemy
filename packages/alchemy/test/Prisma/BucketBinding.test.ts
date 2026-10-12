@@ -49,13 +49,6 @@ describe(
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers: Prisma.providers() });
 
-const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials =
-  !!process.env.PRISMA_SERVICE_TOKEN?.trim() ||
-  !!process.env.PRISMA_API_TOKEN?.trim() ||
-  process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
-const runLive = wantsLive && hasLiveCredentials;
-
 // One Prisma Compute deploy alone can take the full 600s Compute.live.test.ts
 // budgets for it; this stack deploys three of them plus a project, a bucket
 // and its keys.
@@ -63,22 +56,6 @@ const HOOK_TIMEOUT = 1_200_000;
 const TEST_TIMEOUT = 120_000;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-if (wantsLive && !hasLiveCredentials) {
-  test(
-    "requires Prisma credentials for the live bucket binding suite",
-    Effect.fail(
-      new Error(
-        [
-          "Live Prisma bucket binding suite requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy profile` and add Prisma with `Service Token`,",
-          "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
-        ].join(" "),
-      ),
-    ),
-    { tags: ["provider:prisma", "provider:prisma:bucket", "live"] },
-  );
-}
 
 class AppNotReady extends Data.TaggedError("AppNotReady")<{ status: number; body: string }> {}
 
@@ -299,7 +276,7 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
  * The stack lives in `fixtures/stack.ts` so it can also be inspected
  * directly, e.g. `alchemy logs --tail --stage test --config ./test/Prisma/fixtures/stack.ts`.
  */
-describe.skipIf(!runLive)(
+describe(
   "Prisma bucket binding over deployed hosts",
   {
     tags: [

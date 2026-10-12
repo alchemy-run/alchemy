@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
 import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
+import { InstanceProfile, Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
@@ -178,5 +179,87 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
     timeout: 240_000,
+  },
+);
+
+// An omitted `desiredCapacity` belongs to whoever scales the group (ECS
+// managed scaling, a scaling policy): redeploys must not reset it to
+// `minSize`. The launch template names an instance profile created in the
+// same deploy, which IAM may not have propagated yet (`InvalidIamInstanceProfile`
+// is retried). `Launch` is suspended before scaling out so no instance starts.
+test.provider(
+  "keeps an externally scaled desired capacity across redeploys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const subnetId = yield* getAutoScalingTestSubnetId;
+
+      const program = (maxSize: number) =>
+        Effect.gen(function* () {
+          const role = yield* Role("ScaledGroupRole", {
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: ["sts:AssumeRole"],
+                },
+              ],
+            },
+          });
+          const profile = yield* InstanceProfile("ScaledGroupProfile", {
+            roleName: role.roleName,
+          });
+          const template = yield* LaunchTemplate("ScaledGroupTemplate", {
+            imageId: amazonLinux2023(),
+            instanceType: "t3.micro",
+            instanceProfileName: profile.instanceProfileName,
+          });
+          return yield* AutoScalingGroup("ScaledGroup", {
+            launchTemplate: template,
+            subnetIds: [subnetId],
+            minSize: 0,
+            maxSize,
+          });
+        });
+
+      const describe = (name: string) =>
+        autoscaling
+          .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+          .pipe(Effect.map((r) => r.AutoScalingGroups?.[0]));
+
+      const created = yield* stack.deploy(program(1));
+      const name = created.autoScalingGroupName;
+      expect((yield* describe(name))?.DesiredCapacity).toBe(0);
+
+      // An external scaler raises the desired capacity.
+      yield* autoscaling.suspendProcesses({
+        AutoScalingGroupName: name,
+        ScalingProcesses: ["Launch"],
+      } as any);
+      yield* autoscaling.setDesiredCapacity({
+        AutoScalingGroupName: name,
+        DesiredCapacity: 1,
+      } as any);
+
+      // A redeploy that updates the group leaves the live value alone.
+      yield* stack.deploy(program(2));
+      const live = yield* describe(name);
+      expect(live?.MaxSize).toBe(2);
+      expect(live?.DesiredCapacity).toBe(1);
+
+      yield* stack.destroy();
+      yield* assertGroupGone(name);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:autoscaling",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );

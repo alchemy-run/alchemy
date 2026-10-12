@@ -1,10 +1,13 @@
 import * as chatbot from "@distilled.cloud/aws/chatbot";
+import { Region } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { CustomAction } from "@/AWS/Chatbot";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -154,6 +157,45 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertActionDeleted(second.customActionArn);
+    }),
+  { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 120_000 },
+);
+
+// Chatbot has endpoints in only four regions. A stack in any other region
+// (ap-northeast-1 here) must still deploy: calls fall back to us-east-2.
+const unsupportedRegion = Test.make({
+  providers: AWS.providers().pipe(
+    Layer.provide(
+      Layer.effect(
+        AWSEnvironment,
+        Effect.gen(function* () {
+          const profileEnvironment = yield* AWSEnvironment;
+          return Effect.map(profileEnvironment, (environment) => ({
+            ...environment,
+            region: "ap-northeast-1",
+          }));
+        }),
+      ).pipe(Layer.provide(AWS.providers())),
+    ),
+  ),
+});
+
+unsupportedRegion.test.provider(
+  "deploys from a region without a Chatbot endpoint",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const action = yield* stack.deploy(
+        CustomAction("RegionFallbackAction", { commandText: "aws sts get-caller-identity" }),
+      );
+      // Out-of-band through a supported endpoint: the action exists.
+      const inUsEast2 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(Effect.provideService(Region, Effect.succeed("us-east-2")));
+      expect((yield* inUsEast2(findAction(action.customActionArn)))?.CustomActionArn).toBe(
+        action.customActionArn,
+      );
+      yield* stack.destroy();
+      yield* inUsEast2(assertActionDeleted(action.customActionArn));
     }),
   { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 120_000 },
 );

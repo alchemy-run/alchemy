@@ -210,7 +210,7 @@ export default class ProtectedGitHost extends Cloudflare.Worker<ProtectedGitHost
   Effect.gen(function* () {
     const fetch = yield* HttpRouter.toHttpEffect(ProtectedGitLive);
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 
 /** Deployable stack for the protected-branch test. */

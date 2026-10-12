@@ -177,8 +177,10 @@ export const DhcpOptionsProvider = () =>
       const describeDhcpOptions = (dhcpOptionsId: string) =>
         ec2.describeDhcpOptions({ DhcpOptionsIds: [dhcpOptionsId] }).pipe(
           Effect.map((r) => r.DhcpOptions?.[0]),
-          Effect.catchTag("InvalidDhcpOptionID.NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidDhcpOptionsID.NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            "InvalidDhcpOptionID.NotFound": () => Effect.succeed(undefined),
+            "InvalidDhcpOptionsID.NotFound": () => Effect.succeed(undefined),
+          }),
         );
 
       const waitUntilDhcpOptionsGone = (dhcpOptionsId: string) =>
@@ -369,8 +371,10 @@ export const DhcpOptionsProvider = () =>
 
           yield* session.note(`Deleting DHCP options set: ${dhcpOptionsId}`);
           yield* ec2.deleteDhcpOptions({ DhcpOptionsId: dhcpOptionsId }).pipe(
-            Effect.catchTag("InvalidDhcpOptionID.NotFound", () => Effect.void),
-            Effect.catchTag("InvalidDhcpOptionsID.NotFound", () => Effect.void),
+            Effect.catchTags({
+              "InvalidDhcpOptionID.NotFound": () => Effect.void,
+              "InvalidDhcpOptionsID.NotFound": () => Effect.void,
+            }),
             // A VPC association may still be clearing.
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "DependencyViolation",

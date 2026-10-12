@@ -723,6 +723,13 @@ class Ignore {
     return this._test(path, this._ignoreCache, false).ignored;
   }
 
+  // Alchemy addition: match one path against the rules without checking its
+  // parent directories, so callers can start the parent walk below a
+  // boundary (e.g. a working directory inside an ignored folder).
+  matches(path: string): IgnoreTestResult {
+    return this._rules.test(checkPath.convert(path), true, MODE_IGNORE);
+  }
+
   createFilter(): (path: string) => boolean {
     return (path: string) => !this.ignores(path);
   }
@@ -803,6 +810,11 @@ export interface IgnoreInstance {
   filter(pathnames: readonly Pathname[]): Pathname[];
   createFilter(): (pathname: Pathname) => boolean;
   ignores(pathname: Pathname): boolean;
+  /** Alchemy addition: match one path without checking parent directories. */
+  matches(pathname: Pathname): {
+    ignored: boolean;
+    unignored: boolean;
+  };
   test(pathname: Pathname): {
     ignored: boolean;
     unignored: boolean;

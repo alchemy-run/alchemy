@@ -16,7 +16,7 @@ import { findEphemeralPort } from "../core/DevPort.ts";
 import * as FrameworkCore from "../core/index.ts";
 import { toOutputFile, type BuildOutput } from "../core/index.ts";
 import { loadProjectModule, resolveProjectPackageDirectory } from "../core/Loader.ts";
-import { loadVinextBuildConfig } from "./BuildConfig.ts";
+import { loadVinextBuildConfig, type VinextRouteRootConfig } from "./BuildConfig.ts";
 import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
 import { loadVinextModule } from "./Modules.ts";
 import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
@@ -53,7 +53,16 @@ export const runVinextBuild = (options: {
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
     const { default: vinext } = yield* loadVinextModule<{
-      default(options?: { disableAppRouter?: boolean }): PluginOption;
+      default(
+        options?: VinextRouteRootConfig & {
+          nextConfig?: unknown;
+          cache?: unknown;
+          disableAppRouter?: boolean;
+          precompress?: boolean;
+          __skipBuildLifecycle?: boolean;
+          __pagesClientAssetsModule?: string | null;
+        },
+      ): PluginOption;
     }>(root, "index.js");
     const cache = yield* makeVinextCachePlugin(root, options.cache);
     const { loadDotenv } = yield* loadVinextModule<{
@@ -68,8 +77,8 @@ export const runVinextBuild = (options: {
     const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
       runWithPreviewBuildCredentials<T>(callback: () => T): T;
     }>(root, "build/preview-credentials.js");
-    const { clearPagesClientAssetsBuildMetadata } = yield* loadVinextModule<{
-      clearPagesClientAssetsBuildMetadata(session: string): void;
+    const { PAGES_CLIENT_ASSETS_MODULE } = yield* loadVinextModule<{
+      PAGES_CLIENT_ASSETS_MODULE: string;
     }>(root, "build/pages-client-assets-module.js");
     const hasDirectory = (name: string) =>
       Effect.gen(function* () {
@@ -93,20 +102,12 @@ export const runVinextBuild = (options: {
           __VINEXT_SHARED_RSC_BUILD_IDENTITY: randomBytes(16).toString("hex"),
           __VINEXT_SHARED_REVALIDATE_SECRET: randomBytes(32).toString("hex"),
           __VINEXT_SHARED_PRERENDER_SECRET: randomBytes(32).toString("hex"),
-          ...(hybrid
-            ? {
-                __VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION: randomBytes(16).toString("hex"),
-              }
-            : {}),
         };
         const previous = Object.fromEntries(
           Object.keys(shared).map((key) => [key, process.env[key]]),
         );
         Object.assign(process.env, shared);
-        return {
-          previous,
-          session: shared.__VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION,
-        };
+        return previous;
       }),
       () =>
         Effect.gen(function* () {
@@ -140,35 +141,89 @@ export const runVinextBuild = (options: {
                 root,
               );
               await flatten(pagesConfig?.config.plugins ?? []);
-              const transforms = flattened.filter(
-                (plugin) =>
-                  !plugin.name.startsWith("vinext:") &&
-                  !plugin.name.startsWith("vite:react") &&
-                  !plugin.name.startsWith("rsc:") &&
-                  plugin.name !== "vite-rsc-load-module-dev-proxy" &&
-                  !plugin.name.startsWith("vite-plugin-cloudflare"),
-              );
-              await vite.build({
+              // The App Router build writes the Pages client-asset manifest next to its RSC entry.
+              const pagesClientAssetsPath = path.join(
                 root,
+                "dist/server",
+                PAGES_CLIENT_ASSETS_MODULE,
+              );
+              const pagesClientAssetsModule = await fs.readFileString(pagesClientAssetsPath).pipe(
+                Effect.orElseSucceed(() => null),
+                Effect.runPromise,
+              );
+              // Mirrors vinext's own hybrid Pages build (build/lifecycle.js): keep the
+              // user's config and transforms, drop App Router internals.
+              const transforms = flattened
+                .filter(
+                  (plugin) =>
+                    !plugin.name.startsWith("vinext:") &&
+                    !plugin.name.startsWith("vite:react") &&
+                    plugin.name !== "rsc" &&
+                    !plugin.name.startsWith("rsc:") &&
+                    plugin.name !== "vite-rsc-load-module-dev-proxy" &&
+                    !plugin.name.startsWith("vite-plugin-cloudflare"),
+                )
+                .map((plugin) => ({ ...plugin, buildApp: undefined }));
+              const {
+                plugins: _plugins,
+                environments,
+                build: userBuild,
+                resolve: userResolve,
+                ...userConfig
+              } = pagesConfig?.config ?? {};
+              const { build: ssrBuild, ...pagesEnvironment } = environments?.ssr ?? {};
+              const mergedBuild = vite.mergeConfig(userBuild ?? {}, ssrBuild ?? {});
+              const userOutput = mergedBuild.rolldownOptions?.output;
+              await vite.build({
+                ...userConfig,
+                root,
+                mode: "production",
                 configFile: false,
-                plugins: [transforms, vinext({ disableAppRouter: true }), cache],
+                plugins: [
+                  transforms,
+                  // vinext() does not expose its options; its config plugin carries these.
+                  vinext({
+                    ...config.routeRootConfig,
+                    nextConfig: config.nextConfigInput,
+                    cache: config.cacheConfig ?? undefined,
+                    disableAppRouter: true,
+                    precompress: false,
+                    __skipBuildLifecycle: true,
+                    __pagesClientAssetsModule: pagesClientAssetsModule,
+                  }),
+                  cache,
+                ],
+                environments: { ssr: { ...pagesEnvironment, consumer: "server" } },
                 resolve: {
-                  dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+                  ...userResolve,
+                  dedupe: [
+                    ...(userResolve?.dedupe ?? []),
+                    "react",
+                    "react-dom",
+                    "react/jsx-runtime",
+                    "react/jsx-dev-runtime",
+                  ],
                 },
                 build: {
+                  ...mergedBuild,
                   outDir: "dist/server",
                   emptyOutDir: false,
+                  manifest: false,
                   ssr: "virtual:vinext-server-entry",
-                  rolldownOptions: { output: { entryFileNames: "entry.js" } },
+                  rolldownOptions: {
+                    ...mergedBuild.rolldownOptions,
+                    output: Array.isArray(userOutput)
+                      ? userOutput.map((output) => ({ ...output, entryFileNames: "entry.js" }))
+                      : { ...userOutput, entryFileNames: "entry.js" },
+                  },
                 },
               });
             }),
           );
           yield* runVinextPrerenderIfConfigured(root, options.cache, config);
         }),
-      ({ previous, session }) =>
+      (previous) =>
         Effect.sync(() => {
-          if (session) clearPagesClientAssetsBuildMetadata(session);
           for (const [key, value] of Object.entries(previous)) {
             if (value === undefined) delete process.env[key];
             else process.env[key] = value;
@@ -188,18 +243,14 @@ export const collectVinextDist = (root: string) =>
     const pagesEntry = path.join(distDir, VINEXT_PAGES_ENTRY);
     const hasDist = yield* fs.exists(distDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasDist) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no ${distDir}`)(undefined),
-      );
+      return yield* failFramework(`The vinext build produced no ${distDir}`)(undefined);
     }
     const hasRsc = yield* fs.exists(rscEntry).pipe(Effect.orElseSucceed(() => false));
     const hasPages = yield* fs.exists(pagesEntry).pipe(Effect.orElseSucceed(() => false));
     if (!hasRsc && !hasPages) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`)(
-          undefined,
-        ),
-      );
+      return yield* failFramework(
+        `The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`,
+      )(undefined);
     }
     const hasClient = yield* fs.exists(clientDir).pipe(Effect.orElseSucceed(() => false));
     yield* fs
@@ -260,9 +311,10 @@ export const spawnVinextDev = (options: {
           [
             options.cli,
             "dev",
-            "-p",
+            "--port",
             String(options.port),
-            ...(options.host !== undefined ? ["-H", options.host] : []),
+            "--strictPort",
+            ...(options.host !== undefined ? ["--host", options.host] : []),
           ],
           {
             cwd: options.root,
@@ -325,11 +377,9 @@ export const awaitVinextDevReady = (options: {
     const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          failFramework(
-            `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* failFramework(
+          `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.callback<boolean>((resume) => {
         const net = createRequire(import.meta.url)("net") as typeof NodeNet;
@@ -359,8 +409,8 @@ export const awaitVinextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(undefined),
+    return yield* failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(
+      undefined,
     );
   });
 

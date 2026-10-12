@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { deepEqual } from "@/Diff";
 import { reconcileBlueGreen } from "@/Fly/bluegreen";
@@ -64,7 +65,7 @@ export const withControlledClient =
       Effect.provideService(HttpClient.HttpClient, client),
       Effect.provide(
         credentials({
-          apiKey: "pure-fixture-only",
+          apiKey: Redacted.make("pure-fixture-only"),
           apiBaseUrl: "https://fly.test",
         }),
       ),

@@ -225,6 +225,70 @@ test.provider(
   },
 );
 
+// `host` / `bridge` tasks have no ENI: ECS rejects an `awsvpcConfiguration`
+// for them, and their ALB targets must register by instance, not IP. Deploy
+// an EC2 host-mode service with `desiredCount: 0` (no container instance
+// needed) and check both on the live service and target group.
+test.provider(
+  "host network mode skips awsvpc configuration and targets instances",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const cluster = yield* Cluster("HostModeCluster", {});
+          return yield* Service("HostModeEdge", {
+            cluster,
+            image: "busybox:stable",
+            command: ["sh", "-c", "while true; do sleep 30; done"],
+            port: 80,
+            networkMode: "host",
+            requiresCompatibilities: ["EC2"],
+            launchType: "EC2",
+            desiredCount: 0,
+            loadBalancer: true,
+          });
+        }),
+      );
+
+      const described = yield* ecs.describeTaskDefinition({
+        taskDefinition: deployed.taskDefinitionArn,
+      });
+      expect(described.taskDefinition?.networkMode).toBe("host");
+
+      const services = yield* ecs.describeServices({
+        cluster: deployed.clusterArn,
+        services: [deployed.serviceName],
+      });
+      const svc = services.services?.[0];
+      expect(svc?.launchType).toBe("EC2");
+      expect(svc?.networkConfiguration).toBeUndefined();
+      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(deployed.targetGroupArn);
+
+      const targetGroups = yield* elbv2.describeTargetGroups({
+        TargetGroupArns: [deployed.targetGroupArn!],
+      });
+      expect(targetGroups.TargetGroups?.[0]?.TargetType).toBe("instance");
+
+      yield* stack.destroy();
+
+      const clusters = yield* ecs.describeClusters({ clusters: [deployed.clusterArn] });
+      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
+      const tgGone = yield* elbv2
+        .describeTargetGroups({ TargetGroupArns: [deployed.targetGroupArn!] })
+        .pipe(
+          Effect.map((r) => (r.TargetGroups ?? []).length === 0),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
+        );
+      expect(tgGone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 420_000,
+  },
+);
+
 // Migration reap: state rows written by the pre-composition provider carry
 // the inline-created ALB/TG/listener/SG ARNs in the service's own attributes
 // with no `ingressKind` marker. The first reconcile under the composed shape

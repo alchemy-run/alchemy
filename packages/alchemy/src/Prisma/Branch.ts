@@ -10,6 +10,7 @@ import {
   createProjectBranch,
 } from "@distilled.cloud/prisma/management";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
@@ -148,12 +149,10 @@ const listBranches = (projectId: string, query?: { readonly gitName?: string }) 
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -170,12 +169,10 @@ const listProjects = () =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -274,17 +271,18 @@ const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const branchId = isPrismaDevId(output?.branchId) ? undefined : output?.branchId;
+          const findBranchInProject = Effect.gen(function* () {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            return projectId
+              ? yield* findBranch(projectId, yield* createGitName(id, olds.gitName))
+              : undefined;
+          });
           const branch = branchId
             ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findBranch(projectId, yield* createGitName(id, olds.gitName))
-                  : undefined;
-              });
+            : yield* findBranchInProject;
           if (!branch) return undefined;
           const attrs = attrsFrom(branch, output?.previousDefaultBranchId);
           return branchId === undefined ? Unowned(attrs) : attrs;
@@ -448,9 +446,18 @@ const ProviderLive = () =>
               );
             }
           }
+          // A member deleted moments ago (e.g. an App) can still count as
+          // live until Prisma's control plane catches up.
           yield* deleteBranch({
             branchId: output.branchId,
-          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              schedule: Schedule.exponential("500 millis"),
+              times: 6,
+            }),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
       };
     }),

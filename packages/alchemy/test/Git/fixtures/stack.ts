@@ -67,7 +67,7 @@ export default class TestGitHost extends Cloudflare.Worker<TestGitHost>()(
   Effect.gen(function* () {
     const fetch = yield* HttpRouter.toHttpEffect(GitLive);
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 
 /**

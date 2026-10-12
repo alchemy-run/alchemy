@@ -55,27 +55,24 @@ export const fromAuthProvider = () =>
         Effect.flatMap(({ resolve }) => resolve),
         Effect.map((creds) =>
           Match.value(creds).pipe(
-            Match.when({ type: "apiToken" }, (c) =>
-              apiTokenCredentials({ apiToken: Redacted.value(c.apiToken) }),
-            ),
+            Match.when({ type: "apiToken" }, (c) => apiTokenCredentials({ apiToken: c.apiToken })),
             Match.when({ type: "apiKey" }, (c) =>
               apiKeyCredentials({
-                apiKey: Redacted.value(c.apiKey),
+                apiKey: c.apiKey,
                 email: Redacted.value(c.email),
               }),
             ),
             Match.when({ type: "oauth" }, (c) =>
               oauthCredentials({
-                accessToken: Redacted.value(c.accessToken),
+                accessToken: c.accessToken,
                 expiresAt: c.expires,
               }),
             ),
             Match.exhaustive,
           ),
         ),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
+        Effect.mapError((e) =>
+          ConfigError.make({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
         ),
         deferUntilFirstUse,
       );

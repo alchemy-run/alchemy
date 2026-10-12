@@ -143,7 +143,7 @@ await bootstrap(entrypoint);
 /** Unwrap env inputs while preserving serialized RuntimeContext markers. */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
-  if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, plainEnvValue);
   if (typeof value === "string") {
     return value.length > 0 ? value : undefined;
   }

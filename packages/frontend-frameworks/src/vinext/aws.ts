@@ -118,11 +118,9 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
     yield* runVinextBuild({ root, cache: "s3" });
     const dist = yield* collectVinextDist(root);
     if (!dist.hasRsc) {
-      return yield* Effect.fail(
-        failFramework(
-          `The vinext AWS target requires an App Router build (${VINEXT_RSC_ENTRY}). Pages Router is supported on Node containers, not Lambda.`,
-        )(undefined),
-      );
+      return yield* failFramework(
+        `The vinext AWS target requires an App Router build (${VINEXT_RSC_ENTRY}). Pages Router is supported on Node containers, not Lambda.`,
+      )(undefined);
     }
     const adapterPath = yield* resolveLambdaAdapterPath;
     const adapterSource = yield* fs
@@ -156,7 +154,7 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
           }): { standaloneDir: string };
         }>,
       catch: failFramework(
-        "Failed to load vinext standalone packaging; install vinext 1.0.0-beta.10 or newer",
+        "Failed to load vinext standalone packaging; install vinext 1.0.1 or newer",
       ),
     });
     const packaged = yield* Effect.try({

@@ -23,7 +23,7 @@ const InternalConfigFields = {
 
 const StaticRoutingSchema = Schema.Struct({
   user_worker: Schema.Array(Schema.String),
-  asset_worker: Schema.optional(Schema.Array(Schema.String)),
+  asset_worker: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 export type StaticRouting = Mutable<typeof StaticRoutingSchema.Type>;
@@ -59,7 +59,7 @@ export type MetadataRedirects = Mutable<typeof MetadataRedirects.Type>;
 
 const MetadataHeaderEntry = Schema.Struct({
   set: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  unset: Schema.optional(Schema.Array(Schema.String)),
+  unset: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 const MetadataHeaders = Schema.Record(Schema.String, MetadataHeaderEntry);
@@ -78,13 +78,14 @@ export const HeadersSchema = Schema.Struct({
 
 export const AssetConfigSchema = Schema.Struct({
   compatibility_date: Schema.optional(Schema.String),
-  compatibility_flags: Schema.optional(Schema.Array(Schema.String)),
+  compatibility_flags: Schema.String.pipe(Schema.Array, Schema.optional),
   html_handling: Schema.optional(
     Schema.Literals(["auto-trailing-slash", "force-trailing-slash", "drop-trailing-slash", "none"]),
   ),
   not_found_handling: Schema.optional(
     Schema.Literals(["single-page-application", "404-page", "none"]),
   ),
+  base_path: Schema.optional(Schema.String),
   redirects: Schema.optional(RedirectsSchema),
   headers: Schema.optional(HeadersSchema),
   has_static_routing: Schema.optional(Schema.Boolean),

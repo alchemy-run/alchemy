@@ -151,7 +151,7 @@ export const ProfileProvider = () =>
             }
             return tags;
           }),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       const syncTags = Effect.fn(function* (

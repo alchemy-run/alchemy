@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
@@ -27,10 +28,15 @@ import {
 } from "./Auth/Demand.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
-import { findProviderByType, missingProviderError, tryFindProviderByType } from "./Provider.ts";
+import {
+  type DeleteInProgress,
+  findProviderByType,
+  missingProviderError,
+  tryFindProviderByType,
+} from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import {
   type PlanDisplayOptions,
@@ -41,6 +47,7 @@ import {
 } from "./Report.ts";
 import type { ApplyStatus } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -85,15 +92,17 @@ interface ResourceTracker {
 }
 
 const provideLifecycleScope =
-  (fqn: string, instanceId: string) =>
+  (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
+          failCredentialsRequired(resource.fqn),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.fqn)),
+            Layer.succeed(ResourceContext, resource),
+          ]),
         ),
       ),
     );
@@ -101,7 +110,7 @@ const provideLifecycleScope =
 /**
  * Instruments a single provider lifecycle call with an OTel span
  * (`provider.<op>`), the resource counter / duration histogram, and the
- * scoped artifacts/instance services normally supplied by
+ * scoped artifacts/resource context normally supplied by
  * {@link provideLifecycleScope}.
  *
  * This is the only call site through which provider lifecycle methods
@@ -112,7 +121,7 @@ const instrumentLifecycle =
   (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
-      provideLifecycleScope(fqn, instanceId),
+      provideLifecycleScope({ logicalId, fqn, instanceId, type: resourceType }),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
         attributes: {
@@ -261,14 +270,12 @@ export const apply = <P extends Plan>(
         // the leak surfaces in the run that caused it.
         const remaining = yield* state.list({ stack: stackName, stage });
         if (remaining.length > 0) {
-          return yield* Effect.fail(
-            new StateStoreError({
-              message:
-                `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
-                `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
-                `not see the stack's persisted state, so its cloud resources were NOT deleted`,
-            }),
-          );
+          return yield* new StateStoreError({
+            message:
+              `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
+              `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
+              `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+          });
         }
         return undefined;
       }
@@ -686,7 +693,7 @@ const executeNode = (
 
     // ── instance ID ──
 
-    const instanceId = yield* Effect.gen(function* () {
+    const resolveInstanceId = Effect.gen(function* () {
       if (node.action === "create" && !node.state?.instanceId) {
         const id = yield* generateInstanceId();
         yield* commit<CreatingResourceState>({
@@ -737,144 +744,484 @@ const executeNode = (
         `Instance ID not found for resource '${logicalId}' and action is '${node.action}'`,
       );
     });
+    const instanceId = yield* resolveInstanceId;
 
     // ── lifecycle ──
 
-    yield* Effect.gen(function* () {
-      // ── create ──
-      if (node.action === "create") {
-        if (!node.state) {
-          // First persistence point for a brand new logical resource. Once this is
-          // written, retries know they should resume creation instead of planning
-          // another fresh create from scratch.
-          yield* commit<CreatingResourceState>({
-            status: "creating",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: node.props,
-            attr: undefined,
-            providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-            adoptionBlocked: node.adoptionBlocked,
-          });
-        }
+    // ── create ──
+    if (node.action === "create") {
+      if (!node.state) {
+        // First persistence point for a brand new logical resource. Once this is
+        // written, retries know they should resume creation instead of planning
+        // another fresh create from scratch.
+        yield* commit<CreatingResourceState>({
+          status: "creating",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
+          attr: undefined,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
+        });
+      }
 
-        let attr: any = node.state?.attr;
+      let attr: any = node.state?.attr;
 
-        if (attr !== undefined) {
-          // Precreate/read may already have produced a usable output snapshot. Publish
-          // it early so downstream resources can start resolving against it.
-          yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
-        }
+      if (attr !== undefined) {
+        // Precreate/read may already have produced a usable output snapshot. Publish
+        // it early so downstream resources can start resolving against it.
+        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+      }
 
-        if (node.provider.precreate && attr === undefined) {
-          // Some resources need a placeholder physical resource before their real
-          // create can finish. Persist that stub so downstream evaluation can proceed.
-          yield* report("pre-creating");
-          attr = yield* node.provider
-            .precreate({
-              id: logicalId,
-              fqn,
-              news: node.props,
-              session: scopedSession,
-              instanceId,
-              bindings: excludeDeletedBindings(node.bindings),
-            })
-            .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
-          yield* commit<CreatingResourceState>({
-            status: "creating",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: node.props,
-            attr,
-            providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-            adoptionBlocked: node.adoptionBlocked,
-          });
-          yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
-        }
-
-        // While we're waiting on upstream outputs the resource isn't actually
-        // creating anything yet — surface that as "pending" so the CLI doesn't
-        // look stuck in "creating" for slow-upstream deploys.
-        yield* report("pending");
-
-        // Create runs against fully resolved upstream outputs and bindings, not the
-        // raw Output expressions stored in the plan.
-        yield* waitForDeps(allUpstreamFqns());
-
-        yield* report("creating");
-        const outputs = getOutputs();
-
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
-
-        const bindingOutputs = excludeDeletedBindings(
-          yield* Output.evaluate(node.bindings, outputs),
-        );
-
-        if (attr === undefined && node.deferredAdoption && node.provider.read) {
-          const checkpoint = () =>
-            commit<CreatingResourceState>({
-              status: "creating",
-              fqn,
-              logicalId,
-              instanceId,
-              resourceType: node.resource.Type,
-              props: news,
-              attr,
-              providerVersion: node.provider.version ?? 0,
-              bindings: bindingOutputs,
-              downstream: node.downstream,
-              removalPolicy: node.resource.RemovalPolicy,
-              providerMode: node.mode,
-              adoptionBlocked: node.adoptionBlocked,
-            });
-          // Refusal or interruption must retain identity, never foreign attributes.
-          yield* checkpoint();
-          const observed = yield* node.provider
-            .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
-            .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
-          if (observed !== undefined) {
-            if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
-              return yield* new OwnedBySomeoneElse({
-                message:
-                  `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
-                  "it exists in the cloud but is not owned by this " +
-                  "stack/stage/logical-id. Re-run with `--adopt` (or " +
-                  "wrap the effect in `adopt(true)`) to take it over.",
-                resourceType: node.resource.Type,
-                logicalId,
-              });
-            }
-            attr = stripUnowned(observed);
-            // A creating checkpoint retains olds: undefined on retry.
-            yield* checkpoint();
-          }
-        }
-
+      // Only cycle peers rendezvous on a precreate stub (`waitForDeps`); every
+      // other consumer waits for the reconciled output. Outside a cycle the
+      // stub is pure cost, and a live one (e.g. a Worker placeholder whose
+      // Durable Object classes are empty) can serve traffic while the real
+      // version propagates.
+      if (inCycle && node.provider.precreate && attr === undefined) {
+        // Some resources need a placeholder physical resource before their real
+        // create can finish. Persist that stub so downstream evaluation can proceed.
+        yield* report("pre-creating");
         attr = yield* node.provider
-          .reconcile({
+          .precreate({
             id: logicalId,
             fqn,
-            news,
-            instanceId,
-            bindings: bindingOutputs,
+            news: node.props,
             session: scopedSession,
-            olds: undefined,
-            output: attr,
+            instanceId,
+            bindings: excludeDeletedBindings(node.bindings),
           })
-          .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
+          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+        yield* commit<CreatingResourceState>({
+          status: "creating",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
+        });
+        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+      }
 
+      // While we're waiting on upstream outputs the resource isn't actually
+      // creating anything yet — surface that as "pending" so the CLI doesn't
+      // look stuck in "creating" for slow-upstream deploys.
+      yield* report("pending");
+
+      // Create runs against fully resolved upstream outputs and bindings, not the
+      // raw Output expressions stored in the plan.
+      yield* waitForDeps(allUpstreamFqns());
+
+      yield* report("creating");
+      const outputs = getOutputs();
+
+      const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
+
+      const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      if (attr === undefined && node.deferredAdoption && node.provider.read) {
+        const checkpoint = () =>
+          commit<CreatingResourceState>({
+            status: "creating",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: bindingOutputs,
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
+            adoptionBlocked: node.adoptionBlocked,
+          });
+        // Refusal or interruption must retain identity, never foreign attributes.
+        yield* checkpoint();
+        const observed = yield* node.provider
+          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
+          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        if (observed !== undefined) {
+          if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
+            return yield* new OwnedBySomeoneElse({
+              message:
+                `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
+                "it exists in the cloud but is not owned by this " +
+                "stack/stage/logical-id. Re-run with `--adopt` (or " +
+                "wrap the effect in `adopt(true)`) to take it over.",
+              resourceType: node.resource.Type,
+              logicalId,
+            });
+          }
+          attr = stripUnowned(observed);
+          // A creating checkpoint retains olds: undefined on retry.
+          yield* checkpoint();
+        }
+      }
+
+      attr = yield* node.provider
+        .reconcile({
+          id: logicalId,
+          fqn,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          olds: undefined,
+          output: attr,
+        })
+        .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
+
+      yield* commit<CreatedResourceState>({
+        status: "created",
+        fqn,
+        logicalId,
+        instanceId,
+        resourceType: node.resource.Type,
+        props: news,
+        attr,
+        // Terminal commits persist the RESOLVED binding payload the
+        // provider actually reconciled with, not the raw plan-time
+        // expressions. Raw `node.bindings` may hold unresolved Outputs
+        // (silently dropped by JSON state stores), so persisting them
+        // makes the next plan's `diffBindings` compare a lossy stored
+        // shape against fully-resolved data — a phantom binding update
+        // on every plan (#874).
+        bindings: bindingOutputs,
+        providerVersion: node.provider.version ?? 0,
+        downstream: node.downstream,
+        removalPolicy: node.resource.RemovalPolicy,
+        providerMode: node.mode,
+      });
+
+      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      yield* signalReady;
+      yield* signalReadyStable;
+
+      yield* markTerminal("created");
+      return;
+    }
+
+    // ── update ──
+    if (node.action === "update" || node.action === "adopted") {
+      // Cycle members publish their previous live attr *before* waiting on
+      // upstreams so the SCC can converge — peers in the cycle would
+      // otherwise deadlock waiting on each other. Phase 3 (`converge`)
+      // re-runs each peer's update against fresh outputs once everyone
+      // has settled.
+      //
+      // Linear (DAG) update nodes skip this entirely and simply wait for
+      // fresh upstream outputs, mirroring the create flow. This is the
+      // important property: a downstream of a non-cycle update never
+      // observes the upstream's stale attr, which prevents wasted/
+      // destructive intermediate updates (e.g. a Worker deploying with
+      // stale Build assets).
+      if (inCycle) {
+        yield* storeAndSignal({
+          output: node.state.attr,
+          props: node.state.props,
+          bindings: node.state.bindings ?? [],
+          instanceId,
+        });
+      }
+
+      // See create-flow note: while we're waiting on upstream outputs
+      // this resource isn't actually updating yet.
+      yield* report("pending");
+      yield* waitForDeps(allUpstreamFqns());
+      const outputs = getOutputs();
+
+      const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
+      const adopting =
+        node.adopting === true ||
+        (node.state.status === "updating" && node.state.adopting === true);
+
+      yield* node.state.status === "replaced"
+        ? commit<ReplacedResourceState>({
+            // Keep the replacement wrapper intact while changing the live
+            // replacement props; GC still has older generations to delete.
+            ...node.state,
+            attr: node.state.attr,
+            props: news,
+            providerMode: node.mode,
+          })
+        : commit<UpdatingReourceState>({
+            // For ordinary updates we snapshot the previously stable props/attrs
+            // once, so retries can continue from the same baseline.
+            status: "updating",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr: node.state.attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            old: node.state.status === "updating" ? node.state.old : node.state,
+            adopting: adopting ? true : undefined,
+            removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
+          });
+
+      yield* report(node.action === "adopted" ? "adopting" : "updating");
+
+      const previousProps = adopting
+        ? undefined
+        : node.state.status === "created" ||
+            node.state.status === "updated" ||
+            node.state.status === "replaced"
+          ? node.state.props
+          : node.state.old.props;
+
+      // Providers receive the resolved binding payload for this exact pass, while
+      // `previousProps` tells them what state the live resource is being updated from.
+      const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      const attr = yield* node.provider
+        .reconcile({
+          id: logicalId,
+          fqn,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          olds: previousProps,
+          output: node.state.attr,
+        })
+        .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
+
+      if (node.state.status === "replaced") {
+        yield* commit<ReplacedResourceState>({
+          // The live replacement changed, but cleanup of older generations still
+          // has to continue afterwards.
+          ...node.state,
+          attr,
+          props: news,
+          // Resolved payload, not raw `node.bindings` — see create commit.
+          bindings: bindingOutputs,
+          providerMode: node.mode,
+        });
+      } else {
+        yield* commit<UpdatedResourceState>({
+          status: "updated",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: news,
+          attr,
+          // Resolved payload, not raw `node.bindings` — see create commit.
+          bindings: bindingOutputs,
+          providerVersion: node.provider.version ?? 0,
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+        });
+      }
+
+      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      // Signal here for the linear (non-cycle) path. For in-cycle updates
+      // the deferred has already been resolved by the early `storeAndSignal`
+      // above and `signalReady` is a no-op the second time.
+      yield* signalReady;
+      yield* signalReadyStable;
+
+      if (node.action === "adopted") {
+        terminalStatuses.set(fqn, {
+          fqn,
+          id: logicalId,
+          type: node.resource.Type,
+          status: "adopted",
+          providerMode: node.mode,
+        });
+        if (!inCycle) yield* report("adopted");
+      } else {
+        yield* markTerminal("updated");
+      }
+      return;
+    }
+
+    // ── replace ──
+    if (node.action === "replace") {
+      if (node.state.status === "replaced" && !node.restart) {
+        // The replacement already exists; this pass only needs GC to clean up
+        // older generations, so expose the current replacement and stop here.
+        tracker[fqn] = {
+          output: node.state.attr,
+          props: node.state.props,
+          bindings: node.state.bindings ?? [],
+          instanceId,
+        };
+        yield* signalReady;
+        yield* signalReadyStable;
+        yield* markTerminal("created");
+        return;
+      }
+
+      let replState: ReplacingResourceState;
+      if (node.state.status !== "replacing" || node.restart) {
+        // `restart` deliberately nests the previous top-level replacement state
+        // into `old`, creating a new outer generation to replace it.
+        replState = yield* commit<ReplacingResourceState>({
+          status: "replacing",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
+          bindings: excludeDeletedBindings(node.bindings),
+          attr: undefined,
+          providerVersion: node.provider.version ?? 0,
+          deleteFirst: node.deleteFirst,
+          old: node.state,
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+        });
+      } else {
+        // Resume the same replacement generation after an interrupted apply.
+        replState = node.state;
+      }
+
+      // ── delete-first replacements ──
+      //
+      // By default a replacement is create-first: the new generation is
+      // created here and the old generation(s) are reclaimed afterwards by
+      // `collectGarbage` (Phase 2). That ordering keeps the old resource
+      // alive if the create fails, but it is wrong for resources whose
+      // replacement cannot coexist with the original — a fixed physical
+      // name, a singleton, etc. Those providers return
+      // `{ action: "replace", deleteFirst: true }`.
+      //
+      // When `deleteFirst` is set we tear the previous generation(s) down
+      // BEFORE creating the new one, and commit the result as a terminal
+      // `created` state (rather than `replaced`) so Phase 2 has no old chain
+      // left to drain. `delete` is required to be idempotent, so a re-run
+      // after an interrupted apply simply re-converges.
+      const deleteOldGenerations = (
+        old: ReplacementOldResourceState,
+      ): Effect.Effect<void, any, any> =>
+        Effect.gen(function* () {
+          const retain = node.resource.RemovalPolicy === "retain";
+          if (old.attr !== undefined && !retain) {
+            // Delete each old generation with the provider variant of the
+            // mode that created it — after a local ⇄ live switch,
+            // `node.provider` (the new mode) cannot tear down the other
+            // runtime's instance. Unstamped rows (legacy or written by a
+            // mode-agnostic provider) are physically live, unless their
+            // attrs carry the `dev:` identity marker — see stampedMode.
+            const oldProvider = yield* findProviderByType(node.resource.Type, stampedMode(old));
+            yield* oldProvider
+              .delete({
+                id: logicalId,
+                fqn,
+                instanceId: old.instanceId,
+                olds: old.props as never,
+                output: old.attr,
+                session: scopedSession,
+                bindings: [],
+              })
+              .pipe(
+                instrumentLifecycle("delete", fqn, node.resource.Type, logicalId, old.instanceId),
+              );
+          }
+          if (old.status === "replacing" || old.status === "replaced") {
+            yield* deleteOldGenerations(old.old);
+          }
+        });
+
+      if (node.deleteFirst) {
+        yield* scopedSession.note(
+          "Deleting previous resource before creating its replacement (deleteFirst)...",
+        );
+        yield* deleteOldGenerations(replState.old);
+      }
+
+      let attr: any = replState.attr;
+
+      if (attr !== undefined) {
+        // If precreate already ran, expose that intermediate output immediately so
+        // downstream resources can resolve against the same in-flight replacement.
+        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+      }
+
+      if (inCycle && node.provider.precreate && attr === undefined) {
+        yield* report("pre-creating");
+        attr = yield* node.provider
+          .precreate({
+            id: logicalId,
+            fqn,
+            news: node.props,
+            session: scopedSession,
+            instanceId,
+            bindings: excludeDeletedBindings(node.bindings),
+          })
+          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+        yield* commit<ReplacingResourceState>({
+          status: "replacing",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          old: replState.old,
+          deleteFirst: node.deleteFirst,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+        });
+        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+      }
+
+      // See create-flow note: while we're waiting on upstream outputs
+      // the replacement isn't actually being created yet.
+      yield* report("pending");
+
+      // Replacement create is evaluated exactly like create, but against the new
+      // generation's instance id and with the previous generations preserved in `old`.
+      yield* waitForDeps(allUpstreamFqns());
+
+      yield* report("creating replacement");
+      const outputs = getOutputs();
+
+      const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
+
+      const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      attr = yield* node.provider
+        .reconcile({
+          id: logicalId,
+          fqn,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          olds: undefined,
+          output: attr,
+        })
+        .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
+
+      if (node.deleteFirst) {
+        // The old generation(s) were already torn down above, so there is
+        // nothing left for `collectGarbage` to drain — collapse straight to
+        // the terminal `created` state.
         yield* commit<CreatedResourceState>({
           status: "created",
           fqn,
@@ -883,390 +1230,48 @@ const executeNode = (
           resourceType: node.resource.Type,
           props: news,
           attr,
-          // Terminal commits persist the RESOLVED binding payload the
-          // provider actually reconciled with, not the raw plan-time
-          // expressions. Raw `node.bindings` may hold unresolved Outputs
-          // (silently dropped by JSON state stores), so persisting them
-          // makes the next plan's `diffBindings` compare a lossy stored
-          // shape against fully-resolved data — a phantom binding update
-          // on every plan (#874).
-          bindings: bindingOutputs,
           providerVersion: node.provider.version ?? 0,
+          // Resolved payload, not raw `node.bindings` — see create commit.
+          bindings: bindingOutputs,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
         });
-
-        tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
-        yield* signalReady;
-        yield* signalReadyStable;
-
-        yield* markTerminal("created");
-        return;
+      } else {
+        yield* commit<ReplacedResourceState>({
+          // Creation of the new generation succeeded; from here on the only remaining
+          // work is draining the old chain via garbage collection.
+          status: "replaced",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: news,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          // Resolved payload, not raw `node.bindings` — see create commit.
+          bindings: bindingOutputs,
+          downstream: node.downstream,
+          // Preserve the remaining backlog exactly as-is. GC is responsible for
+          // popping one generation at a time until the chain is exhausted.
+          old: replState.old,
+          deleteFirst: node.deleteFirst,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+        });
       }
 
-      // ── update ──
-      if (node.action === "update" || node.action === "adopted") {
-        // Cycle members publish their previous live attr *before* waiting on
-        // upstreams so the SCC can converge — peers in the cycle would
-        // otherwise deadlock waiting on each other. Phase 3 (`converge`)
-        // re-runs each peer's update against fresh outputs once everyone
-        // has settled.
-        //
-        // Linear (DAG) update nodes skip this entirely and simply wait for
-        // fresh upstream outputs, mirroring the create flow. This is the
-        // important property: a downstream of a non-cycle update never
-        // observes the upstream's stale attr, which prevents wasted/
-        // destructive intermediate updates (e.g. a Worker deploying with
-        // stale Build assets).
-        if (inCycle) {
-          yield* storeAndSignal({
-            output: node.state.attr,
-            props: node.state.props,
-            bindings: node.state.bindings ?? [],
-            instanceId,
-          });
-        }
+      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      yield* signalReady;
+      yield* signalReadyStable;
 
-        // See create-flow note: while we're waiting on upstream outputs
-        // this resource isn't actually updating yet.
-        yield* report("pending");
-        yield* waitForDeps(allUpstreamFqns());
-        const outputs = getOutputs();
+      // Keep progress anchored to the live replacement while GC drains the
+      // previous generation(s) in the background.
+      yield* markTerminal("created");
+      return;
+    }
 
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
-        const adopting =
-          node.adopting === true ||
-          (node.state.status === "updating" && node.state.adopting === true);
-
-        yield* node.state.status === "replaced"
-          ? commit<ReplacedResourceState>({
-              // Keep the replacement wrapper intact while changing the live
-              // replacement props; GC still has older generations to delete.
-              ...node.state,
-              attr: node.state.attr,
-              props: news,
-              providerMode: node.mode,
-            })
-          : commit<UpdatingReourceState>({
-              // For ordinary updates we snapshot the previously stable props/attrs
-              // once, so retries can continue from the same baseline.
-              status: "updating",
-              fqn,
-              logicalId,
-              instanceId,
-              resourceType: node.resource.Type,
-              props: news,
-              attr: node.state.attr,
-              providerVersion: node.provider.version ?? 0,
-              bindings: excludeDeletedBindings(node.bindings),
-              downstream: node.downstream,
-              old: node.state.status === "updating" ? node.state.old : node.state,
-              adopting: adopting ? true : undefined,
-              removalPolicy: node.resource.RemovalPolicy,
-              providerMode: node.mode,
-            });
-
-        yield* report(node.action === "adopted" ? "adopting" : "updating");
-
-        const previousProps = adopting
-          ? undefined
-          : node.state.status === "created" ||
-              node.state.status === "updated" ||
-              node.state.status === "replaced"
-            ? node.state.props
-            : node.state.old.props;
-
-        // Providers receive the resolved binding payload for this exact pass, while
-        // `previousProps` tells them what state the live resource is being updated from.
-        const bindingOutputs = excludeDeletedBindings(
-          yield* Output.evaluate(node.bindings, outputs),
-        );
-
-        const attr = yield* node.provider
-          .reconcile({
-            id: logicalId,
-            fqn,
-            news,
-            instanceId,
-            bindings: bindingOutputs,
-            session: scopedSession,
-            olds: previousProps,
-            output: node.state.attr,
-          })
-          .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
-
-        if (node.state.status === "replaced") {
-          yield* commit<ReplacedResourceState>({
-            // The live replacement changed, but cleanup of older generations still
-            // has to continue afterwards.
-            ...node.state,
-            attr,
-            props: news,
-            // Resolved payload, not raw `node.bindings` — see create commit.
-            bindings: bindingOutputs,
-            providerMode: node.mode,
-          });
-        } else {
-          yield* commit<UpdatedResourceState>({
-            status: "updated",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: news,
-            attr,
-            // Resolved payload, not raw `node.bindings` — see create commit.
-            bindings: bindingOutputs,
-            providerVersion: node.provider.version ?? 0,
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-          });
-        }
-
-        tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
-        // Signal here for the linear (non-cycle) path. For in-cycle updates
-        // the deferred has already been resolved by the early `storeAndSignal`
-        // above and `signalReady` is a no-op the second time.
-        yield* signalReady;
-        yield* signalReadyStable;
-
-        if (node.action === "adopted") {
-          terminalStatuses.set(fqn, {
-            fqn,
-            id: logicalId,
-            type: node.resource.Type,
-            status: "adopted",
-            providerMode: node.mode,
-          });
-          if (!inCycle) yield* report("adopted");
-        } else {
-          yield* markTerminal("updated");
-        }
-        return;
-      }
-
-      // ── replace ──
-      if (node.action === "replace") {
-        if (node.state.status === "replaced" && !node.restart) {
-          // The replacement already exists; this pass only needs GC to clean up
-          // older generations, so expose the current replacement and stop here.
-          tracker[fqn] = {
-            output: node.state.attr,
-            props: node.state.props,
-            bindings: node.state.bindings ?? [],
-            instanceId,
-          };
-          yield* signalReady;
-          yield* signalReadyStable;
-          yield* markTerminal("created");
-          return;
-        }
-
-        let replState: ReplacingResourceState;
-        if (node.state.status !== "replacing" || node.restart) {
-          // `restart` deliberately nests the previous top-level replacement state
-          // into `old`, creating a new outer generation to replace it.
-          replState = yield* commit<ReplacingResourceState>({
-            status: "replacing",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: node.props,
-            bindings: excludeDeletedBindings(node.bindings),
-            attr: undefined,
-            providerVersion: node.provider.version ?? 0,
-            deleteFirst: node.deleteFirst,
-            old: node.state,
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-          });
-        } else {
-          // Resume the same replacement generation after an interrupted apply.
-          replState = node.state;
-        }
-
-        // ── delete-first replacements ──
-        //
-        // By default a replacement is create-first: the new generation is
-        // created here and the old generation(s) are reclaimed afterwards by
-        // `collectGarbage` (Phase 2). That ordering keeps the old resource
-        // alive if the create fails, but it is wrong for resources whose
-        // replacement cannot coexist with the original — a fixed physical
-        // name, a singleton, etc. Those providers return
-        // `{ action: "replace", deleteFirst: true }`.
-        //
-        // When `deleteFirst` is set we tear the previous generation(s) down
-        // BEFORE creating the new one, and commit the result as a terminal
-        // `created` state (rather than `replaced`) so Phase 2 has no old chain
-        // left to drain. `delete` is required to be idempotent, so a re-run
-        // after an interrupted apply simply re-converges.
-        const deleteOldGenerations = (
-          old: ReplacementOldResourceState,
-        ): Effect.Effect<void, any, any> =>
-          Effect.gen(function* () {
-            const retain = node.resource.RemovalPolicy === "retain";
-            if (old.attr !== undefined && !retain) {
-              // Delete each old generation with the provider variant of the
-              // mode that created it — after a local ⇄ live switch,
-              // `node.provider` (the new mode) cannot tear down the other
-              // runtime's instance. Unstamped rows (legacy or written by a
-              // mode-agnostic provider) are physically live, unless their
-              // attrs carry the `dev:` identity marker — see stampedMode.
-              const oldProvider = yield* findProviderByType(node.resource.Type, stampedMode(old));
-              yield* oldProvider
-                .delete({
-                  id: logicalId,
-                  fqn,
-                  instanceId: old.instanceId,
-                  olds: old.props as never,
-                  output: old.attr,
-                  session: scopedSession,
-                  bindings: [],
-                })
-                .pipe(
-                  instrumentLifecycle("delete", fqn, node.resource.Type, logicalId, old.instanceId),
-                );
-            }
-            if (old.status === "replacing" || old.status === "replaced") {
-              yield* deleteOldGenerations(old.old);
-            }
-          });
-
-        if (node.deleteFirst) {
-          yield* scopedSession.note(
-            "Deleting previous resource before creating its replacement (deleteFirst)...",
-          );
-          yield* deleteOldGenerations(replState.old);
-        }
-
-        let attr: any = replState.attr;
-
-        if (attr !== undefined) {
-          // If precreate already ran, expose that intermediate output immediately so
-          // downstream resources can resolve against the same in-flight replacement.
-          yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
-        }
-
-        if (node.provider.precreate && attr === undefined) {
-          yield* report("pre-creating");
-          attr = yield* node.provider
-            .precreate({
-              id: logicalId,
-              fqn,
-              news: node.props,
-              session: scopedSession,
-              instanceId,
-              bindings: excludeDeletedBindings(node.bindings),
-            })
-            .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
-          yield* commit<ReplacingResourceState>({
-            status: "replacing",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: node.props,
-            attr,
-            providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
-            downstream: node.downstream,
-            old: replState.old,
-            deleteFirst: node.deleteFirst,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-          });
-          yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
-        }
-
-        // See create-flow note: while we're waiting on upstream outputs
-        // the replacement isn't actually being created yet.
-        yield* report("pending");
-
-        // Replacement create is evaluated exactly like create, but against the new
-        // generation's instance id and with the previous generations preserved in `old`.
-        yield* waitForDeps(allUpstreamFqns());
-
-        yield* report("creating replacement");
-        const outputs = getOutputs();
-
-        const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
-
-        const bindingOutputs = excludeDeletedBindings(
-          yield* Output.evaluate(node.bindings, outputs),
-        );
-
-        attr = yield* node.provider
-          .reconcile({
-            id: logicalId,
-            fqn,
-            news,
-            instanceId,
-            bindings: bindingOutputs,
-            session: scopedSession,
-            olds: undefined,
-            output: attr,
-          })
-          .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
-
-        if (node.deleteFirst) {
-          // The old generation(s) were already torn down above, so there is
-          // nothing left for `collectGarbage` to drain — collapse straight to
-          // the terminal `created` state.
-          yield* commit<CreatedResourceState>({
-            status: "created",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: news,
-            attr,
-            providerVersion: node.provider.version ?? 0,
-            // Resolved payload, not raw `node.bindings` — see create commit.
-            bindings: bindingOutputs,
-            downstream: node.downstream,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-          });
-        } else {
-          yield* commit<ReplacedResourceState>({
-            // Creation of the new generation succeeded; from here on the only remaining
-            // work is draining the old chain via garbage collection.
-            status: "replaced",
-            fqn,
-            logicalId,
-            instanceId,
-            resourceType: node.resource.Type,
-            props: news,
-            attr,
-            providerVersion: node.provider.version ?? 0,
-            // Resolved payload, not raw `node.bindings` — see create commit.
-            bindings: bindingOutputs,
-            downstream: node.downstream,
-            // Preserve the remaining backlog exactly as-is. GC is responsible for
-            // popping one generation at a time until the chain is exhausted.
-            old: replState.old,
-            deleteFirst: node.deleteFirst,
-            removalPolicy: node.resource.RemovalPolicy,
-            providerMode: node.mode,
-          });
-        }
-
-        tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
-        yield* signalReady;
-        yield* signalReadyStable;
-
-        // Keep progress anchored to the live replacement while GC drains the
-        // previous generation(s) in the background.
-        yield* markTerminal("created");
-        return;
-      }
-
-      return yield* Effect.die(`Unknown action: ${node.action}`);
-    });
+    return yield* Effect.die(`Unknown action: ${node.action}`);
   }).pipe(
     Effect.catchCause((cause) =>
       // Record the failure, propagate it to any downstream resources waiting on
@@ -1766,6 +1771,8 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
   const failures: DeleteFailure[] = [];
   const blockedDeletes: BlockedDelete[] = [];
   const unresolved = new Set<string>();
+  // Skipped by later passes so generations older than a draining one are still reclaimed.
+  const inProgress = new Set<string>();
 
   const pendingDeletes = { ...plan.deletions };
   // Pending means this generation drained; deferred means it is still live.
@@ -1783,6 +1790,10 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
       Effect.gen(function* () {
         const isDeleteNode = (node: Delete | ReplacementResourceState): node is Delete =>
           "action" in node;
+
+        const generation = isDeleteNode(node)
+          ? node.state
+          : (nextOldGeneration(node, inProgress) ?? node.old);
 
         const {
           fqn,
@@ -1821,11 +1832,11 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               fqn: node.fqn,
               logicalId: node.logicalId,
               namespace: node.namespace,
-              resourceType: node.old.resourceType,
-              instanceId: node.old.instanceId,
-              downstream: node.old.downstream,
-              props: node.old.props,
-              attr: node.old.attr,
+              resourceType: generation.resourceType,
+              instanceId: generation.instanceId,
+              downstream: generation.downstream,
+              props: generation.props,
+              attr: generation.attr,
               // A missing provider is fatal — plan already dies on zombie
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
@@ -1834,22 +1845,23 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               // unstamped rows are physically live unless their attrs
               // carry the `dev:` identity marker (see stampedMode).
               provider: yield* tryFindProviderByType(
-                node.old.resourceType,
-                stampedMode(node.old),
+                generation.resourceType,
+                stampedMode(generation),
               ).pipe(
                 Effect.flatMap(
                   Option.match({
-                    onNone: () => Effect.die(missingProviderError(node.old.resourceType, node.fqn)),
+                    onNone: () =>
+                      Effect.die(missingProviderError(generation.resourceType, node.fqn)),
                     onSome: Effect.succeed,
                   }),
                 ),
               ),
-              providerMode: node.old.providerMode,
+              providerMode: generation.providerMode,
             };
 
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
-          : node.old.adoptionBlocked;
+          : generation.adoptionBlocked;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2068,7 +2080,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
             }
 
             if (attr !== undefined && !retainOldGeneration) {
-              yield* provider
+              // A destroy must finish now; only a replacement's old generation can wait for the next apply.
+              const canFinishLater = !isDeleteNode(node) && pendingDeletes[fqn] === undefined;
+              const deleteInProgress = yield* provider
                 .delete({
                   id: logicalId,
                   fqn,
@@ -2078,7 +2092,22 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   session: scopedSession,
                   bindings: [],
                 })
-                .pipe(instrumentLifecycle("delete", fqn, resourceType, logicalId, instanceId));
+                .pipe(
+                  instrumentLifecycle("delete", fqn, resourceType, logicalId, instanceId),
+                  Effect.as(undefined),
+                  Effect.catchIf(
+                    (error): error is DeleteInProgress =>
+                      canFinishLater && Predicate.isTagged(error, "DeleteInProgress"),
+                    (error) => Effect.succeed(error),
+                  ),
+                );
+              if (deleteInProgress !== undefined) {
+                inProgress.add(instanceId);
+                yield* scopedSession.note(
+                  `${deleteInProgress.message} The replaced resource stays in state and its delete is retried on the next apply.`,
+                );
+                return "deferred" as const;
+              }
             }
 
             if (isDeleteNode(node)) {
@@ -2088,7 +2117,13 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               if (!retainOldGeneration) {
                 yield* scopedSession.note("Cleaning up replaced resource...");
               }
-              if (node.old.status === "replacing" || node.old.status === "replaced") {
+              if (generation !== node.old) {
+                yield* commit<ReplacementResourceState>({
+                  ...node,
+                  bindings: excludeDeletedBindings(node.bindings),
+                  old: withoutGeneration(node.old, generation),
+                });
+              } else if (node.old.status === "replacing" || node.old.status === "replaced") {
                 const remaining: ReplacementResourceState = {
                   ...node,
                   bindings: excludeDeletedBindings(node.bindings),
@@ -2150,11 +2185,18 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    })).filter(
-      (replaced) =>
-        !unresolved.has(replaced.fqn) &&
-        (plan.selectedFqns === undefined || plan.selectedFqns.has(replaced.fqn)),
-    );
+    })).filter((replaced) => {
+      if (unresolved.has(replaced.fqn)) return false;
+      if (plan.selectedFqns !== undefined && !plan.selectedFqns.has(replaced.fqn)) {
+        return false;
+      }
+      if (nextOldGeneration(replaced, inProgress) === undefined) {
+        // Only draining generations remain: keep them for the next apply and block dependent deletes.
+        unresolved.add(replaced.fqn);
+        return false;
+      }
+      return true;
+    });
     const deletionGraph: Record<string, Delete | ReplacementResourceState | undefined> =
       Object.fromEntries(remainingReplacedResources.map((replaced) => [replaced.fqn, replaced]));
     for (const [fqn, node] of Object.entries(pendingDeletes)) {
@@ -2178,9 +2220,44 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
     // Every independent delete was still attempted; now surface everything
     // that went wrong (and everything skipped as a consequence) as one
     // typed aggregate. The destroy as a whole still fails.
-    return yield* Effect.fail(new DestroyError({ failures, blocked: blockedDeletes }));
+    return yield* new DestroyError({ failures, blocked: blockedDeletes });
   }
 });
+
+/** The newest old generation of `row` whose instance ID is not in `skip`. */
+const nextOldGeneration = (
+  row: ReplacementResourceState,
+  skip: ReadonlySet<string>,
+): ReplacementOldResourceState | undefined => {
+  let generation = row.old;
+  while (skip.has(generation.instanceId)) {
+    if (generation.status !== "replacing" && generation.status !== "replaced") {
+      return undefined;
+    }
+    generation = generation.old;
+  }
+  return generation;
+};
+
+/** The chain below `generation` without `target`; a wrapper left with no old generation becomes a plain row. */
+const withoutGeneration = (
+  generation: ReplacementOldResourceState,
+  target: ResourceState,
+): ReplacementOldResourceState => {
+  if (generation.status !== "replacing" && generation.status !== "replaced") {
+    return generation;
+  }
+  if (generation.old !== target) {
+    return { ...generation, old: withoutGeneration(generation.old, target) };
+  }
+  if (target.status === "replacing" || target.status === "replaced") {
+    return { ...generation, old: target.old };
+  }
+  const { old: _old, deleteFirst: _deleteFirst, ...rest } = generation;
+  return generation.status === "replacing"
+    ? { ...rest, status: "creating" }
+    : { ...rest, status: "created", attr: generation.attr };
+};
 
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,

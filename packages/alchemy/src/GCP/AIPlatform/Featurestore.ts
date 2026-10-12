@@ -278,23 +278,20 @@ export const FeaturestoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* Stream.fromIterable(listLocations(env.region))
-          .pipe(
-            Stream.flatMap((location) =>
-              aiplatform.listProjectsLocationsFeaturestores.pages({
-                parent: `projects/${env.project}/locations/${location}`,
-                pageSize: 100,
-              }),
-            ),
-          )
-          .pipe(
-            Stream.flatMap((page) => Stream.fromIterable(page.featurestores ?? [])),
-            Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
-            Stream.map((store) => toAttrs(store, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () => Effect.succeed([])),
-          );
+        return yield* Stream.fromIterable(listLocations(env.region)).pipe(
+          Stream.flatMap((location) =>
+            aiplatform.listProjectsLocationsFeaturestores.pages({
+              parent: `projects/${env.project}/locations/${location}`,
+              pageSize: 100,
+            }),
+          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.featurestores ?? [])),
+          Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
+          Stream.map((store) => toAttrs(store, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFound", () => Effect.succeed([])),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

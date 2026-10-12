@@ -92,7 +92,7 @@ describe(
               FunctionName: functionName,
               Qualifier: qualifier,
               InvocationType: "Event",
-              DurableExecutionName: "durable-test-flow-1",
+              DurableExecutionName: "durable-test-flow-2",
               Payload: encodeDurableEnvelope("DurableFlow", { orderId: "order-1" }),
             });
             expect(started.StatusCode).toBe(202);
@@ -103,7 +103,7 @@ describe(
               ? started.DurableExecutionArn
               : yield* Lambda.listDurableExecutionsByFunction({
                   FunctionName: functionName,
-                  DurableExecutionName: "durable-test-flow-1",
+                  DurableExecutionName: "durable-test-flow-2",
                 }).pipe(
                   Effect.map((r) => r.DurableExecutions?.[0]?.DurableExecutionArn),
                   Effect.repeat({
@@ -128,7 +128,12 @@ describe(
 
             expect(execution.Status).toBe("SUCCEEDED");
             const result = JSON.parse(unwrapSensitive(execution.Result) ?? "{}");
-            expect(result).toEqual({ orderId: "order-1", reserved: true, total: 42 });
+            expect(result).toEqual({
+              orderId: "order-1",
+              reserved: true,
+              total: 42,
+              runtime: "AWS.Lambda.Function",
+            });
           }),
         { timeout: 150_000 },
       );

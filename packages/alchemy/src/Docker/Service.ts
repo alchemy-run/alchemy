@@ -17,6 +17,7 @@ import {
 import { Stack } from "../Stack.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
+import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
 
@@ -226,7 +227,12 @@ export declare namespace Service {
   }
 
   interface Healthcheck {
-    /** Command to run for health checks. */
+    /**
+     * Command to run for health checks. A string runs in the container's
+     * shell. An array follows Docker's healthcheck `Test` form:
+     * `["CMD-SHELL", "pg_isready -U app"]`, `["CMD", "pg_isready", "-U", "app"]`,
+     * or `["NONE"]` to disable the image's healthcheck.
+     */
     cmd: string[] | string;
     /** Time between checks, e.g. `"30s"`. */
     interval?: string;
@@ -693,10 +699,11 @@ export const ServiceProvider = () =>
                 "restart-max-attempts": desired.restartPolicy?.maxAttempts,
                 "restart-window": desired.restartPolicy?.window,
                 "health-cmd": desired.healthcheck
-                  ? Array.isArray(desired.healthcheck.cmd)
-                    ? desired.healthcheck.cmd.join(" ")
-                    : desired.healthcheck.cmd
+                  ? healthcheckCommand(desired.healthcheck.cmd)
                   : undefined,
+                "no-healthcheck":
+                  desired.healthcheck !== undefined &&
+                  isHealthcheckDisabled(desired.healthcheck.cmd),
                 "health-interval": desired.healthcheck?.interval,
                 "health-timeout": desired.healthcheck?.timeout,
                 "health-retries": desired.healthcheck?.retries,
@@ -761,10 +768,10 @@ export const ServiceProvider = () =>
             "restart-max-attempts": desired.restartPolicy?.maxAttempts,
             "restart-window": desired.restartPolicy?.window,
             "health-cmd": desired.healthcheck
-              ? Array.isArray(desired.healthcheck.cmd)
-                ? desired.healthcheck.cmd.join(" ")
-                : desired.healthcheck.cmd
+              ? healthcheckCommand(desired.healthcheck.cmd)
               : undefined,
+            "no-healthcheck":
+              desired.healthcheck !== undefined && isHealthcheckDisabled(desired.healthcheck.cmd),
             "health-interval": desired.healthcheck?.interval,
             "health-timeout": desired.healthcheck?.timeout,
             "health-retries": desired.healthcheck?.retries,
@@ -939,36 +946,34 @@ const toServiceAttributes = (
   service: ServiceInspect,
   context?: string,
   code?: { hash: string },
-): Service["Attributes"] => {
-  return {
-    id: service.ID,
-    name: service.Spec.Name,
-    context,
-    image: service.Spec.TaskTemplate?.ContainerSpec?.Image ?? "",
-    replicas: service.Spec.Mode?.Replicated?.Replicas ?? 1,
-    networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
-      n.Target ? [n.Target] : [],
-    ),
-    ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
-      if (port.PublishedPort === undefined || port.TargetPort === undefined) {
-        return [];
-      }
-      return [
-        {
-          external: port.PublishedPort,
-          internal: port.TargetPort,
-          protocol: port.Protocol ?? "tcp",
-          mode: port.PublishMode ?? "ingress",
-        },
-      ];
-    }),
-    labels: service.Spec.Labels ?? {},
-    endpointMode: service.Spec.EndpointSpec?.Mode ?? "vip",
-    createdAt: Date.parse(service.CreatedAt ?? "") || Date.now(),
-    updatedAt: Date.parse(service.UpdatedAt ?? "") || Date.now(),
-    code,
-  };
-};
+): Service["Attributes"] => ({
+  id: service.ID,
+  name: service.Spec.Name,
+  context,
+  image: service.Spec.TaskTemplate?.ContainerSpec?.Image ?? "",
+  replicas: service.Spec.Mode?.Replicated?.Replicas ?? 1,
+  networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
+    n.Target ? [n.Target] : [],
+  ),
+  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+    if (port.PublishedPort === undefined || port.TargetPort === undefined) {
+      return [];
+    }
+    return [
+      {
+        external: port.PublishedPort,
+        internal: port.TargetPort,
+        protocol: port.Protocol ?? "tcp",
+        mode: port.PublishMode ?? "ingress",
+      },
+    ];
+  }),
+  labels: service.Spec.Labels ?? {},
+  endpointMode: service.Spec.EndpointSpec?.Mode ?? "vip",
+  createdAt: Date.parse(service.CreatedAt ?? "") || Date.now(),
+  updatedAt: Date.parse(service.UpdatedAt ?? "") || Date.now(),
+  code,
+});
 
 const ensureReplicatedMode = (service: ServiceInspect): void => {
   if (service.Spec.Mode?.Global !== undefined) {

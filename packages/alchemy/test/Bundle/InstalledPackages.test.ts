@@ -836,6 +836,35 @@ describe("Lambda external packages", { tags: ["unit", "local"] }, () => {
           ].join("\n"),
         },
         {
+          // pnpm 12: pnpm's own environment lock document, then the project
+          // lockfile as a second YAML document.
+          name: "pnpm-lock.yaml",
+          content: [
+            "---",
+            "lockfileVersion: '9.0'",
+            "importers:",
+            "  .:",
+            "    packageManagerDependencies:",
+            "      pnpm:",
+            "        specifier: 12.9.1",
+            "        version: 12.9.1",
+            "",
+            "---",
+            "lockfileVersion: '9.0'",
+            "importers:",
+            "  .:",
+            "    dependencies:",
+            "      sharp:",
+            "        specifier: ^0.34.0",
+            "        version: 0.34.5",
+            "snapshots:",
+            "  sharp@0.34.5:",
+            "    dependencies:",
+            "      semver: 7.7.3",
+            "  semver@7.7.3: {}",
+          ].join("\n"),
+        },
+        {
           name: "bun.lock",
           content: [
             "{",

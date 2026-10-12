@@ -340,6 +340,58 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
   );
 
   test.provider.skipIf(!dockerAvailable)(
+    "dev mode applies logging.retention to the task's log group",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deploy = (retention: "10 days" | "forever") =>
+          stack.deploy(
+            AWS.ECS.Task("EcsRetentionTask", {
+              context: contextDir,
+              port: CONTEXT_PORT,
+              cpu: 256,
+              memory: 512,
+              networkMode: "bridge",
+              requiresCompatibilities: ["EC2"],
+              runtimePlatform: hostRuntimePlatform,
+              logging: { retention },
+            }),
+          );
+
+        /** The task's log group as the emulator reports it, if it exists. */
+        const findGroup = Effect.fn(function* (logGroupName: string) {
+          const response = yield* rawAwsJson({
+            service: "logs",
+            region: FLOCI_REGION,
+            target: "Logs_20140328.DescribeLogGroups",
+            contentType: "application/x-amz-json-1.1",
+            body: { logGroupNamePrefix: logGroupName },
+          });
+          const page = (yield* response.json) as {
+            logGroups?: { logGroupName?: string; retentionInDays?: number }[];
+          };
+          return page.logGroups?.find((group) => group.logGroupName === logGroupName);
+        });
+
+        // 10 days rounds up to CloudWatch's 14.
+        const task = yield* deploy("10 days");
+        expect((yield* findGroup(task.logGroupName))?.retentionInDays).toBe(14);
+
+        // "forever" clears the policy and keeps the group.
+        yield* deploy("forever");
+        const cleared = yield* findGroup(task.logGroupName);
+        expect(cleared).toBeDefined();
+        expect(cleared?.retentionInDays).toBeUndefined();
+
+        // The task's destroy deletes its log group.
+        yield* stack.destroy();
+        expect(yield* findGroup(task.logGroupName)).toBeUndefined();
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!dockerAvailable)(
     "dev mode bundles a main-program ECS task and pushes through the local ECR registry",
     (stack) =>
       Effect.gen(function* () {

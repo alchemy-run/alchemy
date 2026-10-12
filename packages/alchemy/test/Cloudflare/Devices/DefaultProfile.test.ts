@@ -10,10 +10,11 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Gate on the dedicated env var so this test only runs in environments
-// the operator has explicitly opted in to mutating the WARP default
-// profile of.
-const ENABLED = process.env.CLOUDFLARE_TEST_DEVICES === "1";
+// The mutating cases toggle the account's WARP default profile and restore
+// the captured baseline. The standing test account has Zero Trust (the
+// ungated `list` case below already requires it), so they run by default;
+// set CLOUDFLARE_TEST_DEVICES=0 to skip them on an account you must not touch.
+const ENABLED = process.env.CLOUDFLARE_TEST_DEVICES !== "0";
 const skip = !ENABLED;
 
 // Both cases mutate the same account-level WARP default device profile

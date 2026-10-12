@@ -13,6 +13,12 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const runLifecycle = !process.env.FAST;
 
+// Project setup (one-time): the Datastore index admin API only targets the
+// project's `(default)` database, which must exist in Datastore mode:
+//   gcloud firestore databases create --database='(default)' \
+//     --location=us-central1 --type=datastore-mode --project=PROJECT_ID
+// Without it every call fails with `NotFound: Project '…' does not exist.`
+
 const waitUntilGone = (indexId: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;

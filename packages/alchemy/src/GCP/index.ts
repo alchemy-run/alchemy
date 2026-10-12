@@ -140,6 +140,7 @@ export * as SecurityPosture from "./SecurityPosture/index.ts";
 export * as ServiceDirectory from "./ServiceDirectory/index.ts";
 export * as ServiceManagement from "./ServiceManagement/index.ts";
 export * as ServiceNetworking from "./ServiceNetworking/index.ts";
+export * as ServiceUsage from "./ServiceUsage/index.ts";
 export * as SiteVerification from "./SiteVerification/index.ts";
 export * as SQL from "./SQL/index.ts";
 export * as Spanner from "./Spanner/index.ts";

@@ -342,6 +342,59 @@ describe
         5_000_000,
       );
 
+      // Regression (#1832): `--force` upgrades the unchanged database's noop
+      // to an update. Its conditional `name` stable must survive, or the
+      // role sees `database.name === undefined`, plans a replacement and
+      // rotates its credentials on every forced deploy.
+      test.provider(
+        "forced redeploy keeps the role (no replacement, credentials unchanged)",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const program = Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("Database", {
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const role = yield* Planetscale.PostgresRole("RoleForce", {
+                database,
+                inheritedRoles: ["pg_read_all_data"],
+              });
+              return { database, role };
+            });
+
+            const { database, role } = yield* stack.deploy(program);
+            const { role: forced } = yield* stack.deploy(program, { force: true });
+
+            expect(forced.id).toEqual(role.id);
+            expect(forced.name).toEqual(role.name);
+            expect(forced.username).toEqual(role.username);
+            expect(Redacted.value(forced.password)).toEqual(Redacted.value(role.password));
+
+            // Out-of-band: the original role still exists and is the only
+            // non-default role on the branch (no replacement was created).
+            const live = yield* ps.getRole({
+              id: role.id,
+              database: database.name,
+              organization: database.organization,
+              branch: "main",
+            });
+            expect(live.id).toEqual(role.id);
+            const roles = yield* ps.listRoles({
+              database: database.name,
+              organization: database.organization,
+              branch: "main",
+            });
+            expect(roles.data.filter((r) => !r.default).map((r) => r.id)).toEqual([role.id]);
+
+            yield* stack.destroy();
+
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+          }).pipe(logLevel),
+        5_000_000,
+      );
+
       test.provider(
         "role with replication is created with the attribute and replaced when it changes",
         (stack) =>

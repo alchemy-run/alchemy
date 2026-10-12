@@ -39,7 +39,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
+test.provider(
   "Vite remote opt-out deploys real Compute from dev and removes it",
   (stack) =>
     Effect.gen(function* () {

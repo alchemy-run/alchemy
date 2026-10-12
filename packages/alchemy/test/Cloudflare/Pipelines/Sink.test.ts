@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -38,15 +39,18 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(
-    user.verifyToken({}).pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
-        times: 8,
-      }),
-    ),
-  );
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(
+        user.verifyToken({}).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: Schedule.exponential("500 millis"),
+            times: 8,
+          }),
+        ),
+      );
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );

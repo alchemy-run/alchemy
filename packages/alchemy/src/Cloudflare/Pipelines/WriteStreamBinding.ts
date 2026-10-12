@@ -4,11 +4,27 @@ import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { isLegacyPipeline, type LegacyPipeline } from "./LegacyPipeline.ts";
 import type { Stream } from "./Stream.ts";
-import { StreamSendError, WriteStream, type WriteStreamClient } from "./WriteStream.ts";
+import { makeStreamClient, recordSchemaOf, toStreamSendError } from "./StreamCodec.ts";
+import { WriteStream, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
- * Implementation of the {@link WriteStream} service that uses a native
- * Worker `pipelines` binding.
+ * Implementation of the {@link WriteStream} service over a native Worker
+ * `pipelines` binding. Registers the binding on the host Worker and, when
+ * the stream has an Effect Schema, encodes records with it before
+ * `send`.
+ * ### Providing the Layer
+ * **Example:** Send from a Worker
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const views = yield* Cloudflare.Basin.WriteStream(PageViews);
+ *   // ...
+ * }).pipe(Effect.provide(Cloudflare.Basin.WriteStreamBinding));
+ * ```
+ *
+ * @layer
+ * @provides Cloudflare.Pipelines.WriteStream
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export const WriteStreamBinding = Layer.effect(
   WriteStream,
@@ -16,7 +32,7 @@ export const WriteStreamBinding = Layer.effect(
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (stream: Stream | LegacyPipeline) {
+    return Effect.fn(function* (stream: Stream<any> | LegacyPipeline) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${stream}`({
           bindings: [
@@ -39,23 +55,20 @@ export const WriteStreamBinding = Layer.effect(
 /** Build the producer client over a native Worker `pipelines` binding. */
 export const makeWriteStreamClient = (
   env: Record<string, any>,
-  stream: Stream | LegacyPipeline,
-): WriteStreamClient => {
+  stream: Stream<any> | LegacyPipeline,
+): WriteStreamClient<any> => {
   const raw = Effect.sync(() => (env as Record<string, Pipeline>)[stream.LogicalId]!);
-  return {
+  return makeStreamClient({
+    schema: recordSchemaOf(stream),
     raw,
-    send: (records) =>
+    sendEncoded: (records) =>
       raw.pipe(
         Effect.flatMap((pipeline) =>
           Effect.tryPromise({
             try: () => pipeline.send([...records]),
-            catch: (error: any) =>
-              new StreamSendError({
-                message: error?.message ?? "Unknown pipeline error",
-                cause: error,
-              }),
+            catch: toStreamSendError,
           }),
         ),
       ),
-  };
+  });
 };

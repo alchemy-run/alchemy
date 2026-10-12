@@ -1,7 +1,9 @@
 import * as iot from "@distilled.cloud/aws/iot";
-import { describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { DestroyError } from "@/Apply";
 import * as AWS from "@/AWS";
 import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
 import * as Test from "@/Test/Alchemy";
@@ -40,8 +42,8 @@ describe.sequential(
     // AWS requires a thing type to remain deprecated for at least five minutes
     // before deletion. The provider fully waits for observable absence, so this
     // lifecycle is intentionally outside the default fast sweep; enable it for
-    // the slow lane with AWS_TEST_SLOW=1.
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    // the slow lane (skipped under `--fast`).
+    test.provider.skipIf(!!process.env.FAST)(
       "creates a thing type, associates a thing, and deletes it",
       (stack) =>
         Effect.gen(function* () {
@@ -96,8 +98,13 @@ describe.sequential(
           // First destroy removes the Thing and deprecates its type, then exits
           // on the provider's bounded nonterminal error instead of blocking for
           // AWS's mandatory five-minute window. State remains for re-entry.
+          // The engine aggregates delete failures into a DestroyError; the
+          // thing type's cause is the provider's typed timeout.
           const pending = yield* Effect.flip(stack.destroy());
-          expect(pending).toBeInstanceOf(ThingTypeDeletionTimedOut);
+          assert(pending instanceof DestroyError);
+          const failures = pending.failures;
+          expect(failures.map((f) => f.logicalId)).toEqual(["SensorType"]);
+          expect(Cause.squash(failures[0]!.cause)).toBeInstanceOf(ThingTypeDeletionTimedOut);
           yield* assertThingGone(created.thingName);
 
           const deprecated = yield* iot.describeThingType({ thingTypeName: created.thingTypeName });

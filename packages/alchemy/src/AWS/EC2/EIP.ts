@@ -338,20 +338,19 @@ export const EIPProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag("InvalidAllocationID.NotFound", () => Effect.void),
-              Effect.catchTag("AuthFailure", () => Effect.void),
+              Effect.catchTags({
+                "InvalidAllocationID.NotFound": () => Effect.void,
+                AuthFailure: () => Effect.void,
+              }),
               Effect.tapError(Effect.logDebug),
               // Retry when EIP is still in use (e.g., NAT Gateway being deleted)
               Effect.retry({
-                while: (e) => {
-                  return (
-                    // TODO(sam): not sure if the API will actually throw this
-                    // e._tag === "DependencyViolation" ||
-                    // this throws if the address hasn't been disassociated from all resources
-                    // we will retry it assuming that another resource provider is dissassociating it (e.g. a NAT Gateway resource is being deleted)
-                    e._tag === "InvalidIPAddress.InUse"
-                  );
-                },
+                while: (e) =>
+                  // TODO(sam): not sure if the API will actually throw this
+                  // e._tag === "DependencyViolation" ||
+                  // this throws if the address hasn't been disassociated from all resources
+                  // we will retry it assuming that another resource provider is dissassociating it (e.g. a NAT Gateway resource is being deleted)
+                  e._tag === "InvalidIPAddress.InUse",
                 schedule: Schedule.max([Schedule.exponential(1000, 1.5), Schedule.recurs(20)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`EIP still in use, waiting for release... (attempt ${attempt})`),

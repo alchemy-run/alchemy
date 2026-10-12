@@ -240,7 +240,7 @@ export const ApplicationProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* findByNamespace(news.namespace);
                     if (existing === undefined) {
-                      return yield* Effect.fail(error);
+                      return yield* error;
                     }
                     return { Arn: existing };
                   }),

@@ -20,7 +20,6 @@ const { test } = Test.make({ providers: AWS.providers() });
 // collection + index (and a KB service role that can read the embedding model,
 // the collection, and S3) via env vars to run this against real infra.
 //
-//   AWS_TEST_SLOW=1
 //   BEDROCK_KB_ROLE_ARN=arn:aws:iam::...:role/...
 //   BEDROCK_KB_COLLECTION_ARN=arn:aws:aoss:...:collection/...
 //   BEDROCK_KB_INDEX_NAME=bedrock-index
@@ -30,7 +29,7 @@ const collectionArn = process.env.BEDROCK_KB_COLLECTION_ARN;
 const indexName = process.env.BEDROCK_KB_INDEX_NAME ?? "bedrock-index";
 const embeddingModelArn = process.env.BEDROCK_KB_EMBEDDING_MODEL_ARN;
 
-const gated = !process.env.AWS_TEST_SLOW || !roleArn || !collectionArn || !embeddingModelArn;
+const gated = !!process.env.FAST || !roleArn || !collectionArn || !embeddingModelArn;
 
 const findKb = (knowledgeBaseId: string) =>
   bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(

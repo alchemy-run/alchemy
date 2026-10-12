@@ -7,6 +7,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
+import { otelDatasetHeader } from "./OtelHeaders.ts";
 import type { Providers } from "./Providers.ts";
 
 export type DatasetKind =
@@ -72,7 +73,9 @@ export type Dataset = Resource<
     /** OTLP/HTTP metrics endpoint. */
     otelMetricsEndpoint: string;
     /**
-     * Headers required for OTLP shipping aside from the bearer token.
+     * Headers required for OTLP shipping aside from the bearer token:
+     * `X-Axiom-Dataset`, or `X-Axiom-Metrics-Dataset` for an
+     * `otel:metrics:v1` dataset.
      * Add `Authorization: Bearer <AXIOM_TOKEN>` separately at runtime so the
      * secret is never persisted in resource state.
      */
@@ -195,7 +198,7 @@ export const DatasetProvider = () =>
           otelLogsEndpoint: `${otelRoot}/v1/logs`,
           otelMetricsEndpoint: `${otelRoot}/v1/metrics`,
           otelHeaders: {
-            "X-Axiom-Dataset": dataset.name,
+            [otelDatasetHeader(dataset.kind === "otel:metrics:v1")]: dataset.name,
           } as Record<string, string>,
         };
       });

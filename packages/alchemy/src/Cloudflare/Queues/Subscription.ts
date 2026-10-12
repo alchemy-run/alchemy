@@ -69,6 +69,14 @@ export type SubscriptionSource =
       type: "workflows.workflow";
       /** Name of the workflow to subscribe to. */
       workflowName: string;
+    }
+  | {
+      /** Email Sending lifecycle events for one sending domain. */
+      type: "email.sending";
+      /** Zone the sending domain belongs to. */
+      zoneId: string;
+      /** The zone apex or a verified sending subdomain, e.g. `mail.example.com`. */
+      domain: string;
     };
 
 export type SubscriptionProps = {
@@ -365,6 +373,15 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
  *   source: { type: "workflows.workflow", workflowName: "existing-ingestion" },
  *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Bounces and complaints from an Email Sending domain
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("MailEvents", {
+ *   source: { type: "email.sending", zoneId: zone.zoneId, domain: "mail.example.com" },
+ *   events: ["message.bounced", "message.complained"],
  *   queueId: queue.queueId,
  * });
  * ```
@@ -670,6 +687,8 @@ type WireSource = {
   modelName?: string | null;
   workerName?: string | null;
   workflowName?: string | null;
+  zoneId?: string | null;
+  domain?: string | null;
 };
 
 const toSource = (wire: unknown): SubscriptionSource => {
@@ -686,6 +705,12 @@ const toSource = (wire: unknown): SubscriptionSource => {
       return {
         type: "workflows.workflow",
         workflowName: source.workflowName ?? "",
+      };
+    case "email.sending":
+      return {
+        type: "email.sending",
+        zoneId: source.zoneId ?? "",
+        domain: source.domain ?? "",
       };
     case "images":
     case "kv":
@@ -709,6 +734,10 @@ const sameSource = (a: SubscriptionSource, b: SubscriptionSource): boolean => {
       return a.workerName === (b as { workerName?: string }).workerName;
     case "workflows.workflow":
       return a.workflowName === (b as { workflowName?: string }).workflowName;
+    case "email.sending": {
+      const other = b as { zoneId?: string; domain?: string };
+      return a.zoneId === other.zoneId && a.domain === other.domain;
+    }
     default:
       return true;
   }

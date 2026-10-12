@@ -136,9 +136,7 @@ const finish = (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     if (context.entry === undefined) {
-      return yield* Effect.fail(
-        fail("The React Router build produced no on-disk server entry to finish"),
-      );
+      return yield* fail("The React Router build produced no on-disk server entry to finish");
     }
     const serverDir = path.dirname(context.entry);
     const serverEntryFileName = path.basename(context.entry);
@@ -237,6 +235,7 @@ export const makeAwsTarget = (config: ReactRouterAwsTargetConfig = {}): ReactRou
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "react-router",
       config: {
         rootDir: context.root,

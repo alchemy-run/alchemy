@@ -120,5 +120,5 @@ export const handleHashEvent = (event: HashEvent): Effect.Effect<HashResponse> =
 /** Decodes a response into the pump's scan result (or a typed error). */
 export const decodeHashResponse = (response: HashResponse): Effect.Effect<ScanResult, HashError> =>
   "error" in response
-    ? Effect.fail(new HashError({ reason: `lambda hasher: ${response.error}` }))
+    ? Effect.fail(HashError.make({ reason: `lambda hasher: ${response.error}` }))
     : Effect.succeed(decodeScanResult(fromBase64(response.scan)));

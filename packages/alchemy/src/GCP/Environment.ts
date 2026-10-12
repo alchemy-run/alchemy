@@ -7,7 +7,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { DEFAULT_GCP_REGION } from "./AuthProvider.ts";
+import { orDieCredentialsUnavailable } from "../Auth/Resolve.ts";
+import { DEFAULT_GCP_REGION, GCP_AUTH_PROVIDER_NAME } from "./AuthProvider.ts";
 
 export class GcpProjectMissing extends Data.TaggedError("GCP.ProjectMissing")<{
   message: string;
@@ -72,7 +73,7 @@ export const fromCredentials = () =>
       // in the providers' context, not the caller's.
       const override = yield* Effect.serviceOption(Region.Region);
       return Effect.gen(function* () {
-        const config = yield* credentials;
+        const config = yield* credentials.pipe(orDieCredentialsUnavailable(GCP_AUTH_PROVIDER_NAME));
         const region =
           (Option.isSome(override) ? yield* override.value : undefined) ??
           config.region ??

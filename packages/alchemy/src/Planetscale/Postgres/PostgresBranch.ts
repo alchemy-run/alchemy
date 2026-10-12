@@ -17,7 +17,8 @@ export interface PostgresBranchProps extends BaseBranchProps {
 
   /**
    * PostgreSQL cluster size for the branch. Required if `backupId` is provided.
-   * Short NAS sizes are expanded using the target branch region. Metal
+   * Short NAS sizes are expanded using the parent branch's region and CPU
+   * architecture (e.g. `"PS_DEV"` off an ARM parent becomes `"PS_DEV_AWS_ARM"`). Metal
    * requires the full SKU (e.g. `"M1_10_AWS_ARM_D_METAL_10"`).
    */
   clusterSize?: PostgresClusterSize;

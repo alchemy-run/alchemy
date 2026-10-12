@@ -418,7 +418,7 @@ export const DirectoryProvider = () =>
           // A directory mid-create rejects deletion — wait (bounded) for it
           // to settle first. Already deleting (or gone) is success.
           const settled = yield* waitUntilSettled(directoryId).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           if (
             settled === undefined ||

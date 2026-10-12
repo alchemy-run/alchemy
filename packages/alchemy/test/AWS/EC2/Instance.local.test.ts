@@ -67,7 +67,7 @@ test.provider.todo(
           const fn = yield* Ec2DevProbeFunction;
           return {
             instanceId: instance.instanceId,
-            publicDnsName: instance.publicDnsName,
+            url: instance.url,
             functionUrl: fn.functionUrl,
           };
         }).pipe(Effect.provide(DevProbeFunctionLive)),
@@ -75,13 +75,10 @@ test.provider.todo(
 
       expect(outputs.instanceId).toMatch(/^i-/);
       expect(outputs.functionUrl).toBeDefined();
-      // Emulator identity: floci addresses instances under its own
-      // host-routed localhost domain.
-      const host =
-        outputs.publicDnsName?.endsWith(".localhost.floci.io") === true
-          ? outputs.publicDnsName
-          : `${outputs.instanceId}.localhost.floci.io`;
-      const base = `http://${host}:3000`;
+      // Emulator identity: `url` carries floci's host-routed localhost
+      // address and the hosted port.
+      expect(outputs.url).toContain(".localhost.floci.io:3000");
+      const base = outputs.url!;
 
       // The instance container boots the Alchemy userData: bundle sync from
       // emulated S3, runtime install, then the Bun HTTP server on :3000.

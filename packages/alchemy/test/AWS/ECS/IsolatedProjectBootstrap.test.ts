@@ -27,10 +27,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // bootstrap's imports left external the container dies at boot with
 // `Cannot find module …` (exit code 1).
 //
-// Docker + ECR + Fargate placement is minutes of wall clock, so like the Task
-// e2e smoke test this is gated out of the default sweep: run it explicitly
-// with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Docker + ECR + Fargate placement is ~1 minute of wall clock, so it is
+// skipped under --fast like the Task e2e smoke test.
+test.provider.skipIf(!!process.env.FAST)(
   "task bundled from an isolated project boots and exits 0",
   (stack) =>
     Effect.gen(function* () {

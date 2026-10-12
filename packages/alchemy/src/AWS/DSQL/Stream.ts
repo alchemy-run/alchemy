@@ -332,7 +332,7 @@ export const StreamProvider = () =>
               schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
             }),
             // Best-effort — deletion continues server-side either way.
-            Effect.catch(() => Effect.void),
+            Effect.ignore,
           );
         }),
 

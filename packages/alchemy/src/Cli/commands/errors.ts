@@ -147,6 +147,6 @@ export const handleCliErrors = <A, E, R>(self: Effect.Effect<A, E, R>) =>
 export const failWithHelp = (commandPath: ReadonlyArray<string>) =>
   setExitCode(1).pipe(
     Effect.andThen(
-      Effect.fail(new CliError.ShowHelp({ commandPath: [...commandPath], errors: [] })),
+      Effect.fail(CliError.ShowHelp.make({ commandPath: [...commandPath], errors: [] })),
     ),
   );

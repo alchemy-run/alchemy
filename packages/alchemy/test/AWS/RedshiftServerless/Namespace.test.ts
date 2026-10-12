@@ -61,9 +61,9 @@ const assertWorkgroupGone = (name: string) =>
   );
 
 // A namespace is cheap but a workgroup bills against its RPU floor while it
-// exists, so the full lifecycle is gated behind AWS_TEST_SLOW=1 and always
+// exists, so the full lifecycle is skipped under `--fast` and always
 // destroys immediately (workgroup, then namespace).
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create a namespace + minimal workgroup, verify AVAILABLE, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

@@ -156,6 +156,143 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
 );
 
+// `recoveryWindowInDays` opts out of force deletion: removing the secret
+// schedules it for deletion (still describable, `DeletedDate` set), and
+// re-adding the same `Secret` restores that secret rather than failing on a
+// name that is pending deletion. Restoring needs a stable `name` (a re-added
+// resource otherwise gets a fresh generated name); it is scoped to the test
+// stage. Cleanup force-deletes out-of-band so the scheduled secret does not
+// linger for the window.
+test.provider(
+  "recovery window: removal schedules deletion, re-adding restores",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (included: boolean) =>
+        Effect.gen(function* () {
+          if (!included) return {};
+          const secret = yield* Secret("RecoverableSecret", {
+            name: `alchemy-test-recoverable-${stack.stage}`,
+            description: "recoverable",
+            secretString: Redacted.make("recoverable-value"),
+            recoveryWindowInDays: 7,
+          });
+          return { secret };
+        });
+
+      // DescribeSecret is eventually consistent after DeleteSecret /
+      // RestoreSecret; poll (bounded) until the deletion state shows.
+      const describeUntil = (secretArn: string, scheduled: boolean) =>
+        secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (d): boolean => (d.DeletedDate !== undefined) === scheduled,
+            times: 15,
+          }),
+        );
+
+      const created = (yield* stack.deploy(program(true))).secret!;
+
+      // Removal schedules deletion instead of force-deleting.
+      yield* stack.deploy(program(false));
+      const scheduled = yield* describeUntil(created.secretArn, true);
+      expect(scheduled.DeletedDate).toBeDefined();
+
+      // Re-adding restores the same secret.
+      const restored = (yield* stack.deploy(program(true))).secret!;
+      expect(restored.secretArn).toBe(created.secretArn);
+      const live = yield* describeUntil(created.secretArn, false);
+      expect(live.DeletedDate).toBeUndefined();
+      expect(live.Description).toBe("recoverable");
+
+      // Destroy schedules it again; then force-delete so nothing lingers.
+      yield* stack.destroy();
+      const afterDestroy = yield* describeUntil(created.secretArn, true);
+      expect(afterDestroy.DeletedDate).toBeDefined();
+      yield* secretsmanager
+        .deleteSecret({ SecretId: created.secretArn, ForceDeleteWithoutRecovery: true })
+        .pipe(
+          // Briefly unfindable right after being scheduled; retry (bounded).
+          Effect.retry({
+            while: (e) => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
+      yield* assertSecretDeleted(created.secretArn);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// The recovery window is validated before any API call: DeleteSecret only
+// accepts a whole number of days from 7 to 30.
+test.provider(
+  "recovery window outside 7..30 fails before creating anything",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-bad-window-${stack.stage}`;
+      const failure = yield* stack
+        .deploy(
+          Secret("BadWindowSecret", {
+            name,
+            secretString: Redacted.make("value"),
+            recoveryWindowInDays: 3,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "SecretRecoveryWindowOutOfRange" });
+      const absent = yield* secretsmanager.describeSecret({ SecretId: name }).pipe(Effect.flip);
+      expect(absent._tag).toBe("ResourceNotFoundException");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// A pending secret this resource did not create (no ownership tags) is never
+// restored: the deploy fails with OwnedBySomeoneElse and the secret stays
+// scheduled for deletion.
+test.provider(
+  "recovery window never restores a foreign pending secret",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-foreign-pending-${stack.stage}`;
+      const foreign = yield* secretsmanager.createSecret({
+        Name: name,
+        SecretString: "foreign",
+      });
+      yield* secretsmanager.deleteSecret({ SecretId: foreign.ARN!, RecoveryWindowInDays: 7 });
+
+      const failure = yield* stack
+        .deploy(
+          Secret("ForeignNameSecret", {
+            name,
+            secretString: Redacted.make("mine"),
+            recoveryWindowInDays: 7,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      const still = yield* secretsmanager.describeSecret({ SecretId: foreign.ARN! });
+      expect(still.DeletedDate).toBeDefined();
+
+      yield* stack.destroy();
+      yield* secretsmanager
+        .deleteSecret({ SecretId: foreign.ARN!, ForceDeleteWithoutRecovery: true })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
+      yield* assertSecretDeleted(foreign.ARN!);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
 // Audit: `secretBinary` is declared as `Redacted.Redacted<Uint8Array>` — this
 // exercises the Redacted conversion end-to-end at deploy time: create with a
 // binary value, verify the exact bytes on the wire out-of-band via distilled,

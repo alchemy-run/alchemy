@@ -233,11 +233,9 @@ export const LifecyclePolicyProvider = () =>
           }
 
           if (detail?.name === undefined) {
-            return yield* Effect.fail(
-              new aoss.ResourceNotFoundException({
-                message: `lifecycle policy ${type}/${name} not visible after reconcile`,
-              }),
-            );
+            return yield* aoss.ResourceNotFoundException.make({
+              message: `lifecycle policy ${type}/${name} not visible after reconcile`,
+            });
           }
           yield* session.note(`${type}/${name}`);
           return toAttributes(detail);

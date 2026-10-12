@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -50,7 +51,10 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -251,18 +255,13 @@ test.provider(
   },
 );
 
-// The list endpoint returns truncated summary items
-// (`{id, name, endpoint}` only), but distilled's `ListPipelinesResponse`
-// schema marks the per-item `destination`, `source`, and `version`
-// fields as required, so the valid response is rejected as a catch-all
-// `CloudflareHttpError`:
-//   CloudflareHttpError: {"success":true,...,"result":[{"id":"...",
-//   "name":"...","endpoint":"..."}],"result_info":{...}}
-// NEEDED DISTILLED PATCH (pipelines/listPipelines): make the per-item
-// `destination`, `source`, and `version` fields optional in
-// `ListPipelinesResponse.results` (the list endpoint is summary-only;
-// the provider hydrates each item via `getPipeline`). Until then this is
-// gated — set CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST=1 to run it.
+// The legacy list endpoint no longer enumerates legacy pipelines: while the
+// deployed pipeline exists (getPipeline by name succeeds), polling
+// `GET /accounts/{account_id}/pipelines?per_page=50` every 2s returns
+// `{"result":[],"result_info":{"count":0,"total_count":0}}` (observed
+// 2026-10-09), so `list()` decodes fine but cannot find it. Platform
+// behavior of the deprecated API, not a provider bug — gated; set
+// CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST=1 to re-check.
 test.provider.skipIf(!process.env.CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST)(
   "list enumerates the deployed legacy pipeline",
   (stack) =>

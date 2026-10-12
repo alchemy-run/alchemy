@@ -14,46 +14,12 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
-const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials = process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
-const runLive = wantsLive && hasLiveCredentials;
-const wantsCleanup =
+// Manual recovery tool for a Compute app whose destroy failed; not part of the suite.
+const runCleanup =
   process.env.ALCHEMY_RUN_LIVE_PRISMA_CLEANUP === "true" &&
   !!process.env.PRISMA_CLEANUP_PROJECT_ID?.trim();
-const runCleanup = wantsCleanup && hasLiveCredentials;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-if (wantsLive && !hasLiveCredentials) {
-  test(
-    "requires Prisma credentials for the live Compute smoke",
-    Effect.fail(
-      new Error(
-        [
-          "Live Prisma Compute smoke requested but no credentials are configured.",
-          "Run `alchemy profile edit --re-configure Prisma` and select `Service Token`,",
-          "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
-        ].join(" "),
-      ),
-    ),
-    { tags: ["provider:prisma", "provider:prisma:compute", "live"] },
-  );
-}
-
-if (wantsCleanup && !hasLiveCredentials) {
-  test(
-    "requires Prisma credentials for existing Compute cleanup",
-    Effect.fail(
-      new Error(
-        [
-          "Live Prisma Compute cleanup requested but no credentials are configured.",
-          "Run `alchemy profile edit --re-configure Prisma` and select `Service Token`.",
-        ].join(" "),
-      ),
-    ),
-    { tags: ["provider:prisma", "provider:prisma:compute", "live"] },
-  );
-}
 
 test.provider.skipIf(!runCleanup)(
   "live cleans up an existing Prisma Compute project/App from configured credentials",
@@ -83,7 +49,7 @@ test.provider.skipIf(!runCleanup)(
   },
 );
 
-test.provider.skipIf(!runLive)(
+test.provider(
   "live deploys, reaches, and destroys a Prisma Compute app",
   (stack) =>
     Effect.gen(function* () {
@@ -113,9 +79,6 @@ test.provider.skipIf(!runLive)(
         ].join("\n"),
       );
 
-      const suffix = yield* Effect.sync(() => Date.now().toString(36));
-      const name = `alchemy-compute-${suffix}`;
-
       yield* stack.destroy();
 
       let deployed:
@@ -130,12 +93,10 @@ test.provider.skipIf(!runLive)(
         const output = yield* stack.deploy(
           Effect.gen(function* () {
             const project = yield* Prisma.Project("Project", {
-              name,
               createDatabase: false,
             });
             const app = yield* Prisma.Compute("App", {
               project: project.projectId,
-              appName: name,
               path: appDir,
               entrypoint: "server.ts",
               port: 8080,
@@ -175,11 +136,10 @@ test.provider.skipIf(!runLive)(
                     deployed
                       ? [
                           "Retry cleanup after the platform fix with:",
-                          "ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE=true \\",
                           `PRISMA_CLEANUP_PROJECT_ID=${deployed.projectId} \\`,
                           `PRISMA_CLEANUP_APP_ID=${deployed.appId} \\`,
                           `PRISMA_CLEANUP_DEPLOYMENT_ID=${deployed.deploymentId} \\`,
-                          "ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true bun vitest run packages/alchemy/test/Prisma/Compute.live.test.ts",
+                          "ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true pnpm test test/Prisma/Compute.live.test.ts --profile testing",
                         ].join(" ")
                       : undefined,
                   ]
@@ -206,7 +166,7 @@ test.provider.skipIf(!runLive)(
   },
 );
 
-test.provider.skipIf(!runLive)(
+test.provider(
   "live deploys, serves, and destroys a Prisma static site",
   (stack) =>
     Effect.gen(function* () {
@@ -375,7 +335,7 @@ test.provider.skipIf(!runLive)(
   },
 );
 
-test.provider.skipIf(!runLive)(
+test.provider(
   "live rolls a Prisma App back to an existing deployment",
   (stack) =>
     Effect.gen(function* () {
@@ -405,21 +365,16 @@ test.provider.skipIf(!runLive)(
         ].join("\n"),
       );
 
-      const suffix = yield* Effect.sync(() => Date.now().toString(36));
-      const name = `alchemy-rollback-${suffix}`;
-
       yield* stack.destroy();
 
       yield* Effect.gen(function* () {
         const output = yield* stack.deploy(
           Effect.gen(function* () {
             const project = yield* Prisma.Project("Project", {
-              name,
               createDatabase: false,
             });
             const app = yield* Prisma.Compute("App", {
               project: project.projectId,
-              appName: name,
               path: appDir,
               entrypoint: "server.ts",
               port: 8080,

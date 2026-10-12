@@ -2,6 +2,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import path from "pathe";
 import * as Lambda from "@/AWS/Lambda";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const main = path.resolve(import.meta.dirname, "durable-handler.ts");
 
@@ -41,7 +42,15 @@ export default DurableFlow.make(
         // result replays identically on the resume invocation.
         Effect.sync(() => 40 + 2),
       );
-      return { orderId: reserved.orderId, reserved: reserved.reserved, total };
+      // Runtime-only code (binding clients, services colored with
+      // `RuntimeContext`) must be callable from the durable body.
+      const runtime = yield* Lambda.Durable.step(
+        "runtime",
+        Effect.gen(function* () {
+          return (yield* RuntimeContext).Type;
+        }),
+      );
+      return { orderId: reserved.orderId, reserved: reserved.reserved, total, runtime };
     });
   }),
 );

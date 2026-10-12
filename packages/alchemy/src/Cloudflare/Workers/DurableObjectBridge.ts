@@ -107,28 +107,34 @@ export const makeDurableObjectBridge =
             const bind = (f: any) => (typeof f === "function" ? f.bind(target) : f);
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            return (...args: unknown[]) =>
+              this.#execute(
+                (instance) =>
+                  Effect.suspend(() => {
+                    if (!Object.hasOwn(instance, prop)) {
+                      return Effect.die(new Error(`Method "${prop}" not found on Durable Object`));
+                    }
+                    const member = instance[prop as keyof DurableObjectShape];
+                    const result =
+                      typeof member === "function"
+                        ? (member as (...args: unknown[]) => unknown)(...args)
+                        : member;
+                    // Effects (including nested-RPC values built by
+                    // `asEffectOrStream`, which are Effects branded as Streams)
+                    // run as effects; a genuine Stream is lifted into the
+                    // success channel for `handleRpcExit` to encode. The RPC
+                    // Shape constraint rejects any other member at
+                    // declaration, so anything else got past it with a cast.
+                    if (Effect.isEffect(result)) return result;
+                    if (Stream.isStream(result)) return Effect.succeed(result);
+                    return Effect.die(
+                      new Error(
+                        `Durable Object RPC member "${prop}" must return an Effect or a Stream`,
+                      ),
+                    );
+                  }),
+                handleRpcExit,
+              );
           },
         });
       }

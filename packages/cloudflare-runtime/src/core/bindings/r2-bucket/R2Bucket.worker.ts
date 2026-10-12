@@ -69,7 +69,7 @@ const R2Limits = {
   MAX_KEY_SIZE: 1024,
   // https://developers.cloudflare.com/r2/platform/limits/
   MAX_VALUE_SIZE: 5_368_709_120 - 5_242_880, // 5 GiB - 5 MiB
-  MAX_METADATA_SIZE: 2048, // 2048 B
+  MAX_METADATA_SIZE: 8192, // 8 KiB
   MIN_MULTIPART_PART_SIZE: 5 * 1024 * 1024,
   MIN_MULTIPART_PART_SIZE_TEST: 50,
 } as const;
@@ -141,6 +141,7 @@ const HEX_REGEXP = /^[0-9a-f]*$/;
 async function readPrefix(
   stream: ReadableStream<Uint8Array>,
   prefixLength: number,
+  restTransform: IdentityTransformStream = new IdentityTransformStream(),
 ): Promise<[prefix: Uint8Array, rest: ReadableStream<Uint8Array>]> {
   const reader = stream.getReader({ mode: "byob" });
   const result = await reader.readAtLeast(prefixLength, new Uint8Array(prefixLength));
@@ -148,7 +149,7 @@ async function readPrefix(
   reader.releaseLock();
   // Without this `pipeThrough()`, getting uncaught `TypeError: Can't read from
   // request stream after response has been sent.`
-  const rest = stream.pipeThrough(new IdentityTransformStream());
+  const rest = stream.pipeThrough(restTransform);
   return [result.value, rest];
 }
 
@@ -1933,7 +1934,7 @@ export class R2BucketObject implements DurableObject {
     key: string,
     opts: InternalR2CreateMultipartUploadOptions,
   ): Promise<R2CreateMultipartUploadResponse> {
-    validate.key(key);
+    validate.key(key).metadataSize(opts.customMetadata);
 
     const uploadId = generateId();
     this.#stmts.createMultipartUpload({

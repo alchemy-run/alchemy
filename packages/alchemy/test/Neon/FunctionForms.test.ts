@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Alchemy from "@/index";
 import { Function } from "@/Neon/Function";
@@ -28,8 +29,9 @@ const Stack = Alchemy.Stack(
       project: scope,
       main: new URL("./fixtures/function-hono.ts", import.meta.url).href,
     });
+    // `project` takes the project resource's Effect directly.
     const bare = yield* Function("Bare", {
-      project: scope,
+      project,
       main: new URL("./fixtures/function-bare.ts", import.meta.url).href,
     });
     return {
@@ -123,7 +125,7 @@ test.provider(
               : { logs: [record(2), record(1)], is_truncated: false },
           ),
         ),
-        Effect.provide(SDK.fromApiKey({ apiKey: "fixture-key" })),
+        Effect.provide(SDK.fromApiKey({ apiKey: Redacted.make("fixture-key") })),
       );
       expect(selected.map((line) => line.message)).toEqual(["fixture-1", "fixture-2", "fixture-3"]);
       expect(requests.length).toBe(2);
@@ -148,7 +150,7 @@ test.provider(
                 mode === "missing" ? undefined : mode === "repeated" ? "same" : `page-${page}`,
             })),
           ),
-          Effect.provide(SDK.fromApiKey({ apiKey: "fixture-key" })),
+          Effect.provide(SDK.fromApiKey({ apiKey: Redacted.make("fixture-key") })),
           Effect.as("unexpected-success"),
           Effect.catchTag("FunctionLogQueryError", (error) => Effect.succeed(error.reason)),
         );

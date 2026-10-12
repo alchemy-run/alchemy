@@ -38,7 +38,7 @@ export interface RailwayS3Scope {
 
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
-  if (Redacted.isRedacted(value)) return asPlain(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, asPlain);
   return undefined;
 };
 
@@ -47,6 +47,7 @@ const readValue = (value: unknown): Effect.Effect<string | undefined> =>
     const direct = asPlain(value);
     if (direct !== undefined) return direct;
     if (Effect.isEffect(value)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource attribute Effects resolve without requirements
       return asPlain(yield* value as Effect.Effect<unknown>);
     }
     return undefined;
@@ -107,8 +108,8 @@ const authorizeS3 = <A, E>(
       Layer.mergeAll(
         fromCredentials(
           {
-            accessKeyId: scope.accessKeyId,
-            secretAccessKey: scope.secretAccessKey,
+            accessKeyId: Redacted.make(scope.accessKeyId),
+            secretAccessKey: Redacted.make(scope.secretAccessKey),
           },
           scope.region,
         ),

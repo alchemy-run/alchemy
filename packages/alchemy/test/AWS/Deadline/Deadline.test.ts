@@ -190,11 +190,11 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:deadline", "live"], timeout: 180_000 },
 );
 
-// A customer-managed fleet provisions no EC2 capacity, but fleet lifecycle
-// is gated per the service plan (service-managed fleets can provision
-// costly workers; entitlement/limits vary by account).
-test.provider.skipIf(!process.env.AWS_TEST_DEADLINE)(
-  "create and destroy a customer-managed fleet (AWS_TEST_DEADLINE=1)",
+// A customer-managed fleet provisions no EC2 capacity (free, ~1 min). An
+// account without Deadline fleet entitlement opts out with
+// AWS_TEST_DEADLINE=0.
+test.provider.skipIf(process.env.AWS_TEST_DEADLINE === "0")(
+  "create and destroy a customer-managed fleet",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

@@ -205,7 +205,7 @@ const inflateEntryStreaming = (
     if (offset < 0 || offset >= buf.length) {
       resume(
         Effect.fail(
-          new ZlibError({
+          ZlibError.make({
             reason: `inflate offset ${offset} out of range (buffer ${buf.length})`,
           }),
         ),
@@ -222,7 +222,7 @@ const inflateEntryStreaming = (
       if (settled) return;
       settled = true;
       inflater.destroy();
-      resume(Effect.fail(new ZlibError({ reason })));
+      resume(Effect.fail(ZlibError.make({ reason })));
     };
 
     inflater.on("data", (chunk: Uint8Array) => {
@@ -285,7 +285,7 @@ export const inflate = (data: Uint8Array): Effect.Effect<Uint8Array, ZlibError> 
   Effect.try({
     try: () => new Uint8Array(zlib.inflateSync(data)),
     catch: (error) =>
-      new ZlibError({
+      ZlibError.make({
         reason: `inflateSync failed: ${error instanceof Error ? error.message : String(error)}`,
       }),
   });
@@ -299,7 +299,7 @@ export const deflate = (data: Uint8Array, level = 6): Effect.Effect<Uint8Array, 
   Effect.try({
     try: () => new Uint8Array(zlib.deflateSync(data, { level })),
     catch: (error) =>
-      new ZlibError({
+      ZlibError.make({
         reason: `deflateSync failed: ${error instanceof Error ? error.message : String(error)}`,
       }),
   });
@@ -322,7 +322,7 @@ export const inflateExactSpan = (
       return out;
     },
     catch: (error) =>
-      new ZlibError({
+      ZlibError.make({
         reason: `inflateSync failed: ${error instanceof Error ? error.message : String(error)}`,
       }),
   });

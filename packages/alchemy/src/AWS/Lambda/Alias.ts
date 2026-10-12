@@ -193,6 +193,9 @@ export const AliasProvider = () =>
           if (!isResolved(news)) return;
           const resolvedOlds = resolvedProps(olds);
           const resolvedNews = resolvedProps(news);
+          // An interrupted create persists the Version reference as missing
+          // (see stripUnresolved); there is no old function to compare.
+          if (resolvedOlds.version === undefined) return;
           const oldAliasName = yield* createAliasName(id, resolvedOlds.aliasName);
           const newAliasName = yield* createAliasName(id, resolvedNews.aliasName);
           if (
@@ -203,8 +206,11 @@ export const AliasProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          // An interrupted create's first checkpoint strips the Version
+          // reference while the Version is still being created (see
+          // stripUnresolved), so `olds.version` can be missing.
           const functionName =
-            output?.functionName ?? (olds ? resolvedProps(olds).version.functionName : undefined);
+            output?.functionName ?? (olds ? resolvedProps(olds).version?.functionName : undefined);
           if (!functionName) return undefined;
           const aliasName =
             output?.aliasName ??

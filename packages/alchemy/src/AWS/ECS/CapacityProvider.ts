@@ -157,7 +157,13 @@ export const CapacityProviderProvider = () =>
             capacityProviders: [name],
             include: ["TAGS"],
           })
-          .pipe(Effect.map((res) => res.capacityProviders?.find((p) => p.name === name)));
+          .pipe(
+            // A deleted provider stays describable as INACTIVE for a while
+            // and can no longer be updated, so treat it as missing.
+            Effect.map((res) =>
+              res.capacityProviders?.find((p) => p.name === name && p.status !== "INACTIVE"),
+            ),
+          );
 
       return {
         stables: ["capacityProviderArn", "name"],
@@ -344,8 +350,10 @@ export const CapacityProviderProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* ecs.deleteCapacityProvider({ capacityProvider: output.name }).pipe(
             // Already gone — treat as success.
-            Effect.catchTag("InvalidParameterException", () => Effect.void),
-            Effect.catchTag("ClientException", () => Effect.void),
+            Effect.catchTags({
+              InvalidParameterException: () => Effect.void,
+              ClientException: () => Effect.void,
+            }),
           );
         }),
       };

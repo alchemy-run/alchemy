@@ -230,7 +230,7 @@ export const ReplicationSubnetGroupProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dms
           .listTagsForResource({ ResourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.TagList);
       });
 
@@ -372,7 +372,7 @@ export const ReplicationSubnetGroupProvider = () =>
             }
             yield* Effect.sleep("1 second");
           }
-          yield* Effect.die(
+          return yield* Effect.die(
             new Error(
               `DMS replication subnet group ${output.replicationSubnetGroupIdentifier} remained observable 30 seconds after delete`,
             ),

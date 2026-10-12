@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import { Record } from "@/AWS/Route53";
+import { HostedZone, Record, Records } from "@/AWS/Route53";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
@@ -437,5 +437,69 @@ test.provider(
       // Route53-clean.
       Effect.ensuring(teardownZone),
     ),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
+);
+
+// Route 53 lists record names with special characters as `\ddd` octal
+// escapes, so a wildcard `*.zone.` comes back as `\052.zone.`. Both `Record`
+// and `Records` must still find the records they wrote: `Record` verifies its
+// upsert, and `Records` observes values and deletes by lookup. The zone has no
+// `forceDestroy`, so a wildcard record `Records` failed to find (and delete)
+// makes the zone delete fail.
+test.provider(
+  "manages wildcard records returned as octal escapes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneName = `wildcard-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.alchemy-route53-test.com`;
+
+      const deployWildcards = (value: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* HostedZone("WildcardZone", { name: zoneName });
+            const record = yield* Record("WildcardRecord", {
+              hostedZoneId: zone.id,
+              name: `*.${zoneName}`,
+              type: "TXT",
+              ttl: "60 seconds",
+              records: [value],
+            });
+            const records = yield* Records("WildcardRecords", {
+              hostedZoneId: zone.id,
+              type: "TXT",
+              names: [`*.set.${zoneName}`],
+              ttl: "60 seconds",
+              records: [value],
+            });
+            return { zone, record, records };
+          }),
+        );
+
+      const created = yield* deployWildcards('"v1"');
+      expect(created.records.records).toEqual(['"v1"']);
+
+      const updated = yield* deployWildcards('"v2"');
+      expect(updated.records.records).toEqual(['"v2"']);
+
+      const live = yield* route53.listResourceRecordSets({
+        HostedZoneId: normalizeId(updated.zone.id),
+      });
+      const txt = (live.ResourceRecordSets ?? [])
+        .filter((set) => set.Type === "TXT")
+        .map((set) => [set.Name, set.ResourceRecords?.map((r) => r.Value)]);
+      expect(txt).toEqual(
+        expect.arrayContaining([
+          [`\\052.${zoneName}.`, ['"v2"']],
+          [`\\052.set.${zoneName}.`, ['"v2"']],
+        ]),
+      );
+      expect(txt).toHaveLength(2);
+
+      yield* stack.destroy();
+      const zoneGone = yield* route53
+        .getHostedZone({ Id: normalizeId(updated.zone.id) })
+        .pipe(Effect.flip);
+      expect(zoneGone._tag).toBe("NoSuchHostedZone");
+    }),
   { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );

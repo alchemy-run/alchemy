@@ -19,13 +19,15 @@ import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import { BucketProvider } from "@/AWS/S3/Bucket.ts";
-import { InstanceId } from "@/InstanceId.ts";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
+import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { resourceContext } from "../../Utils/ResourceContext.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -1266,6 +1268,48 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
 );
 
+// IAM's grammar takes a bare `"*"` for `Principal` (not only a principal
+// map) — the usual form for resource-policy denies like "TLS only".
+test.provider(
+  "bucket policy with a wildcard string principal",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const definition = Effect.gen(function* () {
+        const bucket = yield* Bucket("TlsOnlyBucket", { forceDestroy: true });
+        yield* bucket.bind`DenyInsecureTransport`({
+          policyStatements: [
+            {
+              Sid: "DenyInsecureTransport",
+              Effect: "Deny",
+              Principal: "*",
+              Action: ["s3:*"],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
+              Condition: { Bool: { "aws:SecureTransport": "false" } },
+            },
+          ],
+        });
+        return bucket;
+      });
+
+      const bucket = yield* stack.deploy(definition);
+      const policy = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName });
+      const statements = JSON.parse(policy.Policy ?? "{}").Statement as Array<{
+        Sid?: string;
+        Principal?: unknown;
+      }>;
+      expect(statements.find((s) => s.Sid === "DenyInsecureTransport")?.Principal).toBe("*");
+
+      const unchanged = yield* stack.plan(definition);
+      expect(unchanged.resources.TlsOnlyBucket?.action).toBe("noop");
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
+);
+
 // Server-access logging needs a same-stack target bucket that grants the S3
 // logging service principal permission to deliver logs (the modern, ACL-free
 // grant — works with the BucketOwnerEnforced default).
@@ -1645,11 +1689,11 @@ const testStack: Omit<StackSpec, "output"> = {
   actions: {},
 };
 
-// Built with distilled's own helper: the signer reads credentials through
-// distilled's copy of `effect`, whose `Redacted` values a `Redacted.make`
-// from this package's copy cannot unwrap.
 const testCredentials = fromCredentials(
-  { accessKeyId: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "test-secret-key" },
+  {
+    accessKeyId: Redacted.make("AKIAIOSFODNN7EXAMPLE"),
+    secretAccessKey: Redacted.make("test-secret-key"),
+  },
   TEST_REGION,
 );
 
@@ -1665,7 +1709,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     Layer.succeed(Region, Effect.succeed(TEST_REGION)),
     Layer.succeed(Stack, testStack),
     Layer.succeed(Stage, testStack.stage),
-    Layer.succeed(InstanceId, INSTANCE_ID),
+    Layer.succeed(ResourceContext, resourceContext(INSTANCE_ID)),
     Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
     Layer.sync(ArtifactStore, createArtifactStore),
     inMemoryState(),

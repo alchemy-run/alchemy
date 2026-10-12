@@ -11,14 +11,6 @@ import IsolatedProjectCompute, { project } from "./fixtures/isolated-project-com
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
-// Same live gating as Compute.live.test.ts.
-const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials =
-  !!process.env.PRISMA_SERVICE_TOKEN?.trim() ||
-  !!process.env.PRISMA_API_TOKEN?.trim() ||
-  process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
-const runLive = wantsLive && hasLiveCredentials;
-
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Live proof that the Prisma Compute bun bootstrap boots when the app's
@@ -27,7 +19,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // `@effect/platform-bun` / `alchemy/*` imports must be bundled by the
 // virtual-entry plugin rather than found from the project root. With them
 // left external bun dies at module load and the app never answers.
-test.provider.skipIf(!runLive)(
+test.provider(
   "app bundled from an isolated project serves HTTP",
   (stack) =>
     Effect.gen(function* () {

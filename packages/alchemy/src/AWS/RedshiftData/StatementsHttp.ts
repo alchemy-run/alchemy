@@ -215,13 +215,11 @@ export const StatementsHttp = Layer.effect(
             }),
           );
           if (described.Status !== "FINISHED") {
-            return yield* Effect.fail(
-              new RedshiftStatementFailed({
-                statementId: id,
-                status: described.Status ?? "UNKNOWN",
-                error: described.Error,
-              }),
-            );
+            return yield* new RedshiftStatementFailed({
+              statementId: id,
+              status: described.Status ?? "UNKNOWN",
+              error: described.Error,
+            });
           }
           return yield* getResult(id);
         },

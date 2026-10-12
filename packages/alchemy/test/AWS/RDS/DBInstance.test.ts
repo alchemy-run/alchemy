@@ -1,7 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import { expect } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -23,6 +23,35 @@ import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Gated lifecycle budget, measured on a live run (us-west-2): a postgres
+// db.t3.micro creates in 283–343s, a reboot-applied modify takes 137–199s and
+// a delete 90–210s; an Aurora serverless-v2 writer creates in ~380s and
+// deletes in ~315s. A create + up to three applied modifies + delete fits in
+// 30 minutes; cases that apply four or more modifies (or measured >25 min)
+// get 45.
+const INSTANCE_TIMEOUT = 1_800_000;
+const LONG_INSTANCE_TIMEOUT = 2_700_000;
+
+// Every gated case provisions its own Network + instance and spends 10–25
+// minutes doing it, so running them one after another takes ~7 hours. They
+// are registered into lanes instead: lanes run concurrently, the cases within
+// a lane run sequentially. Nine lanes bound the VPCs and instances alive at
+// once (well under the account's VPC quota of 20) while the whole file
+// finishes in about an hour. Cases cannot share instances: RDS allows one
+// storage modification per instance every six hours, and the others assert
+// exact request sequences, adoption, or drift on an instance they own.
+type LifecycleCase = Parameters<ReturnType<typeof test.provider.skipIf>>;
+const LANES = 9;
+const lanes: Array<Array<{ enabled: boolean; args: LifecycleCase }>> = Array.from(
+  { length: LANES },
+  () => [],
+);
+const lifecycle =
+  (lane: number, gate: string | undefined) =>
+  (...args: LifecycleCase) => {
+    lanes[lane - 1]!.push({ enabled: !!gate, args });
+  };
 
 // Render a deploy failure (whatever engine wrapper it arrives in) to a string
 // we can assert AWS's parameter-validation message against.
@@ -180,7 +209,7 @@ test.provider(
 // AWS_TEST_RDS_DBINSTANCE=1 on an account that can afford the wait to run it.
 // It deploys a serverless-v2 Aurora cluster + instance and asserts the
 // instance appears in the exhaustively-paginated `list()` result.
-test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
+lifecycle(3, process.env.AWS_TEST_RDS_DBINSTANCE)(
   "list enumerates the deployed DB instance",
   (stack) =>
     Effect.gen(function* () {
@@ -266,11 +295,14 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       yield* stack.destroy();
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
 // RDS provisioning and storage optimization exceed the default test budget.
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(1, process.env.RDS_TEST_LIFECYCLE)(
   "standalone instance: autoscaling defaults, drift, and allocation floor",
   (stack) =>
     Effect.gen(function* () {
@@ -421,7 +453,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       );
       expect(gone).toBe(true);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
+  },
 );
 
 type StorageProps = Pick<
@@ -481,6 +516,148 @@ const assertStorageState = Effect.fn(function* (
   expect(observed?.PendingModifiedValues?.Iops).toBeUndefined();
   expect(observed?.PendingModifiedValues?.StorageThroughput).toBeUndefined();
 });
+
+// A point-in-time restore swapped into place leaves the same identifier (and
+// props) on a different physical instance. Do exactly that against the real
+// API: restore the deployed instance to its latest restorable time under a
+// temporary identifier, carrying every source setting over, then rename the
+// original away and the restored copy into place. The redeploy must publish
+// the restored server's `dbiResourceId`; on main it plans no change and keeps
+// the old one.
+lifecycle(1, process.env.RDS_TEST_LIFECYCLE)(
+  "identity: a point-in-time restore swapped into place is picked up on redeploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = `alchemy-pitr-${stack.stage.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const restoredId = `${identifier}-restored`;
+      const displacedId = `${identifier}-old`;
+
+      const describeInstance = (id: string) =>
+        rds.describeDBInstances({ DBInstanceIdentifier: id }).pipe(
+          Effect.map((r) => r.DBInstances?.[0]),
+          Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)),
+        );
+      const waitUntil = (id: string, done: (instance: rds.DBInstance | undefined) => boolean) =>
+        describeInstance(id).pipe(
+          Effect.repeat({ schedule: Schedule.spaced("20 seconds"), times: 120, until: done }),
+        );
+      const waitAvailable = (id: string) =>
+        waitUntil(id, (i) => i?.DBInstanceStatus === "available");
+      const deleteIfPresent = (id: string) =>
+        rds
+          .deleteDBInstance({
+            DBInstanceIdentifier: id,
+            SkipFinalSnapshot: true,
+            DeleteAutomatedBackups: true,
+          })
+          .pipe(
+            Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
+            Effect.andThen(waitUntil(id, (i) => i === undefined)),
+            Effect.ignore,
+          );
+
+      const program = Effect.gen(function* () {
+        const net = yield* Network("PitrNet", { cidrBlock: "10.48.0.0/16" });
+        const subnetGroup = yield* DBSubnetGroup("PitrSubnetGroup", {
+          description: "alchemy DBInstance point-in-time restore identity",
+          subnetIds: net.privateSubnetIds,
+        });
+        return yield* DBInstance("PitrInstance", {
+          dbInstanceIdentifier: identifier,
+          engine: "postgres",
+          dbInstanceClass: "db.t3.micro",
+          allocatedStorage: 20,
+          masterUsername: "alchemy",
+          masterUserPassword: Redacted.make("alchemy-pitr-test-password"),
+          backupRetentionPeriod: "1 day",
+          deletionProtection: false,
+          skipFinalSnapshot: true,
+          dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+          publiclyAccessible: false,
+        });
+      });
+
+      yield* Effect.gen(function* () {
+        const first = yield* stack.deploy(program);
+
+        // Automated backups make the instance restorable a few minutes in.
+        const source = (yield* waitUntil(
+          identifier,
+          (i) => i?.LatestRestorableTime !== undefined,
+        ))!;
+
+        yield* rds.restoreDBInstanceToPointInTime({
+          SourceDBInstanceIdentifier: identifier,
+          TargetDBInstanceIdentifier: restoredId,
+          UseLatestRestorableTime: true,
+          DBInstanceClass: source.DBInstanceClass,
+          DBSubnetGroupName: source.DBSubnetGroup?.DBSubnetGroupName,
+          VpcSecurityGroupIds: (source.VpcSecurityGroups ?? []).flatMap((g) =>
+            g.VpcSecurityGroupId ? [g.VpcSecurityGroupId] : [],
+          ),
+          DBParameterGroupName: source.DBParameterGroups?.[0]?.DBParameterGroupName,
+          OptionGroupName: source.OptionGroupMemberships?.[0]?.OptionGroupName,
+          StorageType: source.StorageType,
+          AllocatedStorage: source.AllocatedStorage,
+          MaxAllocatedStorage: source.MaxAllocatedStorage,
+          Iops: source.Iops,
+          StorageThroughput: source.StorageThroughput,
+          Port: source.Endpoint?.Port,
+          PubliclyAccessible: source.PubliclyAccessible,
+          MultiAZ: source.MultiAZ,
+          EnableIAMDatabaseAuthentication: source.IAMDatabaseAuthenticationEnabled,
+          CACertificateIdentifier: source.CACertificateIdentifier,
+          BackupRetentionPeriod: source.BackupRetentionPeriod,
+          CopyTagsToSnapshot: source.CopyTagsToSnapshot,
+          DeletionProtection: false,
+          Tags: source.TagList,
+        });
+        const restored = (yield* waitAvailable(restoredId))!;
+        expect(restored.DbiResourceId).not.toBe(first.dbiResourceId);
+
+        // Swap: original out of the way, restored copy into place.
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: identifier,
+          NewDBInstanceIdentifier: displacedId,
+          ApplyImmediately: true,
+        });
+        yield* waitAvailable(displacedId);
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: restoredId,
+          NewDBInstanceIdentifier: identifier,
+          ApplyImmediately: true,
+        });
+        const swapped = (yield* waitUntil(
+          identifier,
+          (i) => i?.DBInstanceStatus === "available" && i.DbiResourceId === restored.DbiResourceId,
+        ))!;
+        expect(swapped.DbiResourceId).toBe(restored.DbiResourceId);
+
+        // Unchanged props, new physical server: the redeploy publishes it.
+        const second = yield* stack.deploy(program);
+        expect(second.dbInstanceIdentifier).toBe(identifier);
+        expect(second.dbiResourceId).toBe(restored.DbiResourceId);
+
+        // The displaced original still sits in the stack's subnet group.
+        yield* deleteIfPresent(displacedId);
+        yield* stack.destroy();
+        yield* assertInstanceGone(identifier);
+      }).pipe(
+        // The displaced original (and a stranded restore) are not tracked by
+        // the stack; remove them whether the test passes or fails.
+        Effect.ensuring(
+          Effect.all([deleteIfPresent(displacedId), deleteIfPresent(restoredId)], {
+            concurrency: 2,
+          }),
+        ),
+      );
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 5_400_000,
+  },
+);
 
 const assertInstanceGone = Effect.fn(function* (identifier: string) {
   const gone = yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
@@ -573,8 +750,11 @@ const storageCases: StorageCase[] = [
   ]),
 ];
 
-for (const scenario of storageCases) {
-  test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+// Lane per storage case (index-aligned with `storageCases`).
+const storageLanes = [6, 7, 7, 7, 8, 6, 8, 8, 9, 9];
+
+for (const [index, scenario] of storageCases.entries()) {
+  lifecycle(storageLanes[index]!, process.env.RDS_TEST_LIFECYCLE)(
     `storage coupling: ${scenario.name}`,
     (stack) =>
       Effect.gen(function* () {
@@ -608,11 +788,14 @@ for (const scenario of storageCases) {
         yield* stack.destroy();
         yield* assertInstanceGone(created.dbInstanceIdentifier);
       }),
-    { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+    {
+      tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+      timeout: INSTANCE_TIMEOUT,
+    },
   );
 }
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(9, process.env.RDS_TEST_LIFECYCLE)(
   "storage coupling: plans correction for external storage drift",
   (stack) =>
     Effect.gen(function* () {
@@ -660,7 +843,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
 const observeInstanceRequests = Effect.gen(function* () {
@@ -780,7 +966,7 @@ const injectPort = Effect.fn(function* (identifier: string, port: number) {
   yield* assertPort(identifier, port);
 });
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(4, process.env.RDS_TEST_LIFECYCLE)(
   "listener port: defaults, updates, removal, and no redundant writes",
   (stack) =>
     Effect.gen(function* () {
@@ -832,10 +1018,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(4, process.env.RDS_TEST_LIFECYCLE)(
   "listener port: unchanged-input drift repair and adoption defaults",
   (stack) =>
     Effect.gen(function* () {
@@ -891,10 +1080,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
+  },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(4, process.env.RDS_TEST_LIFECYCLE)(
   "listener port: waits for an accepted change without resubmitting",
   (stack) =>
     Effect.gen(function* () {
@@ -925,7 +1117,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
 type SecurityProps = Pick<
@@ -1021,7 +1216,7 @@ const enabledSecurity: SecurityProps = {
   enableCloudwatchLogsExports: ["postgresql", "upgrade"],
 };
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   "security: defaults, removal, drift, adoption, and no redundant writes",
   (stack) =>
     Effect.gen(function* () {
@@ -1147,11 +1342,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     }),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
-    timeout: 1_800_000,
+    timeout: LONG_INSTANCE_TIMEOUT,
   },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   "security: maintenance-queued IAM convergence and immediate-only queue isolation",
   (stack) =>
     Effect.gen(function* () {
@@ -1297,11 +1492,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     }),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
-    timeout: 1_800_000,
+    timeout: INSTANCE_TIMEOUT,
   },
 );
 
-test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
+lifecycle(3, process.env.AWS_TEST_RDS_DBINSTANCE)(
   "security: Aurora cluster ownership survives omitted membership and adoption",
   (stack) =>
     Effect.gen(function* () {
@@ -1412,7 +1607,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
     }),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
-    timeout: 1_800_000,
+    timeout: INSTANCE_TIMEOUT,
   },
 );
 
@@ -1547,7 +1742,7 @@ const injectAssociations = Effect.fn(function* (
   yield* assertAssociations(identifier, parameterGroup, securityGroups);
 });
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(5, process.env.RDS_TEST_LIFECYCLE)(
   "associations: defaults, explicit attachments, and order-independent no-op writes",
   (stack) =>
     Effect.gen(function* () {
@@ -1618,10 +1813,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.instance.dbInstanceIdentifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(5, process.env.RDS_TEST_LIFECYCLE)(
   "associations: removal, older-engine defaults, drift, and nondefault-VPC adoption",
   (stack) =>
     Effect.gen(function* () {
@@ -1680,10 +1878,13 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
+  },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(6, process.env.RDS_TEST_LIFECYCLE)(
   "managed secret policy: create, update, removal, drift, adoption, and public rejection",
   (stack) =>
     Effect.gen(function* () {
@@ -1709,6 +1910,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       const requests: Array<{
         action: string;
         blockPublicPolicy: boolean | undefined;
+        secretId: string | undefined;
       }> = [];
       const observedClient = client.pipe(
         HttpClient.tapRequest((request) =>
@@ -1722,6 +1924,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             requests.push({
               action: target.split(".").at(-1)!,
               blockPublicPolicy: body.BlockPublicPolicy,
+              secretId: body.SecretId,
             });
           }),
         ),
@@ -1796,8 +1999,19 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(created.masterUserSecretResourcePolicy).toBe(normalizePolicyDocument(initialPolicy));
       expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
       expect(requests.filter((request) => request.action === "PutResourcePolicy")).toEqual([
-        { action: "PutResourcePolicy", blockPublicPolicy: true },
+        { action: "PutResourcePolicy", blockPublicPolicy: true, secretId: secretArn },
       ]);
+      // ValidateResourcePolicy is authorized against the secret it names, so
+      // once the secret exists every validation must name it: an identity
+      // scoped to this secret's ARN is denied an untargeted (`*`) validation.
+      // Only the first create, before RDS returns a secret, runs untargeted.
+      const validatedSecretIds = (from: number) =>
+        requests
+          .slice(from)
+          .filter((request) => request.action === "ValidateResourcePolicy")
+          .map((request) => request.secretId);
+      expect(validatedSecretIds(0).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(0).every((secretId) => secretId === undefined)).toBe(true);
       const beforePlan = requests.length;
       expect(
         (yield* stack
@@ -1805,16 +2019,14 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           .pipe(Effect.provideService(HttpClient.HttpClient, observedClient))).resources
           .SecretPolicyInstance,
       ).toMatchObject({ action: "noop" });
-      expect(
-        requests.slice(beforePlan).some((request) => request.action === "ValidateResourcePolicy"),
-      ).toBe(true);
+      expect(validatedSecretIds(beforePlan).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforePlan).every((secretId) => secretId === secretArn)).toBe(true);
 
       const beforeNoop = requests.length;
       const unchanged = yield* deploy(initialPolicy, "force-reconcile");
       expect(unchanged.dbInstanceArn).toBe(created.dbInstanceArn);
-      expect(
-        requests.slice(beforeNoop).some((request) => request.action === "ValidateResourcePolicy"),
-      ).toBe(true);
+      expect(validatedSecretIds(beforeNoop).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforeNoop).every((secretId) => secretId === secretArn)).toBe(true);
       expect(
         requests
           .slice(beforeNoop)
@@ -1935,10 +2147,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       "provider:aws:secretsmanager",
       "live",
     ],
+    timeout: LONG_INSTANCE_TIMEOUT,
   },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(5, process.env.RDS_TEST_LIFECYCLE)(
   "managed secret policy: enable management on an existing instance",
   (stack) =>
     Effect.gen(function* () {
@@ -2013,10 +2226,11 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       "provider:aws:secretsmanager",
       "live",
     ],
+    timeout: INSTANCE_TIMEOUT,
   },
 );
 
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(3, process.env.RDS_TEST_LIFECYCLE)(
   "readiness: pending creation, blocked stop, and restart recovery",
   (stack) =>
     Effect.gen(function* () {
@@ -2134,7 +2348,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
 
 // Fingerprint-guarded master password lifecycle (#876), gated behind
@@ -2154,7 +2371,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 // must be exactly 1 — the anchored positive event proves step 2's reconcile
 // did not re-send the unchanged password (pre-#876 every reconcile did,
 // putting the instance through a live `resetting-master-credentials` cycle).
-test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   "master password: fingerprint guard skips unchanged, applies rotation",
   (stack) =>
     Effect.gen(function* () {
@@ -2248,5 +2465,18 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       yield* stack.destroy();
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
 );
+
+describe.concurrent("lifecycle lanes", () => {
+  lanes.forEach((cases, index) =>
+    describe(`lane ${index + 1}`, () => {
+      for (const { enabled, args } of cases) {
+        test.provider.skipIf(!enabled)(...args);
+      }
+    }),
+  );
+});

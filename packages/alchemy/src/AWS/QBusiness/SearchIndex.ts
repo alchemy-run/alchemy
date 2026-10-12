@@ -212,18 +212,16 @@ const waitForIndexStatus = (applicationId: string, indexId: string, target: "ACT
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(new IndexNotReady({ indexId, status: described.status }));
+        return yield* new IndexNotReady({ indexId, status: described.status });
       }
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(
-          new IndexProvisioningFailed({
-            indexId,
-            message: described.error?.errorMessage,
-          }),
-        );
+        return yield* new IndexProvisioningFailed({
+          indexId,
+          message: described.error?.errorMessage,
+        });
       }
-      return yield* Effect.fail(new IndexNotReady({ indexId, status: described?.status }));
+      return yield* new IndexNotReady({ indexId, status: described?.status });
     }),
   );
 

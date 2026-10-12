@@ -10,7 +10,7 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -49,6 +49,7 @@ import {
 import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -60,6 +61,8 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { LocalEdge } from "./LocalEdge.ts";
+import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
@@ -151,6 +154,7 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const edge = yield* LocalEdge;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
 
@@ -288,7 +292,7 @@ export const LocalWorkerProvider = () =>
           if (type === "SourceMap") continue;
           if (type === "Data" || type === "Wasm") {
             if (!(file.content instanceof Uint8Array)) {
-              return yield* new WorkerValidationError({
+              return yield* WorkerValidationError.make({
                 message: `Expected Uint8Array for ${file.path} (${type})`,
                 value: file.content,
               });
@@ -350,7 +354,7 @@ export const LocalWorkerProvider = () =>
         // send_email descriptors. Part of the hashed config: flipping the
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
-        const containers: Record<string, ContainerImage> = {};
+        const containers: Record<string, NonNullable<RuntimeDurableObject["container"]>> = {};
         // Content hashes of the container images, keyed like `containers`.
         // `ContainerImage` itself only carries stable paths (context /
         // dockerfile / imageUri), so without the hash an image CONTENT
@@ -412,14 +416,23 @@ export const LocalWorkerProvider = () =>
             }
           }
           if (data.containers) {
+            const toRuntimeImage = (image: DevContainerImage) => ({
+              ...image,
+              env: unwrapRedacted(image.env),
+            });
             for (const container of data.containers) {
-              if (!container.dev) {
+              if (container.devImages !== undefined) {
+                // Durable Object-managed: named images, selected at start().
+                const images: Record<string, RuntimeContainerImage> = {};
+                for (const [name, image] of Object.entries(container.devImages)) {
+                  images[name] = toRuntimeImage(image);
+                }
+                containers[container.className] = { images };
+              } else if (container.dev) {
+                containers[container.className] = toRuntimeImage(container.dev);
+              } else {
                 return yield* Effect.die(`Container ${container.className} has no dev image`);
               }
-              containers[container.className] = {
-                ...container.dev,
-                env: unwrapRedacted(container.dev.env),
-              };
               if (container.hash !== undefined) {
                 containerHashes[container.className] = container.hash;
               }
@@ -528,6 +541,26 @@ export const LocalWorkerProvider = () =>
           // list into workerd's `streamingTails` designators, which deliver
           // the producer's events live via the consumer's `tailStream()`.
           streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
+          /**
+           * Zone routes, emulated by the local edge (see `LocalEdge`). The
+           * zone is never resolved in dev — `zoneId` is the declared id or
+           * a `dev:`-marked stand-in.
+           */
+          routes: (props.routes ?? []).map((route) => {
+            const pattern = route.pattern.trim();
+            const zone =
+              route.zoneName ??
+              (typeof route.zone === "string" ? route.zone : route.zone?.zoneId) ??
+              routePatternHost(pattern) ??
+              pattern;
+            return { id: `dev:${pattern}`, pattern, zoneId: route.zoneId ?? `dev:${zone}` };
+          }),
+          /**
+           * The custom-domain hostname. In dev the Worker's own URL serves
+           * it, with zone routes for the hostname applied in front.
+           */
+          edgeDomain:
+            typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
         };
       });
 
@@ -595,6 +628,9 @@ export const LocalWorkerProvider = () =>
       // bound via `scriptName` from another Worker) therefore never observe
       // a window where the script has no running instance and no registry
       // entry, even when `runtime.start` is slow (container image builds).
+      // Workers with containers are the exception: their previous instance
+      // is retired after the images are ready but before the new workerd
+      // boots (see `beforeServe` in `serveWith`).
       // Both instances use the same registry key; the registry's entry
       // removal is owner-aware, so closing the old scope after the
       // replacement has re-registered cannot delete the replacement's
@@ -653,16 +689,20 @@ export const LocalWorkerProvider = () =>
           const fs = yield* PlatformFileSystem.FileSystem;
           const watched = new Map<string, { dockerfile: string | undefined }>();
           for (const namespace of worker.durableObjectNamespaces) {
-            const image = namespace.container;
-            if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(runtimeBase, image.context ?? ".");
-            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
-            watched.set(context, {
-              dockerfile:
-                image.dockerfile !== undefined
-                  ? path.resolve(context, image.dockerfile)
-                  : undefined,
-            });
+            const container = namespace.container;
+            if (container === undefined) continue;
+            const images = "images" in container ? Object.values(container.images) : [container];
+            for (const image of images) {
+              if (!("dockerfile" in image)) continue;
+              const context = path.resolve(runtimeBase, image.context ?? ".");
+              if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
+              watched.set(context, {
+                dockerfile:
+                  image.dockerfile !== undefined
+                    ? path.resolve(context, image.dockerfile)
+                    : undefined,
+              });
+            }
           }
           const key = JSON.stringify([...watched.entries()].sort());
           const existing = containerWatchers.get(worker.fqn);
@@ -744,6 +784,39 @@ export const LocalWorkerProvider = () =>
           containerWatchers.set(worker.fqn, { key, fiber });
         });
 
+      // Custom-domain hostnames handed to the local edge, per worker FQN.
+      const edgeDomains = new Map<string, { host: string; script: string }>();
+
+      const releaseEdgeDomain = Effect.fn(function* (fqn: string) {
+        const previous = edgeDomains.get(fqn);
+        if (previous) {
+          edgeDomains.delete(fqn);
+          yield* edge.removeDomain(previous.host, previous.script);
+        }
+      });
+
+      /**
+       * Point the worker's stable proxy at a freshly served workerd. A
+       * custom-domain worker is handed to the local edge instead, which
+       * fronts it with the zone-route router whenever routes match its
+       * hostname (Cloudflare's routes-over-custom-domain precedence).
+       */
+      const exposeWorker = Effect.fn(function* (
+        worker: RunnableWorkerConfig,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        url: URL,
+      ) {
+        const previous = edgeDomains.get(worker.fqn);
+        if (previous && (previous.host !== worker.edgeDomain || previous.script !== worker.name)) {
+          yield* releaseEdgeDomain(worker.fqn);
+        }
+        if (worker.edgeDomain === undefined) {
+          return yield* proxy.set(url);
+        }
+        edgeDomains.set(worker.fqn, { host: worker.edgeDomain, script: worker.name });
+        yield* edge.serveDomain(worker.edgeDomain, { script: worker.name, proxy, upstream: url });
+      });
+
       const serveWith = (
         worker: RunnableWorkerConfig,
         bundle: Bundle.BundleOutput,
@@ -761,10 +834,43 @@ export const LocalWorkerProvider = () =>
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
               const previous = workerdScopes.get(worker.fqn);
-              // Instances whose queue-consumer wiring went stale while they
-              // were starting; never exposed via the proxy, closed together
-              // with `previous` after the cutover below.
-              const superseded: Scope.Closeable[] = [];
+              // Instances to tear down once the replacement is up: `previous`
+              // plus any instance whose queue-consumer wiring went stale
+              // while it was starting (never exposed via the proxy).
+              const retiring: Scope.Closeable[] = previous ? [previous] : [];
+              const closeRetiring = Effect.suspend(() =>
+                Effect.forEach(
+                  retiring.splice(0),
+                  (replaced) =>
+                    Scope.close(replaced, Exit.void).pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.logWarning(
+                          `[${worker.fqn}] Failed to stop previous local worker instance`,
+                          Cause.squash(cause),
+                        ),
+                      ),
+                    ),
+                  { discard: true },
+                ),
+              ).pipe(Effect.uninterruptible);
+              // Container names are deterministic per Durable Object, so a
+              // new workerd would "recover" the previous instance's
+              // still-running container — which the previous instance's
+              // teardown then removes (with its networking sidecar) out from
+              // under it. For workers with containers, break before make:
+              // retire the previous instance after the slow part of the start
+              // (image builds/pulls) but before the new workerd boots, parking
+              // requests on the proxy until the cutover.
+              const hasContainers = worker.durableObjectNamespaces.some(
+                (namespace) => namespace.container !== undefined,
+              );
+              const beforeServe = hasContainers
+                ? Effect.suspend(() =>
+                    retiring.length > 0
+                      ? Effect.andThen(proxy.unset(), closeRetiring)
+                      : Effect.void,
+                  )
+                : undefined;
               let scope!: Scope.Closeable;
               let url!: URL;
               // Queue-consumer wiring can change while `runtime.start` is in
@@ -836,6 +942,7 @@ export const LocalWorkerProvider = () =>
                       cf: worker.dev.cf,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
+                      beforeServe,
                     })
                     .pipe(Scope.provide(scope)),
                 ).pipe(
@@ -867,27 +974,18 @@ export const LocalWorkerProvider = () =>
                 if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
                   // Wiring changed while workerd was starting — serve again
                   // with the fresh consumers before exposing the instance.
-                  superseded.push(scope);
+                  retiring.push(scope);
                   continue;
                 }
                 break;
               }
-              yield* proxy.set(url);
-              // Only now tear the replaced instances down: `previous` kept
-              // serving — and stayed registered in the dev registry — until
-              // the cutover above. The registry's entry removal is
-              // owner-aware, so these closes cannot delete the replacement's
-              // registration.
-              for (const replaced of previous ? [...superseded, previous] : superseded) {
-                yield* Scope.close(replaced, Exit.void).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Failed to stop previous local worker instance`,
-                      Cause.squash(cause),
-                    ),
-                  ),
-                );
-              }
+              yield* exposeWorker(worker, proxy, url);
+              // Only now tear the replaced instances down (unless
+              // `beforeServe` already did): `previous` kept serving — and
+              // stayed registered in the dev registry — until the cutover
+              // above. The registry's entry removal is owner-aware, so these
+              // closes cannot delete the replacement's registration.
+              yield* closeRetiring;
               return url;
             }),
           ),
@@ -1326,12 +1424,10 @@ export const LocalWorkerProvider = () =>
         };
         const handle = yield* source.dev(devCtx);
         if (handle.mode !== "bundle") {
-          return yield* Effect.fail(
-            new SourceProviderError({
-              provider: worker.source!.provider,
-              message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
-            }),
-          );
+          return yield* new SourceProviderError({
+            provider: worker.source!.provider,
+            message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
+          });
         }
         yield* serveBundleStream(worker, proxy, handle.bundles);
         return proxy.url;
@@ -1401,6 +1497,8 @@ export const LocalWorkerProvider = () =>
           if (config.dev.mode === "external") {
             dropServeState(fqn);
             yield* closeWorkerd(fqn);
+            yield* edge.removeRoutes(fqn);
+            yield* releaseEdgeDomain(fqn);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
               workerId: `dev:${config.name}`,
@@ -1450,6 +1548,17 @@ export const LocalWorkerProvider = () =>
             dev: config.dev,
             workerBindings,
           };
+          // Zone routes target this script through the local edge's router.
+          yield* edge.setRoutes(
+            fqn,
+            config.routes.map((route) => ({ pattern: route.pattern, script: config.name })),
+          );
+          // Only workerd-served workers can sit behind the edge router (it
+          // reaches them over service bindings); dev-server modes keep
+          // their proxy pointed at the dev server.
+          if (config.vite || config.source?.devMode === "server") {
+            yield* releaseEdgeDomain(fqn);
+          }
           const serverUrl = yield* config.source
             ? config.source.devMode === "server"
               ? runVite(worker, config.source.rootDir, invalidate, {
@@ -1483,7 +1592,13 @@ export const LocalWorkerProvider = () =>
                 namespace.uniqueKey,
               ]),
             ),
-            routes: [],
+            // Each route reports the edge listener serving its hostname.
+            routes: yield* Effect.forEach(config.routes, (route) => {
+              const host = routePatternHost(route.pattern);
+              return host === undefined
+                ? Effect.succeed(route)
+                : edge.url(host).pipe(Effect.map((url) => ({ ...route, url: url?.origin })));
+            }),
             crons: config.crons,
             tailConsumers: config.tailConsumers,
             streamingTailConsumers: config.streamingTailConsumers,
@@ -1497,6 +1612,8 @@ export const LocalWorkerProvider = () =>
           // and the URL proxy live outside instance scopes and are only
           // reclaimed on a real delete.
           dropServeState(fqn);
+          yield* edge.removeRoutes(fqn);
+          yield* releaseEdgeDomain(fqn);
           yield* closeWorkerd(fqn);
           yield* stopProxy(fqn);
         }),

@@ -206,31 +206,25 @@ const waitForFeatureGroup = (name: string, target: "Created" | "Gone") =>
       const described = yield* describeFeatureGroupOrUndefined(name);
       if (target === "Gone") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new FeatureGroupNotReady({
-            featureGroupName: name,
-            status: described.FeatureGroupStatus,
-          }),
-        );
+        return yield* new FeatureGroupNotReady({
+          featureGroupName: name,
+          status: described.FeatureGroupStatus,
+        });
       }
       if (described?.FeatureGroupStatus === "Created") return;
       if (
         described?.FeatureGroupStatus === "CreateFailed" ||
         described?.FeatureGroupStatus === "DeleteFailed"
       ) {
-        return yield* Effect.fail(
-          new FeatureGroupCreateFailed({
-            featureGroupName: name,
-            message: described.FailureReason,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new FeatureGroupNotReady({
+        return yield* new FeatureGroupCreateFailed({
           featureGroupName: name,
-          status: described?.FeatureGroupStatus,
-        }),
-      );
+          message: described.FailureReason,
+        });
+      }
+      return yield* new FeatureGroupNotReady({
+        featureGroupName: name,
+        status: described?.FeatureGroupStatus,
+      });
     }),
   );
 

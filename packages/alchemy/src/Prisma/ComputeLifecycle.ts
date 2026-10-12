@@ -150,18 +150,14 @@ export const waitForDeploymentStatus = Effect.fn(function* (
   const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* Effect.fail(
-      new PrismaDeploymentWaitInvalidOptions({
-        message: "timeoutSeconds must be a positive finite number.",
-      }),
-    );
+    return yield* new PrismaDeploymentWaitInvalidOptions({
+      message: "timeoutSeconds must be a positive finite number.",
+    });
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* Effect.fail(
-      new PrismaDeploymentWaitInvalidOptions({
-        message: "pollIntervalMs must be a positive finite number.",
-      }),
-    );
+    return yield* new PrismaDeploymentWaitInvalidOptions({
+      message: "pollIntervalMs must be a positive finite number.",
+    });
   }
   const timeoutMs = timeoutSeconds * 1_000;
   const startedAt = yield* Effect.sync(() => Date.now());
@@ -171,13 +167,13 @@ export const waitForDeploymentStatus = Effect.fn(function* (
   while (true) {
     const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
     if (remainingBeforeObservation <= 0) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
     const deploymentOption = yield* observeDeployment(deploymentId).pipe(
       Effect.timeoutOption(Duration.millis(remainingBeforeObservation)),
     );
     if (Option.isNone(deploymentOption)) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
     const deployment = deploymentOption.value;
     lastStatus = deployment.status;
@@ -185,16 +181,14 @@ export const waitForDeploymentStatus = Effect.fn(function* (
       return deployment satisfies ObservedDeployment;
     }
     if (deployment.status === "failed") {
-      return yield* Effect.fail(
-        new PrismaDeploymentFailed({
-          message: `Prisma deployment '${deploymentId}' failed`,
-        }),
-      );
+      return yield* new PrismaDeploymentFailed({
+        message: `Prisma deployment '${deploymentId}' failed`,
+      });
     }
 
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
 
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
@@ -202,7 +196,7 @@ export const waitForDeploymentStatus = Effect.fn(function* (
 });
 
 /**
- * Stops a running or provisioning deployment, then deletes it.
+ * Stops a running or provisioning deployment (or waits out a stop in progress), then deletes it.
  *
  * Uses the canonical deployment lifecycle routes. Errors include the observed
  * status and exact manual route for cleanup.
@@ -228,23 +222,28 @@ export const destroyDeployment = Effect.fn(function* (
   const previousStatus = deployment.status;
   let statusAtDelete = previousStatus;
   let stopped = false;
-  if (deployment.status === "running" || deployment.status === "provisioning") {
-    yield* stopDeploymentIdempotent(deploymentId).pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.mapError(ensureError),
-    );
+  if (
+    deployment.status === "running" ||
+    deployment.status === "provisioning" ||
+    deployment.status === "stopping"
+  ) {
+    if (deployment.status !== "stopping") {
+      yield* stopDeploymentIdempotent(deploymentId).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.mapError(ensureError),
+      );
+      stopped = true;
+    }
+    // Only a stopped deployment can be deleted.
     const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
-    stopped = true;
   }
 
   yield* deleteDeployment({ deploymentId }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catch((error) =>
-      Effect.fail(deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
-    ),
+    Effect.mapError((error) => deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
   );
 
   return {
@@ -269,12 +268,13 @@ export const destroyApp = Effect.fn(function* (
     for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
       const deleted = yield* deleteService({ serviceId: appId }).pipe(
         Effect.as(true),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.catchTag("Conflict", (error) =>
-          attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
-            ? deleteRetryDelay(attempt).pipe(Effect.as(false))
-            : Effect.fail(error),
-        ),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(true),
+          Conflict: (error) =>
+            attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
+              ? deleteRetryDelay(attempt).pipe(Effect.as(false))
+              : Effect.fail(error),
+        }),
       );
       if (deleted) {
         appDeleted = true;
@@ -318,12 +318,10 @@ export const destroyProjectApps = Effect.fn(function* (
         const nextCursor = page.pagination.nextCursor;
         if (!page.pagination.hasMore) break;
         if (nextCursor === null) {
-          return yield* Effect.fail(
-            new PrismaPaginationError({
-              message:
-                "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-            }),
-          );
+          return yield* new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+          });
         }
         cursor = nextCursor;
       }
@@ -346,21 +344,22 @@ export const destroyProjectApps = Effect.fn(function* (
       // delete is blocked on remaining member resources: re-clean and retry.
       const deleted = yield* deleteProject({ id: projectId }).pipe(
         Effect.as(true),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.catchTag("Conflict", (error) =>
-          Effect.gen(function* () {
-            if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
-              return yield* Effect.fail(error);
-            }
-            yield* cleanupApps();
-            yield* deleteRetryDelay(attempt);
-            return false;
-          }),
-        ),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(true),
+          Conflict: (error) =>
+            Effect.gen(function* () {
+              if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
+                return yield* error;
+              }
+              yield* cleanupApps();
+              yield* deleteRetryDelay(attempt);
+              return false;
+            }),
+        }),
         Effect.catchTag("BadRequest", (error) =>
           Effect.gen(function* () {
             if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
-              return yield* Effect.fail(error);
+              return yield* error;
             }
             yield* cleanupApps();
             yield* deleteRetryDelay(attempt);

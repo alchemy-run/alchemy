@@ -1,5 +1,7 @@
 import type {
   WorkflowBinding,
+  WorkflowBatchCreateOptions,
+  WorkflowBatchCreateResult,
   WorkflowInstanceRestartOptions,
 } from "../../../internal/workflows-shared/binding.ts";
 import type { WorkflowIntrospectionOperation } from "../../../internal/workflows-shared/types.ts";
@@ -23,11 +25,29 @@ class WorkflowImpl implements Workflow {
 
   async createBatch(
     options: Array<WorkflowInstanceCreateOptions>,
-  ): Promise<Array<WorkflowInstance>> {
+  ): Promise<Array<WorkflowInstance>>;
+  async createBatch(options: WorkflowBatchCreateOptions): Promise<{
+    created: Array<WorkflowInstance>;
+    errors: WorkflowBatchCreateResult["errors"];
+  }>;
+  async createBatch(
+    options: Array<WorkflowInstanceCreateOptions> | WorkflowBatchCreateOptions,
+  ): Promise<
+    | Array<WorkflowInstance>
+    | {
+        created: Array<WorkflowInstance>;
+        errors: WorkflowBatchCreateResult["errors"];
+      }
+  > {
+    if (Array.isArray(options)) {
+      const result = await this.binding.createBatch(options);
+      return result.map(({ id }) => new InstanceImpl(id, this.binding));
+    }
     const result = await this.binding.createBatch(options);
-    return result.map((res) => {
-      return new InstanceImpl(res.id, this.binding);
-    });
+    return {
+      created: result.created.map(({ id }) => new InstanceImpl(id, this.binding)),
+      errors: result.errors,
+    };
   }
 
   async deleteBatch(instanceIds: string[]): Promise<WorkflowBatchDeleteResult> {

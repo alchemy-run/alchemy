@@ -176,7 +176,7 @@ export const ReplicationSetProvider = () =>
                 Object.entries(r.tags).filter((e): e is [string, string] => e[1] !== undefined),
               ) as Record<string, string>,
           ),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       const buildAttrs = (rs: incidents.ReplicationSet & { arn: string }) => ({

@@ -89,6 +89,7 @@ export const makeSecretAuth = (
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- TimeoutError/env-credential errors surface untyped; widening SecretAuth would ripple through every Fly secret client
       return eff.pipe(
         Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
         Effect.timeout("8 seconds"),
@@ -125,6 +126,7 @@ export const makeKmsAuth = (
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A, E, RuntimeContext> => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- TimeoutError surfaces untyped; widening SecretAuth would ripple through every Fly secret client
       return Effect.scoped(
         eff.pipe(
           Effect.provide(
@@ -132,7 +134,7 @@ export const makeKmsAuth = (
               Layer.succeed(MachineIdentity, true),
               flyMachineApiHttp,
               credentials({
-                apiKey: "unused",
+                apiKey: Redacted.make("unused"),
                 apiBaseUrl: "http://localhost/v1",
               }),
             ),

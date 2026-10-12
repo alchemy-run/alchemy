@@ -91,15 +91,14 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } = yield* importVinextDist(
     "dist/config/prerender.js",
   );
-  const config =
-    buildConfig ??
-    (yield* Effect.gen(function* () {
-      const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
-      const loaded = yield* Effect.tryPromise(() =>
-        vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
-      );
-      return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
-    }));
+  const loadBuildConfig = Effect.gen(function* () {
+    const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
+    const loaded = yield* Effect.tryPromise(() =>
+      vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
+    );
+    return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
+  });
+  const config = buildConfig ?? (yield* loadBuildConfig);
   const decision = resolveVinextPrerenderDecision({
     vinextPrerenderConfig: config.prerenderConfig,
     nextOutput: config.nextConfig.output,
@@ -120,6 +119,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   )) as {
     runPrerender: (options: {
       root: string;
+      concurrency?: number;
       nextConfig: unknown;
       routeRootConfig: unknown;
     }) => Promise<{ routes?: readonly unknown[] } | null>;
@@ -129,6 +129,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     Effect.promise(() =>
       runPrerender({
         root,
+        concurrency: config.prerenderConfig?.concurrency,
         nextConfig: config.nextConfig,
         routeRootConfig: config.routeRootConfig,
       }),

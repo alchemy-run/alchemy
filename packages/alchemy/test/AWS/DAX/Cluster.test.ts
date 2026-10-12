@@ -74,9 +74,9 @@ const assertClusterDeleting = (name: string) =>
   );
 
 // A DAX cluster takes ~5-10 minutes to provision and bills per node-hour
-// while it exists. The full lifecycle is gated behind AWS_TEST_SLOW=1 and
+// while it exists. The full lifecycle is skipped under `--fast` and
 // always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create DAX cluster (dax.t3.small), verify, destroy",
   (stack) =>
     Effect.gen(function* () {

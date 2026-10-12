@@ -60,7 +60,7 @@ describe(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "creates, lists, replaces, repairs, and deletes Client VPN routes",
       (stack) =>
         Effect.gen(function* () {

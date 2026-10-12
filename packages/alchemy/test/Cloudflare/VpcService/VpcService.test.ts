@@ -137,11 +137,7 @@ test.provider(
   },
 );
 
-// TODO: re-enable once distilled ships the union-ordering fix
-// (alchemy-run/distilled#232) — on @distilled.cloud/cloudflare@0.16.3 the
-// dual-stack host variant comes after the ipv4-only variant in the request
-// schema's Schema.Union, so `ipv6` is silently stripped on encode.
-test.provider.skip(
+test.provider(
   "create vpc service with dual-stack host",
   (stack) =>
     Effect.gen(function* () {

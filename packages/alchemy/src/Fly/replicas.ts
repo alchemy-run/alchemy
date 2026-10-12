@@ -118,6 +118,28 @@ export const getMachineById = (appName: string, machineId: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
+/**
+ * Reads a Machine we hold a lease on. Fly's Machines API is not
+ * read-after-write consistent: a freshly created Machine can accept a lease
+ * (201) and then answer `GET /machines/{id}` with 404 for several seconds.
+ * Holding the lease blocks other writers, so a 404 here is lag rather than
+ * deletion; retry it (bounded) before surfacing `NotFound`.
+ */
+const getLeasedMachine = (appName: string, machineId: string) =>
+  machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
+    Effect.retry({
+      times: 10,
+      schedule: Schedule.spaced("1 second"),
+      while: (error) => error._tag === "NotFound",
+    }),
+  );
+
+const getLeasedMachineById = (appName: string, machineId: string) =>
+  getLeasedMachine(appName, machineId).pipe(
+    Effect.map((machine) => (gone(machine) ? undefined : machine)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
+
 export const listMachinesByApp = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
@@ -365,9 +387,7 @@ export const waitHealthy = Effect.fn(function* (
       );
     }),
     Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
-    Effect.catchTag("HttpClientError", (error) =>
-      error.reason._tag === "TransportError" ? Effect.succeed(false) : Effect.fail(error),
-    ),
+    Effect.catchReason("HttpClientError", "TransportError", () => Effect.succeed(false)),
     Effect.repeat({
       schedule: Schedule.spaced(healthTimeoutMs / 10),
       until: (passing) => passing,
@@ -424,7 +444,7 @@ const ensureLeasedStarted = Effect.fn(function* (
   yield* leases.acquire([machineId]);
   const started = yield* Effect.gen(function* () {
     // Create/update responses can lag Fly's automatic launch.
-    const current = yield* machines.getMachine({ app_name: appName, machine_id: machineId });
+    const current = yield* getLeasedMachine(appName, machineId);
     if (!sameOwnership(current, machine)) {
       return yield* new ReplicaOwnershipChanged({ appName, machineId });
     }
@@ -448,7 +468,7 @@ const ensureLeasedStarted = Effect.fn(function* (
         timeout: WAIT_TIMEOUT_SECONDS,
       })
       .pipe(Retry.none);
-    return yield* machines.getMachine({ app_name: appName, machine_id: machineId });
+    return yield* getLeasedMachine(appName, machineId);
   }).pipe(
     Effect.retry({
       times: 6,
@@ -620,12 +640,17 @@ export const leaseSnapshot = Effect.fn(function* (
   leases: MachineLeases,
 ) {
   const ordered = [...snapshot].sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
+  const leased = new Set<string>();
   yield* Effect.forEach(
     ordered,
     (machine) =>
       Effect.gen(function* () {
         if (!machine.id || machine.host_status === "unreachable") return;
-        yield* leases.acquire([machine.id]).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        const id = machine.id;
+        yield* leases.acquire([id]).pipe(
+          Effect.tap(() => Effect.sync(() => leased.add(id))),
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }),
     { concurrency: 1 },
   ).pipe(Effect.timeout("30 seconds"));
@@ -636,7 +661,9 @@ export const leaseSnapshot = Effect.fn(function* (
       observed.push(machine);
       continue;
     }
-    const current = yield* getMachineById(appName, machine.id);
+    const current = yield* leased.has(machine.id)
+      ? getLeasedMachineById(appName, machine.id)
+      : getMachineById(appName, machine.id);
     if (!current) {
       yield* leases.forget(machine.id);
       continue;

@@ -271,16 +271,51 @@ describe("handleWebSocket", () => {
     expect(response.ok).toBe(true);
   });
 
-  test("destroys client socket when worker does not upgrade", async () => {
-    // Upstream responds with a normal HTTP 200 instead of upgrading.
+  test("relays the worker's response and closes when it refuses the upgrade", async () => {
+    // The worker rejects the handshake with a plain HTTP response instead of
+    // upgrading — the client must see that response, not a connection reset,
+    // and the socket closes once it is relayed (the promise resolves on close).
     harness.upstreamServer.removeAllListeners("upgrade");
+    harness.upstreamServer.on("upgrade", (_request, socket) => {
+      socket.end(
+        [
+          "HTTP/1.1 403 Forbidden",
+          "content-type: text/plain",
+          "content-length: 9",
+          "connection: close",
+          "",
+          "Forbidden",
+        ].join("\r\n"),
+      );
+    });
 
-    const fakeReq = makeFakeRequest({ host: "localhost" });
-    const fakeSocket = new NodeNet.Socket();
-    harness.clientServer.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    const received = await new Promise<string>((resolve, reject) => {
+      const socket = NodeNet.connect(harness.clientPort, "127.0.0.1", () => {
+        socket.write(
+          [
+            "GET /ws HTTP/1.1",
+            `Host: 127.0.0.1:${harness.clientPort}`,
+            "Connection: Upgrade",
+            "Upgrade: websocket",
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version: 13",
+            "",
+            "",
+          ].join("\r\n"),
+        );
+      });
+      let buffer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+      });
+      socket.on("close", () => resolve(buffer));
+      socket.on("error", reject);
+    });
 
-    await new Promise<void>((resolve) => fakeSocket.once("close", resolve));
-    expect(fakeSocket.destroyed).toBe(true);
+    expect(received).toContain("HTTP/1.1 403 Forbidden");
+    expect(received).toContain("content-type: text/plain");
+    expect(received.endsWith("Forbidden")).toBe(true);
   });
 
   test("returns a cleanup function that removes the upgrade listener", async () => {

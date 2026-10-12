@@ -9,6 +9,12 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
+// Project setup (one-time): Application Integration must be provisioned in
+// us-central1, else calls fail with `Found zero or more than one active
+// project` / `Failed to client for project`:
+//   POST https://integrations.googleapis.com/v1/projects/PROJECT_ID/locations/us-central1/clients:provision
+//   {"createSampleWorkflows": false}
+
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>

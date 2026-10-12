@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { highlightTS } from "../marketing/highlightTS";
+import { useEffect, useRef, useState } from "react";
+import { RollTemplate } from "./_roll";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 import {
   compactValues,
@@ -11,7 +11,7 @@ import {
 import "./HeroHosts.css";
 
 /*
- * The hero: one API cycling through nine hosts. Each turn rolls the parts
+ * The hero: one API cycling through eight providers. Each turn rolls the parts
  * of the code that change (the host, its props, the Photos Layer) the way
  * the talk deck's Roll does, then deploys it, showing the resources that host needs and the binding.
  * Clicking a host in the reel jumps to it.
@@ -136,38 +136,19 @@ export default function HeroHosts() {
   const spinner = useSpinner(rows.some((r) => r.status === "creating"));
   const h = HOSTS[host]!;
 
-  // A template, with each value in a slot that rolls when it changes.
-  const render = (segments: string[], was: readonly string[], now: readonly string[]) =>
-    segments.map((seg, n) => {
-      if (n % 2 === 0)
-        return <span key={n} dangerouslySetInnerHTML={{ __html: highlightTS(seg) }} />;
-      const k = +seg;
-      const rolling = was[k] !== now[k];
-      return (
-        <span
-          key={`${n}-${roll.n}`}
-          className={`hh-slot ${rolling ? "is-active is-rolling" : ""}`}
-          style={
-            {
-              "--from": `${was[k]!.length}ch`,
-              "--to": `${now[k]!.length}ch`,
-              width: `${now[k]!.length}ch`,
-            } as CSSProperties
-          }
-        >
-          <span className="hh-slot__strip">
-            <span dangerouslySetInnerHTML={{ __html: highlightTS(was[k]!) || "" }} />
-            <span dangerouslySetInnerHTML={{ __html: highlightTS(now[k]!) || "" }} />
-          </span>
-        </span>
-      );
-    });
-  const code = render(SEGMENTS, roll.was, roll.now);
-  const compact = render(SEGMENTS_COMPACT, compactValues(roll.was), compactValues(roll.now));
+  const code = <RollTemplate segments={SEGMENTS} was={roll.was} now={roll.now} n={roll.n} />;
+  const compact = (
+    <RollTemplate
+      segments={SEGMENTS_COMPACT}
+      was={compactValues(roll.was)}
+      now={compactValues(roll.now)}
+      n={roll.n}
+    />
+  );
 
   return (
     <>
-      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Hosts">
+      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Providers">
         {HOSTS.map((x, i) => (
           <li key={x.label}>
             <button

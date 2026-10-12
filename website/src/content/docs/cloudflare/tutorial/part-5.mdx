@@ -61,7 +61,9 @@ alchemy profile create admin
 alchemy profile edit --profile admin --add Cloudflare
 ```
 
-When prompted for a Cloudflare credential, pick one of:
+When asked for the Cloudflare authentication method, choose **API
+Token or API Key**, not the recommended OAuth: Cloudflare's OAuth
+scopes can't manage API tokens. Then pick one of:
 
 - **API Key + Email** (the Global API Key) — has full account
   access, including the ability to mint tokens.

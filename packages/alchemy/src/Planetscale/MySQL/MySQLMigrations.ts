@@ -109,7 +109,7 @@ const withMySQLConnection = <A, E, R>(
         Effect.tryPromise({
           try: () => connection.end(),
           catch: toMigrationError,
-        }).pipe(Effect.catch(() => Effect.void)),
+        }).pipe(Effect.ignore),
     ),
   );
 

@@ -115,6 +115,7 @@ export const asStringEffect = (value: unknown): Effect.Effect<Effect.Effect<stri
     return value.asEffect() as Effect.Effect<Effect.Effect<string>>;
   }
   if (Effect.isEffect(value)) {
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource id Effects resolve without requirements
     return Effect.succeed(value as Effect.Effect<string>);
   }
   return Effect.die("Stripe binding expected a resolved resource id");

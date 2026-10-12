@@ -238,7 +238,7 @@ export const EnvironmentProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       const octokit = yield* octokitFor(news.baseUrl);
 
       // Resolve reviewer logins/slugs to the numeric IDs the API expects.
@@ -268,17 +268,32 @@ export const EnvironmentProvider = () =>
       });
 
       // Ensure & Sync — the PUT is a full upsert of the environment's
-      // protection configuration; send explicit values (not omissions) so
-      // removed props converge back to their defaults.
+      // protection configuration. Protection rules are only sent when set now
+      // or previously (olds): on private repos without GitHub Enterprise,
+      // sending them at all — even as defaults — is rejected as a billing
+      // error. A prop that was set before and is now removed is sent as its
+      // explicit default so it converges. `prevent_self_review` and
+      // `reviewers` are sent together: GitHub rejects the former when the
+      // latter is omitted (an explicit `null` is accepted).
+      const sendWaitTimer = news.waitTimer !== undefined || olds?.waitTimer !== undefined;
+      const sendReviewers =
+        news.reviewers !== undefined ||
+        news.preventSelfReview !== undefined ||
+        olds?.reviewers !== undefined ||
+        olds?.preventSelfReview !== undefined;
       const environment = yield* Effect.tryPromise({
         try: async () => {
           const { data } = await octokit.rest.repos.createOrUpdateEnvironment({
             owner: news.owner,
             repo: news.repository,
             environment_name: news.name,
-            wait_timer: news.waitTimer ?? 0,
-            prevent_self_review: news.preventSelfReview ?? false,
-            reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
+            ...(sendWaitTimer ? { wait_timer: news.waitTimer ?? 0 } : {}),
+            ...(sendReviewers
+              ? {
+                  prevent_self_review: news.preventSelfReview ?? false,
+                  reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
+                }
+              : {}),
             deployment_branch_policy:
               news.deploymentBranchPolicy === undefined
                 ? null

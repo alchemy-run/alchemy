@@ -1,6 +1,10 @@
 import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import { fromDurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import { fromDurableObjectStorage } from "@/Cloudflare/Workers/DurableObjectStorage.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
@@ -56,6 +60,47 @@ describe(
         Effect.provideService(Marker, { value: "inside the transaction" }),
         Effect.provide(RuntimeContext.phantom),
       ),
+    );
+
+    it.live("storage.transaction interrupts a callback that synchronously cancels its caller", () =>
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>();
+        let cleaned = false;
+        const storage = fromDurableObjectStorage({
+          sql: {},
+          // Native storage starts the callback after its caller has suspended.
+          transaction: <T>(closure: (txn: unknown) => Promise<T>) =>
+            Promise.resolve().then(() => closure({})),
+        } as never);
+
+        const caller = yield* Effect.withFiber((parent) =>
+          storage.transaction(() =>
+            Effect.withFiber((callback) =>
+              Effect.gen(function* () {
+                yield* Deferred.succeed(entered, callback);
+                yield* Effect.sync(() => parent.interruptUnsafe());
+                yield* Effect.never;
+              }),
+            ).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  cleaned = true;
+                }),
+              ),
+            ),
+          ),
+        ).pipe(Effect.forkScoped);
+        const callback = yield* Deferred.await(entered);
+
+        yield* Effect.gen(function* () {
+          const exit = yield* Fiber.await(caller).pipe(Effect.timeout("1 second"));
+          expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+          expect(cleaned).toBe(true);
+        }).pipe(
+          // A regression must fail without leaving the callback stuck.
+          Effect.ensuring(Fiber.interrupt(callback)),
+        );
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
   },
 );

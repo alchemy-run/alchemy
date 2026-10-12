@@ -400,9 +400,7 @@ export const make: (
       });
       const target = resolveExportTarget(parsed.exports?.["./vite"]);
       if (target === undefined) {
-        return yield* Effect.fail(
-          fail(`The project's @sveltejs/kit (${kitDirectory}) has no "./vite" export`),
-        );
+        return yield* fail(`The project's @sveltejs/kit (${kitDirectory}) has no "./vite" export`);
       }
       return yield* Effect.tryPromise({
         try: async () =>
@@ -511,9 +509,7 @@ export const make: (
 
       const result = adapter.result.current;
       if (result === undefined) {
-        return yield* Effect.fail(
-          fail("The SvelteKit build completed without running the adapter"),
-        );
+        return yield* fail("The SvelteKit build completed without running the adapter");
       }
 
       const output: FrameworkCore.BuildOutput = {
@@ -589,7 +585,7 @@ export const make: (
       );
       const url = server.resolvedUrls?.local[0];
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       return { url };
     });

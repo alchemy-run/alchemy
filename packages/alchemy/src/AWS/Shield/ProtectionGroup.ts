@@ -139,7 +139,7 @@ const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
 const readGroupTags = (protectionGroupArn: string) =>
   shield.listTagsForResource({ ResourceARN: protectionGroupArn }).pipe(
     Effect.map((r) => toTagRecord(r.Tags)),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 const buildAttrs = (group: shield.ProtectionGroup, tags: Record<string, string>) => ({

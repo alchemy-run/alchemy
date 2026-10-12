@@ -4,6 +4,7 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { PrismaApiError } from "@/Prisma/Client";
 
@@ -107,7 +108,7 @@ export const makeFakeManagementApi = (
     layer: Layer.mergeAll(
       Layer.succeed(HttpClient.HttpClient, client),
       fromApiToken({
-        apiToken: "fake-service-token",
+        apiToken: Redacted.make("fake-service-token"),
         apiBaseUrl: FAKE_API_BASE_URL,
       }),
     ),

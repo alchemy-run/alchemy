@@ -1,6 +1,7 @@
-import { describe } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
@@ -24,6 +25,38 @@ const collectorWorker = () =>
     env: { SINK: Cloudflare.DurableObject<OtelSink>("OtelSink") },
     compatibility: { date: "2024-09-23" },
   });
+
+interface CollectedSpan {
+  name: string;
+  status?: { code?: number };
+  attributes?: { key: string; value: Record<string, unknown> }[];
+}
+
+// Every span across all the OTLP traces pushes the collector recorded.
+const collectedSpans = (collected: unknown): CollectedSpan[] =>
+  (collected as { items: { signal: string; payload: any }[] }).items
+    .filter((item) => item.signal === "traces")
+    .flatMap((item) => item.payload.resourceSpans ?? [])
+    .flatMap((resource: any) => resource.scopeSpans ?? [])
+    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[]);
+
+// Name, path and status of each span, printed when an assertion fails.
+const rootSpanSummary = (collected: unknown) =>
+  collectedSpans(collected).map((span) => ({
+    name: span.name,
+    path: span.attributes?.find((attribute) => attribute.key === "url.path")?.value,
+    status: span.status?.code,
+  }));
+
+// The `http.server` spans for one path.
+const rootSpansFor = (collected: unknown, path: string): CollectedSpan[] =>
+  collectedSpans(collected).filter(
+    (span) =>
+      span.name.startsWith("http.server") &&
+      span.attributes?.some(
+        (attribute) => attribute.key === "url.path" && attribute.value.stringValue === path,
+      ),
+  );
 
 describe(
   "AWS.Lambda Telemetry",
@@ -101,6 +134,54 @@ describe(
           yield* expectUrlContains(collected, "lambda.child-span");
           // Log record shipped by the OTLP logger.
           yield* expectUrlContains(collected, "lambda-work-log");
+
+          // A timing-out invocation: the fixture's timeout is 5 s and `/slow`
+          // sleeps 60 s, so Lambda kills it and the Function URL answers with
+          // an error. 2 s before that the deadline flush ended the root
+          // span with the timeout and drained the exporters, so the trace
+          // exists. Without it Lambda kills the invocation and nothing below
+          // ever reaches the collector.
+          const client = yield* HttpClient.HttpClient;
+          const slow = yield* client.get(`${fnUrl}/slow`);
+          expect(slow.status).not.toBe(200);
+          yield* expectUrlContains(collected, "AWS.Lambda.InvocationTimeoutError", {
+            timeout: "120 seconds",
+            label: "timed-out invocation's root span",
+          });
+          yield* expectUrlContains(collected, "aws.lambda.timeout.imminent");
+          // The child span that ended before the sleep and its log travel in
+          // the same flush.
+          yield* expectUrlContains(collected, "lambda.slow-span");
+          yield* expectUrlContains(collected, "lambda-slow-log");
+
+          // An invocation that finishes after the deadline flush but before
+          // the timeout: the response is untouched, and its root span is
+          // exported exactly once — by the flush, as timeout-imminent. The
+          // dispatcher flushes again before responding, so any second
+          // export has reached the collector by the time we see the 200.
+          const late = yield* client.get(`${fnUrl}/late`);
+          expect(late.status).toBe(200);
+          expect(yield* late.text).toContain("lambda-late-done");
+          const collectedBody = yield* client
+            .get(collected)
+            .pipe(Effect.flatMap((response) => response.json));
+          const lateSpans = rootSpansFor(collectedBody, "/late");
+          expect({
+            lateSpans: lateSpans.length,
+            roots: rootSpanSummary(collectedBody),
+          }).toMatchObject({
+            lateSpans: 1,
+          });
+          expect(lateSpans[0]?.status?.code).toBe(2);
+          // The early-ended span still says which request it was.
+          expect(lateSpans[0]?.attributes).toContainEqual({
+            key: "http.request.method",
+            value: { stringValue: "GET" },
+          });
+          expect(lateSpans[0]?.attributes).toContainEqual({
+            key: "aws.lambda.timeout.imminent",
+            value: { boolValue: true },
+          });
         }),
       { timeout: 600_000 },
     );

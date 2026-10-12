@@ -312,9 +312,7 @@ export const PolicyProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
+            Effect.orElseSucceed((): ObservedPolicy | undefined => undefined),
           );
       }
       if (!observed) {
@@ -343,7 +341,7 @@ export const PolicyProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findPolicyByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );
@@ -431,11 +429,7 @@ export const PolicyProvider = () =>
             accountId: acct,
             policyId: output.policyId,
           })
-          .pipe(
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.orElseSucceed((): ObservedPolicy | undefined => undefined));
         if (direct && direct.id) {
           return {
             policyId: direct.id,
@@ -472,7 +466,7 @@ const findPolicyByName = (acct: string, name: string) =>
     Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 type ObservedPolicy = {

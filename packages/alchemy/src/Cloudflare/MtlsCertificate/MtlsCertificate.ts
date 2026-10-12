@@ -2,6 +2,7 @@ import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -155,6 +156,32 @@ export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Provide
  * });
  * ```
  *
+ * ### Binding to a Worker
+ * **Example:** Present a leaf certificate on subrequests
+ * ```typescript
+ * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
+ *   ca: false,
+ *   certificates: leafPem,
+ *   privateKey: yield* Config.Redacted("ORIGIN_CLIENT_KEY"),
+ * });
+ *
+ * // `env.ORIGIN_CERT` is a `Fetcher`: `env.ORIGIN_CERT.fetch(url)` presents
+ * // the certificate to the origin.
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { ORIGIN_CERT: cert },
+ * });
+ * ```
+ *
+ * **Example:** Present a leaf certificate from an Effect Worker
+ * ```typescript
+ * // Inside the Worker's Effect; provide `Cloudflare.MtlsCertificate.FetchBinding`.
+ * const fetchOrigin = yield* Cloudflare.MtlsCertificate.Fetch(cert);
+ * const response = yield* fetchOrigin(
+ *   HttpClientRequest.get("https://origin.example.com/"),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  *
  * @resource
@@ -269,7 +296,7 @@ export const MtlsCertificateProvider = () =>
             Effect.catchTag("CertificateAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const match = yield* findByContent(accountId, news.certificates);
-                if (!match) return yield* Effect.fail(originalError);
+                if (!match) return yield* originalError;
                 return match;
               }),
             ),
@@ -286,6 +313,18 @@ export const MtlsCertificateProvider = () =>
         })
         .pipe(
           Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
+          // Cloudflare releases a Worker's `mtls_certificate` binding
+          // eventually: for a short while after the Worker is deleted the
+          // delete still fails with `CertificateInUse`, even though the
+          // certificate's association list is already empty. Treat it as a
+          // dependency violation and retry, bounded to about 45 seconds.
+          Effect.retry({
+            while: (e) => e._tag === "CertificateInUse",
+            schedule: Schedule.max([
+              Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+              Schedule.recurs(10),
+            ]),
+          }),
         );
     }),
   });

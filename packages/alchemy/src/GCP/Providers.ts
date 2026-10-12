@@ -1055,10 +1055,6 @@ import {
 import { RunPipelineHttp } from "./DataPipelines/RunPipelineHttp.ts";
 import { StopPipelineHttp } from "./DataPipelines/StopPipelineHttp.ts";
 import { AspectType, AspectTypeProvider } from "./Dataplex/AspectType.ts";
-import {
-  DataAttributeBinding,
-  DataAttributeBindingProvider,
-} from "./Dataplex/DataAttributeBinding.ts";
 import { DataDomain, DataDomainProvider } from "./Dataplex/DataDomain.ts";
 import { DataDomainsBinding, DataDomainsBindingProvider } from "./Dataplex/DataDomainsBinding.ts";
 import { DataProduct, DataProductProvider } from "./Dataplex/DataProduct.ts";
@@ -1067,11 +1063,6 @@ import {
   DataProductsDataAssetProvider,
 } from "./Dataplex/DataProductsDataAsset.ts";
 import { DataScan, DataScanProvider } from "./Dataplex/DataScan.ts";
-import {
-  DataTaxonomiesAttribute,
-  DataTaxonomiesAttributeProvider,
-} from "./Dataplex/DataTaxonomiesAttribute.ts";
-import { DataTaxonomy, DataTaxonomyProvider } from "./Dataplex/DataTaxonomy.ts";
 import { EncryptionConfig, EncryptionConfigProvider } from "./Dataplex/EncryptionConfig.ts";
 import { EntryGroup, EntryGroupProvider } from "./Dataplex/EntryGroup.ts";
 import { EntryGroupsEntry, EntryGroupsEntryProvider } from "./Dataplex/EntryGroupsEntry.ts";
@@ -1530,6 +1521,10 @@ import {
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
+import {
+  ServiceAccount as IamServiceAccount,
+  ServiceAccountProvider as IamServiceAccountProvider,
+} from "./IAM/ServiceAccount.ts";
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
@@ -2354,6 +2349,7 @@ import {
   ServiceProvider as ServicemanagementServiceProvider,
 } from "./ServiceManagement/Service.ts";
 import { Connection, ConnectionProvider } from "./ServiceNetworking/Connection.ts";
+import { ProjectService, ProjectServiceProvider } from "./ServiceUsage/ProjectService.ts";
 import { WebResource, WebResourceProvider } from "./SiteVerification/WebResource.ts";
 import {
   Database as SpannerDatabase,
@@ -2552,10 +2548,6 @@ import {
   Subscription as WorkspaceeventsSubscription,
   SubscriptionProvider as WorkspaceeventsSubscriptionProvider,
 } from "./WorkspaceEvents/Subscription.ts";
-import {
-  TasksPushNotificationConfig,
-  TasksPushNotificationConfigProvider,
-} from "./WorkspaceEvents/TasksPushNotificationConfig.ts";
 import { GenerateAccessTokenHttp } from "./Workstations/GenerateAccessTokenHttp.ts";
 import { GetWorkstationClusterHttp } from "./Workstations/GetWorkstationClusterHttp.ts";
 import { GetWorkstationConfigHttp } from "./Workstations/GetWorkstationConfigHttp.ts";
@@ -2615,6 +2607,7 @@ const gcpLive = fromCredentials().pipe(
 );
 
 const makeProviders = () =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erased on purpose, see comment at the cast below
   Layer.effect(
     Providers,
     Effect.gen(function* () {
@@ -3066,15 +3059,12 @@ const makeProviders = () =>
           TcpRoute,
           TlsRoute,
           AspectType,
-          DataAttributeBinding,
           DataDomain,
           DataDomainsBinding,
           DataProduct,
           DataProductsDataAsset,
           DataScan,
           EncryptionConfig,
-          DataTaxonomy,
-          DataTaxonomiesAttribute,
           EntryGroup,
           EntryGroupsEntry,
           EntryGroupsEntryLink,
@@ -3199,7 +3189,6 @@ const makeProviders = () =>
           MattersHold,
           MattersSavedQuery,
           WorkspaceeventsSubscription,
-          TasksPushNotificationConfig,
           JobsTenant,
           TenantsCompany,
           TenantsJob,
@@ -3593,6 +3582,8 @@ const makeProviders = () =>
           SasportalSignedCustomersDeploymentsDevice,
           SasportalSignedNodesDeploymentsDevice,
           JobTemplate,
+          IamServiceAccount,
+          ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       return {
@@ -4054,7 +4045,6 @@ const makeProviders = () =>
           ),
           Layer.mergeAll(
             AspectTypeProvider(),
-            DataAttributeBindingProvider(),
             DataDomainProvider(),
             DataDomainsBindingProvider(),
             DataProductProvider(),
@@ -4063,8 +4053,6 @@ const makeProviders = () =>
             EncryptionConfigProvider(),
           ),
           Layer.mergeAll(
-            DataTaxonomyProvider(),
-            DataTaxonomiesAttributeProvider(),
             EntryGroupProvider(),
             EntryGroupsEntryProvider(),
             EntryGroupsEntryLinkProvider(),
@@ -4243,11 +4231,7 @@ const makeProviders = () =>
             CustomersConfigurationProvider(),
             CustomersConnectorConfigProvider(),
           ),
-          Layer.mergeAll(
-            WorkspaceeventsSubscriptionProvider(),
-            TasksPushNotificationConfigProvider(),
-            SupportEventSubscriptionProvider(),
-          ),
+          Layer.mergeAll(WorkspaceeventsSubscriptionProvider(), SupportEventSubscriptionProvider()),
           Layer.mergeAll(
             JobsTenantProvider(),
             TenantsCompanyProvider(),
@@ -4719,6 +4703,8 @@ const makeProviders = () =>
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
                 IamMemberProvider(),
+                IamServiceAccountProvider(),
+                ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
               ),

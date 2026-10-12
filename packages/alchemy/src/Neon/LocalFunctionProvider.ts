@@ -10,7 +10,7 @@ import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { moduleExtension } from "../Util/Node.ts";
 import { sha256 } from "../Util/sha256.ts";
-import { Function } from "./Function.ts";
+import { branchScopeOf, Function } from "./Function.ts";
 import { buildFunctionArtifact, validateFunctionZip } from "./FunctionArtifact.ts";
 import { FunctionConfigurationError, functionEnvironment, functionSlug } from "./FunctionConfig.ts";
 
@@ -150,8 +150,9 @@ export const LocalFunctionProvider = () =>
               Effect.forkScoped,
             );
           }
-          const projectId = news.branch?.projectId ?? news.project?.projectId ?? "local";
-          const branchId = news.branch?.branchId ?? "local";
+          const scope = branchScopeOf(news);
+          const projectId = scope.branch?.projectId ?? scope.project?.projectId ?? "local";
+          const branchId = scope.branch?.branchId ?? "local";
           return {
             projectId,
             branchId,

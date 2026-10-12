@@ -165,8 +165,10 @@ const getByName = (name: string) =>
         })
         .pipe(
           Effect.provide(noRetryLayer),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("BadGateway", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFound: () => Effect.succeed(undefined),
+            BadGateway: () => Effect.succeed(undefined),
+          }),
         );
 
 const findByOwnership = (id: string, project: string) =>
@@ -274,13 +276,11 @@ export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider = (
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreGone(
-        retryDelete(
-          datalabeling.deleteProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
-            name: output.name,
-          }),
-        ),
-      );
+      yield* datalabeling
+        .deleteProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+          name: output.name,
+        })
+        .pipe(retryDelete, ignoreGone);
       yield* waitUntilGone(getByName(output.name));
     }),
   });

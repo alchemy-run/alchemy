@@ -148,9 +148,9 @@ const waitForSnapshotReady = ({
       return details!;
     }
     if (status === "CREATING") {
-      return yield* Effect.fail(new SnapshotPending({ status }));
+      return yield* new SnapshotPending({ status });
     }
-    return yield* Effect.fail(new SnapshotFailed({ applicationName, snapshotName, status }));
+    return yield* new SnapshotFailed({ applicationName, snapshotName, status });
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "SnapshotPending",
@@ -171,7 +171,7 @@ const waitForSnapshotDeleted = ({
   Effect.gen(function* () {
     const details = yield* describeSnapshot({ applicationName, snapshotName });
     if (details !== undefined) {
-      return yield* Effect.fail(new SnapshotStillExists());
+      return yield* new SnapshotStillExists();
     }
   }).pipe(
     Effect.retry({

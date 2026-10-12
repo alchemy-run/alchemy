@@ -119,9 +119,7 @@ const finish = (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     if (context.entry === undefined) {
-      return yield* Effect.fail(
-        fail("The TanStack Start build produced no on-disk server entry to finish"),
-      );
+      return yield* fail("The TanStack Start build produced no on-disk server entry to finish");
     }
     const serverDir = path.dirname(context.entry);
     const serverEntryFileName = path.basename(context.entry);
@@ -220,6 +218,7 @@ export const makeAwsTarget = (config: TanStackStartAwsTargetConfig = {}): TanSta
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "tanstack-start",
       config: {
         rootDir: context.root,

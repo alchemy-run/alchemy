@@ -65,9 +65,9 @@ const assertClusterDeleting = (identifier: string) =>
   );
 
 // Provisioned Redshift clusters take ~5-10 minutes to reach `available` and
-// bill hourly per node while they exist. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// bill hourly per node while they exist. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create single-node Redshift cluster, verify, destroy",
   (stack) =>
     Effect.gen(function* () {

@@ -170,8 +170,10 @@ export interface MongoConnectionUrlOptions {
 /**
  * Format a `mongodb://` connection URL with the DocumentDB-recommended
  * options (`replicaSet=rs0`, `readPreference=secondaryPreferred`,
- * `retryWrites=false`). Username and password are percent-encoded; the
- * result is `Redacted` because it embeds the password.
+ * `retryWrites=false`, and `authMechanism=SCRAM-SHA-1` when credentials are
+ * present — DocumentDB does not support SCRAM-SHA-256). Username and
+ * password are percent-encoded; the result is `Redacted` because it embeds
+ * the password.
  */
 export const formatMongoConnectionUrl = (
   options: MongoConnectionUrlOptions,
@@ -195,6 +197,10 @@ export const formatMongoConnectionUrl = (
     replicaSet: "rs0",
     readPreference: "secondaryPreferred",
     retryWrites: "false",
+    // DocumentDB only implements SCRAM-SHA-1. Without an explicit mechanism
+    // current `mongodb` drivers negotiate SCRAM-SHA-256 and the server
+    // rejects the handshake with "Unsupported mechanism [ -301 ]".
+    ...(options.username !== undefined ? { authMechanism: "SCRAM-SHA-1" } : {}),
     ...options.params,
   });
   if (options.tls === true) {

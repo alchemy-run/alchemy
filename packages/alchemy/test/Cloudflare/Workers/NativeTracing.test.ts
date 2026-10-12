@@ -134,6 +134,23 @@ describe(
       expect(resolved.traces?.headSamplingRate).toBe(1);
     });
 
+    unit("Issues coexist with Telemetry traces and explicit logs", () => {
+      const resolved = resolveObservability(
+        {
+          observability: {
+            enabled: true,
+            logs: { enabled: true, invocationLogs: true },
+            issues: { enabled: true },
+          },
+        },
+        tracesBind({ enabled: true, headSamplingRate: 0.1 }),
+      );
+      expect(resolved.issues?.enabled).toBe(true);
+      expect(resolved.logs?.invocationLogs).toBe(true);
+      expect(resolved.traces?.enabled).toBe(true);
+      expect(resolved.traces?.headSamplingRate).toBe(0.1);
+    });
+
     unit("no bind returns default logs", () => {
       const resolved = resolveObservability({}, []);
       expect(resolved.traces).toBeUndefined();

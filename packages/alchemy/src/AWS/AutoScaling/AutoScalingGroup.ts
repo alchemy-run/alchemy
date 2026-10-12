@@ -59,7 +59,8 @@ export interface AutoScalingGroupProps {
    */
   maxSize: number;
   /**
-   * Desired number of instances.
+   * Desired number of instances. When omitted, updates leave the live value
+   * alone so external scalers (e.g. ECS managed scaling) keep control.
    * @default minSize
    */
   desiredCapacity?: number;
@@ -239,6 +240,24 @@ export const AutoScalingGroup = Resource<AutoScalingGroup>("AWS.AutoScaling.Auto
 
 const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
+
+/**
+ * A launch template naming a just-created instance profile is rejected until
+ * IAM propagates it; retry that rejection (bounded, ~1 minute).
+ */
+const retryInstanceProfilePropagation = <A, R>(
+  effect: Effect.Effect<
+    A,
+    autoscaling.CreateAutoScalingGroupError | autoscaling.UpdateAutoScalingGroupError,
+    R
+  >,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "InvalidIamInstanceProfile",
+      schedule: Schedule.max([Schedule.recurs(10), Schedule.exponential("1 second")]),
+    }),
+  );
 
 export const AutoScalingGroupProvider = () =>
   Provider.effect(
@@ -453,9 +472,8 @@ export const AutoScalingGroupProvider = () =>
                 Tags: toTags(autoScalingGroupName, desiredTags),
               } as any)
               .pipe(
-                Effect.catch((error: any) =>
-                  error?._tag === "AlreadyExistsFault" ? Effect.void : Effect.fail(error),
-                ),
+                retryInstanceProfilePropagation,
+                Effect.catchTag("AlreadyExistsFault", () => Effect.void),
               );
 
             existing = yield* describeGroup(autoScalingGroupName).pipe(
@@ -477,18 +495,20 @@ export const AutoScalingGroupProvider = () =>
           // overwrites min/max/desired/template/subnets/health-check
           // settings in one call, so we issue it unconditionally
           // (idempotent for matching values).
-          yield* autoscaling.updateAutoScalingGroup({
-            AutoScalingGroupName: autoScalingGroupName,
-            MinSize: news.minSize,
-            MaxSize: news.maxSize,
-            DesiredCapacity: news.desiredCapacity ?? news.minSize,
-            LaunchTemplate: launchTemplate,
-            VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
-            HealthCheckType: healthCheckType,
-            HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
-            DefaultCooldown: toSeconds(news.defaultCooldown),
-            TerminationPolicies: news.terminationPolicies,
-          } as any);
+          yield* autoscaling
+            .updateAutoScalingGroup({
+              AutoScalingGroupName: autoScalingGroupName,
+              MinSize: news.minSize,
+              MaxSize: news.maxSize,
+              DesiredCapacity: news.desiredCapacity,
+              LaunchTemplate: launchTemplate,
+              VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
+              HealthCheckType: healthCheckType,
+              HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
+              DefaultCooldown: toSeconds(news.defaultCooldown),
+              TerminationPolicies: news.terminationPolicies,
+            } as any)
+            .pipe(retryInstanceProfilePropagation);
 
           // Sync target groups — observed cloud attachments vs desired.
           const observedAttrs = toAttributes(existing);

@@ -136,14 +136,12 @@ export const ensureMySQLProductionBranchClusterSize = Effect.fn(function* (
     const includedReplicas = keyspace.replicas - keyspace.extra_replicas;
     const extraReplicas = expectedReplicas - includedReplicas;
     if (extraReplicas < 0) {
-      return yield* Effect.fail(
-        new PlanetscaleConflict({
-          message:
-            `Cannot set replicas to ${expectedReplicas} on keyspace "${keyspace.name}": ` +
-            `cluster size ${keyspace.cluster_name} always includes ${includedReplicas} replicas. ` +
-            `Set replicas to ${includedReplicas} or more (or omit it).`,
-        }),
-      );
+      return yield* new PlanetscaleConflict({
+        message:
+          `Cannot set replicas to ${expectedReplicas} on keyspace "${keyspace.name}": ` +
+          `cluster size ${keyspace.cluster_name} always includes ${includedReplicas} replicas. ` +
+          `Set replicas to ${includedReplicas} or more (or omit it).`,
+      });
     }
 
     const resize = yield* ps

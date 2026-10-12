@@ -207,8 +207,11 @@ describe(
 // Full runtime fixture: a Lambda bound to all eleven data-plane bindings
 // against a live HealthImaging data store. A data store takes a few minutes
 // to provision (and must be empty to delete), so this is gated behind
-// AWS_TEST_MEDICAL_IMAGING=1 (same gate as the Datastore lifecycle test) and
-// always destroys what it created.
+// AWS_TEST_MEDICAL_IMAGING=1 and always destroys what it created. Running it
+// alongside the (default-on) Datastore lifecycle test has been observed to
+// fail createDatastore with an untyped `UnknownAwsError: Too Many Requests`
+// (2026-10-09, not reproducible with 4 concurrent CLI creates) — the wire
+// error code is unknown, so it is not yet patched into distilled.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "MedicalImagingBindings");

@@ -11,6 +11,8 @@ import {
 import * as Effect from "effect/Effect";
 import * as Sse from "effect/encoding/Sse";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 
@@ -76,6 +78,7 @@ export const makeLanguageModel = ({
   Effect.gen(function* () {
     const ai = yield* client.raw;
     const gatewayId = client.id === undefined ? undefined : yield* client.id;
+    const startsInThink = THINK_PREFILLED_MODELS.has(model);
 
     const callRaw = (
       body: WorkersAiInputs,
@@ -99,7 +102,7 @@ export const makeLanguageModel = ({
             try: () => resp.json() as Promise<Record<string, unknown>>,
             catch: (cause) => toAiError(cause, "generateText"),
           });
-          return yield* parseGenerateText(json);
+          return yield* parseGenerateText(json, startsInThink);
         }),
       streamText: (options) =>
         Stream.unwrap(
@@ -108,7 +111,7 @@ export const makeLanguageModel = ({
             const body = toRequestBody({ options, parameters, stream: true });
             const resp = yield* callRaw(body, "streamText");
             const hasTools = options.tools.length > 0 && options.toolChoice !== "none";
-            return parseStreamText(resp, idGen, hasTools);
+            return parseStreamText(resp, idGen, hasTools, startsInThink);
           }),
         ),
     });
@@ -370,6 +373,37 @@ const mapFinishReason = (raw: unknown): Response.FinishReason => {
   }
 };
 
+const finishMetadata = (
+  raw: Record<string, unknown> | undefined,
+): { readonly metadata?: Response.FinishPartMetadata } => {
+  const neurons = (raw?.usage as Record<string, unknown> | undefined)?.neurons;
+  return typeof neurons === "number" && Number.isFinite(neurons)
+    ? { metadata: { cloudflare: { neurons } } }
+    : {};
+};
+
+/**
+ * The neurons Workers AI billed for a response, read from its finish part.
+ * Workers AI reports this as `usage.neurons`; the adapter carries it on the
+ * finish part as `metadata.cloudflare.neurons`. `undefined` when the model
+ * did not report it.
+ *
+ * @example
+ * ```typescript
+ * const response = yield* LanguageModel.generateText({ prompt });
+ * const finish = response.content.find((part) => part.type === "finish");
+ * const neurons = finish ? Cloudflare.AI.finishNeurons(finish) : undefined;
+ * ```
+ */
+export const finishNeurons = (part: {
+  readonly metadata: Response.FinishPartMetadata;
+}): number | undefined =>
+  Option.getOrUndefined(Option.map(decodeNeurons(part.metadata), (m) => m.cloudflare.neurons));
+
+const decodeNeurons = Schema.decodeUnknownOption(
+  Schema.Struct({ cloudflare: Schema.Struct({ neurons: Schema.Number }) }),
+);
+
 const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   const usage = (raw?.usage as Record<string, unknown> | undefined) ?? {};
   const promptTokens = (usage.prompt_tokens as number | undefined) ?? 0;
@@ -379,7 +413,7 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   // Construct an actual `Response.Usage` instance — `Schema.Class<Usage>`
   // encodes by going through the class constructor / `isInstance` check, so a
   // plain struct that "matches" the encoded shape isn't enough.
-  return new Response.Usage({
+  return Response.Usage.make({
     inputTokens: {
       uncached: cached !== undefined ? Math.max(0, promptTokens - cached) : promptTokens,
       total: promptTokens,
@@ -392,6 +426,113 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
       reasoning: 0,
     },
   });
+};
+
+// ---------------------------------------------------------------------------
+// Inline reasoning
+//
+// Some models (e.g. `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`) write
+// their chain of thought into the text itself, as `<think>…</think>`
+// followed by the answer. Others (e.g. `@cf/qwen/qwq-32b`) have a chat
+// template that pre-opens `<think>`, so only the closing tag is generated.
+// `splitThink` incrementally routes text before `</think>` to reasoning and
+// the rest to text, holding back any suffix that could be a split tag.
+// ---------------------------------------------------------------------------
+
+/**
+ * Models whose chat template opens the `<think>` block in the prompt, so
+ * their output starts inside reasoning and only `</think>` is generated.
+ */
+const THINK_PREFILLED_MODELS: ReadonlySet<string> = new Set(["@cf/qwen/qwq-32b"]);
+
+const THINK_OPEN = "<think>";
+const THINK_CLOSE = "</think>";
+
+interface ThinkState {
+  /**
+   * - `pending`: no non-whitespace text yet; a leading `<think>` opens reasoning
+   * - `inside`: inside the `<think>` block
+   * - `after`: just closed the block; drop the whitespace separating the answer
+   * - `outside`: plain text
+   */
+  readonly mode: "pending" | "inside" | "after" | "outside";
+  /** Held-back text that may be the start of a tag split across chunks. */
+  readonly carry: string;
+}
+
+const initialThinkState = (startsInThink: boolean): ThinkState => ({
+  mode: startsInThink ? "inside" : "pending",
+  carry: "",
+});
+
+/** Length of the longest suffix of `s` that is a proper prefix of `tag`. */
+const partialTagSuffix = (s: string, tag: string): number => {
+  for (let n = Math.min(tag.length - 1, s.length); n > 0; n--) {
+    if (s.endsWith(tag.slice(0, n))) return n;
+  }
+  return 0;
+};
+
+const splitThink = (
+  state: ThinkState,
+  input: string,
+): { readonly state: ThinkState; readonly reasoning: string; readonly text: string } => {
+  let buf = state.carry + input;
+  let mode = state.mode;
+  let reasoning = "";
+  while (true) {
+    switch (mode) {
+      case "pending": {
+        const trimmed = buf.trimStart();
+        if (trimmed.startsWith(THINK_OPEN)) {
+          buf = trimmed.slice(THINK_OPEN.length);
+          mode = "inside";
+          continue;
+        }
+        if (THINK_OPEN.startsWith(trimmed)) {
+          return { state: { mode, carry: buf }, reasoning, text: "" };
+        }
+        mode = "outside";
+        continue;
+      }
+      case "inside": {
+        const end = buf.indexOf(THINK_CLOSE);
+        if (end >= 0) {
+          reasoning += buf.slice(0, end);
+          buf = buf.slice(end + THINK_CLOSE.length);
+          mode = "after";
+          continue;
+        }
+        const held = partialTagSuffix(buf, THINK_CLOSE);
+        reasoning += buf.slice(0, buf.length - held);
+        return { state: { mode, carry: buf.slice(buf.length - held) }, reasoning, text: "" };
+      }
+      case "after": {
+        buf = buf.trimStart();
+        if (buf.length === 0) return { state: { mode, carry: "" }, reasoning, text: "" };
+        mode = "outside";
+        continue;
+      }
+      case "outside":
+        return { state: { mode, carry: "" }, reasoning, text: buf };
+    }
+  }
+};
+
+/**
+ * Split a complete response text. A `</think>` with no opening tag means the
+ * template pre-opened the block, so everything before it is reasoning.
+ */
+const splitThinkText = (
+  text: string,
+  startsInThink: boolean,
+): { readonly reasoning: string; readonly text: string } => {
+  const prefilled =
+    startsInThink || (text.includes(THINK_CLOSE) && !text.trimStart().startsWith(THINK_OPEN));
+  const split = splitThink(initialThinkState(prefilled), text);
+  return split.state.mode === "inside"
+    ? { reasoning: split.reasoning + split.state.carry, text: split.text }
+    : { reasoning: split.reasoning, text: split.text + split.state.carry };
 };
 
 // ---------------------------------------------------------------------------
@@ -480,9 +621,18 @@ const tryParseJsonArgs = (raw: unknown): unknown => {
   }
 };
 
-const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
+const parseGenerateText = Effect.fn(function* (
+  raw: Record<string, unknown>,
+  startsInThink: boolean,
+) {
   const idGen = yield* IdGenerator.IdGenerator;
   const decoded = decodeResponse(raw);
+  const inline =
+    decoded.text === undefined ? undefined : splitThinkText(decoded.text, startsInThink);
+  const reasoning = [decoded.reasoning, inline?.reasoning]
+    .filter((r): r is string => r !== undefined && r.length > 0)
+    .join("");
+  const text = inline?.text ?? decoded.text;
 
   const toolCallParts = yield* Effect.forEach(decoded.toolCalls, (tc) =>
     Effect.gen(function* () {
@@ -501,18 +651,15 @@ const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
   );
 
   return [
-    ...(decoded.reasoning !== undefined
-      ? [{ type: "reasoning" as const, text: decoded.reasoning }]
-      : []),
-    ...(decoded.text !== undefined && decoded.text.length > 0
-      ? [{ type: "text" as const, text: decoded.text }]
-      : []),
+    ...(reasoning.length > 0 ? [{ type: "reasoning" as const, text: reasoning }] : []),
+    ...(text !== undefined && text.length > 0 ? [{ type: "text" as const, text }] : []),
     ...toolCallParts,
     {
       type: "finish" as const,
       reason: finish,
       usage: mapUsage(raw),
       response: undefined,
+      ...finishMetadata(raw),
     },
   ] satisfies ReadonlyArray<Response.PartEncoded>;
 });
@@ -548,9 +695,10 @@ interface StreamState {
   // text-delta, then parse it into tool-params parts on finalize.
   readonly nativeToolBuffer: string;
   readonly nativeToolId: string | undefined;
+  readonly think: ThinkState;
 }
 
-const initialStreamState = (): StreamState => ({
+const initialStreamState = (startsInThink: boolean): StreamState => ({
   textId: undefined,
   reasoningId: undefined,
   toolCalls: new Map(),
@@ -562,6 +710,7 @@ const initialStreamState = (): StreamState => ({
   receivedDone: false,
   nativeToolBuffer: "",
   nativeToolId: undefined,
+  think: initialThinkState(startsInThink),
 });
 
 type StreamParts = Array<Response.StreamPartEncoded>;
@@ -594,6 +743,12 @@ const closeToolCall = (state: StreamState, index: number, parts: StreamParts): S
   const tc = state.toolCalls.get(index);
   if (!tc) return state;
   parts.push({ type: "tool-params-end", id: tc.id });
+  parts.push({
+    type: "tool-call",
+    id: tc.id,
+    name: tc.name,
+    params: tryParseJsonArgs(tc.arguments),
+  });
   const closed = new Set(state.closedToolIndices);
   closed.add(index);
   return { ...state, closedToolIndices: closed };
@@ -715,6 +870,25 @@ const updateChunkMeta = (state: StreamState, chunk: Record<string, unknown>): St
   return s;
 };
 
+/**
+ * Route a text fragment through the inline-reasoning splitter, emitting any
+ * reasoning it contains and returning the remaining answer text.
+ */
+const splitInlineReasoning = (
+  state: StreamState,
+  input: string,
+  parts: StreamParts,
+  idGen: IdGenerator.Service,
+): Effect.Effect<readonly [StreamState, string]> =>
+  Effect.gen(function* () {
+    const split = splitThink(state.think, input);
+    let s: StreamState = { ...state, think: split.state };
+    if (split.reasoning.length > 0) {
+      s = yield* emitReasoningDelta(s, split.reasoning, parts, idGen);
+    }
+    return [s, split.text] as const;
+  });
+
 const handleNativeText = (
   state: StreamState,
   chunk: Record<string, unknown>,
@@ -726,20 +900,29 @@ const handleNativeText = (
   if (native == null || native === "") return Effect.succeed(state);
   const text = typeof native === "object" ? JSON.stringify(native) : String(native);
   if (text.length === 0) return Effect.succeed(state);
-  // When tools were requested, the native `response` stream is the
-  // tool-call JSON, not prose — buffer it and decide on finalize. We
-  // pre-allocate the tool id here (we're in an Effect, finalize is sync).
-  if (hasTools) {
-    return Effect.gen(function* () {
-      const id = state.nativeToolId ?? (yield* idGen.generateId());
+  // Some models (e.g. `@cf/meta/llama-3.3-70b`) mirror every text fragment
+  // in both the native `response` field and the OpenAI-compatible delta of
+  // the same chunk. Prefer the latter so the text is neither emitted nor
+  // buffered twice.
+  const openAiContent = (chunk.choices as Array<{ delta?: { content?: unknown } }> | undefined)?.[0]
+    ?.delta?.content;
+  if (openAiContent === text) return Effect.succeed(state);
+  return Effect.gen(function* () {
+    const [s, answer] = yield* splitInlineReasoning(state, text, parts, idGen);
+    if (answer.length === 0) return s;
+    // When tools were requested, the native `response` stream is the
+    // tool-call JSON, not prose — buffer it and decide on finalize. We
+    // pre-allocate the tool id here (we're in an Effect, finalize is sync).
+    if (hasTools) {
+      const id = s.nativeToolId ?? (yield* idGen.generateId());
       return {
-        ...state,
+        ...s,
         nativeToolId: id,
-        nativeToolBuffer: state.nativeToolBuffer + text,
+        nativeToolBuffer: s.nativeToolBuffer + answer,
       };
-    });
-  }
-  return emitTextDelta(state, text, parts, idGen);
+    }
+    return yield* emitTextDelta(s, answer, parts, idGen);
+  });
 };
 
 const handleNativeToolCalls = (
@@ -755,7 +938,12 @@ const handleNativeToolCalls = (
   // field and the OpenAI-compatible delta. Prefer the latter so every
   // fragment is emitted exactly once.
   if (Array.isArray(openAiToolCalls)) return Effect.succeed(state);
-  if (!Array.isArray(chunk.tool_calls)) return Effect.succeed(state);
+  // Workers AI attaches an empty `tool_calls: []` to ordinary chunks;
+  // treating it as a tool delta would close the open reasoning block on
+  // every chunk.
+  if (!Array.isArray(chunk.tool_calls) || chunk.tool_calls.length === 0) {
+    return Effect.succeed(state);
+  }
   return Effect.gen(function* () {
     const s = closeReasoning(state, parts);
     return yield* handleToolDeltas(
@@ -784,10 +972,11 @@ const handleOpenAiDelta = (
     }
     const text = delta.content as string | undefined;
     if (text && text.length > 0) {
-      s = yield* emitTextDelta(s, text, parts, idGen);
+      const [next, answer] = yield* splitInlineReasoning(s, text, parts, idGen);
+      s = answer.length > 0 ? yield* emitTextDelta(next, answer, parts, idGen) : next;
     }
     const toolDeltas = delta.tool_calls as ReadonlyArray<Record<string, unknown>> | undefined;
-    if (Array.isArray(toolDeltas)) {
+    if (Array.isArray(toolDeltas) && toolDeltas.length > 0) {
       s = closeReasoning(s, parts);
       s = yield* handleToolDeltas(s, toolDeltas, parts, idGen);
     }
@@ -879,13 +1068,40 @@ const flushNativeToolBuffer = (state: StreamState, parts: StreamParts): StreamSt
       parts.push({ type: "tool-params-delta", id, delta: call.args });
     }
     parts.push({ type: "tool-params-end", id });
+    parts.push({ type: "tool-call", id, name: call.name, params: tryParseJsonArgs(call.args) });
   });
   return { ...state, nativeToolBuffer: "", nativeToolId: undefined };
 };
 
+/**
+ * Emit text the inline-reasoning splitter held back as a possible split tag
+ * when the stream ended before it resolved.
+ */
+const flushThinkCarry = (state: StreamState, parts: StreamParts): StreamState => {
+  const { mode, carry } = state.think;
+  let s: StreamState = { ...state, think: { mode, carry: "" } };
+  if (carry.length === 0) return s;
+  if (mode === "inside") {
+    if (s.reasoningId === undefined) {
+      parts.push({ type: "reasoning-start", id: "reasoning-0" });
+      s = { ...s, reasoningId: "reasoning-0" };
+    }
+    parts.push({ type: "reasoning-delta", id: s.reasoningId!, delta: carry });
+    return s;
+  }
+  if (carry.trim().length === 0) return s;
+  s = closeReasoning(s, parts);
+  if (s.textId === undefined) {
+    parts.push({ type: "text-start", id: "text-0" });
+    s = { ...s, textId: "text-0" };
+  }
+  parts.push({ type: "text-delta", id: s.textId!, delta: carry });
+  return s;
+};
+
 const finalizeStream = (state: StreamState): ReadonlyArray<Response.StreamPartEncoded> => {
   const parts: StreamParts = [];
-  let s = state;
+  let s = flushThinkCarry(state, parts);
   for (const [idx] of s.toolCalls) s = closeToolCall(s, idx, parts);
   s = closeReasoning(s, parts);
   if (s.textId !== undefined) parts.push({ type: "text-end", id: s.textId });
@@ -914,6 +1130,7 @@ const finalizeStream = (state: StreamState): ReadonlyArray<Response.StreamPartEn
     reason,
     usage: mapUsage(s.usage),
     response: undefined,
+    ...finishMetadata(s.usage),
   });
   return parts;
 };
@@ -922,10 +1139,13 @@ const parseStreamText = (
   resp: Response,
   idGen: IdGenerator.Service,
   hasTools: boolean,
+  startsInThink: boolean,
 ): Stream.Stream<Response.StreamPartEncoded, AiError.AiError> => {
   const body = resp.body;
   if (body === null) {
-    return Stream.fromIterable<Response.StreamPartEncoded>(finalizeStream(initialStreamState()));
+    return Stream.fromIterable<Response.StreamPartEncoded>(
+      finalizeStream(initialStreamState(startsInThink)),
+    );
   }
   return Stream.fromReadableStream<Uint8Array, AiError.AiError>({
     evaluate: () => body,
@@ -933,10 +1153,12 @@ const parseStreamText = (
   }).pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode<AiError.AiError, unknown>()),
-    Stream.catchTag("Retry", (retry) => Stream.die(retry)),
-    Stream.catchTag("SseError", (error) => Stream.fail(toAiError(error, "streamText"))),
+    Stream.catchTags({
+      Retry: (retry) => Stream.die(retry),
+      SseError: (error) => Stream.fail(toAiError(error, "streamText")),
+    }),
     Stream.mapAccumEffect(
-      initialStreamState,
+      () => initialStreamState(startsInThink),
       (state, event) => handleStreamChunk(state, event.data, idGen, hasTools),
       { onHalt: (state) => finalizeStream(state) },
     ),
@@ -951,7 +1173,7 @@ const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiErr
   AiError.AiError.make({
     module: "Cloudflare.AI.LanguageModel",
     method,
-    reason: new AiError.UnknownError({
+    reason: AiError.UnknownError.make({
       description: cause instanceof Error ? cause.message : "AI Gateway request failed",
     }),
   });

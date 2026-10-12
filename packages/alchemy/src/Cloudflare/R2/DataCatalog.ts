@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { Bucket } from "./Bucket.ts";
 
 const TypeId = "Cloudflare.R2.DataCatalog" as const;
 type TypeId = typeof TypeId;
@@ -58,14 +59,7 @@ export type SnapshotExpiration = {
   minSnapshotsToKeep?: number;
 };
 
-export type DataCatalogProps = {
-  /**
-   * Name of the R2 bucket to enable the Iceberg data catalog on. The bucket
-   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2.Bucket`
-   * resource to order catalog-after-bucket. Changing the bucket replaces the
-   * catalog (the old bucket's catalog is disabled; table data is untouched).
-   */
-  bucketName: string;
+export type DataCatalogProps = DataCatalogBucket & {
   /**
    * Compaction maintenance configuration. Only the fields you specify are
    * enforced; omitted fields keep Cloudflare's defaults.
@@ -83,6 +77,46 @@ export type DataCatalogProps = {
    * Maintenance jobs stay pending until a credential is provided.
    */
   token?: Redacted.Redacted<string>;
+};
+
+/**
+ * The bucket a catalog is enabled on. `bucketName` is the deprecated spelling
+ * of `bucket`; both name the same bucket and switching between them is not a
+ * change.
+ */
+export type DataCatalogBucket =
+  | {
+      /**
+       * The R2 bucket to enable the Iceberg catalog on: a
+       * `Cloudflare.R2.Bucket` resource (orders the catalog after the bucket)
+       * or a bucket name. Changing the bucket replaces the catalog (the old
+       * bucket's catalog is disabled; table data is untouched).
+       */
+      bucket: string | Bucket;
+      bucketName?: never;
+    }
+  | {
+      /**
+       * Name of the R2 bucket to enable the catalog on.
+       * @deprecated Use `bucket`, which also accepts the bucket resource.
+       */
+      bucketName: string;
+      bucket?: never;
+    };
+
+/**
+ * The bucket name behind a catalog's props: `bucket` as a name or a resolved
+ * `Cloudflare.R2.Bucket`, or the deprecated `bucketName`.
+ */
+export const catalogBucketName = (props: unknown): string | undefined => {
+  if (props === null || typeof props !== "object") return undefined;
+  const { bucket, bucketName } = props as { bucket?: unknown; bucketName?: unknown };
+  if (typeof bucket === "string") return bucket;
+  if (bucket !== null && typeof bucket === "object") {
+    const name = (bucket as { bucketName?: unknown }).bucketName;
+    if (typeof name === "string") return name;
+  }
+  return typeof bucketName === "string" ? bucketName : undefined;
 };
 
 export type DataCatalogAttributes = {
@@ -153,13 +187,20 @@ export type DataCatalog = Resource<
  * Iceberg tables stored in R2. The catalog is a singleton per bucket: this
  * resource enables it, keeps its maintenance configuration in sync, and
  * disables it on destroy (table data in the bucket is never deleted).
+ *
+ * Also exported as `Cloudflare.Basin.Catalog` — the catalog of Cloudflare's
+ * Basin product (Pipelines + Catalog + SQL). The warehouse is named
+ * `<accountId>_<bucket>` and served at
+ * `https://catalog.cloudflarestorage.com/<accountId>/<bucket>`. Pass the
+ * catalog resource to a catalog `Cloudflare.Basin.Sink` (`catalog: Catalog`)
+ * so the sink is created after it.
  * ### Enabling a catalog
  * **Example:** Enable the catalog on an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("LakehouseBucket");
  *
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  * });
  *
  * // Point any Iceberg REST client at the warehouse:
@@ -170,8 +211,8 @@ export type DataCatalog = Resource<
  * ### Maintenance
  * **Example:** Configure compaction and snapshot expiration
  * ```typescript
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  *   compaction: { state: "enabled", targetSizeMb: "256" },
  *   snapshotExpiration: {
  *     state: "enabled",
@@ -184,8 +225,8 @@ export type DataCatalog = Resource<
  * **Example:** Register a maintenance credential
  * ```typescript
  * // Maintenance jobs need an API token with R2 read/write on the bucket.
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  *   compaction: { state: "enabled" },
  *   token: maintenanceToken, // Redacted<string>
  * });
@@ -200,7 +241,7 @@ export type DataCatalog = Resource<
 export const DataCatalog = Resource<DataCatalog>(TypeId);
 
 /**
- * Returns true if the given value is an R2DataCatalog resource.
+ * Returns true if the given value is a DataCatalog (Basin Catalog) resource.
  */
 export const isDataCatalog = (value: unknown): value is DataCatalog =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
@@ -217,13 +258,9 @@ export const DataCatalogProvider = () =>
       // The catalog is keyed to its bucket — moving buckets is a replacement
       // (disable on the old bucket, enable on the new one). bucketName is an
       // Input<string>; compare only once both sides are concrete strings.
-      const oldBucket =
-        output?.bucketName ?? (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
-      if (
-        oldBucket !== undefined &&
-        typeof news.bucketName === "string" &&
-        oldBucket !== news.bucketName
-      ) {
+      const oldBucket = output?.bucketName ?? catalogBucketName(olds);
+      const newBucket = catalogBucketName(news);
+      if (oldBucket !== undefined && newBucket !== undefined && oldBucket !== newBucket) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -231,8 +268,7 @@ export const DataCatalogProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const bucketName =
-        output?.bucketName ?? (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
+      const bucketName = output?.bucketName ?? catalogBucketName(olds);
       if (bucketName === undefined) return undefined;
 
       const observed = yield* getCatalog(acct, bucketName);
@@ -261,8 +297,9 @@ export const DataCatalogProvider = () =>
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      // Inputs have been resolved to concrete strings by Plan.
-      const bucketName = news.bucketName as string;
+      // Inputs have been resolved by Plan: `bucket` is a name or the
+      // bucket's attributes.
+      const bucketName = catalogBucketName(news) as string;
 
       // Observe — `output` is only a cache; a disabled or never-enabled
       // catalog observes as missing/inactive and falls through to ensure.

@@ -35,6 +35,7 @@ import {
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectMemberRole, ProjectMemberRoleProvider } from "./ProjectMemberRole.ts";
 import { ProjectVPCEndpoint, ProjectVPCEndpointProvider } from "./ProjectVPCEndpoint.ts";
+import { Role, RoleProvider } from "./Role.ts";
 import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Neon") {}
@@ -79,6 +80,7 @@ export const providers = () =>
       ProjectVPCEndpoint,
       Branch,
       Credential,
+      Role,
       Bucket,
       Object,
       Auth,
@@ -103,6 +105,7 @@ export const providers = () =>
         ProjectVPCEndpointProvider(),
         BranchProvider(),
         CredentialProvider(),
+        RoleProvider(),
         BucketProvider(),
         ObjectProvider(),
         AuthProvider(),

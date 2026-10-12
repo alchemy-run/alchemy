@@ -45,7 +45,7 @@ const fail = (message: string, cause?: unknown) =>
 export interface SvelteKitNodeTargetConfig extends SvelteKitTargetConfig {}
 
 /** The bundled fetch-handler module the finishing pass writes. */
-export const SERVER_ENTRY_NAME = NodePath.join("server", "index.mjs");
+export const SERVER_ENTRY_NAME = "server/index.mjs";
 
 const generateFetchEntry = (options: { readonly serverImport: string }): string =>
   /* js */ `
@@ -133,18 +133,16 @@ const makeNodeAdapterTarget = (config: SvelteKitNodeTargetConfig = {}): SvelteKi
         const path = yield* Path.Path;
         const entry = context.entry;
         if (entry === undefined) {
-          return yield* Effect.fail(
-            fail(
-              "The SvelteKit build produced no on-disk server entry for the finishing pass " +
-                "(context.entry is missing)",
-            ),
+          return yield* fail(
+            "The SvelteKit build produced no on-disk server entry for the finishing pass " +
+              "(context.entry is missing)",
           );
         }
         const root = context.root;
         const distDirectory = output.distDirectory ?? path.resolve(root, "dist");
         if (output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The SvelteKit build produced no client directory for the Node serve entry"),
+          return yield* fail(
+            "The SvelteKit build produced no client directory for the Node serve entry",
           );
         }
         // Container hosts package only distDirectory. Keep the assets beside

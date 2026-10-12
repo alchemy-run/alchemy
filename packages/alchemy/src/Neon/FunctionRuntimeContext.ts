@@ -38,6 +38,7 @@ export const makeFunctionRuntimeContext = (id: string): FunctionRuntimeContext =
       }),
     serve: (next) =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the dispatcher provides the request service at call time
         handler = next as HttpEffect;
         context = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
       }),

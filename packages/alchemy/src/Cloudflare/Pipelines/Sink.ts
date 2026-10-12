@@ -11,6 +11,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { Bucket } from "../R2/Bucket.ts";
+import type { DataCatalog } from "../R2/DataCatalog.ts";
 
 const TypeId = "Cloudflare.Pipelines.Sink" as const;
 type TypeId = typeof TypeId;
@@ -40,12 +42,15 @@ export interface SinkRollingPolicy {
  */
 export interface SinkR2Config {
   /**
-   * Name of the destination R2 bucket. The bucket must already exist.
+   * The destination R2 bucket: a `Cloudflare.R2.Bucket` resource (orders the
+   * sink after the bucket) or a bucket name. The bucket must already exist.
    */
-  bucket: string;
+  bucket: string | Bucket;
   /**
    * R2 S3-compatible credentials the sink uses to write objects.
-   * Write-only — Cloudflare never echoes them back.
+   * Write-only — Cloudflare never echoes them back, and sinks cannot be
+   * updated, so changing them does NOT replace the sink (see the
+   * resource docs on rotating credentials).
    */
   credentials: {
     /** R2 access key id (the API token id). */
@@ -92,15 +97,15 @@ export interface SinkR2Config {
 }
 
 /**
- * Configuration of an `r2_data_catalog` sink writing Iceberg tables via
- * the R2 Data Catalog.
+ * Configuration of a catalog sink writing an Iceberg table via the Basin
+ * (R2 Data) Catalog, spelled with the bucket name.
  */
 export interface SinkR2DataCatalogConfig {
   /**
-   * Name of the R2 bucket backing the catalog. The bucket must already
-   * exist and have the Data Catalog enabled.
+   * The R2 bucket backing the catalog: a `Cloudflare.R2.Bucket` resource or a
+   * bucket name. The bucket must already exist and have the catalog enabled.
    */
-  bucket: string;
+  bucket: string | Bucket;
   /**
    * Name of the Iceberg table to write.
    */
@@ -112,7 +117,8 @@ export interface SinkR2DataCatalogConfig {
   namespace?: string;
   /**
    * Cloudflare API token with R2 Data Catalog permissions. Write-only —
-   * Cloudflare never echoes it back.
+   * Cloudflare never echoes it back, and changing it does NOT replace
+   * the sink.
    */
   token: Redacted.Redacted<string>;
   /**
@@ -120,6 +126,46 @@ export interface SinkR2DataCatalogConfig {
    */
   rollingPolicy?: SinkRollingPolicy;
 }
+
+/**
+ * The catalog a catalog sink writes to: a `Cloudflare.Basin.Catalog`
+ * (`Cloudflare.R2.DataCatalog`) resource, which orders the sink after the
+ * catalog, or the name of the bucket the catalog is enabled on.
+ */
+export type SinkCatalogReference = string | DataCatalog;
+
+/**
+ * The bucket name behind a bucket or catalog reference: the string itself,
+ * or the `bucketName` attribute of a resolved `Cloudflare.R2.Bucket` or
+ * `Cloudflare.Basin.Catalog`.
+ */
+const bucketNameOf = (ref: unknown): string =>
+  typeof ref === "string"
+    ? ref
+    : ref !== null &&
+        typeof ref === "object" &&
+        typeof (ref as { bucketName?: unknown }).bucketName === "string"
+      ? (ref as { bucketName: string }).bucketName
+      : "";
+
+/**
+ * The Iceberg table a catalog sink writes to.
+ */
+export interface SinkCatalogTable {
+  /**
+   * Catalog namespace the table lives in.
+   * @default "default"
+   */
+  namespace?: string;
+  /** Table name. */
+  name: string;
+}
+
+/**
+ * Sink type of a catalog sink. `basin_catalog` and `r2_data_catalog` are
+ * the same destination; switching between them never replaces the sink.
+ */
+export type SinkCatalogType = "basin_catalog" | "r2_data_catalog";
 
 /**
  * Output file format written by the sink.
@@ -147,14 +193,14 @@ interface SinkBaseProps {
    * underscores only (it is referenced as a SQL table name). If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    *
-   * Sinks have no update API, so changing this (or any other) property
-   * triggers a replacement.
+   * Sinks have no update API, so changing this (or any destination
+   * property) triggers a replacement.
    * @default ${app}_${id}_${stage}_${suffix}
    */
   name?: string;
   /**
-   * Output file format.
-   * @default { type: "json" }
+   * Output file format. Catalog sinks require Parquet.
+   * @default { type: "json" } for `r2` sinks, { type: "parquet" } for catalog sinks
    */
   format?: SinkFormat;
 }
@@ -172,14 +218,41 @@ export type SinkProps =
     })
   | (SinkBaseProps & {
       /**
-       * Sink type — `r2_data_catalog` writes Iceberg tables via the R2
-       * Data Catalog.
+       * Sink type — writes an Iceberg table via the Basin (R2 Data)
+       * Catalog.
        */
-      type: "r2_data_catalog";
+      type: SinkCatalogType;
       /**
-       * R2 Data Catalog destination configuration.
+       * Catalog destination configuration, spelled with the bucket name.
+       * Equivalent to the `catalog` / `table` / `token` form.
        */
       config: SinkR2DataCatalogConfig;
+    })
+  | (SinkBaseProps & {
+      /**
+       * Sink type — writes an Iceberg table via the Basin (R2 Data)
+       * Catalog.
+       */
+      type: SinkCatalogType;
+      /**
+       * The catalog to write to: a `Cloudflare.Basin.Catalog` resource or
+       * the name of the bucket the catalog is enabled on.
+       */
+      catalog: SinkCatalogReference;
+      /**
+       * The Iceberg table to write. Cloudflare creates it with the
+       * sink — sinks cannot be created for existing Iceberg tables.
+       */
+      table: SinkCatalogTable;
+      /**
+       * Cloudflare API token with R2 Data Catalog permissions. Write-only;
+       * changing it does NOT replace the sink.
+       */
+      token: Redacted.Redacted<string>;
+      /**
+       * When the sink rolls output files.
+       */
+      rollingPolicy?: SinkRollingPolicy;
     });
 
 export interface SinkAttributes {
@@ -190,11 +263,15 @@ export interface SinkAttributes {
   /** Sink name (unique per account). */
   name: string;
   /** Sink type. */
-  type: "r2" | "r2_data_catalog";
+  type: "r2" | SinkCatalogType;
   /** Destination R2 bucket name. */
   bucket: string;
   /** Key prefix output objects are written under (r2 sinks). */
   path: string | undefined;
+  /** Catalog namespace of the destination table (catalog sinks). */
+  namespace: string | undefined;
+  /** Destination Iceberg table name (catalog sinks). */
+  tableName: string | undefined;
   /** When the sink was created. */
   createdAt: string;
   /** When the sink was last modified. */
@@ -204,17 +281,31 @@ export interface SinkAttributes {
 export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>;
 
 /**
- * A Cloudflare Pipelines sink — the destination of the Pipelines product.
- * A SQL {@link Pipeline} reads events from a {@link Stream} and
- * writes them to a sink, which stores them in R2 either as raw files
- * (`r2`) or as Iceberg tables via the R2 Data Catalog
- * (`r2_data_catalog`).
+ * A Cloudflare Pipelines sink — the destination of the Pipelines product
+ * (also exported as `Cloudflare.Basin.Sink`). A SQL {@link Pipeline}
+ * reads events from a {@link Stream} and writes them to a sink, which
+ * stores them in R2 either as raw files (`r2`) or as an Iceberg table via
+ * the Basin Catalog (`basin_catalog`, a.k.a. `r2_data_catalog`).
  *
- * Sinks have no update API: every property change triggers a
- * replacement. With engine-generated names this is seamless (the new
- * sink gets a fresh name before the old one is deleted); with an
- * explicit `name` the create-before-delete replacement collides, so
- * prefer generated names.
+ * Sinks have no update API: changing the destination (bucket, path,
+ * table, format, partitioning, rolling policy) triggers a replacement.
+ * Equivalent spellings never replace — `basin_catalog` ⇄
+ * `r2_data_catalog`, the `config` form ⇄ the `catalog` / `table` form,
+ * omitted ⇄ explicit defaults. With engine-generated names a replacement
+ * is seamless (the new sink gets a fresh name before the old one is
+ * deleted); with an explicit `name` it collides, so prefer generated
+ * names.
+ *
+ * Credentials (`credentials`, `token`) are write-only and are not part of
+ * the replacement diff, so rotating them never recreates the sink — a
+ * catalog sink could not be recreated anyway, because Cloudflare refuses
+ * to create sinks for existing Iceberg tables. The sink keeps the
+ * credentials it was created with; to move it onto new ones, rename it
+ * (which replaces it).
+ *
+ * Pipelines is ingest-only — to react to files the sink writes, subscribe
+ * to its bucket with `Cloudflare.R2.BucketEventNotification`.
+ *
  * ### Creating a Sink
  * **Example:** R2 sink with JSON output
  * The S3-compatible credentials are derived from a Cloudflare API token:
@@ -223,10 +314,10 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("events", {});
  *
- * const sink = yield* Cloudflare.Pipelines.Sink("events-sink", {
+ * const sink = yield* Cloudflare.Basin.Sink("events-sink", {
  *   type: "r2",
  *   config: {
- *     bucket: bucket.bucketName,
+ *     bucket,
  *     credentials: {
  *       accessKeyId: yield* Config.Redacted("R2_ACCESS_KEY_ID"),
  *       secretAccessKey: yield* Config.Redacted("R2_SECRET_ACCESS_KEY"),
@@ -239,20 +330,35 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  *
  * **Example:** Parquet output
  * ```typescript
- * const sink = yield* Cloudflare.Pipelines.Sink("parquet-sink", {
+ * const sink = yield* Cloudflare.Basin.Sink("parquet-sink", {
  *   type: "r2",
- *   config: { bucket: bucket.bucketName, credentials },
+ *   config: { bucket, credentials },
  *   format: { type: "parquet", compression: "zstd" },
  * });
  * ```
  *
- * ### R2 Data Catalog
+ * ### Basin Catalog
  * **Example:** Iceberg table sink
  * ```typescript
- * const sink = yield* Cloudflare.Pipelines.Sink("iceberg-sink", {
+ * const bucket = yield* Cloudflare.R2.Bucket("Lakehouse", {});
+ * const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
+ *   bucket,
+ * });
+ *
+ * const sink = yield* Cloudflare.Basin.Sink("PageViewTable", {
+ *   type: "basin_catalog",
+ *   catalog,
+ *   table: { namespace: "web", name: "page_views" },
+ *   token: yield* Config.Redacted("CATALOG_TOKEN"),
+ * });
+ * ```
+ *
+ * **Example:** Bucket-name form
+ * ```typescript
+ * const sink = yield* Cloudflare.Basin.Sink("iceberg-sink", {
  *   type: "r2_data_catalog",
  *   config: {
- *     bucket: bucket.bucketName,
+ *     bucket,
  *     tableName: "events",
  *     namespace: "default",
  *     token: yield* Config.Redacted("CATALOG_TOKEN"),
@@ -286,17 +392,18 @@ export const SinkProvider = () =>
       }
       const o = olds as SinkProps | undefined;
       if (o === undefined) return undefined;
-      // Sinks have no update API — any change is a replacement.
+      // Sinks have no update API — any destination change replaces. Compare
+      // the CANONICAL destination (credentials excluded) so equivalent
+      // spellings and credential rotation never replace.
       const newName = yield* sinkName(id, news.name);
       const oldName = output?.name ?? (yield* sinkName(id, o.name));
-      if (
-        newName !== oldName ||
-        news.type !== o.type ||
-        !stableEquals(normalizeProps(news), normalizeProps(o))
-      ) {
+      if (newName !== oldName) {
         return { action: "replace" } as const;
       }
-      return undefined;
+      if (!stableEquals(canonicalSink(news), canonicalSink(o))) {
+        return { action: "replace" } as const;
+      }
+      return { action: "noop" } as const;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -350,9 +457,10 @@ export const SinkProvider = () =>
       }
 
       // 2. Ensure — create when missing. There is no sync step: sinks
-      //    have no update API, so prop changes arrive as replacements
-      //    (diff) rather than in-place updates. An AlreadyExists on
-      //    create is a race or recovery — resolve it via the name lookup.
+      //    have no update API, so destination changes arrive as
+      //    replacements (diff) rather than in-place updates. An
+      //    AlreadyExists on create is a race or recovery — resolve it via
+      //    the name lookup.
       if (!observed) {
         observed = yield* pipelines
           .createSink({
@@ -360,7 +468,7 @@ export const SinkProvider = () =>
             name,
             type: news.type,
             config: toRequestConfig(accountId, news),
-            format: news.format,
+            format: news.format ?? defaultFormat(news.type),
           })
           .pipe(
             Effect.catchTag("SinkAlreadyExists", (error) =>
@@ -413,6 +521,34 @@ interface ObservedSink {
   modifiedAt: string;
 }
 
+/** A catalog sink destination, whichever form it was declared in. */
+interface CatalogTarget {
+  bucket: string;
+  tableName: string;
+  namespace: string | undefined;
+  token: Redacted.Redacted<string>;
+  rollingPolicy: SinkRollingPolicy | undefined;
+}
+
+const isCatalogType = (type: string) => type === "r2_data_catalog" || type === "basin_catalog";
+
+const catalogTarget = (props: Exclude<SinkProps, { type: "r2" }>): CatalogTarget =>
+  "config" in props && props.config !== undefined
+    ? {
+        bucket: bucketNameOf(props.config.bucket),
+        tableName: props.config.tableName,
+        namespace: props.config.namespace,
+        token: props.config.token,
+        rollingPolicy: props.config.rollingPolicy,
+      }
+    : {
+        bucket: bucketNameOf((props as { catalog: SinkCatalogReference }).catalog),
+        tableName: (props as { table: SinkCatalogTable }).table.name,
+        namespace: (props as { table: SinkCatalogTable }).table.namespace,
+        token: (props as { token: Redacted.Redacted<string> }).token,
+        rollingPolicy: (props as { rollingPolicy?: SinkRollingPolicy }).rollingPolicy,
+      };
+
 // Pipelines entity names must be alphanumeric/underscore only (they are
 // referenced as SQL table names), so swap the default hyphen delimiter
 // for underscores.
@@ -435,8 +571,10 @@ const sinkName = (id: string, name: string | undefined) =>
 const getSink = (accountId: string, sinkId: string) =>
   pipelines.getSink({ accountId, sinkId }).pipe(
     Effect.map((s): ObservedSink | undefined => s),
-    Effect.catchTag("SinkNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidSinkId", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      SinkNotFound: () => Effect.succeed(undefined),
+      InvalidSinkId: () => Effect.succeed(undefined),
+    }),
   );
 
 /**
@@ -450,8 +588,10 @@ const deleteSink = (accountId: string, sinkId: string) =>
       while: (e) => e._tag === "SinkInUse",
       schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
     }),
-    Effect.catchTag("SinkNotFound", () => Effect.void),
-    Effect.catchTag("InvalidSinkId", () => Effect.void),
+    Effect.catchTags({
+      SinkNotFound: () => Effect.void,
+      InvalidSinkId: () => Effect.void,
+    }),
   );
 
 /**
@@ -461,21 +601,19 @@ const deleteSink = (accountId: string, sinkId: string) =>
  * diffed so we don't fight server-side defaults.
  */
 const sinkDrifted = (observed: ObservedSink, news: SinkProps): boolean => {
-  if (observed.type !== news.type) return true;
+  if (isCatalogType(observed.type) !== isCatalogType(news.type)) return true;
   const cfg = observed.config;
   if (!cfg) return false;
-  if (cfg.bucket !== (news.config.bucket as string)) return true;
   if (news.type === "r2") {
+    if (cfg.bucket !== bucketNameOf(news.config.bucket)) return true;
     const observedPath = "path" in cfg ? (cfg.path ?? undefined) : undefined;
-    if (news.config.path !== undefined && news.config.path !== observedPath) {
-      return true;
-    }
-  } else if ("tableName" in cfg) {
-    if (cfg.tableName !== news.config.tableName) return true;
-    if (
-      news.config.namespace !== undefined &&
-      news.config.namespace !== (cfg.namespace ?? undefined)
-    ) {
+    return news.config.path !== undefined && news.config.path !== observedPath;
+  }
+  const target = catalogTarget(news);
+  if (cfg.bucket !== target.bucket) return true;
+  if ("tableName" in cfg) {
+    if (cfg.tableName !== target.tableName) return true;
+    if (target.namespace !== undefined && target.namespace !== (cfg.namespace ?? undefined)) {
       return true;
     }
   }
@@ -497,7 +635,7 @@ const toRequestConfig = (accountId: string, news: SinkProps) => {
     const c = news.config;
     return {
       accountId,
-      bucket: c.bucket as string,
+      bucket: bucketNameOf(c.bucket),
       credentials: {
         accessKeyId: Redacted.value(c.credentials.accessKeyId),
         secretAccessKey: Redacted.value(c.credentials.secretAccessKey),
@@ -509,42 +647,69 @@ const toRequestConfig = (accountId: string, news: SinkProps) => {
       jurisdiction: c.jurisdiction,
     };
   }
-  const c = news.config;
+  const t = catalogTarget(news);
   return {
     accountId,
-    bucket: c.bucket as string,
-    tableName: c.tableName,
-    namespace: c.namespace,
-    token: Redacted.value(c.token),
-    rollingPolicy: c.rollingPolicy,
+    bucket: t.bucket,
+    tableName: t.tableName,
+    namespace: t.namespace,
+    token: Redacted.value(t.token),
+    rollingPolicy: t.rollingPolicy,
   };
 };
 
+const canonicalRollingPolicy = (rp: SinkRollingPolicy | undefined) => ({
+  fileSizeBytes: rp?.fileSizeBytes,
+  inactivitySeconds: rp?.inactivitySeconds,
+  intervalSeconds: rp?.intervalSeconds ?? 300,
+});
+
+/** Catalog (Iceberg) sinks only accept Parquet; raw R2 sinks default to JSON. */
+const defaultFormat = (type: SinkProps["type"]): SinkFormat =>
+  isCatalogType(type) ? { type: "parquet" } : { type: "json" };
+
+const canonicalFormat = (type: SinkProps["type"], format: SinkFormat | undefined) => {
+  const f = format ?? defaultFormat(type);
+  return f.type === "parquet"
+    ? {
+        type: "parquet",
+        compression: f.compression ?? "zstd",
+        rowGroupBytes: f.rowGroupBytes,
+      }
+    : { type: "json" };
+};
+
 /**
- * Normalize props for change detection: unwrap redacted secrets so two
- * `Redacted` wrappers holding the same value compare equal.
+ * The canonical destination of a sink, for change detection: catalog
+ * type spellings and declaration forms collapse, defaults are filled in,
+ * and write-only credentials are excluded (they cannot be updated, and
+ * rotating them must never recreate the sink).
  */
-const normalizeProps = (props: SinkProps): unknown => {
+const canonicalSink = (props: SinkProps): unknown => {
+  const format = canonicalFormat(props.type, props.format);
   if (props.type === "r2") {
+    const c = props.config;
     return {
-      type: props.type,
-      format: props.format,
-      config: {
-        ...props.config,
-        credentials: {
-          accessKeyId: Redacted.value(props.config.credentials.accessKeyId),
-          secretAccessKey: Redacted.value(props.config.credentials.secretAccessKey),
-        },
-      },
+      kind: "r2",
+      format,
+      bucket: bucketNameOf(c.bucket),
+      path: c.path,
+      partitioning: c.partitioning,
+      fileNaming: c.fileNaming
+        ? { ...c.fileNaming, strategy: c.fileNaming.strategy ?? "uuid_v7" }
+        : undefined,
+      rollingPolicy: canonicalRollingPolicy(c.rollingPolicy),
+      jurisdiction: c.jurisdiction,
     };
   }
+  const t = catalogTarget(props);
   return {
-    type: props.type,
-    format: props.format,
-    config: {
-      ...props.config,
-      token: Redacted.value(props.config.token),
-    },
+    kind: "catalog",
+    format,
+    bucket: t.bucket,
+    namespace: t.namespace ?? "default",
+    tableName: t.tableName,
+    rollingPolicy: canonicalRollingPolicy(t.rollingPolicy),
   };
 };
 
@@ -563,14 +728,18 @@ const stableStringify = (value: unknown): string =>
       : v,
   ) ?? "undefined";
 
-const toAttributes = (observed: ObservedSink, accountId: string): SinkAttributes => ({
-  sinkId: observed.id,
-  accountId,
-  name: observed.name,
-  type: observed.type as "r2" | "r2_data_catalog",
-  bucket: observed.config?.bucket ?? "",
-  path:
-    observed.config && "path" in observed.config ? (observed.config.path ?? undefined) : undefined,
-  createdAt: observed.createdAt,
-  modifiedAt: observed.modifiedAt,
-});
+const toAttributes = (observed: ObservedSink, accountId: string): SinkAttributes => {
+  const cfg = observed.config ?? undefined;
+  return {
+    sinkId: observed.id,
+    accountId,
+    name: observed.name,
+    type: observed.type as SinkAttributes["type"],
+    bucket: cfg?.bucket ?? "",
+    path: cfg && "path" in cfg ? (cfg.path ?? undefined) : undefined,
+    namespace: cfg && "namespace" in cfg ? (cfg.namespace ?? undefined) : undefined,
+    tableName: cfg && "tableName" in cfg ? cfg.tableName : undefined,
+    createdAt: observed.createdAt,
+    modifiedAt: observed.modifiedAt,
+  };
+};

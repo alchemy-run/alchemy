@@ -1,5 +1,6 @@
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -37,6 +38,7 @@ const tanstackDevBindingsFixtureDir = pathe.resolve(
   "tanstack-dev-bindings-fixture",
 );
 const viteChildFixtureDir = pathe.resolve(import.meta.dirname, "vite-child-fixture");
+const buildErrorFixtureDir = pathe.resolve(import.meta.dirname, "vite-build-error-fixture");
 
 // Vite/Rollup's `vite:build-html` plugin chokes when the project root
 // is outside the current working directory because it tries to express
@@ -114,6 +116,44 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    // Regression test for https://github.com/alchemy-run/alchemy/issues/1996.
+    //
+    // A failed build used to report only the exit code and vite's
+    // `✗ Build failed in …` line; the actual error never left the child.
+    test.provider(
+      "Vite: a failed build reports the exit code and the child's stderr",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(buildErrorFixtureDir, {
+            prefix: "alchemy-vite-build-error-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+
+          const exit = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Website.Vite("ViteBuildError", {
+                  ...viteProps(rootDir, ["src/**", "package.json", "vite.config.ts"]),
+                  main: "./src/worker.ts",
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+
+          assert(Exit.isFailure(exit));
+          const message = Cause.pretty(exit.cause);
+          expect(message).toContain("Vite build child exited with code 1.\nstderr:");
+          expect(message).toContain("MISSING_EXPORT");
+          expect(message).toContain(`"missing" is not exported by "src/lib.ts"`);
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );
 
     // Regression test for https://github.com/alchemy-run/alchemy/issues/1016.

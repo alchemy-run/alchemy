@@ -2,7 +2,6 @@ import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, toConfig } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
@@ -46,16 +45,15 @@ export const fromAuthProvider = () =>
           resolve.pipe(
             Effect.map((creds) =>
               toConfig({
-                token: Redacted.value(creds.token),
+                token: creds.token,
                 tokenKind: creds.tokenKind,
                 apiBaseUrl: creds.apiBaseUrl,
               }),
             ),
-            Effect.mapError(
-              (e) =>
-                new ConfigError({
-                  message: `Failed to resolve Railway credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              ConfigError.make({
+                message: `Failed to resolve Railway credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),

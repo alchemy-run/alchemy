@@ -14,7 +14,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import type { App } from "./App.ts";
-import { destroyDeployment, waitForDeploymentStatus } from "./ComputeLifecycle.ts";
+import {
+  destroyDeployment,
+  PrismaDeploymentWaitTimeout,
+  waitForDeploymentStatus,
+} from "./ComputeLifecycle.ts";
 import { promoteAppObserved } from "./Internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
@@ -227,12 +231,10 @@ const listAppDeployments = (appId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -364,7 +366,7 @@ const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
 const TRIGGERS_HASH_SALT = "alchemy/Prisma.Deployment/triggers/v1";
 
 const unwrapRedacted = (value: unknown): unknown => {
-  if (Redacted.isRedacted(value)) return unwrapRedacted(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, unwrapRedacted);
   if (Array.isArray(value)) return value.map(unwrapRedacted);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
@@ -597,15 +599,13 @@ const ProviderLive = () =>
           const cleanupCreatedDeploymentOnFailure = (failedDeploymentId: string, error: unknown) =>
             createdDeploymentId === failedDeploymentId
               ? destroyDeployment(failedDeploymentId).pipe(
-                  Effect.catch((cleanupError) =>
-                    Effect.fail(
-                      aggregateCleanupFailure(
-                        "deployment",
-                        failedDeploymentId,
-                        `/v1/deployments/${failedDeploymentId}`,
-                        error,
-                        cleanupError,
-                      ),
+                  Effect.mapError((cleanupError) =>
+                    aggregateCleanupFailure(
+                      "deployment",
+                      failedDeploymentId,
+                      `/v1/deployments/${failedDeploymentId}`,
+                      error,
+                      cleanupError,
                     ),
                   ),
                   Effect.andThen(() => Effect.fail(error)),
@@ -684,13 +684,11 @@ const ProviderLive = () =>
             );
           }
           if (news.promote ?? false) {
-            appEndpointDomain = yield* Effect.gen(function* () {
-              // Promotion is deliberately replayed even when the control-plane
-              // record already names this deployment. The endpoint operation also
-              // repairs provider routing and custom-domain assignment drift.
-              const promoted = yield* promoteAppObserved(appId, deployment.id);
-              return promoted.appEndpointDomain;
-            });
+            // Promotion is deliberately replayed even when the control-plane
+            // record already names this deployment. The endpoint operation also
+            // repairs provider routing and custom-domain assignment drift.
+            const promoted = yield* promoteAppObserved(appId, deployment.id);
+            appEndpointDomain = promoted.appEndpointDomain;
           }
 
           return attrsFrom(deployment, appId, {
@@ -706,7 +704,18 @@ const ProviderLive = () =>
           );
           if (!deployment) return;
           yield* ensureDeploymentMembership(output.appId, deployment);
-          yield* destroyDeployment(output.deploymentId);
+          yield* destroyDeployment(output.deploymentId).pipe(
+            // The stop was requested; it finishes once open connections close.
+            Effect.catchIf(
+              (error) => error instanceof PrismaDeploymentWaitTimeout,
+              (error) =>
+                Effect.fail(
+                  new Provider.DeleteInProgress({
+                    message: `${error.message}. Prisma Compute drains open connections before it stops a deployment, and only a stopped deployment can be deleted.`,
+                  }),
+                ),
+            ),
+          );
         }),
         tail: ({ output }) =>
           output.deploymentId ? tailDeploymentLogs(output.deploymentId) : Stream.empty,

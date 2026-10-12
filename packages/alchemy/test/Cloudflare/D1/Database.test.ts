@@ -1,9 +1,12 @@
 import * as d1 from "@distilled.cloud/cloudflare/d1";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +15,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { hashMigrations } from "@/SQL/SqlFile.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -84,6 +88,87 @@ test.provider(
       yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+test.provider(
+  "replace keeping an explicit name deletes the old database first and rebinds its Worker",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const path = yield* Path.Path;
+      const main = path.join(import.meta.dirname, "fixtures", "replace-worker.ts");
+
+      // The database is bound to a Worker so the replacement is exercised
+      // with a live dependent: the old database is deleted while the Worker
+      // still binds it, and the Worker must then be re-bound to the new one.
+      const deployWithWorker = (props: Cloudflare.D1.DatabaseProps) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const database = yield* Cloudflare.D1.Database("ReplacedDatabase", props);
+            const worker = yield* Cloudflare.Worker("ReplacedDatabaseWorker", {
+              main,
+              env: { DB: database },
+            });
+            return {
+              databaseId: database.databaseId,
+              databaseName: database.databaseName,
+              workerName: worker.workerName,
+              url: worker.url.as<string>(),
+            };
+          }),
+        );
+
+      yield* stack.destroy();
+
+      // A generated name keeps concurrent runs collision-free; the replace
+      // below pins it as the explicit name.
+      const initial = yield* deployWithWorker({});
+      yield* writeEntry(initial.url);
+      expect(yield* readEntries(initial.url)).toEqual(1);
+
+      // `primaryLocationHint` is fixed at creation, so this is a replace
+      // whose replacement has the same name as the database it replaces.
+      const replaced = yield* deployWithWorker({
+        name: initial.databaseName,
+        primaryLocationHint: "weur",
+      });
+
+      expect(replaced.databaseName).toEqual(initial.databaseName);
+      expect(replaced.databaseId).not.toEqual(initial.databaseId);
+      yield* waitForDatabaseToBeDeleted(initial.databaseId, accountId);
+      const actualDatabase = yield* d1.getDatabase({
+        accountId,
+        databaseId: replaced.databaseId,
+      });
+      expect(actualDatabase.name).toEqual(initial.databaseName);
+
+      // The deployed Worker's D1 binding now points at the replacement.
+      const settings = yield* workers.getScriptScriptAndVersionSetting({
+        accountId,
+        scriptName: replaced.workerName,
+      });
+      const d1Bindings = (settings.bindings ?? []).flatMap((binding) =>
+        binding.type === "d1" ? [{ name: binding.name, databaseId: binding.databaseId }] : [],
+      );
+      expect(d1Bindings).toEqual([{ name: "DB", databaseId: replaced.databaseId }]);
+
+      // The replacement starts empty, and the Worker writes land in it.
+      yield* writeEntry(replaced.url);
+      expect(yield* readEntries(replaced.url)).toEqual(1);
+      expect(
+        yield* queryAll<{ n: number }>(
+          accountId,
+          replaced.databaseId,
+          "SELECT count(*) AS n FROM entries;",
+        ),
+      ).toEqual([{ n: 1 }]);
+
+      yield* stack.destroy();
+
+      yield* waitForDatabaseToBeDeleted(replaced.databaseId, accountId);
+      yield* waitForWorkerToBeDeleted(replaced.workerName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -1044,6 +1129,36 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
 );
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
+  status: number;
+  body: string;
+}> {}
+
+/** POST to the fixture until it answers 200 (rides out workers.dev cold starts). */
+const fetchOk = (request: HttpClientRequest.HttpClientRequest) =>
+  HttpClient.execute(request).pipe(
+    Effect.flatMap((res) =>
+      res.text.pipe(
+        Effect.flatMap((body) =>
+          res.status === 200
+            ? Effect.succeed(body)
+            : Effect.fail(new WorkerNotReady({ status: res.status, body })),
+        ),
+      ),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerNotReady",
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
+    }),
+  );
+
+const writeEntry = (url: string) => fetchOk(HttpClientRequest.post(`${url}/write`));
+
+const readEntries = (url: string) =>
+  fetchOk(HttpClientRequest.get(`${url}/read`)).pipe(
+    Effect.map((body) => (JSON.parse(body) as { rows: number }).rows),
+  );
 
 const waitForDatabaseToBeDeleted = Effect.fn(function* (databaseId: string, accountId: string) {
   yield* d1.getDatabase({ accountId, databaseId }).pipe(

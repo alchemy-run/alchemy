@@ -1,8 +1,10 @@
 import * as NodeNet from "node:net";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
@@ -13,7 +15,17 @@ import * as Workerd from "../workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
-layer(services)((it) => {
+// Each probe owns its agent and consumes the body before releasing it. Global
+// fetch can throw outside its promise in Undici's setTypeOfService on macOS
+// when connecting during shutdown (Node 24.21.0).
+const readResponse = (port: number) =>
+  HttpClient.get(`http://127.0.0.1:${port}/`).pipe(
+    Effect.flatMap((response) => response.text),
+    Effect.provide(NodeHttpClient.layerNodeHttp),
+  );
+
+// Process and HTTP deadlines must advance without manually ticking TestClock.
+layer(services, { excludeTestServices: true })((it) => {
   it.effect("spawns a workerd process", () =>
     Effect.gen(function* () {
       const workerd = yield* Workerd.Workerd;
@@ -252,12 +264,7 @@ layer(services)((it) => {
           port = ports.http;
           // Workerd has reported its listener, so connect succeeds; the
           // bound covers a slow first-request isolate compile under load.
-          const response = yield* Effect.promise(() =>
-            fetch(`http://127.0.0.1:${port}/`, {
-              signal: AbortSignal.timeout(10_000),
-            }),
-          );
-          expect(yield* Effect.promise(() => response.text())).toBe(sentinel);
+          expect(yield* readResponse(port).pipe(Effect.timeout(10_000))).toBe(sentinel);
         }).pipe(Effect.scoped);
 
         // Linux may immediately give this ephemeral port to another workerd
@@ -265,12 +272,9 @@ layer(services)((it) => {
         // cannot identify whether *this* process survived scope closure.
         // Probe the unique response instead: refusal, timeout, or a different
         // body all prove the original process is no longer serving here.
-        const stopped = yield* Effect.tryPromise(async () => {
-          const response = await fetch(`http://127.0.0.1:${port}/`, {
-            signal: AbortSignal.timeout(1_000),
-          });
-          return (await response.text()) !== sentinel;
-        }).pipe(
+        const stopped = yield* readResponse(port).pipe(
+          Effect.timeout(1_000),
+          Effect.map((body) => body !== sentinel),
           Effect.catch(() => Effect.succeed(true)),
           Effect.filterOrFail(
             (stopped) => stopped,
@@ -324,12 +328,7 @@ layer(services)((it) => {
             ],
           })
           .pipe(Effect.timeout(20_000));
-        const response = yield* Effect.promise(() =>
-          fetch(`http://127.0.0.1:${ports.http}/`, {
-            signal: AbortSignal.timeout(10_000),
-          }),
-        );
-        expect(yield* Effect.promise(() => response.text())).toBe("retried");
+        expect(yield* readResponse(ports.http).pipe(Effect.timeout(10_000))).toBe("retried");
       }),
     { timeout: 60_000, retry: 2 },
   );
@@ -370,19 +369,15 @@ layer(services)((it) => {
   );
 
   it.effect(
-    "a wedged first request fails fast with a typed abort, not a hang",
+    "a wedged first request fails fast with a typed timeout, not a hang",
     () =>
       Effect.gen(function* () {
         const silent = yield* silentServer;
-        const started = Date.now();
-        const exit = yield* Effect.tryPromise(() =>
-          fetch(`http://127.0.0.1:${silent.port}/`, {
-            signal: AbortSignal.timeout(1_000),
-          }),
-        ).pipe(Effect.exit);
-        const elapsed = Date.now() - started;
+        const started = yield* Effect.sync(() => Date.now());
+        const exit = yield* readResponse(silent.port).pipe(Effect.timeout(1_000), Effect.exit);
+        const elapsed = (yield* Effect.sync(() => Date.now())) - started;
         assert(Exit.isFailure(exit));
-        expect(String(exit.cause)).toMatch(/timeout/i);
+        expect(String(exit.cause)).toMatch(/TimeoutError/);
         expect(elapsed).toBeLessThan(10_000);
       }),
     { timeout: 30_000 },

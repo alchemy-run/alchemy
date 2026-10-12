@@ -112,8 +112,7 @@ const generateFallbackInProcess = async (builder: Builder, dest: string): Promis
   const serverRoot = NodePath.join(kit.outDir, "output", "server");
   const load = async (file: string): Promise<Record<string, any>> =>
     await import(/* @vite-ignore */ pathToFileURL(NodePath.join(serverRoot, file)).href);
-  const { set_building } = await load("internal.js");
-  const { Server } = await load("index.js");
+  const { configure } = await load("index.js");
   const { manifest } = await load("manifest-full.js");
 
   // kit's builder loads .env files through vite's `loadEnv`; the adapter
@@ -129,11 +128,10 @@ const generateFallbackInProcess = async (builder: Builder, dest: string): Promis
       ),
   );
 
-  set_building();
-  const server = new Server(manifest);
-  await server.init({ env });
+  const { init, respond } = await configure({ building: true, manifest, env });
+  await init();
   const origin = kit.paths.origin || "http://sveltekit-prerender";
-  const response: Response = await server.respond(new Request(`${origin}/[fallback]`), {
+  const response: Response = await respond(new Request(`${origin}/[fallback]`), {
     getClientAddress: () => {
       throw new Error("Cannot read clientAddress during prerendering");
     },
@@ -141,6 +139,7 @@ const generateFallbackInProcess = async (builder: Builder, dest: string): Promis
       fallback: true,
       dependencies: new Map(),
       remote_responses: new Map(),
+      resolved_route_ids: new Set(),
     },
     read: (file: string) => NodeFs.readFileSync(NodePath.join(kit.files.assets, file)),
   });

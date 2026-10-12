@@ -180,6 +180,12 @@ export function toPostgresClusterSku(input: {
   return `${size}_${provider}_${arch}`;
 }
 
+export function toPostgresClusterArch(
+  architecture: planetscale.DatabaseBranch["cluster_architecture"],
+): "arm" | "x86" {
+  return architecture === "aarch64" ? "arm" : "x86";
+}
+
 /**
  * Schedule for polling branch change requests. Postgres cluster resizes
  * routinely take longer than the default 10-minute polling budget, so
@@ -238,7 +244,7 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
 
   const sku = toPostgresClusterSku({
     size: expectedClusterSize,
-    arch: data.cluster_architecture === "aarch64" ? "arm" : "x86",
+    arch: toPostgresClusterArch(data.cluster_architecture),
     region: data.region.slug,
   });
 

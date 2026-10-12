@@ -36,7 +36,9 @@ export class MyWorkflow extends WorkflowEntrypoint {
 }
 export default {
   async fetch(request, env) {
-    const workflow = await env.MY_WORKFLOW.create({ id: "an-id" });
+    const workflow = new URL(request.url).pathname === "/create"
+      ? await env.MY_WORKFLOW.create({ id: "an-id" })
+      : await env.MY_WORKFLOW.get("an-id");
     return new Response(JSON.stringify(await workflow.status()));
   },
 };
@@ -73,7 +75,7 @@ describe("Workflows binding", () => {
         );
 
         const runStorageExit = Effect.fn(
-          function* () {
+          function* (create: boolean) {
             const worker = yield* startTestWorker({
               name: "workflows-persist-test",
               compatibilityDate: "2024-11-20",
@@ -89,7 +91,7 @@ describe("Workflows binding", () => {
               ],
             });
 
-            const res = yield* worker.fetch("/");
+            const res = yield* worker.fetch(create ? "/create" : "/");
             expect(res.status).toBe(200);
 
             return yield* worker.fetchText("/").pipe(
@@ -108,14 +110,14 @@ describe("Workflows binding", () => {
           (self) => self.pipe(Effect.provide(rumtimeLayerTempDir), Effect.scoped),
         );
 
-        const first = yield* runStorageExit();
+        const first = yield* runStorageExit(true);
         expect(first).toBe(COMPLETE_STATUS);
 
         const persistDir = path.join(tmp, "workflows");
         const names = yield* fs.readDirectory(persistDir);
         expect(names).toContain(encodeURIComponent("MY_WORKFLOW"));
 
-        const second = yield* runStorageExit();
+        const second = yield* runStorageExit(false);
         expect(second).toBe(COMPLETE_STATUS);
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },

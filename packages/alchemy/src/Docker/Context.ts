@@ -186,12 +186,13 @@ export const ContextProvider = () =>
     }),
   );
 
-const normalizeDesired = (id: string, props: ContextProps, instanceId: string) =>
+// Every prop is optional, so `Docker.Context("ctx")` arrives with no props.
+const normalizeDesired = (id: string, props: ContextProps | undefined, instanceId: string) =>
   dockerPhysicalName(id, props, instanceId).pipe(
     Effect.map((name) => ({
       name,
-      description: normalizeDescription(props.description),
-      docker: normalizeDocker(props.docker),
+      description: normalizeDescription(props?.description),
+      docker: normalizeDocker(props?.docker),
     })),
   );
 

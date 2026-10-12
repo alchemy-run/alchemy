@@ -411,7 +411,11 @@ export const VersionProvider = () =>
               : Unowned(attrs);
           }
 
-          const functionName = olds ? resolvedProps(olds).function.functionName : undefined;
+          // An interrupted create's first checkpoint strips the Function
+          // reference while the Function is still being created (see
+          // stripUnresolved), so `olds.function` can be missing. With no
+          // function name there is no version to recover.
+          const functionName = olds ? resolvedProps(olds).function?.functionName : undefined;
           if (!functionName) return undefined;
           const latest = yield* waitForLatest(functionName);
           const complete = yield* completeConfiguration(functionName, latest);

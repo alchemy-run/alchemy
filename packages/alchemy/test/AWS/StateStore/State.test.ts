@@ -3,7 +3,9 @@ import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
+import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { makeS3State } from "@/AWS";
@@ -411,6 +413,62 @@ test.provider(
         yield* state.deleteStack({ stack: STACK, stage });
         expect(yield* state.list({ stack: STACK, stage })).toEqual([]);
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 120_000,
+  },
+);
+
+// State objects hold generated secrets, and the AWS client logs request
+// payloads and parsed responses at Debug. A Debug floor where the store is
+// built (the CLI's run log sets one) must not put state contents in the logs.
+test.provider(
+  "state contents stay out of Debug logs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(
+        AWS.S3.Bucket("LoggingStateBucket", { forceDestroy: true }),
+      );
+      const secret = "state-logging-secret-0123456789";
+      const stage = "logging";
+
+      // Record every log line emitted at a Debug floor.
+      const atDebug = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        Effect.gen(function* () {
+          const lines: string[] = [];
+          const logger = Logger.make<unknown, void>((options) => {
+            lines.push(
+              JSON.stringify(options.message, (_, v) => (typeof v === "bigint" ? `${v}` : v)),
+            );
+          });
+          const result = yield* effect.pipe(
+            Effect.provide(Logger.layer([logger])),
+            Effect.provideService(References.MinimumLogLevel, "Debug"),
+          );
+          return { result, logs: lines.join("\n") };
+        });
+
+      const { logs } = yield* atDebug(
+        Effect.gen(function* () {
+          const state = yield* makeS3State({ bucketName: bucket.bucketName, prefix: "logging" });
+          const value = resource("SecretHolder", { token: secret });
+          yield* state.set({ stack: STACK, stage, fqn: value.fqn, value });
+          expect(yield* state.get({ stack: STACK, stage, fqn: value.fqn })).toEqual(value);
+          yield* state.deleteStack({ stack: STACK, stage });
+        }),
+      );
+      expect(logs).not.toContain(secret);
+
+      // Control: the same payload sent directly is logged at Debug, so the
+      // capture above is real.
+      const control = yield* atDebug(
+        s3.putObject({ Bucket: bucket.bucketName, Key: "control", Body: secret }),
+      );
+      expect(control.logs).toContain(secret);
+
       yield* stack.destroy();
     }),
   {

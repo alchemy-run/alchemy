@@ -384,7 +384,8 @@ export const AgentProvider = () =>
       const toolsChanged = JSON.stringify(toolsOf(current.tools)) !== JSON.stringify(tools);
 
       if (metadataChanged || descriptionChanged || instructionChanged || toolsChanged) {
-        current = yield* aiplatform.patchProjectsLocationsAgents({
+        // Patch is a long-running operation; re-read the agent once it lands.
+        const patched = yield* aiplatform.patchProjectsLocationsAgents({
           name: currentName,
           updateMask: [
             metadataChanged ? "metadata" : undefined,
@@ -402,6 +403,8 @@ export const AgentProvider = () =>
             tools,
           },
         });
+        yield* waitForOperation(patched);
+        current = yield* waitUntilExists(currentName);
       }
 
       return toAttrs(current, env.project);

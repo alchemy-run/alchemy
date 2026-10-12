@@ -56,7 +56,7 @@ export default Cloudflare.Worker(
 );
 ```
 
-Deployed, Alchemy mints a scoped API token for the Worker, and the
+Deployed, Alchemy mints an API token scoped to the bucket for the Worker, and the
 URLs point at `https://{accountId}.r2.cloudflarestorage.com`. Under
 `alchemy dev` they point at the Worker's local R2 endpoint,
 `http://localhost:{port}/cdn-cgi/local/r2/s3`. Signing happens inside

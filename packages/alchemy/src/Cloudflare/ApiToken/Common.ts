@@ -1,3 +1,4 @@
+import type { TokensCreateRequestPoliciesItemPermissionGroupsItemMeta } from "@distilled.cloud/cloudflare/accounts";
 import { PERMISSION_GROUPS_BY_NAME, type PermissionGroupName } from "./PermissionGroups.ts";
 
 /**
@@ -20,9 +21,13 @@ export type ResourceKey =
  * name (resolved against the static catalog) or an explicit `{ id }` for
  * names that aren't in the catalog or have multiple scopes.
  */
-export type PermissionGroupRef =
-  | PermissionGroupName
-  | { id: string; meta?: { key?: string; value?: string } };
+export type PermissionGroupRef = PermissionGroupName | { id: string; meta?: PermissionGroupMeta };
+
+/**
+ * Descriptive attributes of a permission group, as Cloudflare documents them
+ * on token policies. Optional; Cloudflare does not store them on the token.
+ */
+export type PermissionGroupMeta = TokensCreateRequestPoliciesItemPermissionGroupsItemMeta;
 
 /**
  * Value of a resource entry in an {@link Policy}. Usually `"*"`, but
@@ -97,7 +102,7 @@ export const collectPolicies = (
 
 export type ResolvedPolicy = {
   effect: "allow" | "deny";
-  permissionGroups: { id: string; meta?: { key?: string; value?: string } }[];
+  permissionGroups: { id: string; meta?: PermissionGroupMeta }[];
   resources: Record<string, ResourceScope>;
 };
 

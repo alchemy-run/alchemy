@@ -1,7 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { mockJaegerBinding } from "../../../../shared/tracing.ts";
-import type { AssetConfig, JaegerTracing } from "../../../../shared/types.ts";
+import type { JaegerTracing } from "../../../../shared/types.ts";
 import {
   flagIsEnabled,
   SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
@@ -9,6 +9,7 @@ import {
 import { CACHE_CONTROL_BROWSER } from "../constants.ts";
 import { HEADERS_VERSION } from "../handler.ts";
 import type { AssetIntentWithResolver } from "../handler.ts";
+import type { NormalizedAssetConfig } from "../types.ts";
 import type { Env } from "../worker.ts";
 import { generateRulesMatcher, replacer } from "./rules-engine.ts";
 
@@ -23,7 +24,7 @@ export function getAssetHeaders(
   contentType: string | undefined,
   cacheStatus: string,
   request: Request,
-  configuration: Required<AssetConfig>,
+  configuration: NormalizedAssetConfig,
 ) {
   const headers = new Headers({
     ETag: `"${eTag}"`,
@@ -62,7 +63,7 @@ function isCacheable(request: Request) {
 export function attachCustomHeaders(
   request: Request,
   response: Response,
-  configuration: Required<AssetConfig>,
+  configuration: NormalizedAssetConfig,
   env: Env,
 ) {
   const jaeger: JaegerTracing = env.JAEGER ?? mockJaegerBinding();

@@ -10,7 +10,7 @@ import { bodyContaining, copyViteFixture } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
+test.provider(
   "Vite publishes real builds, memoizes unchanged content, updates in place, and cleans up",
   (stack) =>
     Effect.gen(function* () {

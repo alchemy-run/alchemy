@@ -47,10 +47,11 @@ export default class Counter extends Cloudflare.DurableObject<Counter>()(
 ) {}
 ```
 
-:::tip[Why `Counter<Counter>()(...)` ?]
-The empty `()` after `Counter<Counter>` lets TypeScript capture the
-class identity for the typed RPC stub. It's a one-time bit of
-ceremony — the rest of your DO code looks completely normal.
+:::tip[Why `Cloudflare.DurableObject<Counter>()(...)` ?]
+The empty `()` after `Cloudflare.DurableObject<Counter>` lets
+TypeScript capture the class identity for the typed RPC stub. It's a
+one-time bit of ceremony — the rest of your DO code looks completely
+normal.
 :::
 
 ## Persist the count
@@ -161,7 +162,7 @@ export default Cloudflare.Worker(
 ```
 
 `yield* Counter` in the constructor registers the DO with the Worker
-(binding + class-migration metadata) and hands you the namespace.
+(binding + Durable Object `exports` metadata) and hands you the namespace.
 
 ## Call the DO from `fetch`
 
@@ -465,6 +466,19 @@ hinted region, which may not be inside it. Under `alchemy dev` there is
 only one location to place anything in, so hints are accepted and
 ignored — placement is only observable once deployed.
 
+## Keep an instance inside a jurisdiction
+
+A `locationHint` is best-effort. When data must stay inside a region for
+compliance, address the object through `jurisdiction()` instead:
+
+```typescript
+const room = rooms.jurisdiction("eu").getByName(roomId);
+```
+
+Cloudflare creates and stores that object only inside the jurisdiction.
+The same name addresses a different object than it does without
+`jurisdiction()`, so pick one form per name and keep using it.
+
 ## Call scope vs isolate scope
 
 A Durable Object shares its isolate's layer build with the Worker
@@ -669,6 +683,32 @@ compatible with old JSON payloads. Unknown callback names remain pending;
 renaming a handler does not migrate those jobs. TypeScript payload types
 do not validate data stored by an earlier deployment, so decode evolving
 payloads explicitly with a schema when needed.
+
+## Adopt a Worker deployed by Wrangler
+
+Alchemy deploys Durable Object classes with Cloudflare's declarative
+[`exports`](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
+map, the same flow Wrangler uses since 4.107. An
+[adopted](/infrastructure-as-code/resource-lifecycle#adoption) Worker
+keeps every namespace it already has, with its data and storage backend:
+
+```typescript
+const worker = yield* Cloudflare.Worker("Api", {
+  name: "my-existing-worker",
+  main: "./src/worker.ts",
+  env: { Counter: Cloudflare.DurableObject("Counter") },
+}).pipe(adopt(true));
+```
+
+A namespace whose class is no longer exported by your code stops the
+deploy instead of being deleted. Export the class again to keep it.
+
+:::caution
+Cloudflare doesn't allow a Worker to go back to the older `migrations`
+flow once it has deployed with `exports`. Alchemy releases from before
+this change can no longer deploy a Worker after its first deploy with a
+newer release.
+:::
 
 ## Where next
 

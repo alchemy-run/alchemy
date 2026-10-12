@@ -21,7 +21,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -41,6 +41,7 @@ import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
@@ -53,6 +54,12 @@ import {
   makeFunctionImage,
 } from "./FunctionImage.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  HandlerContext,
+  TIMEOUT_MARGIN_ENV,
+  toTimeoutMarginMillis,
+  withInvocationDeadline,
+} from "./InvocationDeadline.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
@@ -79,24 +86,19 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
+  /** `LastUpdateStatusReasonCode` (or `StateReasonCode` for a failed create). */
+  reasonCode?: string;
 }> {
   override get message() {
     return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
   }
 }
 
-export class HandlerContext extends Context.Service<HandlerContext, lambda.Context>()(
-  "AWS.Lambda.HandlerContext",
-) {}
-
-export const isFunction = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.Lambda.Function"
-  );
-};
+export const isFunction = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.Lambda.Function";
 
 /**
  * True for any Alchemy host that accepts the `{ env, policyStatements }`
@@ -113,18 +115,15 @@ export const isFunction = (value: any): value is Function => {
  * `host.LogicalId` are ever touched inside the guarded block, so downstream
  * typing is unchanged while the runtime check widens to all three.
  */
-export const isBindingHost = (value: any): value is Function => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    (value.Type === "AWS.Lambda.Function" ||
-      value.Type === "AWS.ECS.Task" ||
-      value.Type === "AWS.ECS.Service" ||
-      value.Type === "Kubernetes.Deployment" ||
-      value.Type === "Kubernetes.Job")
-  );
-};
+export const isBindingHost = (value: any): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value.Type === "AWS.Lambda.Function" ||
+    value.Type === "AWS.ECS.Task" ||
+    value.Type === "AWS.ECS.Service" ||
+    value.Type === "Kubernetes.Deployment" ||
+    value.Type === "Kubernetes.Job");
 
 export interface FunctionBuildOptions
   extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {
@@ -184,6 +183,9 @@ export const layerVersionArnOf = (layer: LayerRef): string =>
  * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
  * `fileSystemConfigs` entry to the access point ARN.
  */
+/** Inline policy denying the execution role `logs:CreateLogGroup` on its own group. */
+const logGroupGuardPolicyName = "AlchemyDenyLogGroupCreate";
+
 const accessPointArnOf = (config: {
   accessPoint?: AccessPointRef;
   arn?: string;
@@ -293,6 +295,25 @@ export interface FunctionCommonProps extends PlatformProps {
    */
   timeout?: Duration.Duration;
   /**
+   * How long before {@link timeout} telemetry is flushed for an invocation
+   * that is still running. A Lambda that hits its timeout is killed
+   * mid-flight and its buffered spans and logs are lost; at
+   * `timeout - timeoutMargin` the runtime ends the invocation's root span
+   * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
+   * the exporters, so the trace of the slow invocation is exported instead.
+   *
+   * The handler is never interrupted and the invocation's outcome is never
+   * changed. If it does finish inside the margin, its response goes out
+   * as normal; the root span is still exported once, as the timeout error
+   * marked `aws.lambda.timeout.imminent`.
+   *
+   * Size it for one export round-trip to your telemetry backend. Set to
+   * `Duration.zero` to disable.
+   *
+   * @default 500 millis
+   */
+  timeoutMargin?: Duration.Duration;
+  /**
    * Maximum number of concurrent executions reserved for this function.
    * Omit to remove the function-level reserved concurrency limit.
    */
@@ -316,6 +337,15 @@ export interface FunctionCommonProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Retention for the function's CloudWatch log group
+   * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
+   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
+   * log group so the policy applies before the first invocation, and
+   * deletes it with the function. When omitted the log group is left to
+   * Lambda, which creates it on first invoke with no expiry.
+   */
+  logging?: LogRetentionConfig;
 }
 
 export interface FunctionZipProps extends FunctionCommonProps {
@@ -568,7 +598,12 @@ export interface Function extends Resource<
   Providers
 > {}
 
-export type FunctionServices = Credentials | Region | AWSEnvironment;
+export type FunctionServices =
+  | Credentials
+  | Region
+  | AWSEnvironment
+  // The host itself, provided to the implementation at runtime (like Cloudflare's Worker).
+  | Function;
 
 export type FunctionShape = Main<FunctionServices>;
 
@@ -1115,8 +1150,15 @@ export const Function: Platform<
                 // latency anyway — keep request finalizers fast. A failing
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
+                //
+                // The scope is ALSO what a timeout would take with it: Lambda
+                // kills the invocation mid-flight and the buffered telemetry
+                // never flushes. `withInvocationDeadline` flushes it
+                // `timeoutMargin` before that happens — without touching the
+                // handler or the invocation's outcome.
                 const scope = Scope.makeUnsafe();
                 const exit = await eff.pipe(
+                  withInvocationDeadline,
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
@@ -1380,6 +1422,69 @@ export const FunctionProvider = () =>
         return role;
       });
 
+      /**
+       * Deny the execution role `logs:CreateLogGroup` on the function's own
+       * `/aws/lambda/<name>` group. The managed `AWSLambdaBasicExecutionRole`
+       * allows it on `*`, which lets Lambda create the group with no tags or
+       * retention on first invoke, and lets a log batch flushed after
+       * `deleteFunction` silently re-create a group we just deleted. With the
+       * Deny, Alchemy owns the group (see {@link ensureLogGroup}): Lambda only
+       * writes into it, and `delete` removes it once.
+       */
+      const syncLogGroupGuard = Effect.fn(function* ({
+        roleName,
+        functionName,
+      }: {
+        roleName: string;
+        functionName: string;
+      }) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        const document = JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Deny",
+              Action: "logs:CreateLogGroup",
+              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+            },
+          ],
+        });
+        const observed = yield* iam
+          .getRolePolicy({ RoleName: roleName, PolicyName: logGroupGuardPolicyName })
+          .pipe(
+            Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          );
+        if (observed !== document) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: logGroupGuardPolicyName,
+            PolicyDocument: document,
+          });
+        }
+      });
+
+      /**
+       * Create (or adopt) `/aws/lambda/<name>` before the function can run.
+       * The execution role cannot create it (see {@link syncLogGroupGuard}),
+       * so without this the function's logs would be dropped.
+       */
+      const ensureLogGroup = Effect.fn(function* ({
+        id,
+        functionName,
+        retention,
+      }: {
+        id: string;
+        functionName: string;
+        retention: LogRetentionConfig["retention"] | undefined;
+      }) {
+        const logGroupName = `/aws/lambda/${functionName}`;
+        yield* logs
+          .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
+          .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+        yield* syncLogGroupRetention({ logGroupName, retention });
+      });
+
       const withNodeSourceMaps = (
         env: Record<string, string> | undefined,
         props: FunctionZipProps,
@@ -1405,6 +1510,14 @@ export const FunctionProvider = () =>
         };
       };
 
+      // The runtime reads the invocation deadline margin per invocation
+      // (see `withInvocationDeadline`); only written when set so the
+      // runtime default applies otherwise.
+      const timeoutMarginEnv = (margin: Duration.Duration | undefined): Record<string, string> => {
+        const ms = toTimeoutMarginMillis(margin);
+        return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
+      };
+
       const retryFunctionMutation = Effect.retry({
         while: (e: any) =>
           e._tag === "ResourceConflictException" || e._tag === "TooManyRequestsException",
@@ -1424,6 +1537,10 @@ export const FunctionProvider = () =>
             return yield* new FunctionUpdateFailed({
               functionName,
               reason: configuration.LastUpdateStatusReason ?? configuration.StateReason,
+              reasonCode:
+                configuration.LastUpdateStatus === "Failed"
+                  ? configuration.LastUpdateStatusReasonCode
+                  : configuration.StateReasonCode,
             });
           }
           if (
@@ -1673,7 +1790,7 @@ export const FunctionProvider = () =>
 
         const tags = yield* createInternalTags(id);
 
-        const codeLocation = yield* Effect.gen(function* () {
+        const resolveCodeLocation = Effect.gen(function* () {
           if (code.packageType === "Image") {
             return { ImageUri: code.imageUri } as const;
           }
@@ -1690,6 +1807,7 @@ export const FunctionProvider = () =>
             S3Key: key,
           } as const;
         });
+        const codeLocation = yield* resolveCodeLocation;
         const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
@@ -1720,14 +1838,13 @@ export const FunctionProvider = () =>
           Layers: isFunctionImageProps(news)
             ? undefined
             : (news.layers ?? []).map(layerVersionArnOf),
-          Environment: runtimeEnv
-            ? {
-                Variables: {
-                  ...runtimeEnv,
-                  ...alchemyEnv,
-                },
-              }
-            : undefined,
+          Environment: {
+            Variables: {
+              ...runtimeEnv,
+              ...alchemyEnv,
+              ...timeoutMarginEnv(news.timeoutMargin),
+            },
+          },
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
           // Always explicit so removing the `tracing` prop converges back to
@@ -1745,6 +1862,7 @@ export const FunctionProvider = () =>
           FileSystemConfigs: fileSystemConfigs,
         };
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -1820,12 +1938,9 @@ export const FunctionProvider = () =>
           ),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
-          Effect.tapError((e) =>
-            Effect.gen(function* () {
-              yield* Effect.logDebug(e);
-            }),
-          ),
+          Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
             while: (e) => isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(Schedule.tap(() => noteCreateDependencyWait())),
@@ -2008,7 +2123,17 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the bundle hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
@@ -2092,6 +2217,11 @@ export const FunctionProvider = () =>
           if (toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)) {
             return { action: "update" };
           }
+          if (
+            toTimeoutMarginMillis(olds.timeoutMargin) !== toTimeoutMarginMillis(news.timeoutMargin)
+          ) {
+            return { action: "update" };
+          }
           if (olds.architecture !== news.architecture) {
             return { action: "update" };
           }
@@ -2108,6 +2238,12 @@ export const FunctionProvider = () =>
             layers: (props.layers ?? []).map(layerVersionArnOf),
           });
           if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            // Bindings (env / policies from `bind`) are not props. An explicit
+            // noop would skip the engine's binding comparison, so defer to it
+            // whenever they may have changed.
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
             return { action: "noop" };
           }
         }),
@@ -2228,6 +2364,8 @@ export const FunctionProvider = () =>
             roleName,
             vpc: news.vpc,
           });
+          yield* syncLogGroupGuard({ roleName, functionName });
+          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           const prepared = yield* preparePrecreatedFunctionCode({
             id,
@@ -2281,6 +2419,8 @@ export const FunctionProvider = () =>
             vpc: news.vpc,
           });
           const roleArn = ensuredRole.Role.Arn ?? output?.roleArn;
+          yield* syncLogGroupGuard({ roleName, functionName });
+          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
           const {
             env,
@@ -2395,9 +2535,31 @@ export const FunctionProvider = () =>
                   ? []
                   : undefined,
             session,
-          });
-
-          yield* waitForFunctionUpdate(functionName, session, vpc !== undefined);
+          }).pipe(
+            Effect.andThen(waitForFunctionUpdate(functionName, session, vpc !== undefined)),
+            // The create/update call can succeed while Lambda's ASYNC
+            // provisioning (VPC ENIs, EFS mounts) still fails with
+            // `InsufficientRolePermissions` — "The function's execution role
+            // doesn't have permission to perform this operation." — because
+            // the just-attached AWSLambdaVPCAccessExecutionRole /
+            // EFS client policy has not propagated yet. That is IAM eventual
+            // consistency, not a misconfiguration: re-apply the function
+            // (the create path falls through to update on conflict, which
+            // re-triggers provisioning) and wait again, bounded.
+            Effect.tapError((e) =>
+              e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions"
+                ? session.note(
+                    `Waiting for Lambda execution role permissions to propagate: ${functionName}`,
+                  )
+                : Effect.void,
+            ),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "FunctionUpdateFailed" && e.reasonCode === "InsufficientRolePermissions",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 6,
+            }),
+          );
 
           const previousImage = output?.code.image;
           const nextImage = "image" in prepared.attributes ? prepared.attributes.image : undefined;
@@ -2451,14 +2613,17 @@ export const FunctionProvider = () =>
             .pipe(
               Effect.flatMap((policies) =>
                 Effect.all(
-                  (policies.PolicyNames ?? []).map((policyName) =>
-                    iam
-                      .deleteRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyName: policyName,
-                      })
-                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                  ),
+                  // The log-group guard stays until the function is deleted.
+                  (policies.PolicyNames ?? [])
+                    .filter((policyName) => policyName !== logGroupGuardPolicyName)
+                    .map((policyName) =>
+                      iam
+                        .deleteRolePolicy({
+                          RoleName: output.roleName,
+                          PolicyName: policyName,
+                        })
+                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+                    ),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -2495,13 +2660,13 @@ export const FunctionProvider = () =>
             yield* functionImage.deleteRepository(output.code.image.repositoryName);
           }
 
-          // Release the execution role before the auxiliary CloudWatch Logs
-          // reap below. A recently invoked function can keep that reap alive
-          // for ~40 seconds while Lambda flushes its final log batches; if the
-          // process is interrupted during that window, leaving role deletion
-          // until afterwards strands the deterministic role. IAM can briefly
-          // report the just-detached role as still in use, so retry those
-          // eventual-consistency conflicts on a bounded schedule.
+          // The managed policies were detached before deleteFunction, so the
+          // role no longer allows logs:CreateLogGroup and the guard can go with
+          // it. IAM can briefly report a just-detached role as still in use, so
+          // retry those eventual-consistency conflicts on a bounded schedule.
+          yield* iam
+            .deleteRolePolicy({ RoleName: output.roleName, PolicyName: logGroupGuardPolicyName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
             Effect.retry({
@@ -2513,166 +2678,13 @@ export const FunctionProvider = () =>
             }),
           );
 
-          // CloudWatch Logs is not implemented by the floci emulator. The
-          // live reap below (flush watch + observe→delete) would sit on
-          // describe/delete timeouts for minutes; emulator log groups die
-          // with the container anyway.
-          if (yield* AWSEnvironment.isLocalEmulator) {
-            return null as any;
-          }
-
-          // Lambda auto-creates /aws/lambda/{name} on the first invoke and
-          // deleteFunction does NOT remove it — without this every deleted
-          // function leaks an orphaned log group. Worse, the Lambda service
-          // flushes the final log batch asynchronously (observed up to ~35s
-          // after the last invoke, even after BOTH the function and its role
-          // are already deleted), silently re-creating a just-deleted group.
-          // The only reliable reap is a bounded watch over that flush window.
-          // A provably-quiescent group (last ingestion > 2 minutes ago —
-          // every pending flush has long since landed) deletes in a single
-          // call, so routine deletes of idle functions stay fast; a group
-          // with recent ingestion — or one that does not exist yet, where a
-          // first flush may still be in flight — is re-reaped on a short
-          // bounded schedule.
-          const logGroupName = `/aws/lambda/${output.functionName}`;
-          const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            // CloudWatch Logs can sit in its SDK retry path for minutes
-            // under a full parallel sweep. Log-group cleanup is auxiliary
-            // to the already-completed Lambda delete, so bound each reap
-            // attempt while preserving the t=0/20/40 flush watch below.
-            Effect.timeoutOrElse({
-              duration: "5 seconds",
-              orElse: () => Effect.logWarning(`Timed out reaping Lambda log group ${logGroupName}`),
-            }),
-          );
-          const lastIngestion = yield* logs
-            .describeLogStreams({
-              logGroupName,
-              orderBy: "LastEventTime",
-              descending: true,
-              limit: 1,
-            })
-            .pipe(
-              Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-              Effect.timeoutOrElse({
-                duration: "5 seconds",
-                orElse: () =>
-                  Effect.gen(function* () {
-                    yield* Effect.logWarning(
-                      `Timed out inspecting Lambda log group ${logGroupName}`,
-                    );
-                    return undefined;
-                  }),
-              }),
-            );
-          const now = yield* Effect.sync(() => Date.now());
-          const quiescent = lastIngestion !== undefined && now - lastIngestion > 120_000;
-          if (quiescent) {
-            yield* reapLogGroup;
-          } else {
-            // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
-            yield* reapLogGroup.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("20 seconds"),
-                times: 2,
-              }),
-            );
-          }
-
-          // A timed-out delete attempt above is not deletion proof, and the
-          // Lambda service keeps flushing buffered logs AFTER the function is
-          // deleted (typically ~35s, occasionally much longer), silently
-          // re-creating a just-deleted group. Converge with a bounded
-          // observe→delete loop: any reappearance is simply deleted again
-          // (every delete is idempotent — ResourceNotFoundException means
-          // done). A recreation we deleted counts as gone; a flush landing
-          // after our final check is inherently unobservable and the next
-          // nuke census is the backstop. We only fail loudly if the group is
-          // still observable at budget exhaustion AND a final delete attempt
-          // did not remove it — i.e. the group is genuinely undeletable.
-          const describeLogGroup = logs
-            .describeLogGroups({
-              logGroupNamePrefix: logGroupName,
-              limit: 1,
-            })
-            .pipe(
-              Effect.map((response) =>
-                (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
-              ),
-            );
-
-          // Loop observation: a describe that can't complete in time (API
-          // throttling under a busy account / saturated test run) is NOT
-          // deletion proof — assume the group is still present and let the
-          // bounded loop keep converging instead of dying on a slow read.
-          const observeLogGroup = describeLogGroup.pipe(
-            Effect.timeoutOrElse({
-              duration: "30 seconds",
-              orElse: () =>
-                Effect.logWarning(
-                  `Timed out observing Lambda log group ${logGroupName} — assuming still present`,
-                ).pipe(Effect.as(true)),
-            }),
-          );
-
-          // Final authoritative observation: here a timeout must fail loudly,
-          // since we are about to declare the delete converged.
-          const observeLogGroupOrDie = describeLogGroup.pipe(
-            Effect.timeoutOrElse({
-              duration: "30 seconds",
-              orElse: () =>
-                Effect.die(
-                  new Error(`Timed out confirming Lambda log group deletion: ${logGroupName}`),
-                ),
-            }),
-          );
-
-          const deleteLogGroupAgain = logs.deleteLogGroup({ logGroupName }).pipe(
-            Effect.retry({
-              while: (error) =>
-                error._tag === "OperationAbortedException" ||
-                error._tag === "ServiceUnavailableException",
-              schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.timeoutOrElse({
-              duration: "45 seconds",
-              orElse: () =>
-                Effect.die(new Error(`Timed out deleting Lambda log group ${logGroupName}`)),
-            }),
-          );
-
-          const reapIfObserved = Effect.gen(function* () {
-            const present = yield* observeLogGroup;
-            if (present) {
-              yield* deleteLogGroupAgain;
-            }
-            return present;
-          });
-
-          // Happy path (no reappearance): a single describe, done. On a
-          // post-delete flush recreation: delete and re-check every 5s for
-          // up to ~90s after the last reappearance-free observation.
-          const observedAtBudgetEnd = yield* reapIfObserved.pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("5 seconds"),
-              until: (present) => !present,
-              times: 18,
-            }),
-          );
-
-          // Budget exhausted with the group still reappearing: the last loop
-          // iteration already issued a delete. One final authoritative
-          // observation decides — absent means our delete of the latest
-          // recreation stuck (gone); present means the group survives its own
-          // deletion (denied/undeletable) and must fail loudly.
-          if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
-            yield* Effect.die(
-              new Error(`Lambda log group ${logGroupName} remained observable after delete`),
-            );
-          }
+          // Alchemy created /aws/lambda/<name> and the role could never
+          // create it (see `syncLogGroupGuard`), so a late log flush after
+          // deleteFunction is dropped instead of re-creating the group: one
+          // delete is enough.
+          yield* logs
+            .deleteLogGroup({ logGroupName: `/aws/lambda/${output.functionName}` })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           return null as any;
         }),

@@ -4,6 +4,7 @@ import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import path from "pathe";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { DnsConfig } from "../../DNS/Adapter.ts";
@@ -28,6 +29,7 @@ import {
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -83,6 +85,22 @@ export interface WorkerCache extends Exclude<
   workers.PutScriptRequest["metadata"]["cacheOptions"],
   undefined
 > {}
+
+/**
+ * Per-entrypoint settings for one of a Worker's exports, keyed in
+ * {@link WorkerProps.entrypoints} by export name.
+ */
+export interface WorkerEntrypointSettings {
+  /**
+   * Workers Cache override for this entrypoint. `enabled` replaces the
+   * Worker-wide `cache.enabled` for calls into this entrypoint only;
+   * `crossVersionCache` stays Worker-wide.
+   */
+  cache?: {
+    /** Whether Workers Cache is checked before invoking this entrypoint. */
+    enabled: boolean;
+  };
+}
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
@@ -366,8 +384,8 @@ export interface WorkerVersionAffinity {
  *
  * A gradual rollout carries only what a version can: code, static assets,
  * bindings, compatibility settings, and cache configuration. A deploy that
- * changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
+ * creates, renames, deletes or moves Durable Object classes must go out at
+ * 100% (class lifecycle changes cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */
@@ -672,6 +690,11 @@ export interface WorkerProps<
    * If omitted, defaults to `{ enabled: true, logs: { enabled: true,
    * invocationLogs: true } }`. Traces are off by default — opt in via
    * `traces: { enabled: true, ... }`.
+   *
+   * Set `issues: { enabled: true }` to enable Workers Issues error detection
+   * across full deployments. Setting it to `false` or omitting `issues`
+   * disables Issues on the next full deployment. Version-only uploads and
+   * gradual rollouts keep the parent's live observability settings.
    */
   observability?: WorkerObservability;
   /**
@@ -694,6 +717,24 @@ export interface WorkerProps<
    * @see https://blog.cloudflare.com/workers-cache/
    */
   cache?: WorkerCache;
+  /**
+   * Per-entrypoint settings, keyed by export name: `default` for the
+   * default export, or the class name of a named `WorkerEntrypoint`.
+   * Entrypoints you leave out inherit the Worker-wide settings.
+   *
+   * Today the only setting is `cache`: a per-entrypoint `cache.enabled`
+   * overrides the Worker-wide {@link cache} for that entrypoint. Workers
+   * Cache only applies to `fetch()` invocations (including loopback calls
+   * through `ctx.exports`); custom RPC methods always bypass it.
+   *
+   * Names must not collide with Durable Object classes hosted by this
+   * Worker.
+   *
+   * Previews upload their own settings, and the versions of a gradual
+   * rollout may differ. `alchemy dev` does not emulate Workers Cache:
+   * locally, every entrypoint runs on every request.
+   */
+  entrypoints?: Record<string, WorkerEntrypointSettings>;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -863,6 +904,11 @@ export interface WorkerProps<
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
    * `pattern`. When the zone is omitted, it is inferred from the pattern's
+   * hostname.
+   *
+   * `alchemy dev` emulates zone routing locally: a Worker whose custom
+   * {@link domain} matches a route's hostname serves the routes on its own
+   * dev URL, and each route's `url` attribute is a local listener for its
    * hostname.
    */
   routes?: WorkerRouteConfig[];
@@ -1177,7 +1223,12 @@ export type Worker<Bindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    routes: { id: string; pattern: string; zoneId: string }[];
+    /**
+     * The zone routes attached to this Worker. `url` is the origin serving
+     * the route's hostname — `https://<host>` when deployed, the local edge
+     * listener under `alchemy dev` — and `undefined` for a wildcard host.
+     */
+    routes: { id: string; pattern: string; zoneId: string; url?: string }[];
     crons: string[];
     /**
      * The tail consumers attached to this Worker's script — each entry the
@@ -1300,6 +1351,11 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Application name and prepared images for the native container API. */
+      name?: string;
+      images?: Record<string, string>;
+      /** Named image sources for local workerd. An empty map enables managed images. */
+      devImages?: Record<string, DevContainerImage>;
       dev: DevContainerImage | undefined;
       /**
        * Content hash of the image (bundle/Dockerfile/context). Part of the
@@ -1428,6 +1484,10 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * lowers it into a `service` binding targeting the Worker's own physical
  * name at upload, and local dev serves it with the runtime's in-process
  * self service.
+ *
+ * `Self` targets the Worker's default export. To bind one of its named
+ * `WorkerEntrypoint` classes instead, name it with
+ * `Cloudflare.WorkerEntrypoint("McpEntrypoint")`.
  *
  * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
  * revalidation queue re-fetches the worker through it):
@@ -1595,6 +1655,8 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/caller.ts",
  *   env: {
  *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *     // one of this Worker's own entrypoints
+ *     MCP: Cloudflare.WorkerEntrypoint("McpEntrypoint"),
  *   },
  * });
  * ```
@@ -1752,6 +1814,31 @@ export const isSelf = (value: unknown): value is Self =>
  * ) {}
  * ```
  *
+ * **Example:** Binding a Worker to itself
+ *
+ * Declare the class before `.make()` so the implementation can reference it.
+ * The self binding uses workerd's `ctx.exports` loopback, so nothing is
+ * added to the Worker's deployed bindings.
+ * ```typescript
+ * export class Greeter extends Cloudflare.Worker<
+ *   Greeter,
+ *   { greet: (name: string) => Effect.Effect<string> }
+ * >()("Greeter") {}
+ *
+ * export default Greeter.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const self = yield* Cloudflare.Workers.bindWorker(Greeter);
+ *     return {
+ *       greet: (name: string) => Effect.succeed(`Hello ${name}`),
+ *       fetch: Effect.gen(function* () {
+ *         return HttpServerResponse.text(yield* self.greet("world"));
+ *       }),
+ *     };
+ *   }),
+ * );
+ * ```
+ *
  * ### Configuration
  * The props object controls compatibility flags, static assets, and
  * build options. These are evaluated at deploy time.
@@ -1819,6 +1906,28 @@ export const isSelf = (value: unknown): value is Self =>
  *     { pattern: "example.com/api/*", zoneId: "<YOUR_ZONE_ID>" },
  *   ],
  * }
+ * ```
+ *
+ * **Example:** Federating one hostname across Workers
+ * Routes take precedence over custom domains, so one Worker can own the
+ * hostname while others claim paths under it — no gateway Worker in the
+ * request path, and each Worker binds only what its paths need. `alchemy
+ * dev` applies the same routing on the custom-domain Worker's local URL.
+ * ```typescript
+ * const home = yield* Cloudflare.Worker("Home", {
+ *   main: "./src/home.ts",
+ *   domain: "api.example.com",
+ * });
+ * yield* Cloudflare.Worker("Products", {
+ *   main: "./src/products.ts",
+ *   routes: [{ pattern: "api.example.com/products*" }],
+ * });
+ * yield* Cloudflare.Worker("Orders", {
+ *   main: "./src/orders.ts",
+ *   routes: [{ pattern: "api.example.com/orders*" }],
+ * });
+ * // https://api.example.com/orders/1 runs Orders; /about runs Home.
+ * return { url: home.url };
  * ```
  *
  * **Example:** Deploying a prebuilt Worker without bundling
@@ -2148,6 +2257,23 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
+ * **Example:** Enabling Workers Issues
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   observability: {
+ *     issues: { enabled: true },
+ *   },
+ * });
+ * ```
+ *
+ * Workers Issues groups recurring failures in the Cloudflare dashboard.
+ * Alchemy includes the flag in upload metadata and reconciles it through
+ * script settings after a full deployment so it survives redeploys. Set
+ * `issues.enabled` to `false` or remove `issues` to disable detection.
+ * Configure logs and traces alongside `issues` when you need those channels.
+ * Version-only uploads and gradual rollouts retain the parent's settings.
+ *
  * ### Tail Workers
  * A [Tail Worker](https://developers.cloudflare.com/workers/observability/logs/tail-workers/)
  * receives execution traces (console logs, exceptions, event metadata) from
@@ -2239,6 +2365,41 @@ export const isSelf = (value: unknown): value is Self =>
  *     crossVersionCache: true,
  *   },
  * }
+ * ```
+ *
+ * **Example:** Caching one entrypoint behind an uncached gateway
+ * ```typescript
+ * // alchemy.run.ts
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   entrypoints: {
+ *     default: { cache: { enabled: false } },
+ *     Public: { cache: { enabled: true } },
+ *   },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // src/worker.ts
+ * import { WorkerEntrypoint } from "cloudflare:workers";
+ *
+ * export class Public extends WorkerEntrypoint {
+ *   async fetch() {
+ *     return new Response("hello", {
+ *       headers: { "Cache-Control": "public, max-age=300" },
+ *     });
+ *   }
+ * }
+ *
+ * export default {
+ *   // the gateway runs on every request, then forwards to the cached entrypoint
+ *   async fetch(request: Request, env: unknown, ctx: ExecutionContext) {
+ *     if (!request.headers.get("authorization")) {
+ *       return new Response("unauthorized", { status: 401 });
+ *     }
+ *     return ctx.exports.Public.fetch(request);
+ *   },
+ * };
  * ```
  *
  * ### Background Work & Scopes
@@ -2380,10 +2541,9 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
- * bind, start, and monitor the container; then `yield* Sandbox`
- * resolves the **running** instance. Call its typed methods or use
- * `getTcpPort` to make HTTP requests to its exposed ports.
+ * `yield* Sandbox` binds the container to the DO and returns its handle
+ * without starting it. Call `start()` (a no-op once running) before using
+ * its typed methods or `getTcpPort`.
  *
  * **Example:** Running a Container from a Durable Object
  * ```typescript
@@ -2393,10 +2553,12 @@ export const isSelf = (value: unknown): value is Self =>
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* start;
  *             const { fetch } = yield* sandbox.getTcpPort(3000);
  *             const res = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
@@ -2405,11 +2567,7 @@ export const isSelf = (value: unknown): value is Self =>
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *
@@ -2583,9 +2741,31 @@ export const Worker: ResourceClassLike<Worker> &
     // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
     onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-    // `domain.dns` naming a non-Cloudflare DNS host composes Cloudflare for
-    // SaaS custom hostnames + records and rewrites `domain` into routes.
-    transformProps: (id, props) => transformWorkerDomainProps(id, props),
+    // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+    // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
+    // records and rewrite `domain` into routes.
+    transformProps: (id, props) =>
+      transformWorkerDomainProps(
+        id,
+        globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
+          ? props
+          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+      ),
   },
   { URL },
 );
+
+/**
+ * `main` as a path relative to `cwd` when it points inside `cwd`. State keeps
+ * the Worker's props and `alchemy drift` rebuilds the bundle from them, so an
+ * absolute `main` (such as `import.meta.url`) fails once the checkout that
+ * deployed it moves or is removed. Paths outside `cwd` are kept as given.
+ *
+ * @internal exported for unit testing.
+ */
+export const relativeWorkerMain = (main: string, cwd: string): string => {
+  const file = main.startsWith("file:")
+    ? decodeURIComponent(new globalThis.URL(main).pathname)
+    : main;
+  return path.isAbsolute(file) && isPathWithin(cwd, file, cwd) ? path.relative(cwd, file) : main;
+};

@@ -64,7 +64,7 @@ export default Alchemy.Stack(
       database: postgres,
     });
 
-    // Apply checked-in, transactional Prisma Next migrations before building a
+    // Apply checked-in, transactional Prisma migrations before building a
     // deployment. Apply is idempotent and intentionally runs every deploy so a
     // restored or drifted database is verified instead of trusting local state.
     // Production data is never seeded here.

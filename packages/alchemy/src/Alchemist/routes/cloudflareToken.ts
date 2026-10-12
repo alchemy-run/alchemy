@@ -73,7 +73,7 @@ const withGlobalKey = (credentials: GlobalCredentials) =>
     CloudflareCredentials.Credentials,
     Effect.succeed(
       apiKeyCredentials({
-        apiKey: Redacted.value(credentials.apiKey),
+        apiKey: credentials.apiKey,
         email: credentials.email,
       }),
     ),
@@ -136,12 +136,10 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (inpu
   const currentUser = yield* user.getUser({}).pipe(withGlobalKey(input.credentials));
   const resolved = tokenPolicies(input.accountIds, currentUser.id, selected);
   if (resolved.length === 0) {
-    return yield* Effect.fail(
-      new AlchemistInvalidInput({
-        field: "permissionGroupIds",
-        message: "No selected permission groups can be expressed as token policies.",
-      }),
-    );
+    return yield* new AlchemistInvalidInput({
+      field: "permissionGroupIds",
+      message: "No selected permission groups can be expressed as token policies.",
+    });
   }
   return {
     name: input.name,
@@ -161,11 +159,9 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
       policies: input.plan.policies as TokenPolicy[],
     });
     if (!result.value) {
-      return yield* Effect.fail(
-        new CloudflareTokenError({
-          message: "Cloudflare did not return a token value.",
-        }),
-      );
+      return yield* new CloudflareTokenError({
+        message: "Cloudflare did not return a token value.",
+      });
     }
     const granted = (result.policies ?? []).reduce(
       (count, policy) => count + (policy.permissionGroups?.length ?? 0),
@@ -174,10 +170,10 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
     const verificationStatus = yield* user.verifyToken({}).pipe(
       Effect.provideService(
         CloudflareCredentials.Credentials,
-        Effect.succeed(apiTokenCredentials({ apiToken: result.value })),
+        Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make(result.value) })),
       ),
       Effect.map(({ status }) => status),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     return {
       id: result.id ?? "unknown",

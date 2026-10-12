@@ -8,7 +8,7 @@ import type { ResourceLike } from "../Resource.ts";
 import { CurrentRuntimeContext, type RuntimeContext } from "../RuntimeContext.ts";
 import type { Branch } from "./Branch.ts";
 import { resolveBranchScope } from "./BranchScope.ts";
-import type { Function } from "./Function.ts";
+import { branchScopeOf, type Function } from "./Function.ts";
 import type { Project } from "./Project.ts";
 
 /** Postgres connection accessors. Resolving these Effects does not acquire a socket or pool. */
@@ -96,7 +96,7 @@ const stringOutput = (value: string | Output.Output<string>) =>
 
 const injectedScope = (host: ResourceLike | undefined, database: Branch | Project) => {
   if (!isFunction(host)) return Output.literal(false);
-  const scope = host.Props;
+  const scope = branchScopeOf(host.Props);
   const targetBranch =
     database.Type === "Neon.Branch" ? database.branchId : database.defaultBranchId;
   if (scope.branch) {

@@ -83,11 +83,9 @@ export const StreamKeyProvider = () =>
     Effect.gen(function* () {
       const toAttrs = Effect.fn(function* (streamKey: ivs.StreamKey) {
         if (!streamKey.arn || !streamKey.channelArn) {
-          return yield* Effect.fail(
-            new IvsStreamKeyIncomplete({
-              message: "IVS stream key is missing its ARN or channel ARN",
-            }),
-          );
+          return yield* new IvsStreamKeyIncomplete({
+            message: "IVS stream key is missing its ARN or channel ARN",
+          });
         }
         return {
           streamKeyArn: streamKey.arn,
@@ -194,11 +192,9 @@ export const StreamKeyProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsStreamKeyIncomplete({
-                message: `IVS channel '${news.channelArn}' has no stream key and one could not be created`,
-              }),
-            );
+            return yield* new IvsStreamKeyIncomplete({
+              message: `IVS channel '${news.channelArn}' has no stream key and one could not be created`,
+            });
           }
 
           // 3. Sync tags — the only mutable aspect. Diff against OBSERVED
@@ -209,11 +205,9 @@ export const StreamKeyProvider = () =>
           // value; the ListStreamKeys summary does not).
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsStreamKeyIncomplete({
-                message: `IVS stream key '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsStreamKeyIncomplete({
+              message: `IVS stream key '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

@@ -10,6 +10,7 @@ import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  domainEndpoint,
   isDomainActive,
   isDomainDeletable,
   readDomainTags,
@@ -406,7 +407,7 @@ export const DomainProvider = () =>
           domainArn: domain.ARN,
           domainId: domain.DomainId,
           engineVersion: domain.EngineVersion,
-          endpoint: domain.Endpoint ?? domain.EndpointV2,
+          endpoint: domainEndpoint(domain),
           created: domain.Created === true,
           processing: domain.Processing === true,
           tags: yield* readDomainTags(domain.ARN),
@@ -630,7 +631,7 @@ export const DomainProvider = () =>
           // (bounded, tolerant) for it to settle first. Already deleting
           // (or gone) is success.
           yield* repeatUntilDomainState(readDomain(name), isDomainDeletable).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           yield* opensearch
             .deleteDomain({ DomainName: name })
