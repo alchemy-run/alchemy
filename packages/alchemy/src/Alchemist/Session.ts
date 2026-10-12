@@ -20,6 +20,7 @@ import { withProfileOverride } from "../Auth/Resolve.ts";
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
+import { DigitalOceanAuth } from "../DigitalOcean/AuthProvider.ts";
 import { DopplerAuth } from "../Doppler/AuthProvider.ts";
 import { FlyAuth } from "../Fly/AuthProvider.ts";
 import { GcpAuth } from "../GCP/AuthProvider.ts";
@@ -337,8 +338,9 @@ const builtinAuth = Layer.mergeAll(
   CloudflareAuth,
   FlyAuth,
   GcpAuth,
-  GitHubAuth,
+  DigitalOceanAuth,
   DopplerAuth,
+  GitHubAuth,
   HetznerAuth,
   InfisicalAuth,
   NeonAuth,
