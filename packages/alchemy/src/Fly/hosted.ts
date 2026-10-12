@@ -530,14 +530,14 @@ export const createFlyHostedSupport = ({
     }
 
     const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
-    const token = minted.token;
-    if (token === undefined || token.length === 0) {
+    const token = typeof minted.token === "string" ? Redacted.make(minted.token) : minted.token;
+    if (token === undefined || Redacted.value(token).length === 0) {
       return yield* new DeployTokenMissing({ appName: input.appName });
     }
 
     yield* note(`Pushing ${imageRef}...`);
     yield* docker.image
-      .push(imageRef, { server: FLY_REGISTRY, username: "x", password: Redacted.make(token) })
+      .push(imageRef, { server: FLY_REGISTRY, username: "x", password: token })
       .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
     yield* note(`Pushed ${imageRef}`);
     return { imageRef, codeHash };
