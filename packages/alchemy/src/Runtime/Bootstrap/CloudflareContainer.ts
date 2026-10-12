@@ -16,6 +16,7 @@ import { CloudflareEnvironment } from "../../Cloudflare/CloudflareEnvironment.ts
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import { trustEgressCa } from "./EgressCa.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
+import { reportShutdown } from "./ShutdownSnapshot.ts";
 
 export interface ContainerBootstrapOptions {
   /** Stack identity baked in at deploy time. */
@@ -42,8 +43,9 @@ export const bootstrapContainer = (
     Logger.layer([Logger.consolePretty()]),
   );
 
-  // Before the program: anything it starts must trust the egress CA.
-  const program = trustEgressCa
+  // Before the program: anything it starts must trust the egress CA, and a
+  // shutdown is reported so the owning Durable Object can snapshot first.
+  const program = Effect.all([trustEgressCa, reportShutdown])
     .pipe(Effect.andThen(resolveProgram("default", { telemetry: true })))
     .pipe(
       Effect.provide(

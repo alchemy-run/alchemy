@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   CanUseTool,
   PermissionMode,
@@ -110,6 +111,37 @@ const toolTitle = (name: string, input: Record<string, unknown> | undefined): st
   return detail ? `${name} ${detail}` : name;
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A session id as the UUID Claude Code requires: ours if it is one, else derived from it. */
+const claudeSessionId = (id: string) => {
+  if (UUID.test(id)) return id.toLowerCase();
+  const hex = createHash("sha256").update(`alchemy-session:${id}`).digest("hex");
+  // A version-4-shaped UUID (variant bits set) from the digest.
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+
+/**
+ * Whether Claude Code has a transcript for this session on disk, under
+ * `<config>/projects/<project>/<id>.jsonl` (e.g. restored with the
+ * container's filesystem).
+ */
+const hasTranscript = (nativeId: string) =>
+  Effect.tryPromise(async () => {
+    const { readdir, stat } = await import("node:fs/promises");
+    const { homedir } = await import("node:os");
+    const { join } = await import("node:path");
+    const projects = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
+    for (const project of await readdir(projects).catch(() => [] as string[])) {
+      const found = await stat(join(projects, project, `${nativeId}.jsonl`)).then(
+        () => true,
+        () => false,
+      );
+      if (found) return true;
+    }
+    return false;
+  }).pipe(Effect.orElseSucceed(() => false));
+
 const resultStatus = (subtype: string, stopReason: string | null | undefined): TurnStatus => {
   if (subtype !== "success") return subtype === "error_max_turns" ? "max_tokens" : "failed";
   if (stopReason === "max_tokens") return "max_tokens";
@@ -198,6 +230,12 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
           }),
         );
 
+      // Claude's own session id, derived from ours: after a container
+      // restart that restored its files, the conversation resumes from the
+      // transcript on disk; otherwise it starts under that id.
+      const nativeId = claudeSessionId(session.id);
+      const resumable = yield* hasTranscript(nativeId);
+
       const ask = session.approvals === "ask";
       const q: Query = yield* Effect.try({
         try: () =>
@@ -206,6 +244,7 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
             options: {
               cwd: session.cwd,
               includePartialMessages: true,
+              ...(resumable ? { resume: nativeId } : { sessionId: nativeId }),
               permissionMode: ask ? "default" : (options.permissionMode ?? "bypassPermissions"),
               ...(ask ? { canUseTool } : {}),
               ...(!ask && (options.permissionMode ?? "bypassPermissions") === "bypassPermissions"

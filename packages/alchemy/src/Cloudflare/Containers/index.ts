@@ -24,3 +24,4 @@ export * from "./ContainerProvider.ts";
 export * from "./LocalContainerProvider.ts";
 export * from "./ContainerHarness.ts";
 export { Egress, type EgressHandler, isEgress } from "./Egress.ts";
+export { Harness, type HarnessOptions } from "./Harness.ts";
