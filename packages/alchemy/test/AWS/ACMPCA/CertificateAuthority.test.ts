@@ -1,4 +1,5 @@
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
+import * as ram from "@distilled.cloud/aws/ram";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -183,7 +184,30 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
       });
       expect(third.ca.certificateAuthorityArn).not.toBe(first.ca.certificateAuthorityArn);
       expect(third.permission.certificateAuthorityArn).toBe(third.ca.certificateAuthorityArn);
+      // The policy is replaced onto the new CA ...
+      expect(third.policy.certificateAuthorityArn).toBe(third.ca.certificateAuthorityArn);
+      const movedPolicy = yield* acmpca.getPolicy({
+        ResourceArn: third.ca.certificateAuthorityArn,
+      });
+      expect(movedPolicy.Policy).toContain(third.ca.certificateAuthorityArn);
       yield* assertCaDeleted(first.ca.certificateAuthorityArn);
+      // ... and detached from the old one before it was deleted, so the RAM
+      // share the policy spawned does not outlive it in the restore window.
+      const oldShares = yield* ram
+        .getResourceShareAssociations({
+          associationType: "RESOURCE",
+          resourceArn: first.ca.certificateAuthorityArn,
+          associationStatus: "ASSOCIATED",
+        })
+        .pipe(
+          Effect.map((r) => r.resourceShareAssociations ?? []),
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (associations) => associations.length === 0,
+            times: 10,
+          }),
+        );
+      expect(oldShares).toEqual([]);
 
       // 4. DESTROY — CA enters its restoration window (DELETED).
       yield* stack.destroy();

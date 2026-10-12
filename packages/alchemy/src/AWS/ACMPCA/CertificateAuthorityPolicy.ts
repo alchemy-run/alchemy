@@ -100,8 +100,12 @@ export const CertificateAuthorityPolicyProvider = () =>
       return {
         stables: ["certificateAuthorityArn"],
         diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          if (news.certificateAuthorityArn !== olds.certificateAuthorityArn) {
+          // The CA's ARN is stable across its updates, so an unresolved ARN
+          // means the CA is being replaced: the policy moves with it.
+          if (
+            !isResolved(news.certificateAuthorityArn) ||
+            news.certificateAuthorityArn !== olds.certificateAuthorityArn
+          ) {
             return { action: "replace" } as const;
           }
         }),
@@ -137,29 +141,9 @@ export const CertificateAuthorityPolicyProvider = () =>
             );
             return policies.flat();
           }),
-        reconcile: Effect.fn(function* ({ news, output, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const certificateAuthorityArn = news.certificateAuthorityArn;
           const desired = toDesired(news.policy);
-
-          // A replaced CA arrives here as an in-place update (the new ARN is
-          // an unresolved Output at plan time, so `diff` cannot see the
-          // move). Detach the policy from the previous CA first: a CA
-          // deleted with its policy attached keeps it — and the RAM share
-          // ("Resource Share From Policy Created by RAM") it spawned —
-          // for the whole restoration window.
-          if (
-            output?.certificateAuthorityArn !== undefined &&
-            output.certificateAuthorityArn !== certificateAuthorityArn
-          ) {
-            yield* acmpca
-              .deletePolicy({ ResourceArn: output.certificateAuthorityArn })
-              .pipe(
-                Effect.catchTag(
-                  ["ResourceNotFoundException", "InvalidStateException"],
-                  () => Effect.void,
-                ),
-              );
-          }
 
           // OBSERVE — putPolicy is an upsert; compare the canonicalized
           // live document against the canonicalized desired one so a
