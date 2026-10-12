@@ -61,6 +61,8 @@ export interface DurableObjectLike<Shape = any> {
   scriptName?: Input<string>;
   /** @internal phantom */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
+  /** @internal Durable Object-managed Containers attached to the class. */
+  containers?: ReadonlyArray<Container.Decl.Any>;
   /** @internal phantom */
   Shape?: Shape;
 }
@@ -264,6 +266,30 @@ export interface DurableObjectProps {
   // namespaceId?: string | undefined;
 }
 
+/**
+ * Props of an async Worker's Durable Object binding,
+ * `Cloudflare.DurableObject(className, props)` in `env`.
+ */
+export interface DurableObjectBindingProps extends DurableObjectProps {
+  /**
+   * Durable Object-managed Containers (`schedulingPolicy: "durable_object"`)
+   * this class starts. Each adds its image to the class's container
+   * application under the Container's id, read at runtime from
+   * `ctx.container.images`. A Container may be listed by several classes.
+   *
+   * Only for a plain (async) Durable Object class the Worker hosts.
+   * Effect-native Durable Objects `yield*` their Containers instead; listing
+   * Containers for one fails with `DurableObjectContainersOnEffectNativeClass`.
+   *
+   * ```typescript
+   * env: {
+   *   AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+   * }
+   * ```
+   */
+  containers?: ReadonlyArray<Container.Decl.Any> | undefined;
+}
+
 export interface DurableObjectClass extends Effect.Effect<DurableObject, never, DurableObject> {
   <Self, Shape>(): {
     <Name extends string>(
@@ -310,7 +336,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
       new (_: never): Shape;
     };
   };
-  <Shape>(name: string, props?: DurableObjectProps): DurableObjectLike<Shape>;
+  <Shape>(name: string, props?: DurableObjectBindingProps): DurableObjectLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
     impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq>,
@@ -1076,6 +1102,55 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * });
  * ```
  *
+ * ### Native Containers in an Async Worker
+ * A plain Durable Object class can start Durable Object-managed Containers
+ * (`schedulingPolicy: "durable_object"`). List them in its binding's
+ * `containers`: each adds its image to the class's container application,
+ * keyed by the Container's id in `ctx.container.images`. A Container may be
+ * shared by several classes.
+ *
+ * **Example:** Two classes, one shared image
+ * ```typescript
+ * const Node = Cloudflare.Container("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * });
+ * const Python = Cloudflare.Container("Python", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "python:3.13-slim",
+ * });
+ * const Rust = Cloudflare.Container("Rust", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "rust:1.90-slim",
+ * });
+ *
+ * export const Worker = Cloudflare.Worker("App", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+ *     REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [Node, Rust] }),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Starting a Container's image from the class
+ * ```typescript
+ * // src/worker.ts
+ * export class Agent extends DurableObject {
+ *   async run(cmd: string[]) {
+ *     const container = this.ctx.container!;
+ *     if (!container.running) {
+ *       container.start({
+ *         image: container.images.Node,
+ *         entrypoint: ["sleep", "infinity"],
+ *         enableInternet: false,
+ *       });
+ *     }
+ *     return (await container.exec(cmd)).output();
+ *   }
+ * }
+ * ```
+ *
  * ### Moving a Class Between Workers
  * A Durable Object class can move from one Worker to another with its
  * data intact. The move is always **declared** — a class that disappears
@@ -1357,6 +1432,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
         transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
+        containers: (args[1] as DurableObjectBindingProps)?.containers,
       };
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO

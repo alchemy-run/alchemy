@@ -19,7 +19,14 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
-import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
+import {
+  containerApplicationSettings,
+  DurableObjectContainerBindingError,
+  durableObjectContainerBinding,
+  isDurableObjectContainerResource,
+  workerContainerBinding,
+} from "../Containers/ContainerConfiguration.ts";
+import { declareDurableObjectApplication } from "../Containers/DurableObjectApplication.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -48,7 +55,11 @@ import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
-import { isDurableObjectLike, normalizeTransferredFrom } from "./DurableObject.ts";
+import {
+  type DurableObjectLike,
+  isDurableObjectLike,
+  normalizeTransferredFrom,
+} from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
@@ -264,8 +275,16 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           } satisfies WorkflowBinding;
         }
 
+        // Durable Object-managed Containers attached to a hosted class. Both
+        // halves describe this env entry, so they share its `sid`.
+        const containers =
+          isDurableObjectLike(binding) && binding.containers?.length
+            ? yield* bindDurableObjectContainers(resource, bindingName, binding)
+            : undefined;
+
         yield* resource.bind`${bindingName}`({
           bindings: [resolvedBindingMeta],
+          containers,
           hyperdrives: isHyperdriveConnection(binding)
             ? yield* getHyperdriveDevOriginForHost(binding, resource)
             : undefined,
@@ -317,8 +336,11 @@ const isContainerApplicationResource = (value: unknown): value is ContainerAppli
   (value as { Type?: unknown }).Type === "Cloudflare.Container";
 
 /**
- * Wire a Container bound directly on an async Worker's `env`
- * (`env: { Sandbox: Cloudflare.Container("Sandbox", { image }) }`). Mirrors
+ * Wire a fleet Container bound directly on an async Worker's `env`
+ * (`env: { Sandbox: Cloudflare.Container("Sandbox", { image }) }`). A
+ * Durable Object-managed Container fails with
+ * {@link DurableObjectContainerBindingError}: it attaches through
+ * `Cloudflare.DurableObject(className, { containers })` instead. Mirrors
  * v1 alchemy, where a Container binding is a Durable Object namespace plus
  * its ContainerApplication in one declaration:
  *
@@ -358,6 +380,14 @@ const bindContainerClass = Effect.fn(function* (
       `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
     );
   }
+  if (isDurableObjectContainerResource(application)) {
+    return yield* Effect.die(
+      new DurableObjectContainerBindingError({
+        bindingName,
+        message: `Worker binding '${bindingName}' is a Durable Object-managed Container ('${application.LogicalId}'). Attach it to the Durable Object class that starts it: env: { ${bindingName}: Cloudflare.DurableObject("${className}", { containers: [${application.LogicalId}] }) }.`,
+      }),
+    );
+  }
   // Both halves of the Worker's side describe the same env entry, so they
   // share one `sid`. Binding rows are collapsed by sid (last write wins), so
   // splitting them across two `bind` calls silently drops the namespace
@@ -382,6 +412,67 @@ const bindContainerClass = Effect.fn(function* (
       ),
     },
   });
+});
+
+/**
+ * Binding mistakes die with a {@link DurableObjectContainerBindingError}: the
+ * Worker declaration hook cannot fail, and these are programmer errors.
+ *
+ * Attach the Durable Object-managed Containers of
+ * `Cloudflare.DurableObject(className, { containers })` to the class: each
+ * adds its image to the class's one container application (declared once per
+ * class, deduped by id) and returns the Worker's `containers` row for it. The
+ * same machinery as an Effect-native Durable Object's `yield* Container`.
+ */
+const bindDurableObjectContainers = Effect.fn(function* (
+  resource: Worker,
+  bindingName: string,
+  binding: DurableObjectLike,
+) {
+  const className = binding.className ?? binding.name;
+  if (binding.scriptName !== undefined) {
+    return yield* Effect.die(
+      new DurableObjectContainerBindingError({
+        bindingName,
+        message: `Worker binding '${bindingName}' attaches containers to Durable Object class '${className}' hosted by another Worker. Attach containers where the class is hosted.`,
+      }),
+    );
+  }
+  const classApplication = yield* declareDurableObjectApplication(resource, className);
+  const namespaceId = resource.durableObjectNamespaces.pipe(
+    Output.map((namespaces) => namespaces?.[className]),
+  );
+  const rows = [];
+  for (const decl of binding.containers ?? []) {
+    const declaration = (decl as { Application?: unknown }).Application;
+    const application =
+      isYieldableEffectLike(declaration) && !Output.isOutput(declaration)
+        ? yield* declaration as Effect.Effect<unknown>
+        : undefined;
+    if (
+      !isContainerApplicationResource(application) ||
+      !isDurableObjectContainerResource(application)
+    ) {
+      return yield* Effect.die(
+        new DurableObjectContainerBindingError({
+          bindingName,
+          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (image, or context/dockerfile).`,
+        }),
+      );
+    }
+    yield* classApplication.bind`${application.LogicalId}`({
+      durableObjects: { namespaceId },
+      container: {
+        id: application.LogicalId,
+        settings: containerApplicationSettings(application),
+      },
+    });
+    rows.push({
+      ...durableObjectContainerBinding(className, classApplication, application),
+      attachedBy: "binding" as const,
+    });
+  }
+  return rows;
 });
 
 type BindingSpec = InputProps<WorkerBinding>;

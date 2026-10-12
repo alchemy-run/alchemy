@@ -127,11 +127,12 @@ function providerApiReferenceEntry(...providers: string[]) {
  */
 /**
  * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
- * Generated reference pages are edited through their JSDoc instead.
+ * Generated reference pages are edited through their JSDoc instead, and blog
+ * posts aren't editable (in-place editing breaks selecting and copying text).
  */
 const markdownCopy: MarkdownFilesOptions = {
   root: fileURLToPath(new URL(".", import.meta.url)),
-  exclude: /\/src\/content\/docs\/providers\//,
+  exclude: /\/src\/content\/docs\/(providers|blog)\//,
   style: JSDOC_COPY_STYLE,
 };
 
