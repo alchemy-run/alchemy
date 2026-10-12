@@ -91,9 +91,9 @@ test.provider(
 
 // Live JobRun (SparkPi from the EMR image itself — no S3 assets needed).
 // Starting the application and running the job bills real worker-seconds and
-// takes minutes, so it is gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-  "live Spark job run reaches SUCCESS (AWS_TEST_SLOW=1)",
+// takes minutes, so it is skipped under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
+  "live Spark job run reaches SUCCESS",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

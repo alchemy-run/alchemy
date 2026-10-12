@@ -5,7 +5,7 @@ import type { Collection } from "./Collection.ts";
 
 /**
  * Runtime binding for the `CreateIndex` operation scoped to one collection
- * (IAM action `aoss:APIAccessAll` on the collection ARN).
+ * (IAM actions `aoss:CreateIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
  * Creates an index in the bound {@link Collection} from inside a function
  * runtime — the control-plane path for the multi-tenant pattern where each

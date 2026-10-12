@@ -78,9 +78,9 @@ const assertGraphGone = (graphId: string) =>
 
 // A Neptune Analytics graph takes ~5-10 minutes to provision and bills per
 // m-NCU-hour (16 m-NCUs here) while it exists. The full lifecycle — graph +
-// Lambda running openCypher through the ExecuteQuery binding — is gated
-// behind AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// Lambda running openCypher through the ExecuteQuery binding — is skipped
+// under `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create graph, query it from Lambda via ExecuteQuery, destroy",
   (stack) =>
     Effect.gen(function* () {

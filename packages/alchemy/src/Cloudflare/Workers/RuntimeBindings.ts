@@ -36,6 +36,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import { isInstantNamespaceLocalId } from "../KV/InstantNamespaceLocal.ts";
 import { isLocalId } from "../LocalRuntime.ts";
 import { LOCAL_R2_S3_CREDENTIALS, LOCAL_R2_S3_PATH } from "../R2/LocalS3.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -127,7 +128,11 @@ export const toRuntimeBinding = Effect.fn(function* (
       // A `dev:` id belongs to a locally-emulated namespace; a real id is
       // a live namespace the dev worker proxies to.
       return isLocalId(b.namespaceId)
-        ? KvNamespace.local({ binding: b.name, id: b.namespaceId })
+        ? KvNamespace.local({
+            binding: b.name,
+            id: b.namespaceId,
+            mode: isInstantNamespaceLocalId(b.namespaceId) ? "instant" : undefined,
+          })
         : KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
       return MtlsCertificate.remote(b.name, b.certificateId);

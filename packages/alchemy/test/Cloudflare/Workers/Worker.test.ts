@@ -1478,8 +1478,9 @@ describe.concurrent(
     // of Workers binding each other's `url` resolves on the first deploy.
     // Worker A serves only on a custom domain (`workersDev: false`): its
     // precreate `url` must be the domain, not `undefined`.
-    const circularUrlZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-    test.provider.skipIf(!circularUrlZone)(
+    const circularUrlZone =
+      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+    test.provider(
       "circular Worker URL bindings resolve custom-domain and workers.dev URLs on the first deploy",
       (stack) =>
         Effect.gen(function* () {
@@ -1836,8 +1837,9 @@ describe.concurrent(
     // Ordering contract: the canonical custom domain leads `urls` (it is the
     // most significant URL), aliases follow in declared order, and the
     // workers.dev URL comes last. Swapping name and alias moves `url`.
-    const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-    test.provider.skipIf(!customDomainZone)(
+    const customDomainZone =
+      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+    test.provider(
       "custom domain outranks workers.dev in urls and selects url",
       (stack) =>
         Effect.gen(function* () {

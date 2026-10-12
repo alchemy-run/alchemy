@@ -102,70 +102,72 @@ export type GetBindingType<T> =
                       ? D1Database
                       : T extends R2.Bucket
                         ? R2Bucket
-                        : T extends KV.Namespace
-                          ? KVNamespace
-                          : T extends DispatchNamespaceResource
-                            ? DispatchNamespace
-                            : T extends Queues.Queue
-                              ? Queue<unknown>
-                              : T extends AI.Gateway
-                                ? Ai
-                                : T extends AIBinding
+                        : T extends KV.InstantNamespace
+                          ? KV.InstantNamespaceBindingClient
+                          : T extends KV.Namespace
+                            ? KVNamespace
+                            : T extends DispatchNamespaceResource
+                              ? DispatchNamespace
+                              : T extends Queues.Queue
+                                ? Queue<unknown>
+                                : T extends AI.Gateway
                                   ? Ai
-                                  : T extends AI.Search
-                                    ? AiSearchInstance
-                                    : T extends AI.SearchNamespace
-                                      ? AiSearchNamespace
-                                      : T extends Email.SendEmail
-                                        ? SendEmail
-                                        : T extends AnalyticsEngine.Dataset
-                                          ? AnalyticsEngineDataset
-                                          : T extends ArtifactsNs.Namespace
-                                            ? Artifacts
-                                            : T extends RateLimitBinding
-                                              ? RateLimit
-                                              : T extends SecretKeyBinding
-                                                ? CryptoKey
-                                                : T extends ImagesNs.ImagesBinding
-                                                  ? ImagesBinding
-                                                  : T extends BrowserBinding
-                                                    ? BrowserRun
-                                                    : // The ambient global `StreamBinding` from
-                                                      // @cloudflare/workers-types (the alchemy binding value
-                                                      // type of the same name is only reachable as
-                                                      // `StreamNs.StreamBinding`).
-                                                      T extends StreamNs.StreamBinding
-                                                      ? StreamBinding
-                                                      : T extends HyperdriveNs.Connection
-                                                        ? Hyperdrive
-                                                        : T extends VersionMetadataBinding
-                                                          ? WorkerVersionMetadata
-                                                          : T extends WorkerLoaderResource
-                                                            ? WorkerLoader
-                                                            : T extends
-                                                                  | WorkflowLike<infer Params>
-                                                                  | WorkflowBinding<infer Params>
-                                                              ? Workflow<Params>
-                                                              : T extends DurableObjectLike
-                                                                ? DurableObjectNamespace<
-                                                                    Exclude<T["Shape"], undefined>
-                                                                  >
-                                                                : T extends
-                                                                      | VpcService
-                                                                      | VpcServiceLookup
-                                                                      | MtlsCertificate
-                                                                  ? Fetcher
+                                  : T extends AIBinding
+                                    ? Ai
+                                    : T extends AI.Search
+                                      ? AiSearchInstance
+                                      : T extends AI.SearchNamespace
+                                        ? AiSearchNamespace
+                                        : T extends Email.SendEmail
+                                          ? SendEmail
+                                          : T extends AnalyticsEngine.Dataset
+                                            ? AnalyticsEngineDataset
+                                            : T extends ArtifactsNs.Namespace
+                                              ? Artifacts
+                                              : T extends RateLimitBinding
+                                                ? RateLimit
+                                                : T extends SecretKeyBinding
+                                                  ? CryptoKey
+                                                  : T extends ImagesNs.ImagesBinding
+                                                    ? ImagesBinding
+                                                    : T extends BrowserBinding
+                                                      ? BrowserRun
+                                                      : // The ambient global `StreamBinding` from
+                                                        // @cloudflare/workers-types (the alchemy binding value
+                                                        // type of the same name is only reachable as
+                                                        // `StreamNs.StreamBinding`).
+                                                        T extends StreamNs.StreamBinding
+                                                        ? StreamBinding
+                                                        : T extends HyperdriveNs.Connection
+                                                          ? Hyperdrive
+                                                          : T extends VersionMetadataBinding
+                                                            ? WorkerVersionMetadata
+                                                            : T extends WorkerLoaderResource
+                                                              ? WorkerLoader
+                                                              : T extends
+                                                                    | WorkflowLike<infer Params>
+                                                                    | WorkflowBinding<infer Params>
+                                                                ? Workflow<Params>
+                                                                : T extends DurableObjectLike
+                                                                  ? DurableObjectNamespace<
+                                                                      Exclude<T["Shape"], undefined>
+                                                                    >
                                                                   : T extends
-                                                                        | PipelinesNs.Stream
-                                                                        | PipelinesNs.LegacyPipeline
-                                                                    ? Pipeline
-                                                                    : T extends K2Ns.Stream
-                                                                      ? K2StreamBinding
-                                                                      : T extends Redacted<any>
-                                                                        ? // redacteds are always stored as secret_text, so are always string
-                                                                          // we JSON.stringify when not a Redacted<string>
-                                                                          string
-                                                                        : T;
+                                                                        | VpcService
+                                                                        | VpcServiceLookup
+                                                                        | MtlsCertificate
+                                                                    ? Fetcher
+                                                                    : T extends
+                                                                          | PipelinesNs.Stream
+                                                                          | PipelinesNs.LegacyPipeline
+                                                                      ? Pipeline
+                                                                      : T extends K2Ns.Stream
+                                                                        ? K2StreamBinding
+                                                                        : T extends Redacted<any>
+                                                                          ? // redacteds are always stored as secret_text, so are always string
+                                                                            // we JSON.stringify when not a Redacted<string>
+                                                                            string
+                                                                          : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

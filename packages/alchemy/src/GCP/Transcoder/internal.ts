@@ -158,6 +158,25 @@ export const getJobTemplate = (name: string) =>
         .getProjectsLocationsJobTemplates({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/**
+ * Wait (bounded) for a template we know exists — e.g. after a create
+ * reported ALREADY_EXISTS because a retried request had already
+ * succeeded — to become readable.
+ */
+export const waitUntilExists = (name: string) =>
+  getJobTemplate(name).pipe(
+    Effect.flatMap((template) =>
+      template !== undefined
+        ? Effect.succeed(template)
+        : Effect.fail(new JobTemplateNotResolved({ name })),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Transcoder.JobTemplateNotResolved",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
+  );
+
 export const waitUntilGone = (name: string) =>
   getJobTemplate(name).pipe(
     Effect.flatMap((template) =>

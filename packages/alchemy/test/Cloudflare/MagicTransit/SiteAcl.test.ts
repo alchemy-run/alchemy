@@ -13,8 +13,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Magic WAN sites (and their LANs / ACLs) are entitlement-gated. On the
 // standard testing account every site call fails with the typed
-// `MagicWanUnauthorized` error (Cloudflare code 1025) or `Forbidden` (403)
-// depending on token scope. The deploy path below is gated behind an
+// `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). The deploy path below is gated behind an
 // explicit opt-in env flag for entitled accounts; the read-only `list()`
 // assertion always runs because the provider maps those typed tags to `[]`.
 const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
@@ -22,7 +22,8 @@ const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
 // `list()` is a parent fan-out: it enumerates every Magic site (account
 // scope) then lists each site's ACLs. On an unentitled account both
 // `listSites` and `listSiteAcls` reject with the typed
-// `MagicWanUnauthorized` / `Forbidden` tags, which the provider swallows to
+// `MagicWanUnauthorized` /
+// `MagicWanNotEnabled` tags, which the provider swallows to
 // `[]` — so the read-only assertion is safe to run unconditionally. On an
 // entitled account (CLOUDFLARE_TEST_MAGIC_WAN=1) we deploy a site with two
 // LANs and an ACL, then assert the ACL shows up in the result.
@@ -101,7 +102,9 @@ test.provider(
 
       const canList = yield* magicTransit.listSites({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () => Effect.succeed(false)),
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
+          Effect.succeed(false),
+        ),
       );
       if (canList) {
         // Entitled account — the list test above covers real behavior.
@@ -111,7 +114,7 @@ test.provider(
 
       // The typed tag — not UnknownCloudflareError, not a status check.
       const error = yield* magicTransit.listSites({ accountId }).pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(error._tag);
 
       // Despite the gating, list() degrades to an empty array.
       const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteAcl);

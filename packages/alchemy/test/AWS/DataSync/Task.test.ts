@@ -141,8 +141,8 @@ test.provider(
 );
 
 // A live BASIC-mode task execution has 1–4 minutes of launch/prepare
-// overhead, so it is gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// overhead (~2.5 min observed), so it is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "live S3 -> S3 task execution transfers an object",
   (stack) =>
     Effect.gen(function* () {
