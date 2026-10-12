@@ -1435,7 +1435,7 @@ export const LiveContainerProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        precreate: Effect.fn(function* ({ id, news = {}, session }) {
+        precreate: Effect.fn(function* ({ id, news = {}, session, bindings = [] }) {
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, news.name);
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
@@ -1455,7 +1455,7 @@ export const LiveContainerProvider = () =>
               }),
               ...(yield* publishNamedImages(
                 id,
-                yield* withMainImage(news, [], makeContainerEnv(news, accountId)),
+                yield* withMainImage(news, bindings, makeContainerEnv(news, accountId, bindings)),
                 undefined,
                 session,
               )),

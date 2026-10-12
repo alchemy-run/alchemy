@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
 import {
   type Egress as ContainerEgress,
@@ -295,6 +296,44 @@ const pushedRefs = (body: Uint8Array) => {
   return refs;
 };
 
+/** A pkt-line: 4 hex digits of length (including themselves), then the payload. */
+const pktLine = (payload: Uint8Array | string) => {
+  const bytes = typeof payload === "string" ? new TextEncoder().encode(payload) : payload;
+  const out = new Uint8Array(bytes.length + 4);
+  out.set(new TextEncoder().encode((bytes.length + 4).toString(16).padStart(4, "0")));
+  out.set(bytes, 4);
+  return out;
+};
+
+const concat = (parts: ReadonlyArray<Uint8Array>) => {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+};
+
+/**
+ * Refuse a `git push` the way a git server does: a report-status that marks
+ * each ref rejected, so git prints `! [remote rejected] … (reason)`.
+ */
+const rejectPush = (refs: ReadonlyArray<string>, reason: string, sideband: boolean) => {
+  const report = concat([
+    pktLine("unpack ok\n"),
+    ...refs.map((ref) => pktLine(`ng ${ref} ${reason.replace(/\n/g, " ")}\n`)),
+    new TextEncoder().encode("0000"),
+  ]);
+  const body = sideband
+    ? concat([pktLine(concat([Uint8Array.of(1), report])), new TextEncoder().encode("0000")])
+    : report;
+  return HttpServerResponse.uint8Array(body, {
+    status: 200,
+    contentType: "application/x-git-receive-pack-result",
+  });
+};
+
 const bodyBytes = (request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function* () {
     const body = request.body;
@@ -542,6 +581,31 @@ export const Egress = (container: unknown, options: EgressOptions) =>
         return undefined;
       });
 
+    /**
+     * Refuse in the form the client shows: a GitHub API error for `gh`, a
+     * rejected ref for `git push`, plain text otherwise.
+     */
+    const refusal = (
+      request: HttpClientRequest.HttpClientRequest,
+      classified: Classified,
+      reason: string,
+    ) =>
+      Effect.gen(function* () {
+        const message = `alchemy egress: ${reason}`;
+        const url = new URL(request.url);
+        if (classified.kind === "repo" && classified.refs && classified.refs.length > 0) {
+          const first = new TextDecoder().decode(yield* bodyBytes(request)).split("\0")[1] ?? "";
+          return rejectPush(classified.refs, message, /side-band(-64k)?/.test(first));
+        }
+        if (API_HOSTS.includes(url.hostname)) {
+          return yield* HttpServerResponse.json(
+            { message, documentation_url: "https://alchemy.run" },
+            { status: 403 },
+          ).pipe(Effect.orDie);
+        }
+        return refuse(reason);
+      });
+
     /** Add the real token for the host the request goes to. */
     const authenticate = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.map(token, (key) => {
@@ -557,8 +621,9 @@ export const Egress = (container: unknown, options: EgressOptions) =>
       (scope: (Scope & { branch: string }) | undefined) =>
       (request: HttpClientRequest.HttpClientRequest) =>
         Effect.gen(function* () {
-          const reason = yield* authorize(yield* classify(request), scope);
-          if (reason !== undefined) return refuse(reason);
+          const classified = yield* classify(request);
+          const reason = yield* authorize(classified, scope);
+          if (reason !== undefined) return yield* refusal(request, classified, reason);
           return yield* authenticate(request);
         });
 

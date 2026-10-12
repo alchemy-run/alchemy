@@ -74,6 +74,7 @@ describe.each([
       `);
       expect(result.stdout, result.stderr).toContain("PUSH_AGENT_OK");
       expect(result.stdout).not.toContain("PUSH_MAIN_OK");
+      expect(result.stderr).toContain("[remote rejected]");
       expect(result.stderr).toContain("push to refs/heads/main is not allowed");
       expect(result.stdout).not.toContain("OTHER_REPO_OK");
       expect(result.stderr).toContain("cli/cli is not an allowed repository");
