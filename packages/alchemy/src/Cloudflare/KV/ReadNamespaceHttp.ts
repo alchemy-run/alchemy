@@ -7,7 +7,6 @@ import {
   makeHttpKVNamespaceBinding,
   makeKVAuth,
   makeKVHttpScope,
-  retryNamespacePropagation,
   toKVNamespaceError,
   type KVAuth,
 } from "./NamespaceHttp.ts";
@@ -44,7 +43,6 @@ export const makeReadKVHttpClient = (
           Effect.catchTag("KeyNotFound", () => Effect.succeed(null)),
         ),
       ),
-      Effect.retry(retryNamespacePropagation),
       Effect.mapError(toKVNamespaceError),
     );
 
@@ -60,7 +58,6 @@ export const makeReadKVHttpClient = (
           }),
         ),
       ),
-      Effect.retry(retryNamespacePropagation),
       Effect.mapError(toKVNamespaceError),
       Effect.map((res) => {
         const values = (res.values ?? {}) as Record<string, unknown>;
@@ -85,7 +82,6 @@ export const makeReadKVHttpClient = (
           ).pipe(Effect.catchTag(["KeyNotFound", "NamespaceNotFound"], () => Effect.succeed(null))),
         }),
       ),
-      Effect.retry(retryNamespacePropagation),
       Effect.mapError(toKVNamespaceError),
       Effect.map(({ value, metadata }) => ({
         value,
@@ -132,7 +128,6 @@ export const makeReadKVHttpClient = (
             }),
           ),
         ),
-        Effect.retry(retryNamespacePropagation),
         Effect.mapError(toKVNamespaceError),
         Effect.map((res) => {
           const keys = res.result.map((k) => ({
