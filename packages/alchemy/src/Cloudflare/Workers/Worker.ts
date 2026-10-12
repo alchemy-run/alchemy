@@ -83,6 +83,22 @@ export interface WorkerCache extends Exclude<
   undefined
 > {}
 
+/**
+ * Per-entrypoint settings for one of a Worker's exports, keyed in
+ * {@link WorkerProps.entrypoints} by export name.
+ */
+export interface WorkerEntrypointSettings {
+  /**
+   * Workers Cache override for this entrypoint. `enabled` replaces the
+   * Worker-wide `cache.enabled` for calls into this entrypoint only;
+   * `crossVersionCache` stays Worker-wide.
+   */
+  cache?: {
+    /** Whether Workers Cache is checked before invoking this entrypoint. */
+    enabled: boolean;
+  };
+}
+
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
 export type WorkerServices =
@@ -668,6 +684,24 @@ export interface WorkerProps<
    * @see https://blog.cloudflare.com/workers-cache/
    */
   cache?: WorkerCache;
+  /**
+   * Per-entrypoint settings, keyed by export name: `default` for the
+   * default export, or the class name of a named `WorkerEntrypoint`.
+   * Entrypoints you leave out inherit the Worker-wide settings.
+   *
+   * Today the only setting is `cache`: a per-entrypoint `cache.enabled`
+   * overrides the Worker-wide {@link cache} for that entrypoint. Workers
+   * Cache only applies to `fetch()` invocations (including loopback calls
+   * through `ctx.exports`); custom RPC methods always bypass it.
+   *
+   * Names must not collide with Durable Object classes hosted by this
+   * Worker.
+   *
+   * Previews upload their own settings, and the versions of a gradual
+   * rollout may differ. `alchemy dev` does not emulate Workers Cache:
+   * locally, every entrypoint runs on every request.
+   */
+  entrypoints?: Record<string, WorkerEntrypointSettings>;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -2268,6 +2302,41 @@ export const isSelf = (value: unknown): value is Self =>
  *     crossVersionCache: true,
  *   },
  * }
+ * ```
+ *
+ * **Example:** Caching one entrypoint behind an uncached gateway
+ * ```typescript
+ * // alchemy.run.ts
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   entrypoints: {
+ *     default: { cache: { enabled: false } },
+ *     Public: { cache: { enabled: true } },
+ *   },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // src/worker.ts
+ * import { WorkerEntrypoint } from "cloudflare:workers";
+ *
+ * export class Public extends WorkerEntrypoint {
+ *   async fetch() {
+ *     return new Response("hello", {
+ *       headers: { "Cache-Control": "public, max-age=300" },
+ *     });
+ *   }
+ * }
+ *
+ * export default {
+ *   // the gateway runs on every request, then forwards to the cached entrypoint
+ *   async fetch(request: Request, env: unknown, ctx: ExecutionContext) {
+ *     if (!request.headers.get("authorization")) {
+ *       return new Response("unauthorized", { status: 401 });
+ *     }
+ *     return ctx.exports.Public.fetch(request);
+ *   },
+ * };
  * ```
  *
  * ### Background Work & Scopes
