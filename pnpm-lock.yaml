@@ -2013,6 +2013,25 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
+  examples/cloudflare-hyperdrive-aws-vpc:
+    dependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261002.1
+        version: 5.20261002.1
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+
   examples/cloudflare-microvm-shell:
     dependencies:
       '@distilled.cloud/aws':
