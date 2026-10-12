@@ -67,10 +67,19 @@ test.provider(
 
               return Effect.fn(function* () {
                 const id = yield* instanceId;
+                // The namespace instance list is eventually consistent: right
+                // after create (especially under load) it can still come back
+                // without the new instance. Poll until it shows up — bounded,
+                // so a never-listed instance still fails the assertion below.
                 const list = yield* ns.list().pipe(
                   Effect.retry({
                     schedule: Schedule.exponential("500 millis"),
                     times: 6,
+                  }),
+                  Effect.repeat({
+                    schedule: Schedule.spaced("3 seconds"),
+                    until: (list) => list.result.some((i) => i.id === id),
+                    times: 15,
                   }),
                 );
                 const info = yield* ns
