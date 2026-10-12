@@ -3,17 +3,18 @@
 Many Claude Code agents behind one HTTP API, each in its own Cloudflare Container.
 
 ```
-HTTP ──▶ Worker ──▶ Agent (Durable Object, one per session) ──▶ Sandbox (Container)
-                     AI.SessionRpcs                              Claude Code
+HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ Sandbox (Container)
+                     AgentRpcs                                 Claude Code
 ```
 
-- `src/Sandbox.runtime.ts` — the container program. It mounts the repository (`GitHub.MountRepository`), and `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port.
-- `src/Agent.ts` — one Durable Object per session, serving the standard `AI.SessionRpcs` contract. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. `Cloudflare.Containers.Harness` keeps the session's history in the Durable Object and snapshots the container's filesystem when it shuts down.
+- `src/Sandbox.runtime.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port. The image holds only the toolchain.
+- `src/rpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
+- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. `Cloudflare.Containers.Harness` prepares the checkout once per image (clone, install, build — snapshotted, and every session starts from it), checkpoints the session's work into the Durable Object after every turn, and keeps its history there, so a session resumes on any container.
 - `src/worker.ts` — the HTTP API.
 
 ## Run it
 
-Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed and TypeScript built. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
+Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed (not type-checked: that needs ~17-20 GB, over a container's 12 GiB). The first session after a deploy prepares it (several minutes); later sessions start from the prepared snapshot. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...   # read by the Worker, never the container

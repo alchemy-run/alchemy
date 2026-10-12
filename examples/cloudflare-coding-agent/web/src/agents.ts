@@ -11,6 +11,7 @@ import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { useSyncExternalStore } from "react";
+import { AgentRpcs } from "../../src/rpcs.ts";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:1338";
 
@@ -19,7 +20,7 @@ const socketUrl = (id: string) =>
   `${API_URL.replace(/^http/, "ws")}/agents/${encodeURIComponent(id)}/rpc`;
 
 /**
- * An Effect RPC client for one session's `AI.SessionRpcs`. The socket
+ * An Effect RPC client for an issue's `AgentRpcs`. The socket
  * protocol is built into the caller's scope, so it lives as long as the
  * session view does (providing it around `RpcClient.make` alone would close
  * the socket as soon as the client is created).
@@ -34,7 +35,7 @@ const connect = (id: string) =>
         Layer.provide(Socket.layerWebSocketConstructorGlobal),
       ),
     );
-    return yield* RpcClient.make(AI.SessionRpcs).pipe(Effect.provideContext(protocol));
+    return yield* RpcClient.make(AgentRpcs).pipe(Effect.provideContext(protocol));
   });
 
 type Client = Effect.Success<ReturnType<typeof connect>>;
@@ -86,7 +87,7 @@ const open = (id: string, model: string | undefined) => {
   sessions.set(id, live);
   const program = Effect.gen(function* () {
     const client = yield* connect(id);
-    const info = yield* client.start(model ? { model } : {});
+    const info = yield* client.start(model ? { sessionId: id, model } : { sessionId: id });
     yield* Deferred.succeed(live.client, client);
     update(id, (s) => ({
       ...s,
@@ -94,7 +95,9 @@ const open = (id: string, model: string | undefined) => {
       error: undefined,
       transcript: { ...s.transcript, model: s.transcript.model ?? info.model },
     }));
-    yield* Stream.suspend(() => client.events({ after: live.snapshot.transcript.cursor })).pipe(
+    yield* Stream.suspend(() =>
+      client.events({ sessionId: id, after: live.snapshot.transcript.cursor }),
+    ).pipe(
       Stream.runForEach((event) =>
         Effect.sync(() =>
           update(id, (s) => ({ ...s, transcript: AI.reduceTranscript(s.transcript, event) })),
@@ -139,15 +142,15 @@ export const agents = {
   prompt: (id: string, text: string) => {
     const queued = !sessions.get(id)?.snapshot.connected;
     if (queued) update(id, (s) => ({ ...s, pending: [...s.pending, text] }));
-    return call(id, (c) => c.prompt({ prompt: text })).finally(() => {
+    return call(id, (c) => c.prompt({ sessionId: id, prompt: text })).finally(() => {
       if (queued) update(id, (s) => ({ ...s, pending: s.pending.filter((p) => p !== text) }));
     });
   },
-  steer: (id: string, text: string) => call(id, (c) => c.steer({ prompt: text })),
-  interrupt: (id: string) => call(id, (c) => c.interrupt()),
-  setModel: (id: string, model: string) => call(id, (c) => c.setModel({ model })),
+  steer: (id: string, text: string) => call(id, (c) => c.steer({ sessionId: id, prompt: text })),
+  interrupt: (id: string) => call(id, (c) => c.interrupt({ sessionId: id })),
+  setModel: (id: string, model: string) => call(id, (c) => c.setModel({ sessionId: id, model })),
   respond: (id: string, requestId: string, answer: AI.Answer) =>
-    call(id, (c) => c.respond({ requestId, answer })),
+    call(id, (c) => c.respond({ sessionId: id, requestId, answer })),
 };
 
 const subscribe = (listener: () => void) => {

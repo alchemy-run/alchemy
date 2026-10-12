@@ -24,9 +24,10 @@ const cors = {
  *   POST /agents/:id/model    { model }   switch models mid-session
  *   GET  /agents/:id                      session info (state, model, usage)
  *   GET  /agents/:id/events?after=N       server-sent events, resumable by cursor
- *   GET  /agents/:id/rpc                  `AI.SessionRpcs` over a WebSocket (Effect RPC)
+ *   GET  /agents/:id/rpc                  `AgentRpcs` over a WebSocket (Effect RPC)
  *
- * Each agent is its own Durable Object + container. For a browser, connect
+ * `:id` is the issue: each has its own Durable Object + container, and its
+ * session (here, one per issue) is named after it. For a browser, connect
  * straight to the DO over a hibernating WebSocket with `agents.fetch(id, request)`.
  */
 export default Cloudflare.Worker(
@@ -47,7 +48,7 @@ export default Cloudflare.Worker(
         const [, id, action] = match;
 
         if (action === "rpc") {
-          // Effect RPC (`AI.SessionRpcs`) over a hibernating WebSocket,
+          // Effect RPC (`AgentRpcs`) over a hibernating WebSocket,
           // straight to the session's Durable Object.
           return yield* agents.fetch(id!, request);
         }
@@ -59,7 +60,7 @@ export default Cloudflare.Worker(
           // The body is read after this handler returns, so the stream opens
           // (and owns) its own connection to the agent.
           const events = Stream.unwrap(
-            Effect.map(agents.getByName(id!), (agent) => agent.events({ after })),
+            Effect.map(agents.getByName(id!), (agent) => agent.events({ sessionId: id!, after })),
           ).pipe(Stream.scoped);
           return HttpServerResponse.stream(
             events.pipe(
@@ -72,26 +73,26 @@ export default Cloudflare.Worker(
         }
         const agent = yield* agents.getByName(id!);
         if (request.method === "GET" && action === undefined) {
-          return yield* HttpServerResponse.json(yield* agent.info());
+          return yield* HttpServerResponse.json(yield* agent.info({ sessionId: id! }));
         }
         if (action === "interrupt") {
-          yield* agent.interrupt();
+          yield* agent.interrupt({ sessionId: id! });
           return HttpServerResponse.empty({ status: 202 });
         }
         if (action === "model") {
           const { model } = (yield* request.json) as { model: string };
-          yield* agent.setModel({ model });
+          yield* agent.setModel({ sessionId: id!, model });
           return HttpServerResponse.empty({ status: 202 });
         }
         const { prompt } = (yield* request.json) as { prompt: string };
         if (action === "steer") {
-          yield* agent.steer({ prompt });
+          yield* agent.steer({ sessionId: id!, prompt });
           return HttpServerResponse.empty({ status: 202 });
         }
-        yield* agent.start({});
-        const turn = yield* agent.prompt({ prompt });
+        yield* agent.start({ sessionId: id! });
+        const turn = yield* agent.prompt({ sessionId: id!, prompt });
         if (url.searchParams.get("wait") === "false") return yield* HttpServerResponse.json(turn);
-        const result = yield* agent.result({ turnId: turn.turnId });
+        const result = yield* agent.result({ sessionId: id!, turnId: turn.turnId });
         return yield* HttpServerResponse.json(result);
       }).pipe(
         Effect.scoped,
