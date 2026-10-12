@@ -16,9 +16,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // ungated probes assert the typed not-found errors the provider's read/delete
 // paths depend on, and the typed closed-to-new-customers rejection. The full
 // lifecycle (an index takes ~20-30 minutes to provision and bills hourly once
-// ACTIVE) is gated behind AWS_TEST_SLOW=1 AND AWS_TEST_KENDRA=1 for an
+// ACTIVE) skipped under `--fast` AND AWS_TEST_KENDRA=1 for an
 // account that is still an existing Kendra customer.
-const kendraLifecycleGated = !process.env.AWS_TEST_SLOW || !process.env.AWS_TEST_KENDRA;
+const kendraLifecycleGated = !!process.env.FAST || !process.env.AWS_TEST_KENDRA;
 describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "live"] }, () => {
   test.provider(
     "describeIndex on a nonexistent id yields a typed ResourceNotFoundException",

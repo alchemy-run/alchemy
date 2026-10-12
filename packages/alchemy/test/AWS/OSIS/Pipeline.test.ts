@@ -93,9 +93,9 @@ const assertPipelineDeleting = (name: string) =>
 
 // OSIS pipelines take ~5-10 minutes to provision and are billed per
 // Ingestion-OCU-hour while they exist (minimum 1 OCU). The full lifecycle —
-// pipeline + resource policy + VPC pipeline endpoint — is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// pipeline + resource policy + VPC pipeline endpoint — is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create http-to-s3 pipeline with resource policy and VPC endpoint, verify, destroy",
   (stack) =>
     Effect.gen(function* () {

@@ -66,11 +66,11 @@ const assertConfigGone = (name: string) =>
   );
 
 // App Runner service provisioning takes 3-5+ minutes and the service bills
-// while it runs, so the full lifecycle is gated behind AWS_TEST_SLOW=1 and
+// while it runs, so the full lifecycle is skipped under `--fast` and
 // always destroys what it created. The source is a public ECR gallery
 // image (ECR_PUBLIC), which needs no access role, no local Docker build,
 // and no private repository.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create a public-ECR service with custom scaling, verify it serves, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
@@ -146,7 +146,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 // auto-created log groups in place. Uses the same public ECR gallery image
 // as the lifecycle test above (no access role, no Docker build) since all
 // this needs is a real service that has logged something.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "retainLogGroups keeps the auto-created log groups after the service is destroyed",
   (stack) =>
     Effect.gen(function* () {

@@ -164,7 +164,7 @@ describe.sequential(
 // Data-plane binding (Connect + mongo) needs a real DocumentDB cluster +
 // instance (~15 min to provision, billed per instance-hour) and a Secrets
 // Manager VPC interface endpoint (the VPC-attached Lambda has no internet
-// path; deployed and destroyed with the stack) — gated behind AWS_TEST_SLOW=1
+// path; deployed and destroyed with the stack) — skipped under `--fast`
 // like the DBCluster lifecycle test.
 // ---------------------------------------------------------------------------
 
@@ -201,7 +201,7 @@ const defaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.vpcId, subnetIds, securityGroupIds: [securityGroupId] };
 });
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "connect + mongo data plane against a live cluster",
   () =>
     Effect.gen(function* () {

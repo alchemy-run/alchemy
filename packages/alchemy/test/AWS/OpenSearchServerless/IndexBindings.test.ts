@@ -37,10 +37,10 @@ const drive = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 // Collections have a real-money OCU floor and take ~1-5 min to provision, so
-// the index bindings (aoss:{Create,Get,Update,Delete}Index + APIAccessAll) are gated behind
-// AWS_TEST_SLOW=1, destroy IMMEDIATELY, and verify the collection is gone.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-  "index bindings roundtrip against a live collection (AWS_TEST_SLOW=1)",
+// the index bindings (aoss:{Create,Get,Update,Delete}Index + APIAccessAll) are skipped under
+// `--fast`, destroy IMMEDIATELY, and verify the collection is gone.
+test.provider.skipIf(!!process.env.FAST)(
+  "index bindings roundtrip against a live collection",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight. Set

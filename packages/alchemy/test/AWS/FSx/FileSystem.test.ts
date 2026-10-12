@@ -33,7 +33,7 @@ const describeById = (fileSystemId: string) =>
   );
 
 // FSx create → AVAILABLE takes ~5 minutes; slow polling is allowed only
-// because the whole lifecycle is gated behind AWS_TEST_SLOW=1.
+// because the whole lifecycle is skipped under `--fast`.
 const waitUntilAvailable = (fileSystemId: string) =>
   describeById(fileSystemId).pipe(
     Effect.repeat({
@@ -56,9 +56,9 @@ const fsxTags = (tags: readonly fsx.Tag[] | undefined) =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 // A Lustre SCRATCH_2 file system takes several minutes to provision and a few
-// more to delete (and bills hourly while up), so the live lifecycle is gated
-// behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// more to delete (and bills hourly while up), so the live lifecycle is skipped
+// under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
   "create Lustre scratch file system, update tags, delete",
   (stack) =>
     Effect.gen(function* () {

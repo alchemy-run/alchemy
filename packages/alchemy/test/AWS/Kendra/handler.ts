@@ -30,7 +30,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 /**
  * Index-scoped binding fixture: deploys a real Developer-edition Kendra
  * index (~20-30 minutes to provision, billed while it exists; Kendra is
- * closed to new customers — gated behind AWS_TEST_SLOW + AWS_TEST_KENDRA) plus an S3 data source and a Lambda bound to all
+ * closed to new customers — skipped under `--fast` + AWS_TEST_KENDRA) plus an S3 data source and a Lambda bound to all
  * twenty-three Kendra bindings.
  */
 export default KendraTestFunction.make(

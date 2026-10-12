@@ -42,8 +42,8 @@ describe.sequential(
     // AWS requires a thing type to remain deprecated for at least five minutes
     // before deletion. The provider fully waits for observable absence, so this
     // lifecycle is intentionally outside the default fast sweep; enable it for
-    // the slow lane with AWS_TEST_SLOW=1.
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    // the slow lane (skipped under `--fast`).
+    test.provider.skipIf(!!process.env.FAST)(
       "creates a thing type, associates a thing, and deletes it",
       (stack) =>
         Effect.gen(function* () {

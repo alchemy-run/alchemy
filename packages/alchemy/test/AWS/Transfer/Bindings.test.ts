@@ -165,10 +165,10 @@ describe.sequential(
 );
 
 // A running Transfer server is billed hourly and takes minutes to reach
-// ONLINE, so the server/user-scoped binding lifecycle is gated behind
-// AWS_TEST_SLOW=1 (same gate as Server.test.ts) and always destroys what it
+// ONLINE, so the server/user-scoped binding lifecycle is skipped under
+// `--fast` (same gate as Server.test.ts) and always destroys what it
 // created.
-describe.runIf(!!process.env.AWS_TEST_SLOW)(
+describe.runIf(!process.env.FAST)(
   "Transfer server bindings (slow)",
   {
     tags: [
@@ -269,7 +269,7 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
 
     // A stop/offline/start transition adds several minutes beyond the already
     // slow server provisioning lifecycle. Keep it separately opt-in so the
-    // standard AWS_TEST_SLOW lane remains below the hard 240-second wall.
+    // standard slow lane remains below the hard 240-second wall.
     test.provider.skipIf(!process.env.AWS_TEST_TRANSFER_TRANSITIONS)(
       "stops and restarts the bound server (extra slow)",
       (_stack) =>

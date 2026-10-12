@@ -14,9 +14,9 @@ const sharedStack = Core.scratchStack(testOptions, "RedshiftDataBindings");
 let baseUrl: string;
 
 // The whole flagship suite deploys a Redshift Serverless namespace + workgroup
-// (a real-money RPU floor while it exists) plus a Lambda, so it is gated behind
-// AWS_TEST_SLOW=1 and destroys everything in afterAll.
-describe.skipIf(!process.env.AWS_TEST_SLOW)(
+// (a real-money RPU floor while it exists) plus a Lambda, so it is skipped under
+// `--fast` and destroys everything in afterAll.
+describe.skipIf(!!process.env.FAST)(
   "RedshiftData Bindings",
   {
     tags: [

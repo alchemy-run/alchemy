@@ -227,8 +227,8 @@ describe(
       // The full RUNNABLE→STARTING→SUCCEEDED round-trip takes 1-3 minutes of
       // Fargate provisioning (~50s when capacity is free) but has been observed
       // stuck in RUNNABLE for >7 minutes under concurrent Batch load
-      // (2026-10-09), so it stays gated behind AWS_TEST_SLOW=1.
-      test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+      // (2026-10-09), so it stays skipped under `--fast`.
+      test.provider.skipIf(!!process.env.FAST)(
         "submitted echo job runs to SUCCEEDED",
         () =>
           Effect.gen(function* () {

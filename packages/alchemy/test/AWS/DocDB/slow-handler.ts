@@ -46,7 +46,7 @@ export class DocDBSlowTestFunction extends Lambda.Function<Lambda.Function>()(
 
 /**
  * Data-plane fixture: deploys a real DocumentDB cluster + instance
- * (~10-15 minutes, billed per instance-hour — gated behind AWS_TEST_SLOW)
+ * (~10-15 minutes, billed per instance-hour — skipped under `--fast`)
  * and a VPC-attached Lambda bound with Connect + the mongo Effect client.
  */
 export default DocDBSlowTestFunction.make(

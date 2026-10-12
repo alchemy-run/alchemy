@@ -40,9 +40,9 @@ const findInstance = (identifier: string) =>
     );
 
 // A replication instance takes ~6-10 minutes to provision, a similar time to
-// delete, and is billed hourly while it exists. The full lifecycle is gated
-// behind AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// delete, and is billed hourly while it exists. The full lifecycle is skipped
+// under `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create replication instance in a subnet group, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

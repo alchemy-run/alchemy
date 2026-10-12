@@ -22,7 +22,7 @@ export class ElastiCacheBindingsTestFunction extends Lambda.Function<Lambda.Func
  * AccessDeniedException and fail the route with an opaque 500.
  *
  * The cache-scoped `CreateServerlessCacheSnapshot` binding needs a live
- * cache and is exercised by the AWS_TEST_SLOW-gated lifecycle fixture
+ * cache and is exercised by the slow (skipped under `--fast`) lifecycle fixture
  * instead.
  */
 export default ElastiCacheBindingsTestFunction.make(

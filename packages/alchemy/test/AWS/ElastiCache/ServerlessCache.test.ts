@@ -54,9 +54,9 @@ const deleteSnapshot = (name: string) =>
 
 // Serverless caches take ~1-3 minutes to provision and a similar time to
 // delete, and are metered (with a monthly floor) while they exist. The full
-// lifecycle is therefore gated behind AWS_TEST_SLOW=1 and runs as a single
+// lifecycle is therefore skipped under `--fast` and runs as a single
 // sequential test that always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create serverless cache, bind Connect env, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

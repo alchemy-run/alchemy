@@ -111,9 +111,9 @@ test.provider(
 );
 
 // A live crawl takes ~1-4 minutes end to end, but under concurrent load it
-// has not reached SUCCEEDED within 5 minutes (2026-10-09) — gated behind
-// AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// has not reached SUCCEEDED within 5 minutes (2026-10-09) — skipped under
+// `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
   "run a live crawl that populates the catalog",
   (stack) =>
     Effect.gen(function* () {

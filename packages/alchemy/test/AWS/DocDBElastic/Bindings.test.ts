@@ -199,7 +199,7 @@ describe.sequential(
 // ---------------------------------------------------------------------------
 // Cluster-scoped bindings (CreateClusterSnapshot, StopCluster, StartCluster)
 // need a real elastic cluster (~10 min to provision, billed per
-// shard-vCPU-hour) — gated behind AWS_TEST_SLOW=1 like the Cluster lifecycle
+// shard-vCPU-hour) — skipped under `--fast` like the Cluster lifecycle
 // test.
 // ---------------------------------------------------------------------------
 
@@ -265,7 +265,7 @@ const deleteSnapshotsNamed = (name: string) =>
     ),
   );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "snapshot + stop + start bindings against a live elastic cluster",
   () =>
     Effect.gen(function* () {

@@ -117,9 +117,9 @@ const assertClusterDeleting = (identifier: string) =>
   );
 
 // A Neptune cluster + instance take ~15-30 minutes to provision and bill per
-// instance-hour while they exist. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// instance-hour while they exist. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create Neptune cluster + serverless instance, verify, destroy",
   (stack) =>
     Effect.gen(function* () {

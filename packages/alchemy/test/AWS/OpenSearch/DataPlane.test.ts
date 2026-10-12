@@ -46,9 +46,9 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 // The fixture provisions a real OpenSearch domain (~15-25 minutes, billed
-// per instance-hour) — gated behind AWS_TEST_SLOW=1 like the Domain
+// per instance-hour) — skipped under `--fast` like the Domain
 // lifecycle test. The suite stays skip-clean without the flag.
-const describeGated = process.env.AWS_TEST_SLOW ? describe.sequential : describe.skip;
+const describeGated = !process.env.FAST ? describe.sequential : describe.skip;
 
 describeGated("OpenSearch Data Plane", () => {
   beforeAll(

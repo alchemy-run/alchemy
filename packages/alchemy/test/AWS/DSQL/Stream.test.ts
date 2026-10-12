@@ -19,12 +19,12 @@ class StreamStillPresent extends Data.TaggedError("StreamStillPresent")<{
   readonly status: string;
 }> {}
 
-// Gated behind AWS_TEST_SLOW: a DSQL CDC stream transitions
+// Skipped under `--fast`: a DSQL CDC stream transitions
 // CREATING -> ACTIVE in one to three minutes (AWS docs), which is beyond the
 // ~90s async-provisioning budget for the always-on suite. The full lifecycle
 // (cluster + Kinesis target + IAM service role + stream + destroy) measures
 // ~5-7 minutes wall.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and delete a DSQL CDC stream into Kinesis",
   (stack) =>
     Effect.gen(function* () {

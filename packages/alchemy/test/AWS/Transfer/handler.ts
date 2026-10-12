@@ -30,7 +30,7 @@ const trustPolicy = {
 };
 
 /**
- * Full (AWS_TEST_SLOW-gated) fixture: a real SFTP server + service-managed
+ * Full (slow (skipped under `--fast`)) fixture: a real SFTP server + service-managed
  * user with every server/user-scoped Transfer binding attached.
  */
 export class TransferTestFunction extends Lambda.Function<Lambda.Function>()(

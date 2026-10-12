@@ -269,13 +269,13 @@ describe(
 // customers. For more information, see
 // https://docs.aws.amazon.com/kendra/latest/dg/kendra-availability-change.html",
 // typed KendraClosedToNewCustomers — probed in SearchIndex.test.ts), so this
-// is gated behind AWS_TEST_SLOW=1 AND AWS_TEST_KENDRA=1 (same gate as the
+// skipped under `--fast` AND AWS_TEST_KENDRA=1 (same gate as the
 // Index lifecycle test) and always destroys what it created.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "KendraBindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !process.env.AWS_TEST_KENDRA)(
+test.provider.skipIf(!!process.env.FAST || !process.env.AWS_TEST_KENDRA)(
   "all bindings against a live index + data source",
   () =>
     Effect.gen(function* () {

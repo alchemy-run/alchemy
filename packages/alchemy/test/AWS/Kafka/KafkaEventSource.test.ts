@@ -17,7 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // The MSK Serverless cluster this test provisions takes ~5-10 minutes to
 // create and is metered while it exists, so the whole event-source e2e is
-// gated behind AWS_TEST_SLOW=1. It deploys a cluster + a Lambda that binds
+// skipped under `--fast`. It deploys a cluster + a Lambda that binds
 // `consumeKafkaTopic`, then verifies the event source mapping was created and
 // points at the cluster with the configured topic. (A full produce/consume
 // roundtrip additionally requires a Kafka admin/producer with MSK IAM auth to
@@ -28,7 +28,7 @@ describe.sequential(
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kafka", "provider:aws:lambda", "live"],
   },
   () => {
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    test.provider.skipIf(!!process.env.FAST)(
       "creates an event source mapping pointing a Lambda at the cluster topic",
       (stack) =>
         Effect.gen(function* () {

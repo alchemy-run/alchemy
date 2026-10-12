@@ -53,7 +53,7 @@ const defaultNetwork = Effect.gen(function* () {
 // timestream-influxdb IS accessible (unlike Timestream LiveAnalytics), but
 // provisioning a DB instance takes ~15–20 minutes and is EC2-backed/costly.
 // The ungated probe asserts the distilled wiring produces a typed error; the
-// full lifecycle is gated behind AWS_TEST_SLOW=1.
+// full lifecycle is skipped under `--fast`.
 describe(
   "AWS.Timestream.DbInstance",
   { tags: ["provider:aws", "provider:aws:timestream", "live"] },
@@ -74,7 +74,7 @@ describe(
       { timeout: 60_000 },
     );
 
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    test.provider.skipIf(!!process.env.FAST)(
       "create, wait, and delete an InfluxDB instance",
       (stack) =>
         Effect.gen(function* () {
