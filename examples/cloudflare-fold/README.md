@@ -1,6 +1,8 @@
 # cloudflare-fold
 
-A bank built with `alchemy/Fold`: aggregates, views, policies and ports declared as pure, typed definitions, exposed through two Apis, and hosted on Cloudflare Durable Objects.
+A bank built with `alchemy/Fold`: aggregates, views, policies and ports declared as pure, typed definitions, exposed through two Apis, hosted on Cloudflare Durable Objects, and driven from a foldkit app.
+
+An Api exposes commands (writes) and views and aggregates (reads). Each one is a security boundary: its middleware authenticates the caller, and its `decide` or `validate` decides what that caller may do or see.
 
 ## Commands
 
@@ -10,7 +12,7 @@ A command lives in its own file with the events it records and the rejections on
 // src/Customer/RegisterCustomer.ts
 import { Command, Event, Rejection } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
-import { CustomerSession } from "../CustomerApi/CustomerSession.ts";
+import { Session } from "../Session.ts";
 import { CustomerId } from "./CustomerId.ts";
 import { Username } from "./Username.ts";
 
@@ -32,13 +34,61 @@ export class RegistrationRequested extends Event.make("RegistrationRequested", {
  */
 export class RegisterCustomer extends Command.make("RegisterCustomer", {
   target: CustomerId,
+  middleware: [Session],
   input: { name: Schema.String, username: Username },
   events: [RegistrationRequested],
   rejects: [AlreadyRegistered, NotTheCustomer],
-}).middleware(CustomerSession) {}
+}) {}
 ```
 
-The aggregate implements it. `decide` reads the context the command's middleware provides, and authorizes against the current state. Registration is a small saga (see [Consistency](#consistency)), so `Customer` also handles the commands that confirm or reject it:
+`Session` provides `CurrentActor`, a customer or a support agent, from the request's token:
+
+```ts
+// src/Session.ts
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import { agent, customer } from "./Actor.ts";
+import { CurrentActor } from "./CurrentActor.ts";
+import { Unauthorized } from "./Unauthorized.ts";
+
+/**
+ * Authenticates a request, from a customer or a support agent, and provides
+ * who is making it as the {@link CurrentActor}. Authorization is up to each
+ * command's `decide` and each view's `validate`.
+ */
+export class Session extends RpcMiddleware.Service<Session, { provides: CurrentActor }>()(
+  "Bank/Session",
+  { error: Unauthorized, requiredForClient: true },
+) {}
+
+/**
+ * Demo verifier: accepts `Authorization: Bearer customer:<id>` or
+ * `Authorization: Bearer agent:<id>`. In production, verify a session cookie
+ * for customers and a Cloudflare Access JWT for agents.
+ */
+export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
+  Option.match(Headers.get(headers, "authorization"), {
+    onNone: () => Effect.fail(new Unauthorized()),
+    onSome: (value) => {
+      const match = /^Bearer (customer|agent):(.+)$/.exec(value);
+      if (!match) return Effect.fail(new Unauthorized());
+      const actor = match[1] === "customer" ? customer(match[2]!) : agent(match[2]!);
+      return Effect.provideService(effect, CurrentActor, actor);
+    },
+  }),
+);
+
+/** Client side: send this token with every request. */
+export const sessionClient = (token: string) =>
+  RpcMiddleware.layerClient(Session, ({ request, next }) =>
+    next({ ...request, headers: Headers.set(request.headers, "authorization", `Bearer ${token}`) }),
+  );
+```
+
+The aggregate implements the command. `decide` reads what the command's middleware provides and authorizes against the current state:
 
 ```ts
 // src/Customer/Customer.ts
@@ -103,9 +153,298 @@ export class Customer extends Aggregate.make("Customer", {
 }) {}
 ```
 
-`CurrentActor` is a `Command.Context`: a service with a schema, so its value travels with the command to the aggregate's Durable Object. `CustomerSession` provides a customer, `SupportAgentSession` an agent, and policies provide the system (`Effect.provideService(CurrentActor, system("FraudReview"))`). A `decide` can only read what its command's middleware provides, and `send` requires it, so a policy that forgets is a type error.
+## Views
 
-An Api exposes commands directly next to its queries and subscriptions; see [`CustomerApi.ts`](src/CustomerApi/CustomerApi.ts). Only the reads have handler Layers.
+A view folds events into state per key, and is a security boundary like a command. `validate` judges every read from who is asking, the key and that key's state; it runs on every `get` and `list`, and on every change while a client watches. Filters a client sends only narrow what a permitted read returns. To show an audience different data, make another view.
+
+```ts
+// src/Account/AccountSummary.ts
+import { View } from "alchemy/Fold";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { CustomerId } from "../Customer/CustomerId.ts";
+import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
+import { Account } from "./Account.ts";
+import { mustOwn } from "./mustOwn.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+const setBalance = <V extends { balance: number }>(
+  v: V,
+  e: { readonly balanceAfter: number },
+): V => ({
+  ...v,
+  balance: e.balanceAfter,
+});
+
+/**
+ * The current balance and status of one account. It declares no events, so
+ * it emits every event it applies, each with the summary after it.
+ */
+export class AccountSummary extends View.make("AccountSummary", {
+  from: [Account],
+  key: Account,
+  middleware: [Session],
+  rejects: [NotOwner],
+  state: Schema.Struct({
+    customerId: Schema.NullOr(CustomerId),
+    owner: Schema.NullOr(Schema.String),
+    balance: Cents,
+    frozen: Schema.Boolean,
+    closed: Schema.Boolean,
+  }),
+  initial: { customerId: null, owner: null, balance: 0, frozen: false, closed: false },
+  evolve: {
+    AccountOpened: (v, e) => ({ ...v, customerId: e.customerId, owner: e.owner }),
+    OwnerChanged: (v, e) => ({ ...v, customerId: e.customerId }),
+    MoneyDeposited: setBalance,
+    MoneyWithdrawn: setBalance,
+    TransferDebited: setBalance,
+    TransferCredited: setBalance,
+    TransferRefunded: setBalance,
+    SettlementReceived: setBalance,
+    AccountFrozen: (v) => ({ ...v, frozen: true }),
+    AccountClosed: (v) => ({ ...v, closed: true }),
+  },
+  // Re-run on every change while watched: a reassigned account ends the watch with NotOwner.
+  validate: Effect.fn(function* (_request, summary) {
+    yield* mustOwn(summary?.customerId ?? null);
+  }),
+}) {}
+```
+
+The rule is shared with the `Account` aggregate's `read` contract and the other account views:
+
+```ts
+// src/Account/mustOwn.ts
+import * as Effect from "effect/Effect";
+import { CurrentActor } from "../CurrentActor.ts";
+import type { CustomerId } from "../Customer/CustomerId.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+/**
+ * Who may read an account's data: any agent, or the customer who owns the
+ * account right now. An account that doesn't exist yet reads as empty, so a
+ * client can watch for it to appear; someone else's is rejected.
+ */
+export const mustOwn = Effect.fn(function* (owner: CustomerId | null) {
+  const actor = yield* CurrentActor;
+  if (actor._tag === "Agent" || owner === null) return;
+  if (actor._tag !== "Customer" || owner !== actor.customerId) return yield* new NotOwner();
+});
+```
+
+## The Api
+
+Nothing in an Api needs a handler: aggregates implement commands and the Domain hosts views.
+
+```ts
+// src/CustomerApi/CustomerApi.ts
+import { Api } from "alchemy/Fold";
+import { Account } from "../Account/Account.ts";
+import { AccountSummary } from "../Account/AccountSummary.ts";
+import { CloseAccount } from "../Account/CloseAccount.ts";
+import { DepositMoney } from "../Account/DepositMoney.ts";
+import { Statement } from "../Account/Statement.ts";
+import { WithdrawMoney } from "../Account/WithdrawMoney.ts";
+import { CustomerDashboard } from "../Customer/CustomerDashboard.ts";
+import { RegisterCustomer } from "../Customer/RegisterCustomer.ts";
+import { AccountTransfers } from "../Transfer/AccountTransfers.ts";
+import { RequestTransfer } from "../Transfer/RequestTransfer.ts";
+import { TransferStatus } from "../Transfer/TransferStatus.ts";
+
+/**
+ * What the customer app reaches: commands to change things, and the Account
+ * aggregate and views to read and watch. Each entry authorizes itself,
+ * through its `decide` or `validate`.
+ */
+export class CustomerApi extends Api.make(
+  "CustomerApi",
+  RegisterCustomer,
+  DepositMoney,
+  WithdrawMoney,
+  CloseAccount,
+  RequestTransfer,
+  Account,
+  CustomerDashboard,
+  AccountSummary,
+  Statement,
+  AccountTransfers,
+  TransferStatus,
+) {}
+```
+
+A client gets commands as methods and views and aggregates as namespaces: `bank.DepositMoney({ target, amount })`, `bank.AccountSummary.watch(accountId)`, `bank.Statement.list(accountId, { order: "desc" })`, `bank.Account.events(accountId)`.
+
+## A foldkit app
+
+The app's Commands run Fold commands, and its Subscriptions watch a view's snapshots and another's events. The client is a foldkit resource, provided once in [`web/entry.ts`](web/entry.ts).
+
+```ts
+// web/Bank.ts
+import type { Api } from "alchemy/Fold";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Command, Subscription, type Update } from "foldkit";
+import type { Document, HtmlBuilder } from "foldkit/html";
+import { defineMessageUnion } from "foldkit/message";
+import { AccountId, mainAccountId } from "../src/Account/AccountId.ts";
+import { StatementLine } from "../src/Account/Statement.ts";
+import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
+
+/** The bank client this app runs on, provided by the `resources` Layer in `entry.ts`. */
+type Bank = Api.ClientKey<"CustomerApi">;
+
+/** The demo MFA code `MfaChallenge` accepts. */
+const mfa = { headers: { "x-mfa-code": "000000" } };
+
+// FLAGS: who is signed in, handed over when the app boots.
+
+export const Flags = Schema.Struct({ customerId: CustomerId });
+export type Flags = typeof Flags.Type;
+
+// MODEL
+
+export const Model = Schema.Struct({
+  accountId: AccountId,
+  balance: Schema.NullOr(Schema.Number),
+  lines: Schema.Array(StatementLine),
+  error: Schema.NullOr(Schema.String),
+});
+export type Model = typeof Model.Type;
+
+// MESSAGE
+
+export const Message = defineMessageUnion({
+  ClickedDeposit: {},
+  ClickedWithdraw: {},
+  SucceededCommand: { balance: Schema.Number },
+  FailedCommand: { reason: Schema.String },
+  GotBalance: { balance: Schema.NullOr(Schema.Number) },
+  GotLine: { line: StatementLine },
+  FailedWatch: { reason: Schema.String },
+});
+export type Message = typeof Message.Type;
+
+// COMMANDS: each runs one Fold command over the app's connection.
+
+export const Deposit = Command.define("Deposit", {
+  args: { accountId: AccountId, amount: Schema.Number },
+  messages: [Message.SucceededCommand, Message.FailedCommand],
+  execute: ({ accountId, amount }) =>
+    Effect.gen(function* () {
+      const bank = yield* CustomerApi.Client;
+      const { reply } = yield* bank.DepositMoney({ target: accountId, amount });
+      return Message.SucceededCommand({ balance: reply.balance });
+    }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
+});
+
+export const Withdraw = Command.define("Withdraw", {
+  args: { accountId: AccountId, amount: Schema.Number },
+  messages: [Message.SucceededCommand, Message.FailedCommand],
+  execute: ({ accountId, amount }) =>
+    Effect.gen(function* () {
+      const bank = yield* CustomerApi.Client;
+      const { reply } = yield* bank.WithdrawMoney({ target: accountId, amount }, mfa);
+      return Message.SucceededCommand({ balance: reply.balance });
+    }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
+});
+
+// UPDATE
+
+export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
+  Message.match<Update.Return<Model, Message, Bank>>(message, {
+    ClickedDeposit: () => ({
+      model,
+      commands: [Deposit({ accountId: model.accountId, amount: 1_000 })],
+    }),
+    ClickedWithdraw: () => ({
+      model,
+      commands: [Withdraw({ accountId: model.accountId, amount: 1_000 })],
+    }),
+    // The balance arrives through the `summary` subscription; a reply only clears the error.
+    SucceededCommand: () => ({ model: { ...model, error: null } }),
+    FailedCommand: ({ reason }) => ({ model: { ...model, error: reason } }),
+    GotBalance: ({ balance }) => ({ model: { ...model, balance } }),
+    GotLine: ({ line }) => ({ model: { ...model, lines: [line, ...model.lines] } }),
+    FailedWatch: ({ reason }) => ({ model: { ...model, error: `watch ended: ${reason}` } }),
+  });
+
+// INIT: the signed-in customer's main account.
+
+export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
+  model: { accountId: mainAccountId(flags.customerId), balance: null, lines: [], error: null },
+});
+
+// SUBSCRIPTIONS: the account's summary (snapshots) and statement (events), live.
+
+export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) => ({
+  summary: entry(
+    { accountId: AccountId },
+    {
+      modelToDependencies: (model) => ({ accountId: model.accountId }),
+      dependenciesToStream: ({ accountId }) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const bank = yield* CustomerApi.Client;
+            return bank.AccountSummary.watch(accountId);
+          }),
+        ).pipe(
+          Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+          Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
+        ),
+    },
+  ),
+  statement: entry(
+    { accountId: AccountId },
+    {
+      modelToDependencies: (model) => ({ accountId: model.accountId }),
+      dependenciesToStream: ({ accountId }) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const bank = yield* CustomerApi.Client;
+            return bank.Statement.events(accountId);
+          }),
+        ).pipe(
+          Stream.map(({ event }) => Message.GotLine({ line: event })),
+          Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
+        ),
+    },
+  ),
+}));
+
+// VIEW
+
+const button = "bg-black text-white hover:bg-gray-700 px-4 py-2";
+
+const cents = (amount: number) => (amount / 100).toFixed(2);
+
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
+  title: model.balance === null ? "Bank" : `Balance: ${cents(model.balance)}`,
+  body: h.div(
+    [h.Class("flex flex-col gap-4 p-8")],
+    [
+      h.div([h.Class("text-4xl font-bold")], [model.balance === null ? "…" : cents(model.balance)]),
+      h.div(
+        [h.Class("flex gap-2")],
+        [
+          h.button([h.OnClick(Message.ClickedDeposit()), h.Class(button)], ["Deposit 10.00"]),
+          h.button([h.OnClick(Message.ClickedWithdraw()), h.Class(button)], ["Withdraw 10.00"]),
+        ],
+      ),
+      h.p([h.Class("text-red-600")], [model.error ?? ""]),
+      h.ul(
+        [],
+        model.lines.map((line) =>
+          h.li([], [`${line.kind} ${cents(line.amount)}, balance ${cents(line.balance)}`]),
+        ),
+      ),
+    ],
+  ),
+});
+```
 
 ## Consistency
 
@@ -237,11 +576,10 @@ Folders are subdomains; every file is named after the thing it declares.
 
 ```
 src/
-  Account/      Account (aggregate: state, decide, evolve, reply), one file per command
+  Account/      Account (aggregate: state, decide, evolve, reply, read), one file per command
                 (WithdrawMoney: WithdrawMoney + MoneyWithdrawn + DailyLimitExceeded), shared
-                rejections (NotOpen, NotOwner, Frozen, InsufficientFunds), AccountSummary (read
-                model), Statement (maps six events to StatementLine), AccountActivity
-                (pass-through), AccountId
+                rejections (NotOpen, NotOwner, Frozen, InsufficientFunds), mustOwn (read rule),
+                AccountSummary, Statement, AccountActivity (views), AccountId
   Customer/     Customer, RegisterCustomer, ConfirmRegistration, RejectRegistration,
                 UsernameClaim (uniqueness as an aggregate), ClaimUsername,
                 UsernameReservation (reserve-first policy), CustomerDashboard (view of a
@@ -254,13 +592,14 @@ src/
                 DailyOutflowExceeded), FraudReview (policy on that view)
   Settlement/   Payments (port), StripePayments (adapter), SettlementRefund (policy),
                 StripeSettlements (Stripe.consumeEvents: payment_intent.succeeded → RecordSettlement)
-  CustomerApi/  the customer-facing Api: its commands, plus one file per Query / Subscription,
-                CustomerSession and MfaChallenge middleware
-  SupportApi/   a second audience over the same Bank: FreezeAccount, ChangeOwner,
-                ApproveTransfer, ActivityLog
-  CurrentActor.ts  who is acting, provided by the session middleware
+  CustomerApi/  the customer app's Api
+  SupportApi/   the support console's Api, over the same Bank
+  Session.ts, CurrentActor.ts, MfaChallenge.ts   authentication and step-up
   Bank.ts       the Domain
   BankWorker.ts the Worker: both Apis + Stripe events, hosted on Durable Objects
+web/
+  Bank.ts       the foldkit app: model, messages, commands, subscriptions, view
+  entry.ts      boots it with the bank client as a resource
 ```
 
 ## Hosting
@@ -270,9 +609,10 @@ The Domain is hosted by whichever `FoldPlatform` Layer is provided. On Cloudflar
 ## Tests
 
 ```sh
-pnpm vitest run test/Bank.story.test.ts     # pure stories: given / when / then, ports resolved, no mocks
-pnpm vitest run test/CustomerApi.test.ts    # both Apis in-process, principals via middleware
+pnpm vitest run test/Bank.story.test.ts     # stories: given / when / then, ports resolved, no mocks
+pnpm vitest run test/CustomerApi.test.ts    # both Apis in-process, principals via the session
 pnpm vitest run test/HttpTransport.test.ts  # the Worker's HTTP surface on a real HTTP server
+pnpm vitest run test/web.test.ts            # the foldkit app's update, with foldkit stories
 bun test test/integ.test.ts                 # deploys to Cloudflare (+ a Stripe webhook endpoint) and drives the Api
 STRIPE_TEST_REAL_DELIVERY=1 bun test test/integ.test.ts   # also pays with a test card and waits for the settlement
 ```
