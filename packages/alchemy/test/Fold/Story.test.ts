@@ -1,10 +1,12 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import {
   Aggregate,
   Api,
@@ -46,7 +48,13 @@ class ResetCounter extends Command.make("ResetCounter", {
   events: [WasReset],
   rejects: [NotAnOperator],
   reply: { total: Schema.Number },
-}).middleware(OperatorSession) {}
+  middleware: [OperatorSession],
+}) {}
+
+/** Guests may not read counters. */
+const notGuest = Effect.fn(function* () {
+  if ((yield* Operator) === "guest") return yield* new NotAnOperator();
+});
 
 class Increment extends Command.make("Increment", {
   target: Schema.String,
@@ -88,16 +96,25 @@ class Counter extends Aggregate.make("Counter", {
     Increment: (s) => ({ total: s.total }),
     ResetCounter: (s) => ({ total: s.total }),
   },
+  read: {
+    middleware: [OperatorSession],
+    rejects: [NotAnOperator],
+    validate: () => notGuest(),
+  },
 }) {}
 
 class Totals extends View.make("Totals", {
   from: [Counter],
   key: Counter,
+  middleware: [OperatorSession],
+  rejects: [NotAnOperator],
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   evolve: {
     Incremented: (_, e) => ({ total: e.total }),
+    WasReset: () => ({ total: 0 }),
   },
+  validate: () => notGuest(),
 }) {}
 
 class Logged extends Event.make("Logged", { data: { by: Schema.Number } }) {}
@@ -329,7 +346,7 @@ describe("Fold Story", () => {
 
   it.live("an Api exposes a command; its middleware provides the context", () =>
     Effect.gen(function* () {
-      class CounterApi extends Api.make(ResetCounter) {}
+      class CounterApi extends Api.make("CounterApi", ResetCounter) {}
       const client = yield* CounterApi.testClient;
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
@@ -344,6 +361,68 @@ describe("Fold Story", () => {
       expect(denied._tag).toBe("NotAnOperator");
       const anonymous = yield* client.ResetCounter({ target: "c-1" }).pipe(Effect.flip);
       expect(anonymous._tag).toBe("Unauthenticated");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          OperatorSessionLive,
+          Counters.layer(
+            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+          ),
+        ).pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              InMemory,
+              Approval.toLayer(Effect.succeed({ check: () => Effect.succeed({ ok: false }) })),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  it.live("an Api exposes views and aggregates; validate judges every read", () =>
+    Effect.gen(function* () {
+      class CounterApi extends Api.make("CounterApi", ResetCounter, Totals, Counter) {}
+      const client = yield* CounterApi.testClient;
+      const counters = yield* Counter;
+      const sam = { headers: Headers.fromInput({ "x-operator": "sam" }) };
+      const guest = { headers: Headers.fromInput({ "x-operator": "guest" }) };
+
+      const receipt = yield* counters.send(c1, new Increment({ by: 3 }));
+      const atLeast = { stream: receipt.stream, version: receipt.version };
+      expect(yield* client.Totals.get("c-1", { ...sam, atLeast })).toEqual({ total: 3 });
+      // The client's filter only narrows what a permitted read returns.
+      expect(
+        yield* client.Totals.get("c-1", { ...sam, atLeast, where: { total: { gt: 10 } } }),
+      ).toBeNull();
+      expect((yield* client.Totals.get("c-1", guest).pipe(Effect.flip))._tag).toBe("NotAnOperator");
+      expect(yield* client.Counter.get("c-1", sam)).toEqual({ total: 3, capped: false });
+      expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
+
+      // A watch sees the current state, then each change.
+      const totals = yield* client.Totals.watch("c-1", sam).pipe(
+        Stream.take(2),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      const states = yield* client.Counter.watch("c-1", sam).pipe(
+        Stream.take(2),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* Effect.sleep("20 millis");
+      yield* counters.send(c1, new Increment({ by: 2 }));
+      expect(yield* Fiber.join(totals)).toEqual([{ total: 3 }, { total: 5 }]);
+      expect((yield* Fiber.join(states)).map((s) => s.total)).toEqual([3, 5]);
+
+      const events = yield* client.Counter.events("c-1", sam).pipe(
+        Stream.take(2),
+        Stream.runCollect,
+      );
+      expect(events.map((e) => e.event._tag)).toEqual(["Incremented", "Incremented"]);
     }).pipe(
       Effect.scoped,
       Effect.provide(

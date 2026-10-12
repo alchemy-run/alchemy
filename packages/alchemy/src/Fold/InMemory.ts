@@ -118,6 +118,21 @@ export const make = (
           }
         >();
         const lock = Semaphore.makeUnsafe(1);
+        // The latest version of each instance that anyone watches.
+        const versions = new Map<string, SubscriptionRef.SubscriptionRef<number>>();
+        const versionOf = (id: string) =>
+          Effect.suspend(() => {
+            const found = versions.get(id);
+            if (found) return Effect.succeed(found);
+            return SubscriptionRef.make(instance(id).version).pipe(
+              Effect.tap((created) => Effect.sync(() => versions.set(id, created))),
+            );
+          });
+        const announce = (id: string) =>
+          Effect.suspend(() => {
+            const ref = versions.get(id);
+            return ref ? SubscriptionRef.set(ref, instance(id).version) : Effect.void;
+          });
         const instance = (id: string) => {
           let found = instances.get(id);
           if (!found)
@@ -156,6 +171,7 @@ export const make = (
                 },
               };
               current.receipts.set(meta.commandId, sent);
+              yield* announce(id);
               yield* enqueue(result.deliveries, kit.deliver);
               return sent;
             }),
@@ -178,6 +194,34 @@ export const make = (
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
           events: (id) => Effect.sync(() => [...instance(id).events]),
+          changes: (id) =>
+            Stream.unwrap(
+              versionOf(id).pipe(
+                Effect.map((ref) =>
+                  SubscriptionRef.changes(ref).pipe(
+                    Stream.map(() => ({
+                      state: instance(id).state,
+                      version: instance(id).version,
+                    })),
+                  ),
+                ),
+              ),
+            ),
+          tail: (id, after) =>
+            Stream.unwrap(
+              versionOf(id).pipe(
+                Effect.map((ref) => {
+                  let last = after;
+                  return SubscriptionRef.changes(ref).pipe(
+                    Stream.flatMap(() => {
+                      const fresh = instance(id).events.filter((e) => e.envelope.seq > last);
+                      if (fresh.length > 0) last = fresh[fresh.length - 1]!.envelope.seq;
+                      return Stream.fromIterable(fresh);
+                    }),
+                  );
+                }),
+              ),
+            ),
           seed: (id, events) =>
             lock.withPermits(1)(
               Effect.suspend(() => {
@@ -193,7 +237,7 @@ export const make = (
                 current.state = result.state;
                 current.version = result.version;
                 current.events.push(...result.events);
-                return enqueue(result.deliveries, kit.deliver);
+                return announce(id).pipe(Effect.andThen(enqueue(result.deliveries, kit.deliver)));
               }),
             ),
         };

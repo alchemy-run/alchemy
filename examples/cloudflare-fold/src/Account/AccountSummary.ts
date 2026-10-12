@@ -1,8 +1,12 @@
 import { View } from "alchemy/Fold";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
 import { Account } from "./Account.ts";
+import { mustOwn } from "./mustOwn.ts";
+import { NotOwner } from "./NotOwner.ts";
 
 const setBalance = <V extends { balance: number }>(
   v: V,
@@ -19,6 +23,8 @@ const setBalance = <V extends { balance: number }>(
 export class AccountSummary extends View.make("AccountSummary", {
   from: [Account],
   key: Account,
+  middleware: [Session],
+  rejects: [NotOwner],
   state: Schema.Struct({
     customerId: Schema.NullOr(CustomerId),
     owner: Schema.NullOr(Schema.String),
@@ -39,4 +45,8 @@ export class AccountSummary extends View.make("AccountSummary", {
     AccountFrozen: (v) => ({ ...v, frozen: true }),
     AccountClosed: (v) => ({ ...v, closed: true }),
   },
+  // Re-run on every change while watched: a reassigned account ends the watch with NotOwner.
+  validate: Effect.fn(function* (_request, summary) {
+    yield* mustOwn(summary?.customerId ?? null);
+  }),
 }) {}

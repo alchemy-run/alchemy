@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { type AccountId, mainAccountId } from "../src/Account/AccountId.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { Username } from "../src/Customer/Username.ts";
 import type { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { TransferId } from "../src/Transfer/TransferId.ts";
+import { TransferStatus } from "../src/Transfer/TransferStatus.ts";
 
 /** A CustomerApi client, signed in as one customer. */
 export type CustomerClient = Effect.Success<typeof CustomerApi.client>;
@@ -14,52 +15,57 @@ export type CustomerClient = Effect.Success<typeof CustomerApi.client>;
 export const mfa = { headers: { "x-mfa-code": "000000" } };
 
 /**
- * Register, then wait until the username is claimed and
- * `MainAccountProvisioning` has opened the main account: it appears on the
- * customer's live dashboard. The username defaults to the customer id.
+ * Register, then watch the customer's dashboard until `UsernameReservation`
+ * and `MainAccountProvisioning` have opened the main account. The username
+ * defaults to the customer id.
  */
-export const register = (
+export const register = Effect.fn(function* (
   client: CustomerClient,
   customerId: string,
   name: string,
   username: string = customerId,
-) =>
-  Effect.gen(function* () {
-    const id = CustomerId.make(customerId);
-    yield* client.RegisterCustomer({ target: id, name, username: Username.make(username) });
-    const accountId = mainAccountId(id);
-    yield* client.dashboard({}).pipe(
-      Stream.filter((d) => d.accounts.some((a) => a.accountId === accountId)),
-      Stream.runHead,
-      Effect.timeout("20 seconds"),
-    );
-    return accountId;
-  });
+) {
+  const id = CustomerId.make(customerId);
+  yield* client.RegisterCustomer({ target: id, name, username: Username.make(username) });
+  const accountId = mainAccountId(id);
+  yield* client.CustomerDashboard.watch(id).pipe(
+    Stream.filter((dashboard) => dashboard !== null && accountId in dashboard.balances),
+    Stream.runHead,
+    Effect.timeout("20 seconds"),
+  );
+  return accountId;
+});
 
 /**
  * Request a transfer under an id the client chooses (so a retry is
- * idempotent), then wait until `TransferExecution` has completed or failed it.
+ * idempotent), then watch its status until `TransferExecution` has completed
+ * or failed it.
  */
-export const transfer = (
+export const transfer = Effect.fn(function* (
   client: CustomerClient,
-  transfer: {
+  request: {
     readonly transferId: string;
     readonly from: AccountId;
     readonly to: AccountId;
     readonly amount: number;
   },
-) =>
-  Effect.gen(function* () {
-    const transferId = TransferId.make(transfer.transferId);
-    yield* client.RequestTransfer(
-      { target: transferId, from: transfer.from, to: transfer.to, amount: transfer.amount },
-      mfa,
-    );
-    return yield* client.transferStatus({ transferId }).pipe(
-      Effect.filterOrFail(
-        (outcome) => outcome.status === "completed" || outcome.status === "failed",
-        () => "still in flight",
-      ),
-      Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 50 }),
-    );
-  });
+) {
+  const transferId = TransferId.make(request.transferId);
+  yield* client.RequestTransfer(
+    { target: transferId, from: request.from, to: request.to, amount: request.amount },
+    mfa,
+  );
+  const settled = yield* client.TransferStatus.watch(transferId).pipe(
+    Stream.filter(
+      (status) => status !== null && (status.completedAt !== null || status.failedReason !== null),
+    ),
+    Stream.runHead,
+    Effect.timeout("20 seconds"),
+  );
+  const status = Option.getOrThrow(settled)!;
+  return {
+    transferId,
+    status: TransferStatus.computed.status(status),
+    reason: status.failedReason,
+  };
+});

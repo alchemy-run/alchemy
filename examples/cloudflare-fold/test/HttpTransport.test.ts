@@ -7,16 +7,18 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Bank, BankPolicies } from "../src/Bank.ts";
-import { CustomerApi, CustomerApiLive } from "../src/CustomerApi/CustomerApi.ts";
-import { CustomerSessionLive, customerSessionClient } from "../src/CustomerApi/CustomerSession.ts";
-import { MfaChallengeLive } from "../src/CustomerApi/MfaChallenge.ts";
+import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
+import { CustomerId } from "../src/Customer/CustomerId.ts";
+import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
+import { MfaChallengeLive } from "../src/MfaChallenge.ts";
+import { SessionLive, sessionClient } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
 import { register } from "./flows.ts";
 
 // The Worker's HTTP surface (`CustomerApi.httpEffect`) on a real HTTP server, over the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments);
-const World = Layer.mergeAll(CustomerApiLive, CustomerSessionLive, MfaChallengeLive).pipe(
+const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankPolicies).pipe(Layer.provide(Layer.mergeAll(Ports, InMemory)))),
 );
 
@@ -26,18 +28,18 @@ const Served = Layer.unwrap(
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest), Layer.provide(World));
 
 // The test server serves the Api at its root; its HttpClient already targets the server.
-const Client = Layer.mergeAll(Api.protocolHttp(""), customerSessionClient("customer:c-1"));
+const Client = Layer.mergeAll(Api.protocolHttp(""), sessionClient("customer:c-1"));
 
 it.live("the CustomerApi round-trips over HTTP, including a streamed subscription", () =>
   Effect.gen(function* () {
     const sam = yield* CustomerApi.client;
     const accountId = yield* register(sam, "c-1", "sam");
     yield* sam.DepositMoney({ target: accountId, amount: 70 });
-    const dashboard = yield* sam.dashboard({}).pipe(
-      Stream.filter((d) => d.totalBalance === 70),
+    const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+      Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 70),
       Stream.runHead,
     );
     expect(accountId as string).toBe("c-1-main");
-    expect(Option.getOrThrow(dashboard)).toMatchObject({ name: "sam", totalBalance: 70 });
+    expect(Option.getOrThrow(dashboard)).toMatchObject({ name: "sam" });
   }).pipe(Effect.provide(Client.pipe(Layer.provideMerge(Served))), Effect.scoped),
 );

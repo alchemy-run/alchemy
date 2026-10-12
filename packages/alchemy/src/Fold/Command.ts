@@ -2,11 +2,10 @@ import * as EffectContext from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
-import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
-import type { Provided } from "./Operation.ts";
+import * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
 
 /**
@@ -27,6 +26,7 @@ export interface Any extends Schema.Top {
   readonly events: ReadonlyArray<Event.Any>;
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
+  readonly middleware: Middleware.List;
   readonly rpc: Rpc.Any;
   new (...args: any[]): { readonly _tag: string };
 }
@@ -35,7 +35,7 @@ export interface Any extends Schema.Top {
  * The services a command's `decide` may use: whatever its middleware
  * provides. Senders without that middleware (policies, stories) provide them.
  */
-export type ContextOf<C extends Any> = Provided<C["rpc"]>;
+export type ContextOf<C extends Any> = Middleware.Provides<C["middleware"]>;
 
 /**
  * The reply schema declared by a command, as a `Schema.Struct`.
@@ -81,6 +81,7 @@ export interface CommandClass<
   Events extends ReadonlyArray<Event.Any>,
   Rejects extends ReadonlyArray<Rejection.Any>,
   Reply extends Schema.Top | undefined,
+  Ms extends Middleware.List,
   R extends Rpc.Any,
 > extends Schema.Class<Instance<Tag, F>, Schema.TaggedStruct<Tag, F>, {}> {
   readonly kind: "Command";
@@ -89,20 +90,16 @@ export interface CommandClass<
   readonly events: Events;
   readonly rejects: Rejects;
   readonly reply: Reply;
+  /** The middleware that guards the command when an Api exposes it, in order. */
+  readonly middleware: Ms;
   /** The command as an Effect RPC, for exposing it in an Api. */
   readonly rpc: R;
-  /**
-   * Apply an `RpcMiddleware`. Whatever it provides (e.g. the current actor)
-   * is available to this command's `decide` with `yield*`.
-   */
-  middleware<M extends RpcMiddleware.AnyService>(
-    middleware: M,
-  ): CommandClass<Tag, Target, F, Events, Rejects, Reply, Rpc.AddMiddleware<R, M>>;
 }
 
 interface Options {
   readonly target: TargetSchema;
   readonly input?: Fields;
+  readonly middleware?: Middleware.List;
   readonly events?: ReadonlyArray<Event.Any>;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
@@ -121,10 +118,8 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly events = options.events ?? [];
     static readonly rejects = options.rejects ?? [];
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
+    static readonly middleware = options.middleware ?? [];
     static readonly rpc = rpc;
-    static middleware(middleware: RpcMiddleware.AnyService): unknown {
-      return build(tag, options, (rpc as Rpc.Rpc<string>).middleware(middleware));
-    }
   };
 };
 
@@ -136,25 +131,28 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  * its caller receives. A command with its events and rejections is one
  * behaviour of an aggregate, so they usually live together in one file.
  *
- * Middleware authenticates callers and provides context (such as the current
- * actor) that the aggregate's `decide` reads with `yield*`. An Api exposes a
- * command directly; senders without the middleware provide that context.
+ * `middleware` authenticates callers and provides context (such as the
+ * current actor) that the aggregate's `decide` reads with `yield*`. An Api
+ * exposes a command directly; senders without the middleware (policies,
+ * stories) provide that context themselves.
  *
  * **Example:** Declaring a command with middleware
  * ```typescript
  * export class WithdrawMoney extends Command.make("WithdrawMoney", {
  *   target: AccountId,
  *   input: { amount: Cents },
+ *   middleware: [Session, MfaChallenge],
  *   events: [MoneyWithdrawn],
  *   rejects: [NotOpen, NotOwner, InsufficientFunds],
  *   reply: { balance: Cents },
- * }).middleware(CustomerSession) {}
+ * }) {}
  * ```
  */
 export const make = <
   const Tag extends string,
   Target extends TargetSchema,
   const F extends Fields = {},
+  const Ms extends Middleware.List = readonly [],
   const Events extends ReadonlyArray<Event.Any> = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   const Reply extends Fields | undefined = undefined,
@@ -165,6 +163,11 @@ export const make = <
     readonly target: Target;
     /** The command's fields. */
     readonly input?: F;
+    /**
+     * Middleware that guards the command when an Api exposes it, in order.
+     * What it provides is what `decide` may read.
+     */
+    readonly middleware?: Ms;
     /** The events the command may record. */
     readonly events?: Events;
     /** The rejections the command's handler may return. */
@@ -179,7 +182,8 @@ export const make = <
   Events,
   Rejects,
   ReplySchema<Reply>,
-  CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>
+  Ms,
+  Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
 > => {
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
@@ -195,14 +199,15 @@ export const make = <
     }),
     error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
   });
-  return build(tag, options, rpc) as CommandClass<
+  return build(tag, options, Middleware.apply(rpc, options.middleware ?? [])) as CommandClass<
     Tag,
     Target,
     F,
     Events,
     Rejects,
     ReplySchema<Reply>,
-    CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>
+    Ms,
+    Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
   >;
 };
 

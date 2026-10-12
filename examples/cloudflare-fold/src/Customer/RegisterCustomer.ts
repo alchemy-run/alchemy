@@ -1,6 +1,6 @@
 import { Command, Event, Rejection } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
-import { CustomerSession } from "../CustomerApi/CustomerSession.ts";
+import { Session } from "../Session.ts";
 import { CustomerId } from "./CustomerId.ts";
 import { Username } from "./Username.ts";
 
@@ -22,7 +22,8 @@ export class RegistrationRequested extends Event.make("RegistrationRequested", {
  */
 export class RegisterCustomer extends Command.make("RegisterCustomer", {
   target: CustomerId,
+  middleware: [Session],
   input: { name: Schema.String, username: Username },
   events: [RegistrationRequested],
   rejects: [AlreadyRegistered, NotTheCustomer],
-}).middleware(CustomerSession) {}
+}) {}

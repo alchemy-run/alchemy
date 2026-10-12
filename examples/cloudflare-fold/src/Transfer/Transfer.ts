@@ -2,6 +2,7 @@ import { Aggregate } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/AccountId.ts";
+import { NotPermitted } from "../Account/ChangeOwner.ts";
 import { Actor } from "../Actor.ts";
 import { CurrentActor } from "../CurrentActor.ts";
 import { Cents } from "../Money.ts";
@@ -54,8 +55,9 @@ export class Transfer extends Aggregate.make("Transfer", {
       ];
     }),
     ApproveTransfer: Effect.fn(function* (s, _, { id }) {
-      if (s._tag !== "AwaitingApproval") return yield* new NotAwaitingApproval();
       const approvedBy = yield* CurrentActor;
+      if (approvedBy._tag !== "Agent") return yield* new NotPermitted();
+      if (s._tag !== "AwaitingApproval") return yield* new NotAwaitingApproval();
       return [
         new TransferApproved({
           transferId: id,

@@ -2,9 +2,9 @@ import { Command, Event, Rejection } from "alchemy/Fold";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/AccountId.ts";
 import { Actor } from "../Actor.ts";
-import { CustomerSession } from "../CustomerApi/CustomerSession.ts";
-import { MfaChallenge } from "../CustomerApi/MfaChallenge.ts";
+import { MfaChallenge } from "../MfaChallenge.ts";
 import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
 import { TransferId } from "./TransferId.ts";
 
 /** Transfers of at least this many cents wait for a support agent's approval. */
@@ -33,9 +33,8 @@ export class TransferRequested extends Event.make("TransferRequested", {
  */
 export class RequestTransfer extends Command.make("RequestTransfer", {
   target: TransferId,
+  middleware: [Session, MfaChallenge],
   input: { from: AccountId, to: AccountId, amount: Cents },
   events: [TransferRequested],
   rejects: [AlreadyRequested, SameAccount],
-})
-  .middleware(CustomerSession)
-  .middleware(MfaChallenge) {}
+}) {}

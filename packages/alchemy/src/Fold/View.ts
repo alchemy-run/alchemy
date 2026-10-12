@@ -9,6 +9,9 @@ import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import type * as Middleware from "./Middleware.ts";
+import type * as Read from "./Read.ts";
+import type * as Rejection from "./Rejection.ts";
 
 /**
  * Raised by `waitFor` when the predicate does not hold before the timeout.
@@ -53,7 +56,7 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly events?: ReadonlyArray<Event.Any>;
     readonly emit?: Handlers;
     readonly computed?: { readonly [name: string]: ((state: never) => unknown) | undefined };
-  };
+  } & Read.AnyContract;
   /** Type-level only: the view's state. */
   readonly "~state": unknown;
   /** Type-level only: the events the view emits. */
@@ -185,7 +188,9 @@ export interface Definition<
   S extends Schema.Top | undefined,
   Events extends ReadonlyArray<Event.Any>,
   Computed extends Record<string, unknown>,
-> {
+  Ms extends Middleware.List = readonly [],
+  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+> extends Read.Contract<Aggregate.Ref<Key>, StateType<S> | null, Ms, Rejects> {
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /** The aggregate whose refs key this view's instances. */
@@ -332,6 +337,32 @@ export interface ViewKey<Name extends string> {
  * The class is also a service tag: `yield* AccountSummary` gives its read API
  * (`query`, `waitFor`, `watch`, `watchEach`, `events`, `list`).
  *
+ * An Api can expose a view to clients (`get`, `watch`, `events`, `list`). Its
+ * `middleware` authenticates them and `validate` judges every read, from the
+ * actor, the key and the key's state; see {@link Read.Contract}.
+ *
+ * **Example:** A view clients may read, each customer only their own accounts
+ * ```typescript
+ * export class AccountSummary extends View.make("AccountSummary", {
+ *   from: [Account],
+ *   key: Account,
+ *   middleware: [Session],
+ *   rejects: [NotOwner],
+ *   state: Schema.Struct({ customerId: Schema.NullOr(CustomerId), balance: Cents }),
+ *   initial: { customerId: null, balance: 0 },
+ *   evolve: {
+ *     AccountOpened: (v, e) => ({ ...v, customerId: e.customerId }),
+ *     MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+ *   },
+ *   validate: Effect.fn(function* (_request, summary) {
+ *     const actor = yield* CurrentActor;
+ *     if (actor._tag === "Customer" && summary?.customerId !== actor.customerId) {
+ *       return yield* new NotOwner();
+ *     }
+ *   }),
+ * }) {}
+ * ```
+ *
  * **Example:** A read model keyed by its source
  * ```typescript
  * export class AccountSummary extends View.make("AccountSummary", {
@@ -374,12 +405,14 @@ export const make = <
   S extends Schema.Top | undefined = undefined,
   const Events extends ReadonlyArray<Event.Any> = readonly [],
   Computed extends Record<string, unknown> = {},
+  const Ms extends Middleware.List = readonly [],
+  const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<From, Key, S, Events, Computed>,
+  definition: Definition<From, Key, S, Events, Computed, Ms, Rejects>,
 ): ViewClass<
   Name,
-  Definition<From, Key, S, Events, Computed>,
+  Definition<From, Key, S, Events, Computed, Ms, Rejects>,
   S,
   StateType<S>,
   Key,
@@ -392,14 +425,15 @@ export const make = <
   return class extends Tag {
     static readonly kind = "View" as const;
     static readonly viewName: Name = name;
-    static readonly definition: Definition<From, Key, S, Events, Computed> = definition;
+    static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
+      definition;
     /** The view's state schema. */
     static readonly State = definition.state;
     /** Derived values, computed from a state when read. */
     static readonly computed = definition.computed ?? {};
   } as unknown as ViewClass<
     Name,
-    Definition<From, Key, S, Events, Computed>,
+    Definition<From, Key, S, Events, Computed, Ms, Rejects>,
     S,
     StateType<S>,
     Key,

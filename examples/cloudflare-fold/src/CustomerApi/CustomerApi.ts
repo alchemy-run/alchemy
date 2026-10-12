@@ -1,39 +1,29 @@
 import { Api } from "alchemy/Fold";
-import * as Layer from "effect/Layer";
+import { AccountSummary } from "../Account/AccountSummary.ts";
 import { CloseAccount } from "../Account/CloseAccount.ts";
 import { DepositMoney } from "../Account/DepositMoney.ts";
+import { Statement } from "../Account/Statement.ts";
 import { WithdrawMoney } from "../Account/WithdrawMoney.ts";
+import { CustomerDashboard } from "../Customer/CustomerDashboard.ts";
 import { RegisterCustomer } from "../Customer/RegisterCustomer.ts";
+import { AccountTransfers } from "../Transfer/AccountTransfers.ts";
 import { RequestTransfer } from "../Transfer/RequestTransfer.ts";
-import { AccountWatch, AccountWatchLive } from "./AccountWatch.ts";
-import { DashboardFeed, DashboardFeedLive } from "./DashboardFeed.ts";
-import { LiveStatement, LiveStatementLive } from "./LiveStatement.ts";
-import { StatementHistory, StatementHistoryLive } from "./StatementHistory.ts";
-import { TransferLookup, TransferLookupLive } from "./TransferLookup.ts";
+import { TransferStatus } from "../Transfer/TransferStatus.ts";
 
 /**
- * What customers can do and see. Everything else in the Bank is unreachable
- * from here. Its commands and reads carry `CustomerSession`, so `decide` and
- * the read handlers see the customer as the current actor.
+ * What the customer app reaches: commands to change things and views to read
+ * and watch. Each entry authorizes itself, through its `decide` or `validate`.
  */
 export class CustomerApi extends Api.make(
+  "CustomerApi",
   RegisterCustomer,
   DepositMoney,
   WithdrawMoney,
   CloseAccount,
   RequestTransfer,
-  StatementHistory,
-  TransferLookup,
-  DashboardFeed,
-  AccountWatch,
-  LiveStatement,
+  CustomerDashboard,
+  AccountSummary,
+  Statement,
+  AccountTransfers,
+  TransferStatus,
 ) {}
-
-/** Handlers for the CustomerApi's reads (commands are implemented by their aggregates). */
-export const CustomerApiLive = Layer.mergeAll(
-  StatementHistoryLive,
-  TransferLookupLive,
-  DashboardFeedLive,
-  AccountWatchLive,
-  LiveStatementLive,
-);

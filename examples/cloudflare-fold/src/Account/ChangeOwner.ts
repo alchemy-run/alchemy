@@ -1,7 +1,7 @@
 import { Command, Event, Rejection } from "alchemy/Fold";
 import { Actor } from "../Actor.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
-import { SupportAgentSession } from "../SupportApi/SupportAgentSession.ts";
+import { Session } from "../Session.ts";
 import { AccountId } from "./AccountId.ts";
 import { NotOpen } from "./NotOpen.ts";
 
@@ -15,7 +15,8 @@ export class OwnerChanged extends Event.make("OwnerChanged", {
 /** Reassign an account to another customer. */
 export class ChangeOwner extends Command.make("ChangeOwner", {
   target: AccountId,
+  middleware: [Session],
   input: { customerId: CustomerId },
   events: [OwnerChanged],
   rejects: [NotOpen, NotPermitted],
-}).middleware(SupportAgentSession) {}
+}) {}

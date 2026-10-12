@@ -6,6 +6,9 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
+import type * as Middleware from "./Middleware.ts";
+import type * as Read from "./Read.ts";
+import type * as Rejection from "./Rejection.ts";
 
 /**
  * Instance type produced by a class.
@@ -83,6 +86,8 @@ export interface Definition<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
+  Ms extends Middleware.List = readonly [],
+  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   E extends Event.Any = EventsOf<C>,
 > {
   /** Schema of the aggregate id (a string or branded string). */
@@ -128,6 +133,12 @@ export interface Definition<
       events: ReadonlyArray<Inst<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
+  /**
+   * Let an Api expose this aggregate's state and committed events to clients
+   * (`get`, `watch`, `events`): its middleware, rejections, and `validate`,
+   * which judges each read against the instance's current state.
+   */
+  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
 }
 
 /**
@@ -183,6 +194,7 @@ export interface AnyDefinition {
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
+  readonly read?: Read.AnyContract;
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */
@@ -375,11 +387,13 @@ export const make = <
   Id extends IdSchema,
   S extends Schema.Top,
   const C extends ReadonlyArray<Command.Any>,
+  const Ms extends Middleware.List = readonly [],
+  const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C>,
-): AggregateClass<Name, Resolved<Id, S, C>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C>>>()(
+  definition: Definition<Id, S, C, Ms, Rejects>,
+): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Fold/Aggregate/${name}`,
   );
   const decodeId = Schema.decodeUnknownSync(
@@ -388,15 +402,15 @@ export const make = <
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C> = {
+    static readonly definition: Resolved<Id, S, C, Ms, Rejects> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C>;
+    } as unknown as Resolved<Id, S, C, Ms, Rejects>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
 };
 
 /** A definition with its events collected from its commands. */
@@ -404,7 +418,9 @@ export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-> = Definition<Id, S, C> & { readonly events: ReadonlyArray<EventsOf<C>> };
+  Ms extends Middleware.List = readonly [],
+  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+> = Definition<Id, S, C, Ms, Rejects> & { readonly events: ReadonlyArray<EventsOf<C>> };
 
 /**
  * The class type returned by {@link make}.

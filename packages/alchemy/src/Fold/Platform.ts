@@ -173,6 +173,12 @@ export interface AggregateStore {
   ) => Effect.Effect<{ readonly state: Json | null; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+  /** The stored state and version of an instance, then every new one. */
+  readonly changes: (
+    id: string,
+  ) => Stream.Stream<{ readonly state: Json | null; readonly version: number }>;
+  /** Committed events with `seq > after`, then live ones. */
+  readonly tail: (id: string, after: number) => Stream.Stream<StoredEvent>;
   /**
    * Append events without deciding. They reach views as history, and never
    * trigger policies (tests; optional).

@@ -6,28 +6,20 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import { Bank, BankPolicies } from "./Bank.ts";
-import { CustomerApi, CustomerApiLive } from "./CustomerApi/CustomerApi.ts";
-import { CustomerSessionLive } from "./CustomerApi/CustomerSession.ts";
-import { MfaChallengeLive } from "./CustomerApi/MfaChallenge.ts";
+import { CustomerApi } from "./CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+import { MfaChallengeLive } from "./MfaChallenge.ts";
+import { SessionLive } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
-import { SupportAgentSessionLive } from "./SupportApi/SupportAgentSession.ts";
-import { SupportApi, SupportApiLive } from "./SupportApi/SupportApi.ts";
+import { SupportApi } from "./SupportApi/SupportApi.ts";
 
 /**
- * Everything the Worker serves: both Apis, their middleware, and the Bank
- * hosted on Durable Objects. Swap `FoldCloudflare.DurableObjects` for
+ * Everything the Worker serves: the middleware both Apis declare, and the
+ * Bank hosted on Durable Objects. Swap `FoldCloudflare.DurableObjects` for
  * `Fold.InMemory` and nothing else changes.
  */
-const BankLive = Layer.mergeAll(
-  CustomerApiLive,
-  SupportApiLive,
-  CustomerSessionLive,
-  MfaChallengeLive,
-  SupportAgentSessionLive,
-  Stripe.ConsumeEventsLive,
-).pipe(
+const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive, Stripe.ConsumeEventsLive).pipe(
   Layer.provideMerge(Bank.layer(BankPolicies)),
   Layer.provide(Layer.mergeAll(FoldCloudflare.DurableObjects, SiftFraudCheck, StripePayments)),
 );

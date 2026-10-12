@@ -16,8 +16,10 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import Stack from "../alchemy.run.ts";
+import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
+import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
-import { customerSessionClient } from "../src/CustomerApi/CustomerSession.ts";
+import { sessionClient } from "../src/Session.ts";
 import { mfa, register, transfer } from "./flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -32,10 +34,9 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const customerClient = (url: string, customerId: string) =>
   CustomerApi.client.pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Api.protocolHttp(`${url}/api`),
-        customerSessionClient(`customer:${customerId}`),
-      ).pipe(Layer.provide(FetchHttpClient.layer)),
+      Layer.mergeAll(Api.protocolHttp(`${url}/api`), sessionClient(`customer:${customerId}`)).pipe(
+        Layer.provide(FetchHttpClient.layer),
+      ),
     ),
   );
 
@@ -75,7 +76,7 @@ test(
       (yield* alex.WithdrawMoney({ target: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
     ).toBe("NotOwner");
 
-    // a process manager across three aggregates, followed through a multi-source view
+    // a process manager across three aggregates, followed by the requester through a multi-source view
     const outcome = yield* transfer(sam, {
       transferId: "t-1",
       from: samMain,
@@ -83,9 +84,15 @@ test(
       amount: 40,
     });
     expect(outcome.status).toBe("completed");
-    expect((yield* alex.transferStatus({ transferId: outcome.transferId })).status).toBe(
-      "completed",
+    // the recipient sees it arrive on their own account
+    const incoming = yield* alex.AccountTransfers.list(alexMain).pipe(
+      Effect.filterOrFail(
+        (p) => p.entries.length === 1,
+        () => "not projected yet",
+      ),
+      Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }),
     );
+    expect(incoming.entries[0]!.event.direction).toBe("in");
 
     // Stripe deliveries are signature-checked by consumeEvents before they reach the Bank
     const forged = yield* HttpClient.execute(
@@ -97,23 +104,26 @@ test(
     expect(forged.status).toBe(401);
 
     // views are eventually consistent: wait until the transfer has been projected
-    const page = yield* sam.statement({ accountId: samMain }).pipe(
+    const page = yield* sam.Statement.list(samMain, { order: "desc" }).pipe(
       Effect.filterOrFail(
         (p) => p.entries.length === 3,
         () => "not projected yet",
       ),
       Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }),
     );
-    expect(page.entries.map((e) => e.kind)).toEqual(["transfer-out", "withdrawal", "deposit"]);
+    expect(page.entries.map((e) => e.event.kind)).toEqual([
+      "transfer-out",
+      "withdrawal",
+      "deposit",
+    ]);
 
-    // a live subscription: view-to-view (AccountSummary → CustomerDashboard) plus watchEach,
-    // streamed to the client over NDJSON
-    const dashboard = yield* sam.dashboard({}).pipe(
-      Stream.filter((d) => d.totalBalance === 50),
+    // a live view (AccountSummary → CustomerDashboard, view to view), streamed over NDJSON
+    const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+      Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 50),
       Stream.runHead,
       Effect.timeout("20 seconds"),
     );
-    expect(Option.getOrThrow(dashboard)).toMatchObject({ name: "sam", totalBalance: 50 });
+    expect(Option.getOrThrow(dashboard)).toMatchObject({ name: "sam" });
   }).pipe(Effect.scoped),
   { timeout: 180_000 },
 );
@@ -145,14 +155,18 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
       ),
     );
 
-    const page = yield* sam.statement({ accountId }).pipe(
+    const page = yield* sam.Statement.list(accountId, { order: "desc" }).pipe(
       Effect.filterOrFail(
-        (p) => p.entries.some((e) => e.kind === "settlement"),
+        (p) => p.entries.some((e) => e.event.kind === "settlement"),
         () => "not delivered yet",
       ),
       Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 36 }),
     );
-    expect(page.entries[0]).toMatchObject({ kind: "settlement", amount: 500, balance: 500 });
+    expect(page.entries[0]!.event).toMatchObject({
+      kind: "settlement",
+      amount: 500,
+      balance: 500,
+    });
   }).pipe(Effect.scoped),
   { timeout: 240_000 },
 );

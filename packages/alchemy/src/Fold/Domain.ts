@@ -37,6 +37,8 @@ export class Internals extends Context.Service<
     readonly views: ReadonlyMap<string, ViewStore>;
     /** The client of the aggregate that handles each command, by command tag. */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
+    /** Each view's read API, by view name. */
+    readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Aggregate.Any, unknown>>;
   }
 >()("alchemy/Fold/DomainInternals") {}
 
@@ -173,8 +175,11 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
     }
+    const viewHosts = new Map<string, View.Host<unknown, Aggregate.Any, unknown>>();
     for (const view of definitions.views) {
-      hosts = Context.add(hosts, view, viewHost(kernel, view, viewStores.get(view.viewName)!));
+      const host = viewHost(kernel, view, viewStores.get(view.viewName)!);
+      viewHosts.set(view.viewName, host);
+      hosts = Context.add(hosts, view, host);
     }
 
     // Policies are built with the clients available, then hosted.
@@ -195,6 +200,7 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       aggregates: aggregateStores,
       views: viewStores,
       commands,
+      viewHosts,
     });
   });
 

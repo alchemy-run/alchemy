@@ -1,8 +1,12 @@
 import { View } from "alchemy/Fold";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/AccountId.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
+import { CurrentActor } from "../CurrentActor.ts";
+import { Forbidden } from "../Forbidden.ts";
 import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
 import { Customer } from "./Customer.ts";
 
 type Balances = Readonly<Record<AccountId, number>>;
@@ -20,6 +24,8 @@ const without = (balances: Balances, id: AccountId): Balances => {
 export class CustomerDashboard extends View.make("CustomerDashboard", {
   from: [Customer, AccountSummary],
   key: Customer,
+  middleware: [Session],
+  rejects: [Forbidden],
   keyOf: {
     AccountSummary: ({ state }) => (state?.customerId ? Customer.ref(state.customerId) : undefined),
     OwnerChanged: {
@@ -49,6 +55,14 @@ export class CustomerDashboard extends View.make("CustomerDashboard", {
           : without(d.balances, source.id),
     }),
   },
+  // Keyed by customer, so the key alone decides who may read it.
+  validate: Effect.fn(function* (request) {
+    const actor = yield* CurrentActor;
+    if (actor._tag === "Agent") return;
+    if (actor._tag !== "Customer" || request.key.id !== actor.customerId) {
+      return yield* new Forbidden({ reason: "that is not your dashboard" });
+    }
+  }),
   computed: {
     totalBalance: (d) => Object.values<number>(d.balances).reduce((a, b) => a + b, 0),
   },

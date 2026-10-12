@@ -254,6 +254,12 @@ const aggregateObject = (kit: AggregateKit) =>
               .get<{ state: Json | null; version: number }>("meta")
               .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 })),
           ),
+        after: (after: number) =>
+          reportDefects(
+            state.storage
+              .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
+              .pipe(Effect.map((rows) => [...rows.values()])),
+          ),
       };
     });
   });
@@ -329,6 +335,29 @@ const policyObject = (kit: PolicyKit) =>
 /** How often a subscription re-reads the Durable Object that owns a key. */
 const POLL = Schedule.spaced("300 millis");
 
+/** Entries after a cursor, then new ones, by polling the object that owns them. */
+const pollAfter = <A>(
+  from: number,
+  read: (cursor: number) => Effect.Effect<ReadonlyArray<A>>,
+  seqOf: (entry: A) => number,
+): Stream.Stream<A> =>
+  Stream.suspend(() => {
+    let first = true;
+    return Stream.paginate(from, (cursor: number) => {
+      const poll = read(cursor);
+      const next = first ? poll : Effect.delay(poll, "300 millis");
+      first = false;
+      return Effect.map(
+        next,
+        (fresh) =>
+          [
+            fresh,
+            Option.some(fresh.length > 0 ? seqOf(fresh[fresh.length - 1]!) : cursor),
+          ] as const,
+      );
+    });
+  });
+
 /**
  * Host a Domain on Cloudflare Durable Objects.
  *
@@ -380,6 +409,23 @@ export const DurableObjects: Layer.Layer<FoldPlatform, never, Worker> = Layer.ef
               schedule: (id, command, meta, due) =>
                 unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
+              // Polls from the caller; push to watchers is the next step.
+              changes: (id) =>
+                Stream.fromEffectSchedule(
+                  unwrapDefects<{ state: Json | null; version: number }>(
+                    namespace.getByName(id).state(),
+                  ),
+                  POLL,
+                ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
+              tail: (id, from) =>
+                pollAfter(
+                  from,
+                  (cursor) =>
+                    unwrapDefects<ReadonlyArray<StoredEvent>>(
+                      namespace.getByName(id).after(cursor),
+                    ),
+                  (event) => event.envelope.seq,
+                ),
             };
           }),
         ),
