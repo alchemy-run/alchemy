@@ -710,6 +710,39 @@ this change can no longer deploy a Worker after its first deploy with a
 newer release.
 :::
 
+## Run containers
+
+A Durable Object can start a container. Declare one Container per image
+with `schedulingPolicy: "durable_object"`, and bind each one the Durable
+Object can run.
+
+An Effect-native Durable Object `yield*`s its Containers:
+
+```typescript
+export class Agent extends Cloudflare.DurableObject<Agent>()(
+  "Agent",
+  Effect.gen(function* () {
+    const node = yield* Node;
+    const python = yield* Python;
+    return Effect.succeed({
+      start: () => node.start({ enableInternet: false }),
+    });
+  }),
+) {}
+```
+
+An async Worker lists them on the Durable Object binding:
+
+```typescript
+env: {
+  AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+}
+```
+
+An object runs one container at a time. See
+[Several images in one Durable Object](/cloudflare/compute/containers#several-images-in-one-durable-object)
+and [on an async Worker](/cloudflare/compute/containers#several-images-on-an-async-worker).
+
 ## Where next
 
 Guides that build on Durable Objects:
