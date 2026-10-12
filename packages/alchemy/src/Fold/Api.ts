@@ -139,7 +139,10 @@ export interface AggregateClient<A extends Aggregate.Any> {
  * The typed client of an Api: commands as methods (`bank.WithdrawMoney(...)`),
  * views and aggregates as namespaces (`bank.AccountSummary.watch(...)`).
  */
-export type ApiClient<E extends Entry> = RpcClient.RpcClient<Commands<E>["rpc"]> & {
+export type ApiClient<E extends Entry> = RpcClient.RpcClient<
+  Commands<E>["rpc"],
+  RpcClientError.RpcClientError
+> & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
 } & {
   readonly [A in Aggregates<E> as A["aggregateName"]]: AggregateClient<A>;

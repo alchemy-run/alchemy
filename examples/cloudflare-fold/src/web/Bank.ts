@@ -18,23 +18,42 @@ type Bank = Api.ClientKey<"CustomerApi">;
 /** The demo MFA code `MfaChallenge` accepts. */
 const mfa = { headers: { "x-mfa-code": "000000" } };
 
-// FLAGS: who is signed in, handed over when the app boots.
+// INTENTS: what the customer asked for that the server has not acknowledged.
+// They are kept across reloads, so asking works offline.
+
+/** A deposit or withdrawal the customer asked for, named by the command that carries it. */
+export const Intent = Schema.Struct({
+  commandId: Schema.String,
+  kind: Schema.Literals(["deposit", "withdrawal"]),
+  amount: Schema.Number,
+});
+export type Intent = typeof Intent.Type;
+
+/** Where a customer's unacknowledged intents are kept between page loads. */
+export const intentsKey = (customerId: CustomerId) => `bank:intents:${customerId}`;
+
+// FLAGS: who is signed in, and what this browser still owes the server.
 
 export const Flags = Schema.Struct({
   customerId: CustomerId,
   /** Unique per page load; with a counter, it names every command this page sends. */
   session: Schema.String,
+  online: Schema.Boolean,
+  /** Intents saved by an earlier page load, oldest first. */
+  intents: Schema.Array(Intent),
 });
 export type Flags = typeof Flags.Type;
 
 // MODEL
 
 /**
- * Whether the server has acknowledged a line: `pending` until the event it
- * caused arrives on the statement stream, then `confirmed`; `rejected` if the
- * account refused the command.
+ * Whether the server has acknowledged a line:
+ * - `pending`: sent, waiting for the event it causes on the statement stream;
+ * - `queued`: not sent, because the server could not be reached; sent when back online;
+ * - `confirmed`: its event arrived;
+ * - `rejected`: the account refused the command.
  */
-export const Ack = Schema.Literals(["pending", "confirmed", "rejected"]);
+export const Ack = Schema.Literals(["pending", "queued", "confirmed", "rejected"]);
 export type Ack = typeof Ack.Type;
 
 /** A statement line, shown before the server has acknowledged it. */
@@ -57,6 +76,7 @@ export const Model = Schema.Struct({
   session: Schema.String,
   /** Commands this page has sent: with `session`, the next command's id. */
   sent: Schema.Number,
+  online: Schema.Boolean,
   /** `null` until the main account exists (register to open it). */
   balance: Schema.NullOr(Schema.Number),
   /** Unacknowledged lines first, then confirmed ones, newest first. */
@@ -64,6 +84,15 @@ export const Model = Schema.Struct({
   error: Schema.NullOr(Schema.String),
 });
 export type Model = typeof Model.Type;
+
+/** What delivering one intent came to. */
+export const Outcome = Schema.Struct({
+  commandId: Schema.String,
+  /** `accepted` waits for its event; `queued` waits for the network. */
+  result: Schema.Literals(["accepted", "queued", "rejected"]),
+  reason: Schema.NullOr(Schema.String),
+});
+export type Outcome = typeof Outcome.Type;
 
 // MESSAGE
 
@@ -73,10 +102,11 @@ export const Message = defineMessageUnion({
   ClickedWithdraw: {},
   SucceededCommand: {},
   FailedCommand: { reason: Schema.String },
-  /** The account accepted a command. Its line stays pending until its event arrives. */
-  AcceptedCommand: { commandId: Schema.String },
-  /** The account refused a command. */
-  RejectedCommand: { commandId: Schema.String, reason: Schema.String },
+  /** Intents were delivered in order, up to the first that could not reach the server. */
+  Delivered: { outcomes: Schema.Array(Outcome) },
+  SavedIntents: {},
+  WentOnline: {},
+  WentOffline: {},
   GotBalance: { balance: Schema.NullOr(Schema.Number) },
   /** A statement event, and the command that caused it. */
   GotLine: { commandId: Schema.String, line: StatementLine },
@@ -84,7 +114,7 @@ export const Message = defineMessageUnion({
 });
 export type Message = typeof Message.Type;
 
-// COMMANDS: each runs one Fold command over the app's connection.
+// COMMANDS: each runs Fold commands over the app's connection.
 
 /** Register the signed-in customer; a policy then opens their main account. */
 export const Register = Command.define("Register", {
@@ -103,48 +133,70 @@ export const Register = Command.define("Register", {
 });
 
 /**
- * Resend a command whose connection failed. Safe because the account
- * deduplicates by `commandId`: a send that did land is not applied twice.
+ * Send one intent. A dropped connection is retried briefly, which is safe
+ * because the account deduplicates by `commandId`: a send that did land is
+ * not applied twice. If the server still cannot be reached, the intent is
+ * queued; a rejection is the account's answer.
  */
-const resendOnDisconnect = <A, E extends { readonly _tag: string }, R>(
-  send: Effect.Effect<A, E, R>,
-) =>
-  send.pipe(
-    Effect.retry({
-      while: (error) => error._tag === "RpcClientError",
-      schedule: Schedule.exponential("200 millis"),
-      times: 5,
-    }),
-  );
-
-export const Deposit = Command.define("Deposit", {
-  args: { accountId: AccountId, amount: Schema.Number, commandId: Schema.String },
-  messages: [Message.AcceptedCommand, Message.RejectedCommand],
-  execute: ({ accountId, amount, commandId }) =>
-    Effect.gen(function* () {
-      const bank = yield* CustomerApi.Client;
-      yield* resendOnDisconnect(bank.DepositMoney({ target: accountId, amount, commandId }));
-      return Message.AcceptedCommand({ commandId });
-    }).pipe(
+const deliver = (accountId: AccountId, intent: Intent) =>
+  Effect.gen(function* () {
+    const bank = yield* CustomerApi.Client;
+    const { commandId, amount } = intent;
+    const send =
+      intent.kind === "deposit"
+        ? bank.DepositMoney({ target: accountId, amount, commandId })
+        : bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa);
+    return yield* send.pipe(
+      Effect.retry({
+        while: (error) => error._tag === "RpcClientError",
+        schedule: Schedule.exponential("200 millis"),
+        times: 3,
+      }),
+      Effect.as<Outcome>({ commandId, result: "accepted", reason: null }),
       Effect.catch((error) =>
-        Effect.succeed(Message.RejectedCommand({ commandId, reason: error._tag })),
+        Effect.succeed<Outcome>(
+          error._tag === "RpcClientError"
+            ? { commandId, result: "queued", reason: null }
+            : { commandId, result: "rejected", reason: error._tag },
+        ),
       ),
-    ),
+    );
+  });
+
+/**
+ * Deliver intents in the order they were made, stopping at the first that
+ * cannot reach the server: the rest stay queued, so a withdrawal never
+ * overtakes the deposit it was made after.
+ */
+export const Deliver = Command.define("Deliver", {
+  args: { accountId: AccountId, intents: Schema.Array(Intent) },
+  messages: [Message.Delivered],
+  execute: ({ accountId, intents }) =>
+    Effect.gen(function* () {
+      const outcomes: Array<Outcome> = [];
+      for (const intent of intents) {
+        const outcome = yield* deliver(accountId, intent);
+        outcomes.push(outcome);
+        if (outcome.result === "queued") {
+          for (const rest of intents.slice(outcomes.length)) {
+            outcomes.push({ commandId: rest.commandId, result: "queued", reason: null });
+          }
+          break;
+        }
+      }
+      return Message.Delivered({ outcomes });
+    }),
 });
 
-export const Withdraw = Command.define("Withdraw", {
-  args: { accountId: AccountId, amount: Schema.Number, commandId: Schema.String },
-  messages: [Message.AcceptedCommand, Message.RejectedCommand],
-  execute: ({ accountId, amount, commandId }) =>
-    Effect.gen(function* () {
-      const bank = yield* CustomerApi.Client;
-      yield* resendOnDisconnect(bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa));
-      return Message.AcceptedCommand({ commandId });
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.succeed(Message.RejectedCommand({ commandId, reason: error._tag })),
-      ),
-    ),
+/** Keep the unacknowledged intents for the next page load. */
+export const SaveIntents = Command.define("SaveIntents", {
+  args: { customerId: CustomerId, intents: Schema.Array(Intent) },
+  messages: [Message.SavedIntents],
+  execute: ({ customerId, intents }) =>
+    Effect.sync(() => {
+      localStorage.setItem(intentsKey(customerId), JSON.stringify(intents));
+      return Message.SavedIntents();
+    }),
 });
 
 // UPDATE
@@ -152,23 +204,96 @@ export const Withdraw = Command.define("Withdraw", {
 /** The next command's id. Unique across page loads, and stable if the command is resent. */
 const nextCommandId = (model: Model) => `${model.session}:${model.sent}`;
 
-/** Add a line the server has not acknowledged yet, above every other line. */
-const optimistic = (
-  model: Model,
-  kind: Line["kind"],
-  amount: number,
-  commandId: string,
-): Model => ({
-  ...model,
-  sent: model.sent + 1,
-  error: null,
-  lines: [{ commandId, kind, amount, balance: null, ack: "pending", reason: null }, ...model.lines],
-});
+const isIntent = (line: Line): line is Line & { readonly kind: Intent["kind"] } =>
+  (line.ack === "pending" || line.ack === "queued") &&
+  (line.kind === "deposit" || line.kind === "withdrawal");
+
+/** The model's unacknowledged intents, oldest first. */
+const intentsOf = (model: Model): Array<Intent> =>
+  model.lines
+    .filter(isIntent)
+    .map(({ commandId, kind, amount }) => ({ commandId, kind, amount }))
+    .reverse();
+
+const save = (model: Model) =>
+  SaveIntents({ customerId: model.customerId, intents: intentsOf(model) });
 
 /**
- * A statement event arrived. If this page sent its command, the pending line
- * becomes confirmed; otherwise (history, another tab) it is a new line. Either
- * way it goes above the confirmed lines and below the unacknowledged ones.
+ * Add a line the server has not acknowledged, above every other line. Sent
+ * now if the server is reachable and nothing older is waiting; otherwise
+ * queued behind what is.
+ */
+const ask = (
+  model: Model,
+  kind: Intent["kind"],
+  amount: number,
+): Update.Return<Model, Message, Bank> => {
+  const commandId = nextCommandId(model);
+  const send = model.online && !model.lines.some((l) => l.ack === "queued");
+  const next: Model = {
+    ...model,
+    sent: model.sent + 1,
+    error: null,
+    lines: [
+      { commandId, kind, amount, balance: null, ack: send ? "pending" : "queued", reason: null },
+      ...model.lines,
+    ],
+  };
+  return {
+    model: next,
+    commands: [
+      save(next),
+      ...(send
+        ? [Deliver({ accountId: model.accountId, intents: [{ commandId, kind, amount }] })]
+        : []),
+    ],
+  };
+};
+
+/** Send every queued intent, oldest first. */
+const flush = (model: Model): Update.Return<Model, Message, Bank> => {
+  const queued = intentsOf(model).filter((intent) =>
+    model.lines.some((l) => l.commandId === intent.commandId && l.ack === "queued"),
+  );
+  if (queued.length === 0) return { model };
+  const sending = new Set(queued.map((intent) => intent.commandId));
+  return {
+    model: {
+      ...model,
+      lines: model.lines.map((l) => (sending.has(l.commandId) ? { ...l, ack: "pending" } : l)),
+    },
+    commands: [Deliver({ accountId: model.accountId, intents: queued })],
+  };
+};
+
+/**
+ * Apply what delivery came to. A confirmed line stays confirmed: its event
+ * can arrive before the reply.
+ */
+const delivered = (model: Model, outcomes: ReadonlyArray<Outcome>): Model => {
+  const byId = new Map(outcomes.map((o) => [o.commandId, o]));
+  return {
+    ...model,
+    lines: model.lines.map((l): Line => {
+      const outcome = byId.get(l.commandId);
+      if (!outcome || l.ack === "confirmed") return l;
+      switch (outcome.result) {
+        case "accepted":
+          return l;
+        case "queued":
+          return { ...l, ack: "queued" };
+        case "rejected":
+          return { ...l, ack: "rejected", reason: outcome.reason };
+      }
+    }),
+  };
+};
+
+/**
+ * A statement event arrived. If this browser asked for it, its line becomes
+ * confirmed; otherwise (history, a transfer, another device) it is a new
+ * line. Either way it goes above the confirmed lines and below the
+ * unacknowledged ones.
  */
 const confirm = (model: Model, commandId: string, line: StatementLine): Model => {
   const confirmed: Line = {
@@ -185,97 +310,108 @@ const confirm = (model: Model, commandId: string, line: StatementLine): Model =>
   return { ...model, lines: [...unacknowledged, confirmed, ...acknowledged] };
 };
 
-const reject = (model: Model, commandId: string, reason: string): Model => ({
-  ...model,
-  lines: model.lines.map((l) =>
-    l.commandId === commandId && l.ack === "pending" ? { ...l, ack: "rejected", reason } : l,
-  ),
-});
-
 export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
   Message.match<Update.Return<Model, Message, Bank>>(message, {
     ClickedRegister: () => ({ model, commands: [Register({ customerId: model.customerId })] }),
-    ClickedDeposit: () => {
-      const commandId = nextCommandId(model);
-      return {
-        model: optimistic(model, "deposit", 1_000, commandId),
-        commands: [Deposit({ accountId: model.accountId, amount: 1_000, commandId })],
-      };
-    },
-    ClickedWithdraw: () => {
-      const commandId = nextCommandId(model);
-      return {
-        model: optimistic(model, "withdrawal", 1_000, commandId),
-        commands: [Withdraw({ accountId: model.accountId, amount: 1_000, commandId })],
-      };
-    },
+    ClickedDeposit: () => ask(model, "deposit", 1_000),
+    ClickedWithdraw: () => ask(model, "withdrawal", 1_000),
     SucceededCommand: () => ({ model: { ...model, error: null } }),
     FailedCommand: ({ reason }) => ({ model: { ...model, error: reason } }),
-    // Accepted is not acknowledged: the line is confirmed by its event, which
-    // may already have arrived.
-    AcceptedCommand: () => ({ model }),
-    RejectedCommand: ({ commandId, reason }) => ({ model: reject(model, commandId, reason) }),
+    Delivered: ({ outcomes }) => {
+      const next = delivered(model, outcomes);
+      return { model: next, commands: [save(next)] };
+    },
+    SavedIntents: () => ({ model }),
+    WentOnline: () => flush({ ...model, online: true }),
+    WentOffline: () => ({ model: { ...model, online: false } }),
     GotBalance: ({ balance }) => ({ model: { ...model, balance } }),
-    GotLine: ({ commandId, line }) => ({ model: confirm(model, commandId, line) }),
+    GotLine: ({ commandId, line }) => {
+      const next = confirm(model, commandId, line);
+      return { model: next, commands: [save(next)] };
+    },
     FailedWatch: ({ reason }) => ({ model: { ...model, error: `watch ended: ${reason}` } }),
   });
 
-// INIT: the signed-in customer's main account.
+// INIT: the signed-in customer's main account, and what an earlier page load still owes.
 
-export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
-  model: {
+export const init = (flags: Flags): Update.Return<Model, Message, Bank> => {
+  const model: Model = {
     customerId: flags.customerId,
     accountId: mainAccountId(flags.customerId),
     session: flags.session,
     sent: 0,
+    online: flags.online,
     balance: null,
-    lines: [],
+    // Restored intents are queued: the statement's history confirms those the
+    // server already applied, and the rest are sent when online.
+    lines: flags.intents
+      .map((intent): Line => ({ ...intent, balance: null, ack: "queued", reason: null }))
+      .reverse(),
     error: null,
-  },
-});
+  };
+  return model.online ? flush(model) : { model };
+};
 
-// SUBSCRIPTIONS: the account's summary (snapshots) and statement (events), live.
+// SUBSCRIPTIONS: connectivity, and the account's summary (snapshots) and
+// statement (events), live while online.
 
 export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) => ({
-  summary: entry(
-    { accountId: AccountId },
+  connectivity: entry(
+    {},
     {
-      modelToDependencies: (model) => ({ accountId: model.accountId }),
-      dependenciesToStream: ({ accountId }) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const bank = yield* CustomerApi.Client;
-            return bank.AccountSummary.watch(accountId);
-          }),
-        ).pipe(
-          Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
-          Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
+      modelToDependencies: () => ({}),
+      dependenciesToStream: () =>
+        Stream.merge(
+          Stream.fromEventListener(window, "online").pipe(Stream.as(Message.WentOnline())),
+          Stream.fromEventListener(window, "offline").pipe(Stream.as(Message.WentOffline())),
         ),
     },
   ),
-  statement: entry(
-    { accountId: AccountId },
+  // Depending on `online` restarts a watch when the browser comes back,
+  // however long it was gone.
+  summary: entry(
+    { accountId: AccountId, online: Schema.Boolean },
     {
-      modelToDependencies: (model) => ({ accountId: model.accountId }),
-      dependenciesToStream: ({ accountId }) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const bank = yield* CustomerApi.Client;
-            return bank.Statement.events(accountId);
-          }),
-        ).pipe(
-          Stream.map(({ event, envelope }) =>
-            Message.GotLine({ commandId: envelope.commandId, line: event }),
-          ),
-          Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
-        ),
+      modelToDependencies: (model) => ({ accountId: model.accountId, online: model.online }),
+      dependenciesToStream: ({ accountId, online }) =>
+        online
+          ? Stream.unwrap(
+              Effect.gen(function* () {
+                const bank = yield* CustomerApi.Client;
+                return bank.AccountSummary.watch(accountId);
+              }),
+            ).pipe(
+              Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+              Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
+            )
+          : Stream.empty,
+    },
+  ),
+  statement: entry(
+    { accountId: AccountId, online: Schema.Boolean },
+    {
+      modelToDependencies: (model) => ({ accountId: model.accountId, online: model.online }),
+      dependenciesToStream: ({ accountId, online }) =>
+        online
+          ? Stream.unwrap(
+              Effect.gen(function* () {
+                const bank = yield* CustomerApi.Client;
+                return bank.Statement.events(accountId);
+              }),
+            ).pipe(
+              Stream.map(({ event, envelope }) =>
+                Message.GotLine({ commandId: envelope.commandId, line: event }),
+              ),
+              Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
+            )
+          : Stream.empty,
     },
   ),
 }));
 
 // VIEW
 
-/** How a pending line moves the balance once it is confirmed. */
+/** How an unacknowledged line will move the balance once it is confirmed. */
 const signed = (line: Line) =>
   line.kind === "deposit" ||
   line.kind === "transfer-in" ||
@@ -286,13 +422,15 @@ const signed = (line: Line) =>
 
 /**
  * The balance to show: the newest confirmed balance (the statement's, so it
- * moves with the lines it confirms), plus every pending line.
+ * moves with the lines it confirms), plus every unacknowledged line. Nothing
+ * here is committed, so a line the account later rejects simply stops
+ * counting.
  */
 export const shownBalance = (model: Model): number | null => {
   if (model.balance === null) return null;
   const confirmed = model.lines.find((l) => l.ack === "confirmed")?.balance ?? model.balance;
   return model.lines
-    .filter((l) => l.ack === "pending")
+    .filter((l) => l.ack === "pending" || l.ack === "queued")
     .reduce((sum, l) => sum + signed(l), confirmed);
 };
 
@@ -304,7 +442,9 @@ const lineView = (line: Line, h: HtmlBuilder<Message>) => {
   const text = `${line.kind} ${cents(line.amount)}`;
   switch (line.ack) {
     case "pending":
-      return h.li([h.Class("text-gray-400 italic")], [`${text}, pending`]);
+      return h.li([h.Class("text-gray-400 italic")], [`${text}, sending`]);
+    case "queued":
+      return h.li([h.Class("text-amber-600 italic")], [`${text}, queued until online`]);
     case "rejected":
       return h.li([h.Class("text-red-600 line-through")], [`${text}, rejected: ${line.reason}`]);
     case "confirmed":
@@ -314,19 +454,31 @@ const lineView = (line: Line, h: HtmlBuilder<Message>) => {
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
   const balance = shownBalance(model);
-  const pending = model.lines.some((l) => l.ack === "pending");
+  const unacknowledged = model.lines.some((l) => l.ack === "pending" || l.ack === "queued");
   return {
     title: balance === null ? "Bank" : `Balance: ${cents(balance)}`,
     body: h.div(
       [h.Class("flex flex-col gap-4 p-8")],
       [
         h.p([], [`Signed in as ${model.customerId}`]),
+        ...(model.online
+          ? []
+          : [
+              h.p(
+                [h.Class("text-amber-600")],
+                ["Offline: changes are kept and sent when you reconnect."],
+              ),
+            ]),
         ...(balance === null
           ? [h.button([h.OnClick(Message.ClickedRegister()), h.Class(button)], ["Open my account"])]
           : [
               h.div(
-                [h.Class(pending ? "text-4xl font-bold text-gray-400" : "text-4xl font-bold")],
-                [pending ? `${cents(balance)} (pending)` : cents(balance)],
+                [
+                  h.Class(
+                    unacknowledged ? "text-4xl font-bold text-gray-400" : "text-4xl font-bold",
+                  ),
+                ],
+                [unacknowledged ? `${cents(balance)} (pending)` : cents(balance)],
               ),
               h.div(
                 [h.Class("flex gap-2")],

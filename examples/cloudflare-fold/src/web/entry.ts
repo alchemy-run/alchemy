@@ -4,11 +4,13 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
+import { Flags, Intent, init, intentsKey, Model, subscriptions, update, view } from "./Bank.ts";
 
 /**
  * The signed-in customer. A demo stand-in for a login: `?customer=c-2` picks
@@ -17,6 +19,17 @@ import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
 const signedIn = Effect.sync(() =>
   CustomerId.make(new URLSearchParams(location.search).get("customer") ?? "c-1"),
 );
+
+/** Intents an earlier page load could not deliver. Anything unreadable is dropped. */
+const savedIntents = (customerId: CustomerId) =>
+  Effect.sync(() =>
+    Option.getOrElse(
+      Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Intent)))(
+        localStorage.getItem(intentsKey(customerId)) ?? "[]",
+      ),
+      () => [],
+    ),
+  );
 
 /** Sign in: the Api sets an `HttpOnly` session cookie on this origin. */
 const signIn = Effect.fn(function* (customerId: CustomerId) {
@@ -55,10 +68,15 @@ Runtime.run(
     container: document.getElementById("root"),
   }),
   {
-    flags: Effect.all({
-      customerId: signedIn,
-      // Names this page's commands, so each is unique even across reloads.
-      session: Effect.sync(() => crypto.randomUUID()),
+    flags: Effect.gen(function* () {
+      const customerId = yield* signedIn;
+      return {
+        customerId,
+        // Names this page's commands, so each is unique even across reloads.
+        session: crypto.randomUUID(),
+        online: navigator.onLine,
+        intents: yield* savedIntents(customerId),
+      };
     }),
   },
 );
