@@ -377,37 +377,24 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
 
           // The tunnel must have a live connector before Hyperdrive is
           // created: Cloudflare connects to the origin when it creates it.
-          const network = yield* stack.deploy(
+          const tunnel = yield* stack.deploy(VpcOriginTunnel);
+          yield* tunnelConnector(accountId, tunnel.tunnelId, Redacted.value(tunnel.token));
+
+          // The VPC Service is created in the same deploy as Hyperdrive, so
+          // Hyperdrive's create must ride out the service's propagation.
+          const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const tunnel = yield* VpcOriginTunnel;
+              yield* VpcOriginTunnel;
               const service = yield* VpcOriginService;
-              return { tunnel, service };
+              const connection = yield* VpcOriginConnection;
+              const effectWorker = yield* HyperdriveVpcEffectWorker;
+              const asyncWorker = yield* Cloudflare.Worker("HyperdriveVpcAsyncWorker", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
+                env: { HD: VpcOriginConnection },
+              });
+              return { service, connection, effectWorker, asyncWorker };
             }),
           );
-          yield* tunnelConnector(
-            accountId,
-            network.tunnel.tunnelId,
-            Redacted.value(network.tunnel.token),
-          );
-
-          const deployed = yield* stack
-            .deploy(
-              Effect.gen(function* () {
-                const service = yield* VpcOriginService;
-                const connection = yield* VpcOriginConnection;
-                const effectWorker = yield* HyperdriveVpcEffectWorker;
-                const asyncWorker = yield* Cloudflare.Worker("HyperdriveVpcAsyncWorker", {
-                  main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
-                  env: { HD: VpcOriginConnection },
-                });
-                return { service, connection, effectWorker, asyncWorker };
-              }),
-            )
-            .pipe(
-              // A freshly registered connector can take a moment before the
-              // VPC Service routes through it.
-              Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 12 }),
-            );
 
           const actual = yield* hyperdrive.getConfig({
             accountId,

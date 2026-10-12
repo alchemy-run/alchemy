@@ -354,10 +354,14 @@ export const ProviderLive = () =>
               ),
             )
       ).pipe(
+        // Cloudflare connects to the origin on create/update. A just-
+        // provisioned database, or a just-created Workers VPC Service that
+        // has not propagated yet (`destination_not_found`), is briefly
+        // unreachable.
         Effect.retry({
           while: (error) => error._tag === "HyperdriveOriginUnavailable",
-          schedule: Schedule.spaced("2 seconds"),
-          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
         }),
       );
 
