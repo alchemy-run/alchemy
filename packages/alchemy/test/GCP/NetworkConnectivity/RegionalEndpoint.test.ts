@@ -12,7 +12,12 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST;
+// Creating a regional endpoint fails on the testing project with an LRO
+// error `{ code: 13, message: "an internal error has occurred" }` for every
+// target (storage.us-central1.p.rep / storage.us-central1.rep) and access
+// type (REGIONAL / GLOBAL), reproduced with gcloud and the REST API as well.
+// Set GCP_TEST_REGIONAL_ENDPOINTS=1 on a project where creation works.
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_REGIONAL_ENDPOINTS === "1";
 
 const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsRegionalEndpoints({ name }).pipe(
