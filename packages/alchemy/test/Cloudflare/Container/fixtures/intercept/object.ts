@@ -4,6 +4,11 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 
+/** `ctx.exports` entrypoints; workers-types does not type them on DurableObjectState. */
+interface InterceptExports {
+  default(options: { props: Record<string, unknown> }): import("@cloudflare/workers-types").Fetcher;
+}
+
 /** Only the owning object's `interceptOutboundHttp` answers this host. */
 export const INTERCEPT_HOST = "intercept.internal";
 
@@ -40,7 +45,44 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
           return yield* response.text;
         });
 
+      const probeTls = (url: string) =>
+        Effect.gen(function* () {
+          const response = yield* fetch(
+            HttpClientRequest.get(`http://container/probe-tls?url=${encodeURIComponent(url)}`),
+          );
+          return yield* response.text;
+        });
+      const ca = Effect.gen(function* () {
+        const response = yield* fetch(HttpClientRequest.get("http://container/ca"));
+        return yield* response.text;
+      });
+      // Cloudflare delivers intercepted traffic only to a Worker entrypoint or
+      // service binding: this Worker's default entrypoint, tagged by props.
+      const entrypoint = Cloudflare.fromCloudflareFetcher(
+        (state.raw as unknown as { exports: InterceptExports }).exports.default({
+          props: { intercepted: true },
+        }),
+      );
+
       return {
+        // HTTP through the Worker entrypoint (the production-compatible route).
+        probeEntrypoint: () =>
+          start.pipe(
+            Effect.andThen(container.interceptOutboundHttp(INTERCEPT_HOST, entrypoint)),
+            Effect.andThen(probe(`http://${INTERCEPT_HOST}/hello`)),
+          ),
+        // HTTPS: the CA must appear in the container, and the TLS request must
+        // reach the entrypoint.
+        probeHttps: () =>
+          start.pipe(
+            Effect.andThen(container.interceptOutboundHttps(INTERCEPT_HOST, entrypoint)),
+            Effect.andThen(
+              Effect.all({ ca, response: probeTls(`https://${INTERCEPT_HOST}/hello`) }),
+            ),
+            Effect.map(({ ca, response }) =>
+              JSON.stringify({ ca: JSON.parse(ca), ...JSON.parse(response) }),
+            ),
+          ),
         // The container's intercepted requests.
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;

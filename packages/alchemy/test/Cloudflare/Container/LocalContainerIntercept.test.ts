@@ -73,5 +73,31 @@ describe(
       }).pipe(logLevel),
       { tags: ["local"], timeout: TEST_TIMEOUT },
     );
+
+    test(
+      "interceptOutboundHttp can route to the Worker's own entrypoint",
+      Effect.gen(function* () {
+        const result = yield* probe("/probe/entrypoint");
+        expect(result.error).toBeUndefined();
+        expect(result.body).toBe(`entrypoint ${INTERCEPT_HOST}/hello`);
+      }).pipe(logLevel),
+      { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "interceptOutboundHttps injects the CA and routes TLS requests to the entrypoint",
+      Effect.gen(function* () {
+        const result = (yield* probe("/probe/https")) as { ca?: { exists: boolean } } & {
+          status?: number;
+          body?: string;
+          error?: string;
+        };
+        yield* Effect.log(`https probe: ${JSON.stringify(result)}`);
+        expect(result.ca?.exists).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.body).toBe(`entrypoint ${INTERCEPT_HOST}/hello`);
+      }).pipe(logLevel),
+      { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
   },
 );
