@@ -79,6 +79,9 @@ yield* sandbox.start({
 `start` starts the Container's own image. To run another image in the
 same Durable Object, bind another Container — see
 [Several images in one Durable Object](/cloudflare/compute/containers#several-images-in-one-durable-object).
+An async Worker attaches Containers to a class with
+`Cloudflare.DurableObject(className, { containers })` — see
+[Several images on an async Worker](/cloudflare/compute/containers#several-images-on-an-async-worker).
 
 ## Start it from a Layer
 

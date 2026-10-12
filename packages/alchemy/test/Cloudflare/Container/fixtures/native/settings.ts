@@ -21,21 +21,24 @@ export const settingsStack = (
   tools: ApplicationSettings = {},
 ) =>
   Effect.gen(function* () {
-    const shell = Cloudflare.Container<NativeAsyncObject>("SettingsShell", {
-      className: "NativeAsyncObject",
+    const shell = Cloudflare.Container("SettingsShell", {
       schedulingPolicy: "durable_object",
       image: "alpine:3.21",
       ...settings,
     });
-    const toolbox = Cloudflare.Container<NativeAsyncObject>("SettingsTools", {
-      className: "NativeAsyncObject",
+    const toolbox = Cloudflare.Container("SettingsTools", {
       schedulingPolicy: "durable_object",
       image: "alpine:3.20",
       ...tools,
     });
     const worker = yield* Cloudflare.Worker("SettingsWorker", {
       main: `${import.meta.dirname}/async-worker.ts`,
-      env: { SANDBOX: shell, TOOLS: toolbox, IMAGE_REVISION: "settings" },
+      env: {
+        SANDBOX: Cloudflare.DurableObject<NativeAsyncObject>("NativeAsyncObject", {
+          containers: [shell, toolbox],
+        }),
+        IMAGE_REVISION: "settings",
+      },
     });
     return {
       worker,

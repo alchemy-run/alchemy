@@ -406,19 +406,18 @@ export interface DurableObjectApplicationSettings {
  * Cloudflare allows one container application per Durable Object class. Every
  * `durable_object` Container bound to the class adds its image to that
  * application, under the Container's id. Bind several Containers to start
- * different images from the same class, one at a time.
+ * different images from the same class, one at a time. One Container may be
+ * bound to several classes.
+ *
+ * An Effect-native Durable Object binds a Container with `yield*`. An async
+ * Worker attaches it to a class with
+ * `Cloudflare.DurableObject(className, { containers })`.
  *
  * The policy is immutable: migrating an existing fleet application requires a
  * new application and Durable Object namespace.
  */
 export interface DurableObjectContainerProps
   extends DurableObjectApplicationSettings, PlatformProps {
-  /**
-   * Exported Durable Object class this Container's image is added to, when
-   * bound on an async Worker's `env`. Defaults to the binding name. Several
-   * Containers may name the same class.
-   */
-  className?: string;
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**

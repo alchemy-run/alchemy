@@ -18,7 +18,9 @@ export {
   ContainerApplicationSettingsConflict,
   ContainerConfigurationError,
   ContainerImagePreparationError,
+  DurableObjectContainerBindingError,
   DurableObjectContainerConflict,
+  DurableObjectContainersOnEffectNativeClass,
 } from "./ContainerConfiguration.ts";
 export { ContainerPlatform } from "./ContainerPlatform.ts";
 export * from "./ContainerProvider.ts";

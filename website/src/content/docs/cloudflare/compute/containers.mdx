@@ -622,32 +622,41 @@ Application-wide settings — `ssh`, `authorizedKeys`, and
 Two Containers that declare different values fail the deploy with
 `ContainerApplicationSettingsConflict`.
 
+A Container can be bound by several Durable Object classes. Each class adds
+the image to its own application.
+
 ## Several images on an async Worker
 
-A plain Durable Object class binds the same Containers through `env`.
-Give each one the class's name:
+A plain Durable Object class lists its Containers on its binding. A
+Container can back several classes:
 
 ```typescript
 // alchemy.run.ts
 const Node = Cloudflare.Container("Node", {
-  className: "Agent",
   schedulingPolicy: "durable_object",
   image: "node:24-slim",
 });
 
 const Python = Cloudflare.Container("Python", {
-  className: "Agent",
   schedulingPolicy: "durable_object",
   image: "python:3.13-slim",
 });
 
+const Rust = Cloudflare.Container("Rust", {
+  schedulingPolicy: "durable_object",
+  image: "rust:1.90-slim",
+});
+
 export const Worker = Cloudflare.Worker("App", {
   main: "./src/worker.ts",
-  env: { NODE: Node, PYTHON: Python },
+  env: {
+    AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+    REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [Node, Rust] }),
+  },
 });
 ```
 
-Each `env` entry binds the `Agent` namespace. The class finds each
+Each class gets its own container application. The class finds each
 image in `ctx.container.images` under its Container's id:
 
 ```typescript
@@ -668,6 +677,9 @@ export class Agent extends DurableObject {
   }
 }
 ```
+
+Only fleet Containers bind directly in `env`. A Durable Object-managed
+Container placed there fails with `DurableObjectContainerBindingError`.
 
 ## ContainerApplication
 

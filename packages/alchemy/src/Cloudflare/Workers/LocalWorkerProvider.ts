@@ -50,7 +50,10 @@ import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
-import { mergeWorkerContainers } from "../Containers/ContainerConfiguration.ts";
+import {
+  assertBindingContainersOnAsyncClasses,
+  mergeWorkerContainers,
+} from "../Containers/ContainerConfiguration.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -62,6 +65,7 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalEdge } from "./LocalEdge.ts";
 import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
@@ -425,6 +429,11 @@ export const LocalWorkerProvider = () =>
           ...image,
           env: unwrapRedacted(image.env),
         });
+        const exportMap = (props.exports ?? {}) as Record<string, unknown>;
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          Object.keys(exportMap).filter((name) => isDurableObjectExport(exportMap[name])),
+        );
         for (const container of yield* mergeWorkerContainers(containerRows)) {
           if (container.devImages !== undefined) {
             const images: Record<string, RuntimeContainerImage> = {};

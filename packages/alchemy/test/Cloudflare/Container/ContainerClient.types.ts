@@ -75,6 +75,38 @@ export const removedImagesProp: Cloudflare.Containers.DurableObjectContainerProp
   images: { shell: { image: "alpine:3.21" } },
 };
 
+export const removedClassName: Cloudflare.Containers.DurableObjectContainerProps = {
+  schedulingPolicy: "durable_object",
+  image: "alpine:3.21",
+  // @ts-expect-error Attach to a class with Cloudflare.DurableObject(name, { containers }).
+  className: "Agent",
+};
+
+// An async Durable Object binding attaches Containers to its class; one
+// Container may be shared by several classes.
+const AsyncNode = Cloudflare.Container("AsyncNodeTypes", {
+  schedulingPolicy: "durable_object",
+  image: "node:24-slim",
+});
+const AsyncRust = Cloudflare.Container("AsyncRustTypes", {
+  schedulingPolicy: "durable_object",
+  image: "rust:1.90-slim",
+});
+export const asyncClasses = {
+  AGENT: Cloudflare.DurableObject("Agent", { containers: [AsyncNode] }),
+  REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [AsyncNode, AsyncRust] }),
+};
+
+// Effect-native Durable Objects `yield*` their Containers; only the async
+// binding form takes a `containers` prop.
+export class EffectfulAgent extends Cloudflare.DurableObject<EffectfulAgent, {}>()(
+  "EffectfulAgentTypes",
+  {
+    // @ts-expect-error `containers` is only for Cloudflare.DurableObject(name, props) in env.
+    containers: [AsyncNode],
+  },
+) {}
+
 export const invalidInstanceType: Cloudflare.Containers.DurableObjectContainerProps = {
   schedulingPolicy: "durable_object",
   // @ts-expect-error Instance sizes are selected by start(), not at deployment.

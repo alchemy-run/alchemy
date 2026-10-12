@@ -1318,6 +1318,8 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
+      attachedBy?: "binding";
       /** Application name and prepared images for the native container API. */
       name?: string;
       images?: Record<string, string>;

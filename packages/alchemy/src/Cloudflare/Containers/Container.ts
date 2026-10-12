@@ -378,29 +378,39 @@ type ContainerShape<Shape> = {
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
  *
  * ### Native Durable Objects on Async Workers
- * A plain Durable Object class on an async Worker binds the same Containers
- * through `env`. Containers naming the same `className` share the class's
- * application; each `env` entry is a binding to the class's namespace. The
- * class reads each image from `ctx.container.images` under its Container's id.
+ * A plain Durable Object class on an async Worker attaches its Containers
+ * through its Durable Object binding:
+ * `Cloudflare.DurableObject(className, { containers })`. Each Container adds
+ * its image to the class's application, and the class reads it from
+ * `ctx.container.images` under the Container's id. A Container may be listed
+ * by several classes; each class gets its own copy of the image key.
  *
- * **Example:** Two images for one async Durable Object class
+ * **Example:** Two classes sharing the Node image
  * ```typescript
  * // alchemy.run.ts
  * const Node = Cloudflare.Container("Node", {
- *   className: "Agent",
  *   schedulingPolicy: "durable_object",
  *   image: "node:24-slim",
  * });
  * const Python = Cloudflare.Container("Python", {
- *   className: "Agent",
  *   schedulingPolicy: "durable_object",
  *   image: "python:3.13-slim",
  * });
+ * const Rust = Cloudflare.Container("Rust", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "rust:1.90-slim",
+ * });
  * export const Worker = Cloudflare.Worker("App", {
  *   main: "./src/worker.ts",
- *   env: { NODE: Node, PYTHON: Python },
+ *   env: {
+ *     AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+ *     REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [Node, Rust] }),
+ *   },
  * });
  * ```
+ *
+ * A Durable Object-managed Container placed directly in `env` fails with
+ * `DurableObjectContainerBindingError`; only fleet Containers bind that way.
  *
  * **Example:** Starting an image from the class
  * ```typescript

@@ -53,6 +53,52 @@ export class DurableObjectContainerConflict extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+/**
+ * A Durable Object-managed Container was bound on an async Worker outside a
+ * Durable Object binding, or a Durable Object binding lists a Container it
+ * cannot attach. Durable Object-managed Containers attach to a class through
+ * `Cloudflare.DurableObject(className, { containers })`.
+ */
+export class DurableObjectContainerBindingError extends Data.TaggedError(
+  "DurableObjectContainerBindingError",
+)<{
+  readonly bindingName: string;
+  readonly message: string;
+}> {}
+
+/**
+ * An async `Cloudflare.DurableObject(className, { containers })` binding
+ * attaches Containers to a class the same Worker implements as an
+ * Effect-native Durable Object. Effect-native classes `yield*` their
+ * Containers instead.
+ */
+export class DurableObjectContainersOnEffectNativeClass extends Data.TaggedError(
+  "DurableObjectContainersOnEffectNativeClass",
+)<{
+  readonly className: string;
+  readonly message: string;
+}> {}
+
+/**
+ * Fail when an async binding's `containers` target a class the Worker
+ * implements as an Effect-native Durable Object.
+ */
+export const assertBindingContainersOnAsyncClasses = (
+  rows: ReadonlyArray<{ readonly className: string; readonly attachedBy?: "binding" }>,
+  effectNativeClasses: Iterable<string>,
+) => {
+  const effectNative = new Set(effectNativeClasses);
+  const row = rows.find((row) => row.attachedBy === "binding" && effectNative.has(row.className));
+  return row === undefined
+    ? Effect.void
+    : Effect.fail(
+        new DurableObjectContainersOnEffectNativeClass({
+          className: row.className,
+          message: `Durable Object class '${row.className}' is an Effect-native Durable Object, so it cannot take containers from Cloudflare.DurableObject("${row.className}", { containers }). Bind each Container inside the Durable Object with \`yield*\` instead, and remove the containers prop.`,
+        }),
+      );
+};
+
 /** Cloudflare's limits for the `images` map of a Durable Object class. */
 const MAX_NAMED_IMAGES = 100;
 const MAX_IMAGE_NAME_LENGTH = 128;
@@ -63,6 +109,7 @@ const MAX_IMAGE_NAME_LENGTH = 128;
  */
 const FLEET_ONLY_PROPS = [
   "name",
+  "className",
   "main",
   "instanceType",
   "instances",
@@ -152,7 +199,7 @@ export const validateContainerConfiguration = Effect.fn(function* (
   const unsupported = FLEET_ONLY_PROPS.find((key) => loose[key] !== undefined);
   if (unsupported !== undefined) {
     return yield* invalid(
-      `Container property '${unsupported}' is not supported with schedulingPolicy: 'durable_object'. The application is named and owned by the Durable Object class; pass per-instance settings to start().`,
+      `Container property '${unsupported}' is not supported with schedulingPolicy: 'durable_object'. The application is named and owned by the Durable Object class: attach the Container with Cloudflare.DurableObject(className, { containers }) on an async Worker, or yield it inside an Effect-native Durable Object. Pass per-instance settings to start().`,
     );
   }
 });
@@ -219,6 +266,8 @@ export const mergeApplicationSettings = (
  */
 export interface WorkerContainerRow {
   readonly className: string;
+  /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
+  readonly attachedBy?: "binding";
   /** Application name, set for a Durable Object-managed class. */
   readonly name?: string;
   /** Prepared images keyed by Container id (Durable Object-managed). */

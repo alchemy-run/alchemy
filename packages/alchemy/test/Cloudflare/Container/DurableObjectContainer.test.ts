@@ -10,8 +10,9 @@ import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import { DockerLive } from "@/Docker/Docker.ts";
 import * as Test from "@/Test/Alchemy";
+import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
-import { NativeImages, nativeStack } from "./fixtures/native/stack.ts";
+import { directEnvStack, NativeImages, nativeStack } from "./fixtures/native/stack.ts";
 
 /** What `/probe` reports about the running container (fixtures/native). */
 interface Probe {
@@ -46,6 +47,9 @@ interface ExecResult {
 
 const EFFECT_IMAGES = ["NativeShell", "NativeTools"];
 const ASYNC_IMAGES = ["AsyncShell", "AsyncTools"];
+// The second class on each Worker shares the Shell Container.
+const EFFECT_REVIEWER_IMAGES = ["NativeLint", "NativeShell"];
+const ASYNC_REVIEWER_IMAGES = ["AsyncLint", "AsyncShell"];
 
 /** A failed deploy's cause mentions the typed settings conflict. */
 const expectSettingsConflict = (exit: Exit.Exit<unknown, unknown>) => {
@@ -321,6 +325,48 @@ for (const dev of [true, false]) {
         { timeout: 120_000, retry: 0 },
       );
 
+      test.provider(
+        "rejects a Durable Object-managed Container placed directly in env",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const exit = yield* stack.deploy(directEnvStack).pipe(Effect.exit);
+            expect(Exit.isFailure(exit)).toBe(true);
+            if (Exit.isFailure(exit)) {
+              const pretty = Cause.pretty(exit.cause);
+              expect(pretty).toContain("DurableObjectContainerBindingError");
+              expect(pretty).toContain(
+                'Cloudflare.DurableObject("SANDBOX", { containers: [AsyncShell] })',
+              );
+            }
+            yield* stack.destroy();
+          }),
+        { timeout: 60_000, retry: 0 },
+      );
+
+      test.provider(
+        "rejects containers on the binding of an Effect-native Durable Object class",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const exit = yield* stack
+              .deploy(
+                Effect.gen(function* () {
+                  return yield* GuardWorker;
+                }),
+              )
+              .pipe(Effect.exit);
+            expect(Exit.isFailure(exit)).toBe(true);
+            if (Exit.isFailure(exit)) {
+              const pretty = Cause.pretty(exit.cause);
+              expect(pretty).toContain("DurableObjectContainersOnEffectNativeClass");
+              expect(pretty).toContain("yield*");
+            }
+            yield* stack.destroy();
+          }),
+        { timeout: 120_000, retry: 0 },
+      );
+
       // Settings conflicts fail the plan, before anything is published.
       test.provider(
         "rejects Containers of one class that declare different application settings",
@@ -510,8 +556,38 @@ for (const dev of [true, false]) {
                     stderr: "",
                   });
 
+                  // A second class on each Worker shares the Shell Container
+                  // and starts its own images from its own image map.
+                  for (const [path, release] of [
+                    ["/reviewer/shell", /^3\.21\./],
+                    ["/reviewer/lint", /^3\.19\./],
+                  ] as const) {
+                    expect(yield* exec(deployed.worker.url!, path)).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      release: expect.stringMatching(release),
+                      images: EFFECT_REVIEWER_IMAGES,
+                    });
+                  }
+                  for (const [path, release] of [
+                    ["/exec?class=reviewer", /^3\.21\./],
+                    ["/image/lint?class=reviewer", /^3\.19\./],
+                  ] as const) {
+                    expect(yield* exec(deployed.asyncWorker.url!, path)).toEqual({
+                      stdout: "native",
+                      exitCode: 7,
+                      release: expect.stringMatching(release),
+                      images: ASYNC_REVIEWER_IMAGES,
+                    });
+                  }
+
                   // Containers own images, not applications.
-                  for (const container of [deployed.shell, deployed.tools, deployed.asyncShell]) {
+                  for (const container of [
+                    deployed.shell,
+                    deployed.tools,
+                    deployed.lint,
+                    deployed.asyncShell,
+                  ]) {
                     expect(container.applicationId).toEqual(
                       dev ? expect.stringMatching(/^dev:/) : "",
                     );
@@ -519,7 +595,12 @@ for (const dev of [true, false]) {
 
                   if (dev) {
                     // Local emulation never creates a cloud application.
-                    for (const application of [deployed.application, deployed.asyncApplication]) {
+                    for (const application of [
+                      deployed.application,
+                      deployed.reviewerApplication,
+                      deployed.asyncApplication,
+                      deployed.asyncReviewerApplication,
+                    ]) {
                       expect(application.applicationId).toMatch(/^dev:/);
                     }
                   }
@@ -527,10 +608,32 @@ for (const dev of [true, false]) {
                   if (!dev) {
                     // One application per class, attached to its namespace,
                     // without any fleet configuration.
-                    for (const [application, worker, className] of [
-                      [deployed.application, deployed.worker, "NativeObject"],
-                      [deployed.asyncApplication, deployed.asyncWorker, "NativeAsyncObject"],
-                    ] as const) {
+                    const classes = [
+                      [deployed.application, deployed.worker, "NativeObject", EFFECT_IMAGES],
+                      [
+                        deployed.reviewerApplication,
+                        deployed.worker,
+                        "NativeReviewer",
+                        EFFECT_REVIEWER_IMAGES,
+                      ],
+                      [
+                        deployed.asyncApplication,
+                        deployed.asyncWorker,
+                        "NativeAsyncObject",
+                        ASYNC_IMAGES,
+                      ],
+                      [
+                        deployed.asyncReviewerApplication,
+                        deployed.asyncWorker,
+                        "NativeAsyncReviewer",
+                        ASYNC_REVIEWER_IMAGES,
+                      ],
+                    ] as const;
+                    // Every class has its own application.
+                    expect(
+                      new Set(classes.map(([application]) => application.applicationId)).size,
+                    ).toBe(classes.length);
+                    for (const [application, worker, className, images] of classes) {
                       const observed = yield* Containers.getContainerApplication({
                         accountId: application.accountId,
                         applicationId: application.applicationId,
@@ -541,22 +644,16 @@ for (const dev of [true, false]) {
                       expect(observed.name).toBe(application.applicationName);
                       expect(observed.configuration.image).toBeUndefined();
                       expect(observed.maxInstances ?? undefined).toBeUndefined();
+                      // The uploaded Worker merges the class's Containers into
+                      // its one entry, keyed by Container id.
+                      expect(
+                        yield* uploadedImageKeys(
+                          application.accountId,
+                          worker.workerName,
+                          className,
+                        ),
+                      ).toEqual(images);
                     }
-                    // The uploaded Worker merges both Containers into the class's entry.
-                    expect(
-                      yield* uploadedImageKeys(
-                        deployed.application.accountId,
-                        deployed.worker.workerName,
-                        "NativeObject",
-                      ),
-                    ).toEqual(EFFECT_IMAGES);
-                    expect(
-                      yield* uploadedImageKeys(
-                        deployed.asyncApplication.accountId,
-                        deployed.asyncWorker.workerName,
-                        "NativeAsyncObject",
-                      ),
-                    ).toEqual(ASYNC_IMAGES);
                     expect(yield* exec(deployed.asyncWorker.url!, "/builtin")).toEqual({
                       stdout: "native",
                       exitCode: 7,

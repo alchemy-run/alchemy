@@ -24,6 +24,12 @@ export class NativeTools extends Cloudflare.Container<NativeTools>()(
   })),
 ) {}
 
+/** The reviewer's own image; NativeShell is shared by both classes. */
+export class NativeLint extends Cloudflare.Container<NativeLint>()("NativeLint", {
+  schedulingPolicy: "durable_object",
+  image: "alpine:3.19",
+}) {}
+
 /** Route names for the two images. */
 export type ImageName = "shell" | "tools";
 
@@ -231,6 +237,37 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
           exitCode: output.exitCode,
           release: decode(release.stdout).trim(),
           images: Object.keys(yield* imageMap).sort(),
+        };
+      }),
+    });
+  }),
+) {}
+
+/**
+ * A second class on the same Worker. It shares `NativeShell` with
+ * `NativeObject` and adds `NativeLint`, so each class has its own container
+ * application and image map.
+ */
+export class NativeReviewer extends Cloudflare.DurableObject<NativeReviewer>()(
+  "NativeReviewer",
+  Effect.gen(function* () {
+    const handles = { shell: yield* NativeShell, lint: yield* NativeLint };
+    const state = yield* DurableObjectState;
+    const run = (cmd: string[]) =>
+      Effect.scoped(Effect.flatMap(handles.shell.exec(cmd), (child) => child.output()));
+
+    return Effect.succeed({
+      exec: Effect.fn(function* (image: "shell" | "lint") {
+        if (!(yield* handles.shell.running)) {
+          yield* handles[image].start({ entrypoint: SLEEP_FOREVER, enableInternet: false });
+        }
+        const output = yield* run(["sh", "-c", "printf native; exit 7"]);
+        const release = yield* run(["cat", "/etc/alpine-release"]);
+        return {
+          stdout: decode(output.stdout),
+          exitCode: output.exitCode,
+          release: decode(release.stdout).trim(),
+          images: Object.keys(state.container?.images ?? {}).sort(),
         };
       }),
     });

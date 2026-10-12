@@ -16,8 +16,9 @@ const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
  * Each Container bound to this class adds its image to
  * `ctx.container.images` under the Container's id (see stack.ts).
  */
-const IMAGE_KEYS = { shell: "AsyncShell", tools: "AsyncTools" } as const;
-const imageKey = (name: string | null) => (name === "tools" ? IMAGE_KEYS.tools : IMAGE_KEYS.shell);
+const IMAGE_KEYS = { shell: "AsyncShell", tools: "AsyncTools", lint: "AsyncLint" } as const;
+const imageKey = (name: string | null) =>
+  name === "tools" ? IMAGE_KEYS.tools : name === "lint" ? IMAGE_KEYS.lint : IMAGE_KEYS.shell;
 
 /**
  * The plain-JS twin of `NativeObject` (object.ts): the same routes, written
@@ -158,6 +159,12 @@ export class NativeAsyncObject extends DurableObject<{
   }
 }
 
+/**
+ * A second class sharing the `AsyncShell` Container with `NativeAsyncObject`
+ * and adding `AsyncLint`; `?class=reviewer` routes to it.
+ */
+export class NativeAsyncReviewer extends NativeAsyncObject {}
+
 /** Routes that inspect the long-lived probe object rather than a fresh one. */
 const PROBE_ROUTES = new Set(["/probe", "/revision", "/metadata", "/evict"]);
 
@@ -171,7 +178,8 @@ export default {
     const objectName =
       url.searchParams.get("object") ?? (PROBE_ROUTES.has(url.pathname) ? "/probe" : url.pathname);
     try {
-      return await env.SANDBOX.getByName(objectName).fetch(request);
+      const namespace = url.searchParams.get("class") === "reviewer" ? env.REVIEWER : env.SANDBOX;
+      return await namespace.getByName(objectName).fetch(request);
     } catch (error) {
       return Response.json({ error: String(error) }, { status: 500 });
     }

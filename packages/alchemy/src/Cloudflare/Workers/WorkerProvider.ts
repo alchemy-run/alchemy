@@ -28,7 +28,10 @@ import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { mergeWorkerContainers } from "../Containers/ContainerConfiguration.ts";
+import {
+  assertBindingContainersOnAsyncClasses,
+  mergeWorkerContainers,
+} from "../Containers/ContainerConfiguration.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -3619,9 +3622,14 @@ export const LiveWorkerProvider = () =>
         // Collect container-backed classes so we can send container metadata.
         // A Durable Object-managed class merges the images of every bound
         // Container under one entry; `name` and `images` are only set for it.
-        const containerClasses = (yield* mergeWorkerContainers(
-          bindings.flatMap((b) => b.data.containers ?? []),
-        )).map(({ className, name, images }) => ({ className, name, images }));
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
+        );
+        const containerClasses = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, name, images }) => ({ className, name, images }),
+        );
 
         // Classes the deployed script hosts locally, by migration tag or by
         // an observed local Durable Object binding.
@@ -4838,6 +4846,10 @@ export const LiveWorkerProvider = () =>
           // Container binding (mirrors reconcile's `containerClasses`).
           // Mapping every DO class to a container would wrongly mark plain DOs
           // as container-backed in the placeholder.
+          yield* assertBindingContainersOnAsyncClasses(
+            bindings.flatMap((b) => b.data.containers ?? []),
+            exportDerived.map((binding) => binding.className),
+          );
           const containers = Array.from(
             new Set(bindings.flatMap((b) => (b.data.containers ?? []).map((c) => c.className))),
           ).map((className) => ({ className }));
@@ -5823,6 +5835,12 @@ ${worker}${doClasses.map((className) => `export class ${className} extends Alche
  * binding-derived entry wins on a collision so the `alchemy:dos:` tag keys off
  * the same logical id (the binding sid) that `reconcile` writes.
  */
+/** The Durable Object classes a Worker implements as Effect-native exports. */
+function effectNativeDurableObjectClasses(exports: WorkerProps["exports"] | undefined) {
+  const exportMap = (exports ?? {}) as Record<string, unknown>;
+  return Object.keys(exportMap).filter((name) => isDurableObjectExport(exportMap[name]));
+}
+
 function mergeDurableObjectClasses(
   exportDerived: ReadonlyArray<{
     logicalId: string;
