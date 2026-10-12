@@ -41,9 +41,29 @@ const reportDefects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-/** A failed RPC call or a reported defect is a defect for the caller. */
-const unwrapDefects = <A>(effect: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
-  effect.pipe(
+/**
+ * How long to keep retrying a Durable Object call that failed in transit:
+ * an instance being reset reports an opaque "internal error", and for a while
+ * after a deploy some instances still run the previous script (whose classes
+ * "do not implement" our methods). Backs off from 100ms to 2s, about a minute
+ * in total, so a call survives a deploy's rollout.
+ */
+const TRANSIT_RETRY = {
+  // Whichever delay is shorter: exponential at first, then every 2 seconds.
+  schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
+  times: 35,
+} as const;
+
+/**
+ * Call a Durable Object. A call that fails in transit is retried: every Fold
+ * object method is idempotent (sends dedupe by command id, deliveries by
+ * checkpoint, schedules replace, reads are reads). A defect the object
+ * reported, or a call that keeps failing, is a defect for the caller.
+ */
+const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
+  call.pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry(TRANSIT_RETRY),
     Effect.catch((error) => Effect.die(error)),
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
