@@ -7,6 +7,7 @@ import type { Actor } from "../Actor.ts";
 import { CurrentActor } from "../CurrentActor.ts";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
 import { AccountId } from "./AccountId.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.ts";
 import { AccountClosed, BalanceNotZero, CloseAccount } from "./CloseAccount.ts";
@@ -16,6 +17,7 @@ import { DepositMoney, MoneyDeposited } from "./DepositMoney.ts";
 import { AccountFrozen, FreezeAccount } from "./FreezeAccount.ts";
 import { Frozen } from "./Frozen.ts";
 import { InsufficientFunds } from "./InsufficientFunds.ts";
+import { mustOwn } from "./mustOwn.ts";
 import { NotOpen } from "./NotOpen.ts";
 import { NotOwner } from "./NotOwner.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
@@ -213,5 +215,14 @@ export class Account extends Aggregate.make("Account", {
   reply: {
     DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
     WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
+  },
+  // Clients may read and watch the account itself (its state and committed
+  // events) through an Api, judged like a view against its current state.
+  read: {
+    middleware: [Session],
+    rejects: [NotOwner],
+    validate: Effect.fn(function* (_request, s) {
+      yield* mustOwn(s._tag === "Open" ? s.customerId : null);
+    }),
   },
 }) {}

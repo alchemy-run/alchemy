@@ -99,6 +99,22 @@ it.live("a view is a security boundary: owners and agents read it, others are re
   ),
 );
 
+it.live("a customer watches their account's own events; others are rejected", () =>
+  inBank(
+    Effect.gen(function* () {
+      const sam = yield* asCustomer("c-1");
+      const alex = yield* asCustomer("c-2");
+      const accountId = yield* register(sam, "c-1", "sam");
+      yield* sam.DepositMoney({ target: accountId, amount: 70 });
+
+      const events = yield* sam.Account.events(accountId).pipe(Stream.take(2), Stream.runCollect);
+      expect(events.map((e) => e.event._tag)).toEqual(["AccountOpened", "MoneyDeposited"]);
+      expect((yield* sam.Account.get(accountId))._tag).toBe("Open");
+      expect((yield* alex.Account.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");
+    }),
+  ),
+);
+
 it.live("a customer can only register themselves", () =>
   inBank(
     Effect.gen(function* () {

@@ -1,4 +1,5 @@
 import { Api } from "alchemy/Fold";
+import { Account } from "../Account/Account.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
 import { CloseAccount } from "../Account/CloseAccount.ts";
 import { DepositMoney } from "../Account/DepositMoney.ts";
@@ -11,8 +12,9 @@ import { RequestTransfer } from "../Transfer/RequestTransfer.ts";
 import { TransferStatus } from "../Transfer/TransferStatus.ts";
 
 /**
- * What the customer app reaches: commands to change things and views to read
- * and watch. Each entry authorizes itself, through its `decide` or `validate`.
+ * What the customer app reaches: commands to change things, and the Account
+ * aggregate and views to read and watch. Each entry authorizes itself,
+ * through its `decide` or `validate`.
  */
 export class CustomerApi extends Api.make(
   "CustomerApi",
@@ -21,6 +23,7 @@ export class CustomerApi extends Api.make(
   WithdrawMoney,
   CloseAccount,
   RequestTransfer,
+  Account,
   CustomerDashboard,
   AccountSummary,
   Statement,

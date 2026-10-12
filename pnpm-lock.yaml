@@ -1889,6 +1889,9 @@ importers:
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
+      '@effect/platform-browser':
+        specifier: 4.0.0
+        version: 4.0.0(effect@4.0.0)
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.0(effect@4.0.0)
@@ -1901,6 +1904,9 @@ importers:
       effect:
         specifier: 4.0.0
         version: 4.0.0
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
