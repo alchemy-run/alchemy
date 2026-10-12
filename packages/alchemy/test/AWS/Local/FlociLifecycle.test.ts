@@ -2,7 +2,6 @@ import { execFile, spawnSync } from "node:child_process";
 import * as Floci from "@alchemy.run/floci";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 /**
  * Lifecycle tests for `ensureFloci`, the manager that owns the floci
  * emulator container.
@@ -42,12 +41,6 @@ const containerId = (name: string) => docker(["inspect", "--format", "{{.Id}}", 
 const isRunning = (name: string) =>
   docker(["inspect", "--format", "{{.State.Running}}", name]).pipe(
     Effect.map((out) => out === "true"),
-    Effect.orElseSucceed(() => false),
-  );
-
-const exists = (name: string) =>
-  containerId(name).pipe(
-    Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
 
@@ -176,31 +169,46 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  // #2214: a port Docker refuses to publish must never leave an
-  // unreachable container behind. Depending on whether the host probe sees
-  // the conflict, the manager either skips the port up front or Docker
-  // rejects it and the ensure fails fast with Docker's error — never a
-  // readiness-timeout wait on an unbound gateway.
+  // #2214: a port Docker refuses to publish (rootless Docker and 80/443, a
+  // port held elsewhere) must be dropped, not leave an unreachable
+  // container behind — and the dropped port must not make every later
+  // ensure recreate (and wipe) the container.
   it.live.skipIf(!dockerAvailable)(
-    "never waits on a container Docker could not fully publish",
+    "starts without a port Docker cannot publish, and keeps the container",
     () =>
       Effect.gen(function* () {
         yield* holdPort("floci-lifecycle-holder", 9595);
         const config = yield* isolated("conflict", 4595, { elbListenerPorts: [9595] });
 
-        const { value: result, elapsed } = yield* timed(Effect.result(Floci.ensureFloci(config)));
+        const { value: instance, elapsed } = yield* timed(Floci.ensureFloci(config));
 
-        if (Result.isSuccess(result)) {
-          // The probe saw the conflict and skipped the port.
-          const ports = yield* docker(["port", config.containerName]);
-          expect(ports).toContain(":4595");
-          expect(ports).not.toContain("9595");
-        } else {
-          expect(result.failure.message).toContain(`could not start ${config.containerName}`);
-          expect(yield* exists(config.containerName)).toBe(false);
-        }
-        // Fast attempts, not readiness timeouts (90s each here).
+        expect(instance.managed).toBe(true);
+        const ports = yield* docker(["port", config.containerName]);
+        expect(ports).toContain(":4595");
+        expect(ports).not.toContain("9595");
+        // A fast fallback, not a readiness timeout (90s here).
         expect(elapsed).toBeLessThan(60_000);
+        yield* Floci.checkHealth(instance.endpoint);
+
+        const id = yield* containerId(config.containerName);
+        yield* Floci.ensureFloci(config);
+        expect(yield* containerId(config.containerName)).toBe(id);
+      }),
+    { timeout: 180_000 },
+  );
+
+  it.live.skipIf(!dockerAvailable)(
+    "recreates the container when the requested ports change",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* isolated("ports", 4598);
+        yield* Floci.ensureFloci(config);
+        const id = yield* containerId(config.containerName);
+
+        yield* Floci.ensureFloci({ ...config, elbListenerPorts: [9598] });
+
+        expect(yield* containerId(config.containerName)).not.toBe(id);
+        expect(yield* docker(["port", config.containerName])).toContain(":9598");
       }),
     { timeout: 180_000 },
   );
