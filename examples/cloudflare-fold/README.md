@@ -46,42 +46,95 @@ export class RegisterCustomer extends Command.make("RegisterCustomer", {
 ```ts
 // src/Session.ts
 import * as Effect from "effect/Effect";
+import * as Cookies from "effect/http/Cookies";
 import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import { agent, customer } from "./Actor.ts";
+import * as Schema from "effect/Schema";
+import { type Actor, agent, customer } from "./Actor.ts";
 import { CurrentActor } from "./CurrentActor.ts";
+import { CustomerId } from "./Customer/CustomerId.ts";
 import { Unauthorized } from "./Unauthorized.ts";
+
+/** The cookie that carries a customer's session in a browser. */
+export const SESSION_COOKIE = "bank_session";
 
 /**
  * Authenticates a request, from a customer or a support agent, and provides
  * who is making it as the {@link CurrentActor}. Authorization is up to each
  * command's `decide` and each view's `validate`.
+ *
+ * Browsers authenticate with the session cookie, which also reaches live
+ * reads: a WebSocket upgrade carries cookies, never a header a client sets.
+ * Other clients (tests, support tooling) send `Authorization` instead.
  */
 export class Session extends RpcMiddleware.Service<Session, { provides: CurrentActor }>()(
   "Bank/Session",
-  { error: Unauthorized, requiredForClient: true },
+  { error: Unauthorized },
 ) {}
 
+const parse = (token: string): Option.Option<Actor> => {
+  const match = /^(customer|agent):(.+)$/.exec(token);
+  if (!match) return Option.none();
+  return Option.some(match[1] === "customer" ? customer(match[2]!) : agent(match[2]!));
+};
+
+const fromCookie = (headers: Headers.Headers): Option.Option<Actor> =>
+  Option.flatMap(Headers.get(headers, "cookie"), (cookie) =>
+    Option.flatMap(Option.fromNullishOr(Cookies.parseHeader(cookie)[SESSION_COOKIE]), (token) =>
+      Option.filter(parse(token), (actor) => actor._tag === "Customer"),
+    ),
+  );
+
+const fromAuthorization = (headers: Headers.Headers): Option.Option<Actor> =>
+  Option.flatMap(Headers.get(headers, "authorization"), (value) =>
+    value.startsWith("Bearer ") ? parse(value.slice("Bearer ".length)) : Option.none(),
+  );
+
 /**
- * Demo verifier: accepts `Authorization: Bearer customer:<id>` or
- * `Authorization: Bearer agent:<id>`. In production, verify a session cookie
- * for customers and a Cloudflare Access JWT for agents.
+ * Demo verifier: the session cookie (`customer:<id>`, from {@link sessionRoute}),
+ * or `Authorization: Bearer customer:<id>` / `Bearer agent:<id>`. In
+ * production, sign the cookie (or keep sessions server-side) and verify a
+ * Cloudflare Access JWT for agents.
  */
 export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
-  Option.match(Headers.get(headers, "authorization"), {
+  Option.match(Option.orElse(fromCookie(headers), () => fromAuthorization(headers)), {
     onNone: () => Effect.fail(new Unauthorized()),
-    onSome: (value) => {
-      const match = /^Bearer (customer|agent):(.+)$/.exec(value);
-      if (!match) return Effect.fail(new Unauthorized());
-      const actor = match[1] === "customer" ? customer(match[2]!) : agent(match[2]!);
-      return Effect.provideService(effect, CurrentActor, actor);
-    },
+    onSome: (actor) => Effect.provideService(effect, CurrentActor, actor),
   }),
 );
 
-/** Client side: send this token with every request. */
+const SignIn = Schema.Struct({ customerId: CustomerId });
+
+/**
+ * `POST /api/session` signs a customer in by setting the session cookie;
+ * `DELETE` signs them out. `HttpOnly` keeps it from scripts, and
+ * `SameSite=Strict` keeps it off cross-site requests, WebSocket upgrades
+ * included. Demo only: anyone may sign in as anyone.
+ */
+export const sessionRoute = Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  const options = { httpOnly: true, secure: true, sameSite: "strict", path: "/" } as const;
+  if (request.method === "DELETE") {
+    return HttpServerResponse.empty({ status: 204 }).pipe(
+      HttpServerResponse.setCookieUnsafe(SESSION_COOKIE, "", { ...options, maxAge: 0 }),
+    );
+  }
+  if (request.method !== "POST") return HttpServerResponse.empty({ status: 405 });
+  const body = yield* request.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SignIn)),
+    Effect.option,
+  );
+  if (Option.isNone(body)) return HttpServerResponse.text("Expected { customerId }", { status: 400 });
+  return HttpServerResponse.empty({ status: 204 }).pipe(
+    HttpServerResponse.setCookieUnsafe(SESSION_COOKIE, `customer:${body.value.customerId}`, options),
+  );
+});
+
+/** Client side, for clients that are not browsers: send this token with every call. */
 export const sessionClient = (token: string) =>
   RpcMiddleware.layerClient(Session, ({ request, next }) =>
     next({ ...request, headers: Headers.set(request.headers, "authorization", `Bearer ${token}`) }),
@@ -291,10 +344,11 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "../src/Account/AccountId.ts";
-import { StatementLine } from "../src/Account/Statement.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
+import { AccountId, mainAccountId } from "../Account/AccountId.ts";
+import { StatementLine } from "../Account/Statement.ts";
+import { CustomerId } from "../Customer/CustomerId.ts";
+import { Username } from "../Customer/Username.ts";
+import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
 
 /** The bank client this app runs on, provided by the `resources` Layer in `entry.ts`. */
 type Bank = Api.ClientKey<"CustomerApi">;
@@ -310,7 +364,9 @@ export type Flags = typeof Flags.Type;
 // MODEL
 
 export const Model = Schema.Struct({
+  customerId: CustomerId,
   accountId: AccountId,
+  /** `null` until the main account exists (register to open it). */
   balance: Schema.NullOr(Schema.Number),
   lines: Schema.Array(StatementLine),
   error: Schema.NullOr(Schema.String),
@@ -320,9 +376,10 @@ export type Model = typeof Model.Type;
 // MESSAGE
 
 export const Message = defineMessageUnion({
+  ClickedRegister: {},
   ClickedDeposit: {},
   ClickedWithdraw: {},
-  SucceededCommand: { balance: Schema.Number },
+  SucceededCommand: {},
   FailedCommand: { reason: Schema.String },
   GotBalance: { balance: Schema.NullOr(Schema.Number) },
   GotLine: { line: StatementLine },
@@ -332,14 +389,30 @@ export type Message = typeof Message.Type;
 
 // COMMANDS: each runs one Fold command over the app's connection.
 
+/** Register the signed-in customer; a policy then opens their main account. */
+export const Register = Command.define("Register", {
+  args: { customerId: CustomerId },
+  messages: [Message.SucceededCommand, Message.FailedCommand],
+  execute: ({ customerId }) =>
+    Effect.gen(function* () {
+      const bank = yield* CustomerApi.Client;
+      yield* bank.RegisterCustomer({
+        target: customerId,
+        name: customerId,
+        username: Username.make(customerId),
+      });
+      return Message.SucceededCommand();
+    }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
+});
+
 export const Deposit = Command.define("Deposit", {
   args: { accountId: AccountId, amount: Schema.Number },
   messages: [Message.SucceededCommand, Message.FailedCommand],
   execute: ({ accountId, amount }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      const { reply } = yield* bank.DepositMoney({ target: accountId, amount });
-      return Message.SucceededCommand({ balance: reply.balance });
+      yield* bank.DepositMoney({ target: accountId, amount });
+      return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });
 
@@ -349,8 +422,8 @@ export const Withdraw = Command.define("Withdraw", {
   execute: ({ accountId, amount }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      const { reply } = yield* bank.WithdrawMoney({ target: accountId, amount }, mfa);
-      return Message.SucceededCommand({ balance: reply.balance });
+      yield* bank.WithdrawMoney({ target: accountId, amount }, mfa);
+      return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });
 
@@ -358,6 +431,7 @@ export const Withdraw = Command.define("Withdraw", {
 
 export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
   Message.match<Update.Return<Model, Message, Bank>>(message, {
+    ClickedRegister: () => ({ model, commands: [Register({ customerId: model.customerId })] }),
     ClickedDeposit: () => ({
       model,
       commands: [Deposit({ accountId: model.accountId, amount: 1_000 })],
@@ -366,7 +440,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       model,
       commands: [Withdraw({ accountId: model.accountId, amount: 1_000 })],
     }),
-    // The balance arrives through the `summary` subscription; a reply only clears the error.
+    // State arrives through the subscriptions; a command's success only clears the error.
     SucceededCommand: () => ({ model: { ...model, error: null } }),
     FailedCommand: ({ reason }) => ({ model: { ...model, error: reason } }),
     GotBalance: ({ balance }) => ({ model: { ...model, balance } }),
@@ -377,7 +451,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 // INIT: the signed-in customer's main account.
 
 export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
-  model: { accountId: mainAccountId(flags.customerId), balance: null, lines: [], error: null },
+  model: {
+    customerId: flags.customerId,
+    accountId: mainAccountId(flags.customerId),
+    balance: null,
+    lines: [],
+    error: null,
+  },
 });
 
 // SUBSCRIPTIONS: the account's summary (snapshots) and statement (events), live.
@@ -428,14 +508,22 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   body: h.div(
     [h.Class("flex flex-col gap-4 p-8")],
     [
-      h.div([h.Class("text-4xl font-bold")], [model.balance === null ? "…" : cents(model.balance)]),
-      h.div(
-        [h.Class("flex gap-2")],
-        [
-          h.button([h.OnClick(Message.ClickedDeposit()), h.Class(button)], ["Deposit 10.00"]),
-          h.button([h.OnClick(Message.ClickedWithdraw()), h.Class(button)], ["Withdraw 10.00"]),
-        ],
-      ),
+      h.p([], [`Signed in as ${model.customerId}`]),
+      ...(model.balance === null
+        ? [h.button([h.OnClick(Message.ClickedRegister()), h.Class(button)], ["Open my account"])]
+        : [
+            h.div([h.Class("text-4xl font-bold")], [cents(model.balance)]),
+            h.div(
+              [h.Class("flex gap-2")],
+              [
+                h.button([h.OnClick(Message.ClickedDeposit()), h.Class(button)], ["Deposit 10.00"]),
+                h.button(
+                  [h.OnClick(Message.ClickedWithdraw()), h.Class(button)],
+                  ["Withdraw 10.00"],
+                ),
+              ],
+            ),
+          ]),
       h.p([h.Class("text-red-600")], [model.error ?? ""]),
       h.ul(
         [],
@@ -448,19 +536,20 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
 });
 ```
 
-The app connects with `Api.protocolWebSocket`, so its subscriptions are pushed by the Durable Objects behind them.
+The app signs in once, which sets an `HttpOnly`, `SameSite=Strict` session cookie, then connects with `Api.protocolWebSocket` on its own origin. The browser sends the cookie with every call and every watch's WebSocket upgrade, so no token appears in a URL or in script. Its subscriptions are pushed by the Durable Objects behind them.
 
 ```ts
 // src/web/entry.ts
 import { Api } from "alchemy/Fold";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { CustomerId } from "../Customer/CustomerId.ts";
 import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
-import { sessionClient } from "../Session.ts";
 import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
 
 /**
@@ -471,25 +560,30 @@ const signedIn = Effect.sync(() =>
   CustomerId.make(new URLSearchParams(location.search).get("customer") ?? "c-1"),
 );
 
+/** Sign in: the Api sets an `HttpOnly` session cookie on this origin. */
+const signIn = Effect.fn(function* (customerId: CustomerId) {
+  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  yield* client.execute(
+    HttpClientRequest.post("/api/session").pipe(HttpClientRequest.bodyJsonUnsafe({ customerId })),
+  );
+});
+
 /**
- * The bank Api for the life of the app, carrying the customer's session
- * token. Commands go over HTTP; each watch is a WebSocket to the Durable
- * Object that owns what it reads, which pushes every change.
+ * The bank Api for the life of the app, on this origin, so the browser sends
+ * the session cookie with every call and every watch. Commands go over HTTP;
+ * each watch is a WebSocket to the Durable Object that owns what it reads,
+ * which pushes every change.
  */
 const BankConnection = Layer.unwrap(
   Effect.gen(function* () {
-    const customerId = yield* signedIn;
+    // The app cannot run signed out.
+    yield* signIn(yield* signedIn).pipe(Effect.orDie);
     return CustomerApi.layerClient.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Api.protocolWebSocket(`${import.meta.env.VITE_BANK_URL}/api`),
-          sessionClient(`customer:${customerId}`),
-        ),
-      ),
-      Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+      Layer.provide(Api.protocolWebSocket(`${location.origin}/api`)),
+      Layer.provide(Socket.layerWebSocketConstructorGlobal),
     );
   }),
-);
+).pipe(Layer.provide(FetchHttpClient.layer));
 
 Runtime.run(
   Runtime.makeApplication({
@@ -658,12 +752,63 @@ src/
   Bank.ts       the Domain
   BankWorker.ts the Worker: both Apis + Stripe events, hosted on Durable Objects
   web/          the foldkit app: Bank.ts (model, messages, commands, subscriptions, view)
-                and entry.ts (boots it with the bank client as a resource)
+                entry.ts (signs in, then boots it with the bank client as a resource)
+                and worker.ts (serves the build, forwards /api to the bank)
 ```
 
 ## Hosting
 
 The Domain is hosted by whichever `FoldPlatform` Layer is provided. On Cloudflare every aggregate, view and policy becomes a Durable Object class, declared while the Domain's Layer is built. See [`BankWorker.ts`](src/BankWorker.ts); swap `FoldCloudflare.DurableObjects` for `Fold.InMemory` and nothing else changes.
+
+The app and the Api share one origin: the app's Worker serves the client build and forwards `/api` to the bank over a service binding, so the session cookie is first-party.
+
+```ts
+// src/web/worker.ts
+interface Fetcher {
+  fetch(request: Request): Promise<Response>;
+}
+
+/**
+ * The app's Worker: the client build, plus `/api` forwarded to the bank over
+ * a service binding. One origin for both, so the session cookie is
+ * first-party and reaches every call and every live read's WebSocket.
+ */
+export default {
+  fetch(request: Request, env: { readonly ASSETS: Fetcher; readonly BANK: Fetcher }) {
+    const { pathname } = new URL(request.url);
+    return pathname.startsWith("/api") ? env.BANK.fetch(request) : env.ASSETS.fetch(request);
+  },
+};
+```
+
+```ts
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import BankWorker from "./src/BankWorker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareFoldExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const bank = yield* BankWorker;
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the bank, so the app and the Api share one origin.
+    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
+      main: "src/web/worker.ts",
+      env: { BANK: bank },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
+    });
+    return { url: bank.url.as<string>(), app: app.url.as<string>() };
+  }),
+);
+```
 
 ## Tests
 

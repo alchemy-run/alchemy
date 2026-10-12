@@ -34,20 +34,28 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 /**
  * A typed CustomerApi client signed in as `customerId`: commands over HTTP,
  * every watch a WebSocket to the Durable Object that owns what it reads.
+ * Not a browser, so it sends `Authorization` rather than the session cookie:
+ * with its calls through `sessionClient`, and on each WebSocket upgrade
+ * through Bun's `WebSocket`, which accepts headers.
  */
-const customerClient = (url: string, customerId: string) =>
-  CustomerApi.client.pipe(
+const customerClient = (url: string, customerId: string) => {
+  const token = `customer:${customerId}`;
+  const webSockets = Layer.succeed(
+    Socket.WebSocketConstructor,
+    (socketUrl, protocols) =>
+      new WebSocket(socketUrl, {
+        protocols,
+        headers: { authorization: `Bearer ${token}` },
+      } as unknown as string[]),
+  );
+  return CustomerApi.client.pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Api.protocolWebSocket(`${url}/api`),
-        sessionClient(`customer:${customerId}`),
-      ).pipe(
-        Layer.provide(
-          Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal),
-        ),
+      Layer.mergeAll(Api.protocolWebSocket(`${url}/api`), sessionClient(token)).pipe(
+        Layer.provide(Layer.mergeAll(FetchHttpClient.layer, webSockets)),
       ),
     ),
   );
+};
 
 test(
   "the deployed bank decides, projects, runs policies and streams views",

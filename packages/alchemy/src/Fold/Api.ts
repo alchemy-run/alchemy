@@ -4,7 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Headers from "effect/http/Headers";
+import type * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -417,21 +417,22 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
 const LIVE_PARAM = "read";
 
 /**
- * A live read as the client sends it: the Effect RPC request, plus the
- * cursor to resume from after a reconnect.
+ * A live read as the client sends it: the Effect RPC request's id, tag and
+ * payload, plus the cursor to resume from after a reconnect. Never headers:
+ * a URL ends up in logs, so a live read authenticates with what its upgrade
+ * request carries (in a browser, its cookies).
  */
 interface LiveRequest {
   readonly id: string | number;
   readonly tag: string;
   readonly payload: unknown;
-  readonly headers: ReadonlyArray<readonly [string, string]>;
   readonly cursor?: number;
 }
 
 /**
  * Serve live reads (`watch` and `events`) as WebSockets. The read's
- * middleware runs here, in the Worker, against the upgrade's headers merged
- * with the ones the client attached; the context it provides travels with
+ * middleware runs here, in the Worker, against the upgrade request's own
+ * headers (cookies, in a browser); the context it provides travels with
  * the subscription to the object that owns the key, which pushes to the
  * socket on every commit. A refused read still connects, to deliver its
  * typed rejection.
@@ -475,7 +476,6 @@ const liveReads = (
     if (Option.isNone(payload))
       return HttpServerResponse.text("Invalid live read", { status: 400 });
     const { key, where, after } = payload.value as ReadPayload;
-    const headers = Headers.merge(request.headers, Headers.fromInput(live.headers));
     // Run the read's middleware, as the RPC server would, around capturing what it provides.
     let authorized: Effect.Effect<Command.ContextJson, unknown> = Command.captureContext;
     for (const service of read.rpc.middlewares) {
@@ -487,7 +487,7 @@ const liveReads = (
         rpc: read.rpc,
         client: new Rpc.ServerClient(0),
         requestId: RpcMessage.RequestId(live.id),
-        headers,
+        headers: request.headers,
         payload: payload.value,
       });
     }
@@ -646,11 +646,13 @@ const RECONNECTS = 8;
  * down the socket, so nothing polls and the object hibernates in between. A
  * dropped socket reconnects and resumes after the last value it delivered.
  *
- * A WebSocket cannot carry request headers from a browser, so the headers
- * client middleware attaches (a session token) travel in the URL, while
- * cookies travel as usual. Requires an `HttpClient` and a
- * `Socket.WebSocketConstructor` (`Socket.layerWebSocketConstructorGlobal`
- * in browsers and Workers).
+ * A browser cannot set headers on a WebSocket, and a URL ends up in logs,
+ * so headers client middleware attaches apply to calls only. A live read
+ * authenticates with what its upgrade request carries: in a browser, the
+ * cookies of the Api's origin, so serve the app and the Api from one origin
+ * and keep sessions in an `HttpOnly`, `SameSite` cookie. Requires an
+ * `HttpClient` and a `Socket.WebSocketConstructor`
+ * (`Socket.layerWebSocketConstructorGlobal` in browsers and Workers).
  *
  * **Example:** Watching a view over a WebSocket
  * ```typescript
@@ -691,7 +693,6 @@ export const protocolWebSocket = (
               id: request.id,
               tag: request.tag,
               payload: request.payload,
-              headers: request.headers,
               cursor,
             };
             const socket = yield* Socket.makeWebSocket(

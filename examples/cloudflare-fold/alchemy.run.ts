@@ -13,10 +13,12 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
-    // The foldkit app, built with Vite and served as static assets. A
-    // `VITE_`-prefixed env value is inlined into the client bundle.
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the bank, so the app and the Api share one origin.
     const app = yield* Cloudflare.Website.Foldkit("BankApp", {
-      env: { VITE_BANK_URL: bank.url.as<string>() },
+      main: "src/web/worker.ts",
+      env: { BANK: bank },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
     });
     return { url: bank.url.as<string>(), app: app.url.as<string>() };
   }),
