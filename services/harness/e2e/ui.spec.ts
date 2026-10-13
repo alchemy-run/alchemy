@@ -175,3 +175,50 @@ test("settling a session stops its machine and archives it until a new prompt", 
     timeout: 30_000,
   });
 });
+
+test("viewing or settling a session doesn't wake its machine", async ({ page, request }) => {
+  const API_URL = process.env.API_URL ?? "http://localhost:1338";
+  const listed = async (id: string) =>
+    (
+      (await (await request.get(`${API_URL}/agents`)).json()) as Array<{
+        id: string;
+        state: string;
+        settledAt?: number;
+      }>
+    ).find((session) => session.id === id);
+  const run = async (id: string) => {
+    const res = await request.post(`${API_URL}/agents/${id}`, {
+      data: { prompt: "Reply with exactly the word: asleep" },
+      timeout: 5 * 60_000,
+    });
+    expect(res.status(), await res.text()).toBe(200);
+  };
+  const stamp = Date.now().toString(36);
+  const viewed = `e2e-viewed-${stamp}`;
+  const unopened = `e2e-unopened-${stamp}`;
+  await Promise.all([run(viewed), run(unopened)]);
+
+  // Settled over the API, its machine stops.
+  await request.post(`${API_URL}/agents/${viewed}/settle`);
+  await expect
+    .poll(async () => (await listed(viewed))?.state, { timeout: 120_000 })
+    .toBe("suspended");
+  // Opening it shows its transcript without starting the machine.
+  await page.goto(`/#${viewed}`);
+  await expect(page.locator(".is-user").filter({ hasText: "asleep" })).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(5_000);
+  expect((await listed(viewed))?.state).toBe("suspended");
+
+  // Settled from the sidebar, never opened: it settles, and its machine stops.
+  const row = page.locator("aside nav > div.group").filter({ hasText: unopened });
+  await row.hover();
+  await row.getByRole("button", { name: `Settle ${unopened}` }).click();
+  await expect
+    .poll(async () => (await listed(unopened))?.settledAt, { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(async () => (await listed(unopened))?.state, { timeout: 120_000 })
+    .toBe("suspended");
+});

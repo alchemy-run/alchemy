@@ -156,7 +156,11 @@ export const agents = {
   machine: (id: string, stats = false) => call(id, (c) => c.machine({ sessionId: id, stats })),
   suspend: (id: string) => call(id, (c) => c.suspend({ sessionId: id })),
   resume: (id: string) => call(id, (c) => c.resume({ sessionId: id })),
-  settle: (id: string) => call(id, (c) => c.settle({ sessionId: id })),
+  /** Works for any session, open in this tab or not (it never starts the machine). */
+  settle: (id: string): Promise<Machine> =>
+    fetch(`${API_URL}/agents/${encodeURIComponent(id)}/settle`, { method: "POST" }).then((res) =>
+      res.ok ? res.json() : res.text().then((text) => Promise.reject(new Error(text))),
+    ),
 };
 
 //#region sessions

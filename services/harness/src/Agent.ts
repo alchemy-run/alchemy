@@ -94,17 +94,28 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           Effect.flatMap(f),
           Effect.scoped,
         );
+      /** A session as this object recorded it: reading it never starts the machine. */
+      const recorded = (sessionId: string) =>
+        harness.list().pipe(Effect.map((listed) => listed.find((info) => info.id === sessionId)));
+
       return AgentRpcs.toLayer({
-        // Idempotent: a session's id is stable.
+        // Opening a session only reads its record; a new session starts its
+        // machine (it's about to be used). Idempotent: a session's id is stable.
         start: ({ sessionId, model }) =>
-          claude.pipe(
-            Effect.flatMap((h) => h.start({ id: sessionId, ...(model ? { model } : {}) })),
-            Effect.flatMap((session) => session.info()),
+          recorded(sessionId).pipe(
+            Effect.flatMap((info) =>
+              info
+                ? Effect.succeed(info)
+                : claude.pipe(
+                    Effect.flatMap((h) => h.start({ id: sessionId, ...(model ? { model } : {}) })),
+                    Effect.flatMap((session) => session.info()),
+                    Effect.scoped,
+                  ),
+            ),
             // Listed for every browser.
             Effect.tap(() =>
               sessions.getByName(SESSIONS_INDEX).register(sessionId).pipe(Effect.ignore),
             ),
-            Effect.scoped,
           ),
         prompt: ({ sessionId, prompt }) =>
           call(sessionId, (s) => s.prompt(prompt)).pipe(
@@ -119,7 +130,12 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         respond: ({ sessionId, requestId, answer }) =>
           call(sessionId, (s) => s.respond(requestId, answer)),
         result: ({ sessionId, turnId }) => call(sessionId, (s) => s.result(turnId)),
-        info: ({ sessionId }) => call(sessionId, (s) => s.info()),
+        info: ({ sessionId }) =>
+          recorded(sessionId).pipe(
+            Effect.flatMap((info) =>
+              info ? Effect.succeed(info) : call(sessionId, (s) => s.info()),
+            ),
+          ),
         // History is served from this object, with or without a container.
         events: ({ sessionId, after }) => harness.events(sessionId, { after }),
         // A shell in the session's container (started, with its workspace).
