@@ -416,6 +416,29 @@ export const BranchProtectionProvider = () =>
       const checks = news.requiredStatusChecks;
       const reviews = news.requiredPullRequestReviews;
       const restrictions = news.restrictions;
+      // GitHub rejects a body that contains both `contexts` and `checks`.
+      // A set `checks` array is the request; `contexts` is sent only when
+      // `checks` is omitted. Octokit's parameter type still requires
+      // `contexts`, so the checks-only body is asserted at the boundary.
+      type UpdateBranchProtectionParams = Parameters<
+        typeof octokit.rest.repos.updateBranchProtection
+      >[0];
+      const requiredStatusChecks = (
+        checks === undefined
+          ? null
+          : checks.checks === undefined
+            ? {
+                strict: checks.strict ?? false,
+                contexts: checks.contexts ?? [],
+              }
+            : {
+                strict: checks.strict ?? false,
+                checks: checks.checks.map((check) => ({
+                  context: check.context,
+                  ...(check.appId === undefined ? {} : { app_id: check.appId }),
+                })),
+              }
+      ) as UpdateBranchProtectionParams["required_status_checks"];
 
       yield* Effect.tryPromise({
         try: () =>
@@ -423,23 +446,7 @@ export const BranchProtectionProvider = () =>
             owner: news.owner,
             repo: news.repository,
             branch: news.branch,
-            required_status_checks:
-              checks === undefined
-                ? null
-                : {
-                    strict: checks.strict ?? false,
-                    // GitHub rejects a body that contains both `contexts` and
-                    // `checks`. A set `checks` array is the request; `contexts`
-                    // is sent only when `checks` is omitted.
-                    ...(checks.checks === undefined
-                      ? { contexts: checks.contexts ?? [] }
-                      : {
-                          checks: checks.checks.map((check) => ({
-                            context: check.context,
-                            ...(check.appId === undefined ? {} : { app_id: check.appId }),
-                          })),
-                        }),
-                  },
+            required_status_checks: requiredStatusChecks,
             enforce_admins: news.enforceAdmins ?? false,
             required_pull_request_reviews:
               reviews === undefined
