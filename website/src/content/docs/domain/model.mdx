@@ -1,89 +1,86 @@
 ---
 title: Domain model
-description: What happens when a command reaches a running model, and how you declare, run and use one.
+description: What a domain model contains, how it processes every command, and how you declare, run and use one.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-A `Domain.Model` is one bounded context running as a whole: its aggregates, the views built from their events, and the policies that act on them. This page follows a single deposit through a running model, then shows how to declare one, run it, and call it from your own code.
+A `Domain.Model` is one bounded context running as a whole. It holds the context's aggregates, the views built from their events, and the policies that act on them, and it guarantees how commands and events move between them. This page describes that in general, with the bank from the [tutorial](/domain/tutorial/part-1) as the example throughout, then shows how to declare, run and call a model.
 
 If the words aggregate, view and policy are new, read [What is Domain-Driven Design?](/domain/what-is-ddd) first.
 
-## Follow one command
+## What a model contains
 
-A client deposits 100 into account `a-1`. Here is everything that happens, from the moment the command is sent to the moment the balance on screen changes.
+Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to views, which answer reads, and to policies, which send further commands.
 
 <DAG
   nodes={[
-    { id: "send", label: "DepositMoney", type: "send", kind: "command" },
-    { id: "account", label: "Account a-1", type: "aggregate", kind: "aggregate" },
-    { id: "commit", label: "commit", type: "events + state" },
-    { id: "receipt", label: "receipt", type: "to the caller" },
-    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
-    { id: "statement", label: "Statement", type: "view", kind: "view" },
+    { id: "commands", label: "Commands", type: "requests", layer: 0, kind: "command" },
+    { id: "aggregates", label: "Aggregates", type: "decide", layer: 1, kind: "aggregate" },
+    { id: "events", label: "Events", type: "the record", layer: 2, kind: "event" },
+    { id: "views", label: "Views", type: "answer reads", layer: 3, kind: "view" },
+    { id: "policies", label: "Policies", type: "act next", layer: 3, kind: "policy" },
   ]}
   edges={[
-    { from: "send", to: "account" },
-    { from: "account", to: "commit" },
-    { from: "commit", to: "receipt" },
-    { from: "commit", to: "summary", dashed: true },
-    { from: "commit", to: "statement", dashed: true },
+    { from: "commands", to: "aggregates" },
+    { from: "aggregates", to: "events" },
+    { from: "events", to: "views", dashed: true },
+    { from: "events", to: "policies", dashed: true },
+    { from: "policies", to: "commands" },
   ]}
-  caption="Solid edges are one step. Dashed edges are delivered shortly after the commit."
+  caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-## The command reaches one instance
+A model declares which aggregates, views and policies it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
 
-Every command names its target, the id of one aggregate instance. `DepositMoney` targets an `AccountId`, so the model routes it to account `a-1` and nowhere else.
+```typescript title="src/Bank.ts"
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account, Customer],
+  views: [AccountSummary, Statement],
+  policies: [MainAccountProvisioning],
+}) {}
+```
+
+## Each command goes to one instance
+
+An aggregate type has many instances, one per id, and every command names the id of the instance it's for. The model routes the command to that instance and no other.
+
+Each instance handles one command at a time. Commands for the same instance queue, and each is decided against the state the previous one left. Commands for different instances run independently. This is what makes an instance a consistency boundary: nothing else changes its state while it decides.
+
+<DAG
+  nodes={[
+    { id: "c1", label: "command", type: "for id 1", layer: 0, kind: "command" },
+    { id: "c2", label: "command", type: "for id 1", layer: 0, kind: "command" },
+    { id: "c3", label: "command", type: "for id 2", layer: 0, kind: "command" },
+    { id: "i1", label: "instance 1", type: "one at a time", layer: 1, kind: "aggregate" },
+    { id: "i2", label: "instance 2", type: "one at a time", layer: 1, kind: "aggregate" },
+  ]}
+  edges={[
+    { from: "c1", to: "i1" },
+    { from: "c2", to: "i1" },
+    { from: "c3", to: "i2" },
+  ]}
+/>
+
+In the bank, a deposit names the account it's for, so two deposits into `a-1` queue while a deposit into `a-2` runs alongside them:
 
 ```typescript title="src/depositAndRead.ts"
 const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
 ```
 
-Each instance handles one command at a time. If two commands for `a-1` arrive together, the second waits until the first has committed, then sees the state it left behind. Commands for different accounts run in parallel, since they can't affect each other.
+## The aggregate decides, and everything commits at once
+
+The instance runs the aggregate's `decide` handler for the command against its current state. A rejection ends the command: nothing is recorded, and the caller gets the rejection as a typed error. Otherwise, `decide` returns events, and each is applied to the state with `evolve`.
+
+Then the instance commits, in one atomic write: the events, appended to its stream with sequence numbers; its new state and version; the reply; and a delivery for every view and policy that consumes the events. Either all of it is stored or none of it is, so a crash can never leave events without their deliveries, or state that disagrees with its events.
 
 <DAG
   nodes={[
-    { id: "d1", label: "DepositMoney", type: "to a-1", layer: 0, kind: "command" },
-    { id: "w1", label: "WithdrawMoney", type: "to a-1", layer: 0, kind: "command" },
-    { id: "d2", label: "DepositMoney", type: "to a-2", layer: 0, kind: "command" },
-    { id: "a1", label: "Account a-1", type: "one at a time", layer: 1, kind: "aggregate" },
-    { id: "a2", label: "Account a-2", type: "one at a time", layer: 1, kind: "aggregate" },
-  ]}
-  edges={[
-    { from: "d1", to: "a1" },
-    { from: "w1", to: "a1" },
-    { from: "d2", to: "a2" },
-  ]}
-  caption="Commands to the same account queue; commands to different accounts don't wait for each other."
-/>
-
-## The aggregate decides
-
-The instance loads its current state and calls the aggregate's `decide` handler for the command.
-
-```typescript title="src/Account.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
-```
-
-If it returns a rejection, the command ends there. Nothing is recorded, and the caller gets the rejection as a typed error, here `NotOpen`.
-
-If it returns events, each one is folded into the state with `evolve`, in order.
-
-## The events and the state commit together
-
-The new events are appended to the instance's stream, each with the next sequence number. In the same atomic write, the instance stores its new state and version, the reply to the caller, and a delivery for every view and policy that consumes these events. Either all of it is stored, or none of it is.
-
-<DAG
-  nodes={[
-    { id: "decide", label: "decide", type: "MoneyDeposited", layer: 0 },
+    { id: "decide", label: "decide", type: "accepted", layer: 0 },
     { id: "commit", label: "one atomic write", layer: 1, tone: "accent" },
-    { id: "events", label: "events", type: "seq 3", layer: 2, kind: "event" },
-    { id: "state", label: "state", type: "version 3", layer: 2 },
-    { id: "receipt", label: "receipt", type: "reply", layer: 2 },
+    { id: "events", label: "events", type: "appended", layer: 2, kind: "event" },
+    { id: "state", label: "state", type: "new version", layer: 2 },
+    { id: "receipt", label: "receipt", type: "with the reply", layer: 2 },
     { id: "deliveries", label: "deliveries", type: "views, policies", layer: 2 },
   ]}
   edges={[
@@ -95,15 +92,38 @@ The new events are appended to the instance's stream, each with the next sequenc
   ]}
 />
 
-The caller then gets a receipt: the stream and the version it committed at, the events, and the reply.
+The caller gets a receipt with the stream and version the command committed at, the events, and the reply. The receipt is also stored under the command's id. If the same command arrives again, after a retry over a flaky connection, the instance returns the stored receipt instead of deciding twice.
 
-Every command also carries an id. If a client resends the same command after a dropped connection, the instance finds the receipt it stored for that id and returns it again. The money is deposited once.
+For a deposit into an open account, `decide` returns one `MoneyDeposited` event carrying the new balance:
+
+```typescript title="src/Account.ts"
+DepositMoney: (s, cmd) =>
+  s._tag !== "Open"
+    ? new NotOpen()
+    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+```
 
 ## Views and policies catch up
 
-After the commit, each delivery is sent on. `AccountSummary` folds `MoneyDeposited` into its balance; `Statement` adds a line. Each one receives every event it consumes at least once, in the order its source recorded them, even if something restarts in between.
+After the commit, the deliveries are sent. Every view and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views ignore events they've already applied; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
 
-That's why the dashed edges above come after the receipt. For a moment, the account knows the new balance and the summary doesn't yet. A reader who needs their own write passes the receipt along, and the view waits until it has applied that version before answering.
+Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version.
+
+In the bank, one `MoneyDeposited` reaches both views that read accounts:
+
+<DAG
+  nodes={[
+    { id: "event", label: "MoneyDeposited", type: "Account a-1", kind: "event" },
+    { id: "summary", label: "AccountSummary", type: "balance", kind: "view" },
+    { id: "statement", label: "Statement", type: "a new line", kind: "view" },
+  ]}
+  edges={[
+    { from: "event", to: "summary", dashed: true },
+    { from: "event", to: "statement", dashed: true },
+  ]}
+/>
+
+And a client that has just deposited reads the summary at that receipt, so it sees the new balance:
 
 ```typescript title="src/depositAndRead.ts"
 return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
