@@ -11,10 +11,8 @@
  * own API, or `AI.HarnessRpcs` to a harness server), persist in a session
  * store, and decode in browsers.
  */
-import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
@@ -348,17 +346,6 @@ export interface Session {
   readonly fork: () => Effect.Effect<Session, SessionError | Unsupported, RuntimeContext>;
   readonly close: () => Effect.Effect<void, SessionError, RuntimeContext>;
 }
-
-/**
- * The harness a session host (e.g. a Durable Object) talks to, as a service:
- * its value connects to the harness for the duration of a call. Provide it
- * with `AI.LocalHarness(Sandbox)` (the Sandbox's program on this machine).
- * For harnesses in Cloudflare Containers, see `Cloudflare.Containers.Harness`.
- */
-export const Harness = Context.Service<
-  Harness,
-  Effect.Effect<Harness, SessionError, Scope.Scope | RuntimeContext>
->("AI.Harness");
 
 /** A harness: starts and finds sessions. */
 export interface Harness {

@@ -34,10 +34,9 @@ export interface CodexServerProps {
  * export default Sandbox.make(
  *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
  *   Effect.gen(function* () {
- *     const app = yield* GitHub.MountRepository("acme/app", { path: "/workspace/app" });
  *     const codex = yield* OpenAI.CodexServer("Codex", {
  *       apiKey: yield* Config.Redacted("OPENAI_API_KEY"),
- *       cwd: app.path,
+ *       cwd: "/workspace/app",
  *     });
  *     return { fetch: yield* AI.serveHarnessHttp(codex) };
  *   }),

@@ -76,10 +76,9 @@ export interface ClaudeCodeServerProps {
  * export default Sandbox.make(
  *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
  *   Effect.gen(function* () {
- *     const app = yield* GitHub.MountRepository("acme/app", { path: "/workspace/app" });
  *     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
  *       apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
- *       cwd: app.path,
+ *       cwd: "/workspace/app",
  *     });
  *     return { fetch: yield* AI.serveHarnessHttp(claude) };
  *   }),

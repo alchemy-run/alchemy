@@ -9,4 +9,3 @@ export * from "./Repository.ts";
 export * from "./RepositoryToken.ts";
 export * from "./WriteNamespace.ts";
 export * from "./WriteNamespaceBinding.ts";
-export * from "./MountRepository.ts";

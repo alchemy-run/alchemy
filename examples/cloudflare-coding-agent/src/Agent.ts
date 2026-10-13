@@ -1,4 +1,4 @@
-import type { Session } from "alchemy/AI";
+import { type Session, SessionError } from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
@@ -40,29 +40,43 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         { repository: "alchemy-run/distilled", contents: "read" },
       ],
     });
-    const harness = yield* Cloudflare.Containers.Harness(Sandbox, {
-      workspace: WORKSPACE,
-      // Built once per image, then every session starts from it.
-      prepare: {
-        commands: [
-          `git clone --depth 50 https://github.com/alchemy-run/alchemy ${WORKSPACE}`,
-          `cd ${WORKSPACE} && git submodule update --init --depth 1 submodules/distilled`,
-          // Not `tsc -b`: type-checking all of Alchemy and its generated SDKs
-          // takes ~17-20 GB, over the largest container's 12 GiB.
-          `cd ${WORKSPACE} && pnpm install --frozen-lockfile`,
-        ],
-        egress: [github],
-        enableInternet: true,
-        instance: "standard-4",
-      },
-    });
+    const harness = yield* Cloudflare.Containers.Harness(Sandbox, { workspace: WORKSPACE });
+    const sandbox = yield* Sandbox;
+
+    /**
+     * The workspace is ours: clone Alchemy into a container that has none
+     * (a snapshot or checkpoint already restores it otherwise). Dependencies
+     * are left to the agent.
+     */
+    const ensureWorkspace = Effect.scoped(
+      Effect.gen(function* () {
+        const child = yield* sandbox.exec([
+          "sh",
+          "-c",
+          `[ -d ${WORKSPACE}/.git ] || git clone --depth 50 https://github.com/alchemy-run/alchemy ${WORKSPACE}`,
+        ]);
+        const { exitCode, stderr } = yield* child.output();
+        if (exitCode !== 0) {
+          return yield* new SessionError({
+            message: `cloning the workspace failed: ${new TextDecoder().decode(stderr)}`,
+          });
+        }
+      }),
+    ).pipe(
+      Effect.catchTag("ContainerError", (cause) =>
+        Effect.fail(new SessionError({ message: cause.message })),
+      ),
+    );
+
     return Effect.sync(() => {
-      const claude = harness.start({
-        egress: [model, github],
-        // Package registries and docs; GitHub and the model go through egress.
-        enableInternet: true,
-        instance: "standard-4",
-      });
+      const claude = harness
+        .start({
+          egress: [model, github],
+          // Package registries and docs; GitHub and the model go through egress.
+          enableInternet: true,
+          instance: "standard-4",
+        })
+        .pipe(Effect.tap(() => ensureWorkspace));
       const call = <A, E, R>(sessionId: string, f: (session: Session) => Effect.Effect<A, E, R>) =>
         claude.pipe(
           Effect.flatMap((h) => h.get(sessionId)),

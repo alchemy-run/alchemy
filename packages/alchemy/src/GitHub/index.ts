@@ -23,4 +23,3 @@ export * from "./Webhook.ts";
 export * from "./WikiPage.ts";
 export * from "./Milestone.ts";
 export * from "./Issue.ts";
-export * from "./MountRepository.ts";

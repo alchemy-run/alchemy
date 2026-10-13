@@ -11,9 +11,12 @@
  *   Object — incremental git bundles and a tarball in its SQLite. This is the
  *   durable copy: any container, on any image, can be restored from it.
  * - Snapshots are a cache on top: the container is snapshotted when it shuts
- *   down, and a `prepare`d workspace is snapshotted once per image (by one
- *   designated instance of the Durable Object class) so new sessions don't
- *   rebuild it. A snapshot only restores onto the image it was taken from.
+ *   down and restored when it starts again. A snapshot only restores onto
+ *   the image it was taken from; otherwise the checkpoint is restored into a
+ *   fresh container (the workspace is recreated from it if missing).
+ *
+ * What goes in the workspace (cloning, installing, building) is up to your
+ * code: run it with the container's `exec` after `start`.
  *
  * A container that dies without warning (crash, host failure) loses only
  * the turn in progress: it restarts from a snapshot and the latest
@@ -22,7 +25,6 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -37,10 +39,8 @@ import {
   StartSession,
 } from "../../AI/Session.ts";
 import { SessionStore } from "../../AI/SessionStore.ts";
-import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { toHttpClient } from "../Fetcher.ts";
-import { callInstance, registerInternal } from "../Workers/DurableObjectInternal.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { DurableSessionStore } from "../Workers/DurableSessionStore.ts";
 import type { Container } from "./Container.ts";
@@ -50,7 +50,7 @@ import type {
   ContainerExecOptions,
   ContainerStartOptions,
 } from "./ContainerClient.ts";
-import { type Egress, makeEgress } from "./Egress.ts";
+import { makeEgress } from "./Egress.ts";
 
 /** The host the container calls when it is told to shut down. */
 export const HARNESS_CONTROL_HOST = "alchemy.internal";
@@ -74,46 +74,7 @@ export interface HarnessOptions {
    * @default ["~/.claude/projects", "~/.codex/sessions", "~/.local/share/opencode"]
    */
   readonly state?: ReadonlyArray<string>;
-  /**
-   * Builds the workspace once per image: `commands` run (with `sh -c`, in
-   * order) in a fresh container, which is then snapshotted. Every session's
-   * container starts from that snapshot — a build cache; each session's own
-   * work comes from its checkpoints.
-   */
-  readonly prepare?: HarnessPrepare;
 }
-
-/** How `Harness` builds the workspace a session starts from. */
-export interface HarnessPrepare {
-  /** Shell commands, e.g. `git clone …` and `pnpm install`. */
-  readonly commands: ReadonlyArray<string>;
-  /** Egress for the build (e.g. `GitHub.Egress` to clone a private repository). */
-  readonly egress?: ReadonlyArray<Egress>;
-  /** Let the build reach hosts outside its egress (e.g. a package registry). @default false */
-  readonly enableInternet?: boolean;
-  /** The instance type to build on. */
-  readonly instance?: ContainerStartOptions["instance"];
-}
-
-/**
- * The instances of the Durable Object class that build and keep prepared
- * snapshots: one per image and command set (`<prefix>:<hash>`), so changing
- * either reaches a fresh instance running the current code.
- */
-export const PREPARE_INSTANCE = "~alchemy-harness-prepare";
-
-/** Identifies a prepared snapshot: the image it's built on and the commands. */
-const preparedHash = (prepare: HarnessPrepare, image: string) =>
-  Effect.promise(async () => {
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(`${image}\n${JSON.stringify(prepare.commands)}`),
-    );
-    return [...new Uint8Array(digest)]
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")
-      .slice(0, 32);
-  });
 
 const DEFAULT_STATE = ["~/.claude/projects", "~/.codex/sessions", "~/.local/share/opencode"];
 
@@ -136,8 +97,8 @@ const GIT_IDENTITY = {
 /**
  * Commit the working tree (through a scratch index, leaving the agent's
  * index alone) as `refs/alchemy/checkpoint`, then print every local branch
- * and the checkpoint as `<sha> <ref>` lines. Exits 3 when $WS is not a git
- * work tree.
+ * and the checkpoint as `<sha> <ref>` lines, then `origin <url>`. Exits 3
+ * when $WS is not a git work tree.
  */
 const CHECKPOINT_SCRIPT = `set -e
 cd "$WS" 2>/dev/null || exit 3
@@ -152,13 +113,14 @@ tree=$(git write-tree)
 branch=$(git symbolic-ref -q --short HEAD || true)
 commit=$(printf 'alchemy checkpoint\n\nbranch: %s\n' "$branch" | git commit-tree "$tree" \${head:+-p "$head"})
 git update-ref refs/alchemy/checkpoint "$commit"
-git for-each-ref --format='%(objectname) %(refname)' refs/heads refs/alchemy/checkpoint`;
+git for-each-ref --format='%(objectname) %(refname)' refs/heads refs/alchemy/checkpoint
+echo "origin $(git remote get-url origin 2>/dev/null || true)"`;
 
 /**
  * Bundle the objects behind the checkpoint and local branches that the
- * restore base doesn't have: not the remote-tracking history (the prepared
- * workspace has it, or it's fetched again), nor what $EXCLUDE (the previous
- * checkpoint's refs) already covered. Exits 4 when there's nothing new.
+ * restore base doesn't have: not the remote-tracking history (fetched from
+ * origin again on restore), nor what $EXCLUDE (the previous checkpoint's
+ * refs) already covered. Exits 4 when there's nothing new.
  */
 const BUNDLE_SCRIPT = `set -e
 cd "$WS"
@@ -176,12 +138,18 @@ fi
 cat "$out"`;
 
 /**
- * Restore a checkpoint: fetch its bundles (fetching any prerequisite the
- * base lacks from origin), set the local branches ($REFS), point HEAD where
- * it was, and make the working tree the checkpoint's — the index matches
- * HEAD again, so uncommitted changes show as uncommitted.
+ * Restore a checkpoint: recreate the repository if $WS has none (with
+ * $ORIGIN as its origin), fetch the bundles (fetching any prerequisite it
+ * lacks from origin), set the local branches ($REFS), point HEAD where it
+ * was, and make the working tree the checkpoint's — the index matches HEAD
+ * again, so uncommitted changes show as uncommitted.
  */
 const RESTORE_SCRIPT = `set -e
+if [ ! -d "$WS/.git" ]; then
+  mkdir -p "$WS"
+  git -C "$WS" init -q
+  if [ -n "$ORIGIN" ]; then git -C "$WS" remote add origin "$ORIGIN"; fi
+fi
 cd "$WS"
 for b in $BUNDLES; do
   missing=$(git bundle verify "$b" 2>&1 >/dev/null | grep -oE '[0-9a-f]{40}' || true)
@@ -203,29 +171,6 @@ git reset -q
 git for-each-ref --format='delete %(refname)' refs/alchemy/restore | git update-ref --stdin
 rm -f $BUNDLES`;
 
-/** The bundle commands run by the harness trust (system roots plus the egress CA). */
-const EXEC_CA_BUNDLE = `${EGRESS_CA_BUNDLE}.exec`;
-
-/**
- * Commands run with `exec` don't inherit the container program's
- * environment: trust the egress interception CA here too (see
- * Runtime/Bootstrap/EgressCa.ts). The platform writes the CA shortly after
- * the container starts with egress, so wait for it when egress is set
- * ($ALCHEMY_EXPECT_EGRESS_CA).
- */
-const TRUST_EGRESS_CA = `if [ -n "$ALCHEMY_EXPECT_EGRESS_CA" ]; then
-  i=0
-  while [ ! -s ${EGRESS_CA} ] && [ $i -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
-fi
-if [ -s ${EGRESS_CA} ]; then
-  for roots in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
-    if [ -f "$roots" ]; then cat "$roots" > ${EXEC_CA_BUNDLE}; break; fi
-  done
-  cat ${EGRESS_CA} >> ${EXEC_CA_BUNDLE}
-  export SSL_CERT_FILE=${EXEC_CA_BUNDLE} GIT_SSL_CAINFO=${EXEC_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EXEC_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EXEC_CA_BUNDLE} CURL_CA_BUNDLE=${EXEC_CA_BUNDLE}
-fi
-`;
-
 /** A tarball (to stdout) of the state directories that exist. */
 const stateTarScript = (paths: ReadonlyArray<string>) => `set -e
 list=""
@@ -243,6 +188,8 @@ interface CheckpointMeta {
   readonly from: number;
   /** `<sha> <ref>` lines: the local branches and the checkpoint commit. */
   readonly refs: ReadonlyArray<string>;
+  /** The workspace's origin, to recreate it in a fresh container. */
+  readonly origin?: string;
   readonly hasState: boolean;
 }
 
@@ -503,9 +450,6 @@ export const Harness = (
 
     //#region running commands in the container
 
-    /** Whether the running container has egress (so its CA will appear). */
-    let expectEgressCa = false;
-
     const sh = (
       script: string,
       execOptions: {
@@ -516,10 +460,9 @@ export const Harness = (
       Effect.scoped(
         Effect.gen(function* () {
           const stdin = execOptions.stdin;
-          const child = yield* sandbox.exec(["sh", "-c", `${TRUST_EGRESS_CA}${script}`], {
+          const child = yield* sandbox.exec(["sh", "-c", script], {
             env: {
               ...GIT_IDENTITY,
-              ...(expectEgressCa ? { ALCHEMY_EXPECT_EGRESS_CA: "1" } : {}),
               ...execOptions.env,
             },
             stdout: "pipe",
@@ -562,12 +505,15 @@ export const Harness = (
       const seq = (previous?.seq ?? 0) + 1;
       let from = previous?.from ?? seq;
       let refs = previous?.refs ?? [];
+      let origin = previous?.origin;
 
       if (options.workspace) {
         const computed = yield* sh(CHECKPOINT_SCRIPT, { env: { WS: options.workspace } });
         if (computed.exitCode !== 3) {
           yield* check("checkpointing the workspace", computed);
-          const next = new TextDecoder().decode(computed.stdout).split("\n").filter(Boolean).sort();
+          const lines = new TextDecoder().decode(computed.stdout).split("\n").filter(Boolean);
+          origin = lines.find((line) => line.startsWith("origin "))?.slice(7) || undefined;
+          const next = lines.filter((line) => !line.startsWith("origin ")).sort();
           if (next.join("\n") !== refs.join("\n")) {
             // A long chain is replaced by one bundle of everything local.
             const whole = previous === undefined || seq - from >= MAX_BUNDLE_CHAIN;
@@ -595,7 +541,13 @@ export const Harness = (
       const hasState = tar.stdout.length > 0;
       if (hasState) yield* putBlob("state", tar.stdout);
 
-      yield* setJson("checkpoint", { seq, from, refs, hasState } satisfies CheckpointMeta);
+      yield* setJson("checkpoint", {
+        seq,
+        from,
+        refs,
+        hasState,
+        ...(origin ? { origin } : {}),
+      } satisfies CheckpointMeta);
       checkpointSeq = seq;
     });
 
@@ -623,6 +575,7 @@ export const Harness = (
                 WS: options.workspace,
                 BUNDLES: bundles.join(" "),
                 REFS: latest.refs.join("\n"),
+                ORIGIN: latest.origin ?? "",
               },
             }),
           );
@@ -717,163 +670,6 @@ export const Harness = (
 
     //#endregion
 
-    //#region the prepared workspace (a build cache, kept by one instance)
-
-    type PreparedStatus =
-      | { readonly status: "ready"; readonly id: string }
-      | { readonly status: "building" }
-      | { readonly status: "failed"; readonly message: string };
-
-    /** Builds in this instance, by key: running, or failed (reported once). */
-    const builds = new Map<string, PreparedStatus>();
-
-    /**
-     * Run one prepare command detached in the container — writing its output
-     * and exit code to files — and poll for the exit code with short calls,
-     * so a long command never rides on one long-lived connection.
-     */
-    const runDetached = (command: string, index: number) =>
-      Effect.gen(function* () {
-        const log = `/tmp/alchemy-prepare-${index}.log`;
-        const exit = `/tmp/alchemy-prepare-${index}.exit`;
-        yield* check(
-          `prepare: starting ${command}`,
-          yield* sh(
-            `rm -f ${exit}
-if command -v setsid >/dev/null 2>&1; then detach=setsid; else detach=nohup; fi
-$detach sh -c 'sh -c "$PREPARE_COMMAND" > ${log} 2>&1; echo $? > ${exit}' </dev/null >/dev/null 2>&1 &`,
-            { env: { PREPARE_COMMAND: command } },
-          ),
-        );
-        const code = yield* sh(`cat ${exit} 2>/dev/null`).pipe(
-          Effect.map((result) => new TextDecoder().decode(result.stdout).trim()),
-          Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (value) => value !== "",
-          }),
-          Effect.timeoutOrElse({
-            duration: "60 minutes",
-            orElse: () =>
-              Effect.fail(new SessionError({ message: `prepare: ${command} ran over 60 minutes` })),
-          }),
-        );
-        if (code !== "0") {
-          const tail = new TextDecoder().decode((yield* sh(`tail -c 4000 ${log}`)).stdout);
-          return yield* new SessionError({
-            message: `prepare: ${command} failed (${code}): ${tail}`,
-          });
-        }
-      });
-
-    /** Build the prepared snapshot for `image`. Runs in a prepare instance. */
-    const buildPrepared = (prepare: HarnessPrepare, image: string, key: string) =>
-      Effect.gen(function* () {
-        // A build interrupted earlier may have left its container running.
-        yield* sandbox.destroy().pipe(Effect.ignore);
-        expectEgressCa = (prepare.egress?.length ?? 0) > 0;
-        yield* sandbox
-          .start({
-            image,
-            egress: [...(prepare.egress ?? [])],
-            enableInternet: prepare.enableInternet ?? false,
-            ...(prepare.instance ? { instance: prepare.instance } : {}),
-          } as ContainerStartOptions)
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new SessionError({
-                  message: `starting the prepare container failed: ${String(cause)}`,
-                }),
-            ),
-          );
-        for (const [index, command] of prepare.commands.entries()) {
-          yield* runDetached(command, index);
-        }
-        const taken = yield* sandbox.snapshotContainer({ name: "harness-prepared" }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new SessionError({
-                message: `snapshotting the prepared workspace failed: ${cause.message}`,
-              }),
-          ),
-        );
-        yield* setJson(key, { id: taken.id });
-        return taken.id;
-      }).pipe(
-        // Succeeded or failed, the build container is done.
-        Effect.ensuring(sandbox.destroy().pipe(Effect.ignore)),
-      );
-
-    /**
-     * The prepared snapshot's status, starting its build in the background
-     * if needed. Answers at once: callers poll, so no call lasts as long as
-     * the build. Runs in a prepare instance.
-     */
-    const preparedStatus = (prepare: HarnessPrepare, image: string) =>
-      Effect.gen(function* () {
-        const key = `prepared:${yield* preparedHash(prepare, image)}`;
-        const existing = yield* getJson<{ readonly id: string }>(key);
-        if (existing) return { status: "ready", id: existing.id } satisfies PreparedStatus;
-        const current = builds.get(key);
-        if (current?.status === "failed") {
-          // Report the failure once; the next request builds again.
-          builds.delete(key);
-          return current;
-        }
-        if (current === undefined) {
-          builds.set(key, { status: "building" });
-          const context = yield* Effect.context<RuntimeContext>();
-          void Effect.runPromise(
-            buildPrepared(prepare, image, key).pipe(
-              Effect.match({
-                onSuccess: () => builds.delete(key),
-                onFailure: (error) => builds.set(key, { status: "failed", message: error.message }),
-              }),
-              Effect.provideContext(context),
-            ),
-          );
-        }
-        return { status: "building" } satisfies PreparedStatus;
-      });
-
-    if (options.prepare && globalThis.__ALCHEMY_RUNTIME__) {
-      const prepare = options.prepare;
-      registerInternal(state.raw, "harness.prepare", (payload) =>
-        preparedStatus(prepare, (payload as { image: string }).image),
-      );
-    }
-
-    /** The prepared snapshot for `image`, from the instance that keeps it (polling its build). */
-    const prepared = (prepare: HarnessPrepare, image: string) =>
-      Effect.gen(function* () {
-        const hash = yield* preparedHash(prepare, image);
-        const ask = callInstance<PreparedStatus>(
-          state.raw,
-          `${PREPARE_INSTANCE}:${hash}`,
-          "harness.prepare",
-          { image },
-        );
-        const status = yield* ask.pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (s) => s.status !== "building",
-          }),
-          Effect.timeoutOrElse({
-            duration: "90 minutes",
-            orElse: () => Effect.fail(new Error("the prepared workspace took over 90 minutes")),
-          }),
-        );
-        if (status.status === "failed") return yield* Effect.fail(new Error(status.message));
-        return { id: (status as { readonly id: string }).id };
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new SessionError({ message: `preparing the workspace failed: ${cause.message}` }),
-        ),
-      );
-
-    //#endregion
-
     //#region the running harness
 
     /** Each time the container starts, its sessions and cursors start over. */
@@ -891,7 +687,6 @@ $detach sh -c 'sh -c "$PREPARE_COMMAND" > ${log} 2>&1; echo $? > ${exit}' </dev/
     const startContainer = (startOptions: ContainerStartOptions | undefined) =>
       Effect.gen(function* () {
         const egress = [...(startOptions?.egress ?? []), control];
-        expectEgressCa = true;
         if (yield* sandbox.running.pipe(Effect.orElseSucceed(() => false))) {
           // Running: only the egress may have changed.
           yield* sandbox.start({ ...startOptions, egress });
@@ -927,22 +722,7 @@ $detach sh -c 'sh -c "$PREPARE_COMMAND" > ${log} 2>&1; echo $? > ${exit}' </dev/
           yield* Effect.logWarning("restoring the container's snapshot failed", restored.cause);
         }
 
-        // 2. The prepared workspace for this image, then the checkpoints.
-        if (options.prepare && image) {
-          const base = yield* Effect.exit(prepared(options.prepare, image));
-          if (Exit.isSuccess(base)) {
-            const restored = yield* startFrom(base.value.id);
-            if (Exit.isSuccess(restored)) {
-              yield* restoreCheckpoint(0);
-              return;
-            }
-            yield* Effect.logWarning("starting from the prepared workspace failed", restored.cause);
-          } else {
-            yield* Effect.logWarning("preparing the workspace failed", base.cause);
-          }
-        }
-
-        // 3. A fresh container, then the checkpoints.
+        // 2. A fresh container, then the checkpoints.
         // TODO(harness-recovery): a session whose container died during a
         // turn has lost that turn's unsaved work (checkpoints are taken
         // between turns). Detect it per session (recorded events past the

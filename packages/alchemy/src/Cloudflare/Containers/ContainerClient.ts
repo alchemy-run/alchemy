@@ -36,6 +36,7 @@ import {
   EGRESS_PROPS_KEY,
   egressRoute,
   registerEgress,
+  TRUST_EGRESS_CA_THEN_EXEC,
   type Egress,
 } from "./Egress.ts";
 
@@ -569,10 +570,14 @@ export const fromContainer = <ImageName extends string = string>(
     Effect.flatMap(attached, (container) =>
       Effect.tryPromise({
         try: (interrupt) =>
-          container.exec(cmd, {
-            ...options,
-            signal: combineSignals(interrupt, options?.signal),
-          }),
+          container.exec(
+            // With egress, the command trusts its interception CA.
+            liveEgress.length > 0 ? ["sh", "-c", TRUST_EGRESS_CA_THEN_EXEC, "sh", ...cmd] : cmd,
+            {
+              ...options,
+              signal: combineSignals(interrupt, options?.signal),
+            },
+          ),
         catch: containerError,
       }),
     ).pipe(Effect.map(fromProcess));

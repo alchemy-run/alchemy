@@ -1,22 +1,17 @@
-import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import type * as Path from "effect/Path";
-import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Scope from "effect/Scope";
+import { gitCliLayer } from "../Docker/CliLayers.ts";
 import { bindIntoImageHost } from "../Docker/ImageHost.ts";
 import type { ImageLayer } from "../Docker/ImageLayer.ts";
-import { gitCliLayer } from "../FS/GitMount.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
 import { HarnessRpcs, serveHarness } from "./HarnessRpcs.ts";
-import { prewarmWorkspaces, sessionCwd } from "./LocalWorkspace.ts";
 import { SessionError, type Harness } from "./Session.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
 
@@ -152,23 +147,7 @@ export const makeHarnessServer = <R>(
       Effect.provideService(Scope.Scope, scope),
       Effect.orDie,
     );
-    // On this machine (`AI.LocalHarness`) one process serves every session:
-    // each session's working directory maps into its own worktree. In a
-    // container the path is used as is. The bootstrap's platform services
-    // (file system, process spawning) do the work.
-    const platform = (yield* Effect.context<never>()) as Context.Context<
-      FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-    >;
-    // Have a worktree ready before the first session asks for one.
-    yield* prewarmWorkspaces.pipe(Effect.provideContext(platform));
-    const driver: HarnessDriver = {
-      ...native,
-      open: (session) =>
-        sessionCwd(session.cwd, session.id).pipe(
-          Effect.provideContext(platform),
-          Effect.flatMap((cwd) => native.open({ ...session, cwd })),
-        ),
-    };
+    const driver: HarnessDriver = native;
     const store = yield* Layer.build(MemorySessionStore).pipe(Scope.provide(scope));
     return yield* makeHarness(driver).pipe(
       Effect.provideContext(store),

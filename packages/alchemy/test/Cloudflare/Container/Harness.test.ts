@@ -11,7 +11,7 @@ const HOOK_TIMEOUT = 600_000;
 /**
  * `Cloudflare.Containers.Harness` keeps a session working across container
  * restarts: from the container's snapshot after `stop()`, and from the
- * prepared workspace plus the session's checkpoints when the container was
+ * session's checkpoints (recreating the workspace) when the container was
  * lost without one. History stays in the Durable Object either way.
  */
 describe.each([
@@ -45,6 +45,14 @@ describe.each([
         Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
       );
     });
+
+  test(
+    "commands run with exec reach egress hosts over intercepted TLS",
+    Effect.gen(function* () {
+      expect((yield* get("/probe", { object: `${mode}-probe` })).trim()).toBe("ok");
+    }),
+    { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 300_000 },
+  );
 
   test(
     "a session keeps its files and conversation across a restart",
@@ -92,10 +100,10 @@ describe.each([
         prompt:
           "Run `cat /workspace/repo/fruit.txt /workspace/repo/base.txt` and reply with only the output.",
       });
-      // The uncommitted file came back from the checkpoint; base.txt from
-      // the prepared workspace.
+      // The fresh container had no repository: the checkpoint recreated it,
+      // with its history (base.txt) and the uncommitted file.
       expect(files).toContain("kiwi-7");
-      expect(files).toContain("prepared");
+      expect(files).toContain("base");
       // A new container: what was outside the workspace is gone.
       expect(yield* get("/read", { ...params, path: "/root/outside.txt" })).toBe("");
 

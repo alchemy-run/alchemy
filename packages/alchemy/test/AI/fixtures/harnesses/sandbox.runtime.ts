@@ -4,10 +4,12 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as AI from "@/AI/index.ts";
 import * as Anthropic from "@/Anthropic/index.ts";
-import * as GitHub from "@/GitHub/index.ts";
+import { Dockerfile } from "@/Docker/index.ts";
 import * as OpenAI from "@/OpenAI/index.ts";
 import * as OpenCode from "@/OpenCode/index.ts";
 import { Sandbox } from "./sandbox.ts";
+
+const WORKSPACE = "/workspace/hello";
 
 /**
  * One image with an environment and three harnesses installed, each served
@@ -17,29 +19,30 @@ export default Sandbox.make(
   {
     main: import.meta.url,
     runtime: "node",
-    image: "node:22-bookworm-slim",
+    // A tiny public repository, checked out into the image.
+    dockerfile: Dockerfile.inline`
+      FROM node:22-bookworm-slim
+      RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+      RUN git clone --depth 1 https://github.com/octocat/Hello-World ${WORKSPACE}
+    `,
     instanceType: "standard-1",
   },
   Effect.gen(function* () {
-    // A tiny public repository, checked out into the image at build time.
-    const repo = yield* GitHub.MountRepository("octocat/Hello-World", {
-      path: "/workspace/hello",
-    });
     const anthropicKey = yield* Config.Redacted("ANTHROPIC_API_KEY");
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
       apiKey: anthropicKey,
       model: "claude-haiku-4-5-20251001",
-      cwd: repo.path,
+      cwd: WORKSPACE,
     });
     const codex = yield* OpenAI.CodexServer("Codex", {
       apiKey: yield* Config.Redacted("OPENAI_API_KEY"),
       model: "gpt-5-nano",
-      cwd: repo.path,
+      cwd: WORKSPACE,
     });
     const opencode = yield* OpenCode.Server("OpenCode", {
       env: { ANTHROPIC_API_KEY: anthropicKey },
       model: "anthropic/claude-haiku-4-5",
-      cwd: repo.path,
+      cwd: WORKSPACE,
     });
     const routes: Record<
       string,

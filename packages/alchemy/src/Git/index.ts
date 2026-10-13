@@ -74,5 +74,3 @@ export {
   type RepositoryProps,
 } from "./Repository.ts";
 export { Providers, providers, type ProviderRequirements } from "./Providers.ts";
-
-export { MountRepository, type MountRepositoryOptions } from "./MountRepository.ts";

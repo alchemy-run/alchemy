@@ -387,12 +387,9 @@ export const LiveContainerProvider = () =>
           const sources = (props.imageLayers ?? []).flatMap((layer) => layer.context ?? []);
           if (sources.length === 0) return undefined;
           const { dotAlchemy } = yield* AlchemyContext;
-          const path = yield* Path.Path;
           const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
           const materialized = yield* materializeImageContext({
             context,
-            cacheDir: path.join(dotAlchemy, "git-cache"),
-            reposDir: path.join(dotAlchemy, "repos"),
             sources,
           });
           return materialized.digest;

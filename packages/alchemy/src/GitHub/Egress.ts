@@ -18,10 +18,9 @@ import {
   makeEgressHandle,
   refuse,
 } from "../Cloudflare/Containers/Egress.ts";
-import { gitCliLayer } from "../FS/GitMount.ts";
+import { ghCliLayer, gitCliLayer } from "../Docker/CliLayers.ts";
 import * as Output from "../Output.ts";
 import { GitHubCredentials } from "./Credentials.ts";
-import { ghCliLayer } from "./MountRepository.ts";
 import type { Repository } from "./Repository.ts";
 
 //#region options

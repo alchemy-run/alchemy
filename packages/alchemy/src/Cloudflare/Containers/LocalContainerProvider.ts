@@ -1,11 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -33,13 +31,11 @@ import {
 } from "./ContainerBundle.ts";
 import {
   isDurableObjectContainer,
-  MAIN_IMAGE,
   durableObjectPlaceholder,
   namedImageHash,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { ensureHostProcess, hostProcessUrl, stopHostProcess } from "./HostProcess.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -87,20 +83,13 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
-            const { context, dockerfile, hash, prepared } = yield* prepareContainerBuildContext(
-              id,
-              news,
-            );
+            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(id, news);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: path.relative(context, dockerfile),
               } as DevContainerImage,
               hash,
-              // For running the program on this machine (`devHost`).
-              host: { context, prepared } as
-                | { readonly context: string; readonly prepared: ReadonlyMap<string, string> }
-                | undefined,
             };
           }
 
@@ -250,51 +239,6 @@ export const LocalContainerProvider = () =>
           checks: props.checks,
         }) as ContainerApplication.Configuration;
 
-      /**
-       * Run the container's program as a process on this machine. Git mounts
-       * resolve to their prepared checkouts (`ALCHEMY_LOCAL_MOUNTS`), and
-       * each session gets a worktree under `ALCHEMY_WORKTREES`.
-       */
-      const runOnHost = (
-        id: string,
-        news: AnyContainerApplicationProps,
-        env: Record<string, string | Redacted.Redacted<string>>,
-        host: { readonly context: string; readonly prepared: ReadonlyMap<string, string> },
-        version: string,
-      ) =>
-        Effect.gen(function* () {
-          const { dotAlchemy } = yield* AlchemyContext;
-          const layers = news.imageLayers ?? [];
-          const mounts = Object.fromEntries(
-            layers.flatMap((layer) =>
-              (layer.context ?? []).flatMap((source) =>
-                source.kind === "git" && source.mountPath && host.prepared.has(source.target)
-                  ? [[source.mountPath, host.prepared.get(source.target)!]]
-                  : [],
-              ),
-            ),
-          );
-          return yield* ensureHostProcess({
-            id,
-            context: host.context,
-            runtime: news.runtime ?? "bun",
-            env: {
-              ...Object.fromEntries(
-                Object.entries(env).map(([k, v]) => [
-                  k,
-                  Redacted.isRedacted(v) ? String(Redacted.value(v)) : v,
-                ]),
-              ),
-              ALCHEMY_LOCAL_MOUNTS: JSON.stringify(mounts),
-              ALCHEMY_WORKTREES: path.resolve(dotAlchemy, "worktrees"),
-            },
-            appPackages: layers.flatMap((layer) =>
-              layer.npm?.into === "app" ? layer.npm.packages : [],
-            ),
-            version,
-          }).pipe(Effect.provide(FetchHttpClient.layer));
-        });
-
       const makeAttributes = Effect.fn(function* ({
         id,
         news,
@@ -315,17 +259,6 @@ export const LocalContainerProvider = () =>
           // workerd resolves each image by its declared name, so locally the
           // runtime image reference is just the name.
           const imageNames = Object.keys(program.images ?? {});
-          // `AI.LocalHarness` asked for the program to run on this machine.
-          const mainSource = program.images?.[MAIN_IMAGE] as
-            | AnyContainerApplicationProps
-            | undefined;
-          let devHostUrl: string | undefined;
-          if (mainSource && bindings.some((binding) => binding.data?.devHost)) {
-            const prepared = yield* prepareImage(`${id}-${MAIN_IMAGE}`, mainSource);
-            if ("host" in prepared && prepared.host) {
-              devHostUrl = yield* runOnHost(id, mainSource, env, prepared.host, prepared.hash);
-            }
-          }
           return {
             ...durableObjectPlaceholder({
               applicationId: output?.applicationId ?? generateLocalId(),
@@ -336,18 +269,11 @@ export const LocalContainerProvider = () =>
             }),
             images: Object.fromEntries(imageNames.map((name) => [name, name])),
             ...(yield* prepareNamedImages(id, program)),
-            ...(devHostUrl ? { devHostUrl } : {}),
           } satisfies ContainerApplication["Attributes"];
         }
         const env = makeContainerEnv(news, accountId, bindings);
         const layered = withImageLayers(news, bindings);
-        const prepared = yield* prepareImage(id, layered);
-        const { dev, hash } = prepared;
-        // `AI.LocalHarness` asked for the program to run on this machine.
-        const devHostUrl =
-          bindings.some((binding) => binding.data?.devHost) && "host" in prepared && prepared.host
-            ? yield* runOnHost(id, layered, env, prepared.host, hash)
-            : undefined;
+        const { dev, hash } = yield* prepareImage(id, layered);
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),
@@ -363,7 +289,6 @@ export const LocalContainerProvider = () =>
           version: 1,
           dev: { ...dev, env },
           hash: { image: hash },
-          ...(devHostUrl ? { devHostUrl } : {}),
         } satisfies ContainerApplication["Attributes"];
       });
 
@@ -392,11 +317,6 @@ export const LocalContainerProvider = () =>
             yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           }
           if (!output) return { action: "update" };
-          // A program running on this machine (`devHost`) doesn't outlive
-          // the dev server: after a restart, start it again.
-          if (output.devHostUrl !== undefined && hostProcessUrl(id) !== output.devHostUrl) {
-            return { action: "update" };
-          }
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.
@@ -472,8 +392,7 @@ export const LocalContainerProvider = () =>
           }
           return attrs;
         }),
-        delete: Effect.fn(function* ({ id }) {
-          yield* stopHostProcess(id);
+        delete: Effect.fn(function* () {
           // Nothing to tear down: the build context lives under `.alchemy/tmp`
           // and is reused across runs; the running container is owned by the
           // worker runtime.

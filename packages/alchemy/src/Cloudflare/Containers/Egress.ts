@@ -14,6 +14,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
 import type { ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as Output from "../../Output.ts";
+import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
 
@@ -206,6 +207,26 @@ export const Egress = <R = never>(
     });
   });
 
+/** The bundle `exec`'d commands trust: system roots plus the interception CA. */
+const EXEC_CA_BUNDLE = `${EGRESS_CA_BUNDLE}.exec`;
+
+/**
+ * Runs `"$@"` trusting the egress interception CA. Commands started with
+ * `exec` don't inherit the container program's environment (where
+ * Runtime/Bootstrap/EgressCa.ts sets this up), and the platform writes the
+ * CA shortly after the container starts with egress, so wait for it.
+ */
+export const TRUST_EGRESS_CA_THEN_EXEC = `i=0
+while [ ! -s ${EGRESS_CA} ] && [ $i -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
+if [ -s ${EGRESS_CA} ]; then
+  for roots in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+    if [ -f "$roots" ]; then cat "$roots" > ${EXEC_CA_BUNDLE}; break; fi
+  done
+  cat ${EGRESS_CA} >> ${EXEC_CA_BUNDLE}
+  export SSL_CERT_FILE=${EXEC_CA_BUNDLE} GIT_SSL_CAINFO=${EXEC_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EXEC_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EXEC_CA_BUNDLE} CURL_CA_BUNDLE=${EXEC_CA_BUNDLE}
+fi
+exec "$@"`;
+
 /** A secret an egress adds to requests: a value, a `Config`, or an `Output` (e.g. `GitHub.ProfileToken`). */
 export type EgressSecret =
   | Redacted.Redacted<string>
@@ -256,9 +277,6 @@ const registries = new WeakMap<object, Map<string, Egress>>();
 export const registerDurableObjectClass = (state: object, className: string) => {
   classNames.set(state, className);
 };
-
-/** @internal The class name of this Durable Object instance, as its bridge registered it. */
-export const durableObjectClassName = (state: object) => classNames.get(state);
 
 /** @internal Make `egress` answerable for this Durable Object's container. */
 export const registerEgress = (state: object, egress: Egress) => {

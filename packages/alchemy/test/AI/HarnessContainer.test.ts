@@ -11,7 +11,7 @@ import makeStack from "./fixtures/harnesses/stack.ts";
 /**
  * End to end, per harness: Worker → Durable Object (one per session) → its
  * own Cloudflare Container, built from one image with
- * an `AI.Environment` checkout and Claude Code, Codex and OpenCode installed
+ * a checkout and Claude Code, Codex and OpenCode installed
  * → one real turn on a cheap model, working in the checkout.
  */
 const HOOK_TIMEOUT = 900_000;

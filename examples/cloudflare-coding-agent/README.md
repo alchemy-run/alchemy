@@ -9,12 +9,12 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 
 - `src/Sandbox.runtime.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port. The image holds only the toolchain.
 - `src/rpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
-- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. `Cloudflare.Containers.Harness` prepares the checkout once per image (clone, install, build — snapshotted, and every session starts from it), checkpoints the session's work into the Durable Object after every turn, and keeps its history there, so a session resumes on any container.
+- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
 - `src/worker.ts` — the HTTP API.
 
 ## Run it
 
-Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed (not type-checked: that needs ~17-20 GB, over a container's 12 GiB). The first session after a deploy prepares it (several minutes); later sessions start from the prepared snapshot. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
+Each session works in a shallow clone of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy); the agent installs dependencies when it needs them. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...   # read by the Worker, never the container

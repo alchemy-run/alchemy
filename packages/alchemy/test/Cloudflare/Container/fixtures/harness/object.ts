@@ -15,17 +15,6 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
     });
     const harness = yield* Cloudflare.Containers.Harness(HarnessBox, {
       workspace: "/workspace/repo",
-      // The build cache every session starts from.
-      prepare: {
-        commands: [
-          // First, right after the container starts: through the egress over
-          // intercepted TLS, which fails unless the command trusts the
-          // interception CA (written shortly after start).
-          `node -e "fetch('https://api.anthropic.com/v1/models').then(() => process.exit(0), (e) => { console.error(e.cause ?? e); process.exit(1); })"`,
-          "cd /workspace/repo && git init -q -b main && echo prepared > base.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm base",
-        ],
-        egress: [model],
-      },
     });
     const box = yield* HarnessBox;
     const state = yield* Cloudflare.DurableObjectState;
@@ -33,12 +22,25 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
       state.storage.sql
         .exec<{ value: string }>("SELECT value FROM alchemy_harness_meta WHERE key = ?", key)
         .pipe(Effect.flatMap((cursor) => cursor.toArray()));
+    const run = (script: string, ...args: ReadonlyArray<string>) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const child = yield* box.exec(["sh", "-c", script, "sh", ...args]);
+          const output = yield* child.output();
+          return new TextDecoder().decode(output.stdout);
+        }),
+      );
     return Effect.gen(function* () {
       return {
         /** Run one turn and return its reply. */
         turn: (sessionId: string, prompt: string) =>
           Effect.gen(function* () {
             const claude = yield* harness.start({ egress: [model], instance: "standard-1" });
+            // The workspace is ours to set up — unless a checkpoint already
+            // brought it back.
+            yield* run(
+              "[ -d /workspace/repo/.git ] || (cd /workspace/repo && git init -q -b main && echo base > base.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm base)",
+            );
             const session = yield* claude
               .get(sessionId)
               .pipe(Effect.catch(() => claude.start({ id: sessionId })));
@@ -70,21 +72,20 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
               "DELETE FROM alchemy_harness_meta WHERE key = 'snapshot'",
             );
           }),
+        /**
+         * A plain `exec` reaching the model API through the egress, over
+         * intercepted TLS, right after the container starts.
+         */
+        probe: () =>
+          Effect.gen(function* () {
+            yield* box.destroy().pipe(Effect.ignore);
+            yield* harness.start({ egress: [model], instance: "standard-1" });
+            return yield* run(
+              `node -e "fetch('https://api.anthropic.com/v1/models').then(() => console.log('ok'), (e) => console.log(String(e.cause ?? e)))"`,
+            );
+          }),
         /** A file in the running container ("" when it's missing). */
-        read: (path: string) =>
-          Effect.scoped(
-            Effect.gen(function* () {
-              const child = yield* box.exec([
-                "sh",
-                "-c",
-                `cat "$1" 2>/dev/null || true`,
-                "sh",
-                path,
-              ]);
-              const output = yield* child.output();
-              return new TextDecoder().decode(output.stdout);
-            }),
-          ),
+        read: (path: string) => run(`cat "$1" 2>/dev/null || true`, path),
         /** Completed turns recorded in this Durable Object. */
         completedTurns: (sessionId: string) =>
           harness.events(sessionId).pipe(

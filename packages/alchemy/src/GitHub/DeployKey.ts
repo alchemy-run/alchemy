@@ -57,8 +57,7 @@ export interface DeployKey extends Resource<
  *
  * The key pair is generated at deploy time (ed25519) and only its public
  * half is sent to GitHub. The private key is an attribute, so bind it into
- * whatever runs git: `GitHub.MountRepository` creates one for you when
- * no `token` is given.
+ * whatever runs git.
  *
  * ### Creating a Deploy Key
  * **Example:** A read-write key for a CI runner

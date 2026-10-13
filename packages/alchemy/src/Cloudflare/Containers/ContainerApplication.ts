@@ -905,12 +905,6 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       images?: Record<string, string>;
     };
     dev: DevContainerImage | undefined;
-    /**
-     * Under `alchemy dev`, when a binding asked for it (`devHost`): the URL
-     * of the container program running as a process on this machine
-     * instead of in Docker.
-     */
-    devHostUrl?: string;
   },
   {
     /**
@@ -929,12 +923,6 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * bindings and rendered between the base image and the program.
      */
     image?: ImageLayer[];
-    /**
-     * Under `alchemy dev`, run the container program as a process on this
-     * machine (reachable at the `devHostUrl` attribute) instead of in
-     * Docker. Set by `AI.LocalHarness`.
-     */
-    devHost?: boolean;
   },
   Providers
 > {

@@ -3,15 +3,11 @@
  * host) at an absolute path.
  *
  * Declare what to mount at module scope (`FS.File`, `FS.Folder`), then
- * mount it inside the host's program. Git repositories mount through their
- * own source's binding: `GitHub.MountRepository`, `Git.MountRepository`,
- * `Cloudflare.Artifacts.MountRepository`.
+ * mount it inside the host's program.
  */
 import * as Effect from "effect/Effect";
 import { contextTarget } from "../Docker/ImageContext.ts";
 import { bindIntoImageHost } from "../Docker/ImageHost.ts";
-
-export type { GitAccess, MountGitOptions, MountedRepository } from "./GitMount.ts";
 
 /** A file with inline content, mountable with {@link MountFile}. */
 export interface File {
