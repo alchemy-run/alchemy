@@ -9,6 +9,7 @@ import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import type {
+  Accepted,
   AggregateKit,
   Delivery,
   EnvelopeJson,
@@ -16,12 +17,15 @@ import type {
   PolicyKit,
   ReceiptJson,
   StoredEvent,
+  StreamEntry,
   ViewEntry,
   ViewKit,
   ViewSnapshot,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
+import type * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -31,6 +35,31 @@ export interface Definitions {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly policies: ReadonlyArray<Policy.Any>;
+  readonly projections: ReadonlyArray<Projection.Any>;
+  readonly streams: ReadonlyArray<DomainStream.Any>;
+}
+
+/**
+ * What a projection input carries for `Stream.append`, out of sight of the
+ * handler's types: who is writing, where in its input log, and the source
+ * event being handled. Appends count up per input, so a re-run of the same
+ * input makes exactly the same writes.
+ *
+ * @internal
+ */
+export const InputMeta = Symbol.for("alchemy/Domain/Projection/InputMeta");
+
+/** @internal */
+export interface InputMetaValue {
+  readonly projection: string;
+  readonly key: string;
+  readonly position: number;
+  readonly source: string;
+  readonly sourceSeq: number;
+  readonly at: number;
+  readonly commandId: string;
+  /** Appends made for this input so far in this run. */
+  appends: number;
 }
 
 /**
@@ -87,6 +116,23 @@ export interface Kernel {
     deliver: (d: Delivery) => Effect.Effect<void>,
   ) => Omit<ViewKit, "push">;
   readonly policyKit: (policy: Policy.Any, handler: Policy.Handler<unknown>) => PolicyKit;
+  /** Decode a run of a projection key's input log into handler inputs. */
+  readonly projectionInputs: (
+    projection: Projection.Any,
+    key: string,
+    batch: ReadonlyArray<Accepted>,
+  ) => ReadonlyArray<unknown>;
+  /** The keys of a projection an aggregate's committed event is routed to (empty if it is not consumed). */
+  readonly projectionKeys: (
+    projection: Projection.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => ReadonlyArray<string>;
+  /** The projection that writes a stream, if any. */
+  readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
+  readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
   readonly encodeCommand: (aggregate: Aggregate.Any, command: { readonly _tag: string }) => Json;
   readonly decodeRejection: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeReceipt: (
@@ -199,6 +245,13 @@ export const make = (definitions: Definitions): Kernel => {
   const keyAggregateOf = (entry: SourceEntry) =>
     entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
 
+  for (const stream of definitions.streams) {
+    if (sources.has(stream.streamName)) {
+      throw new DefinitionError(`Two entities are named '${stream.streamName}'`);
+    }
+    for (const event of stream.definition.entries) registerEvent(event);
+  }
+
   /** Does a view take this event from this source? */
   const consumes = (view: View.Any, tag: string, source: string) => {
     const def = view.definition;
@@ -254,7 +307,7 @@ export const make = (definitions: Definitions): Kernel => {
     readonly routes?: ReadonlyArray<string>;
   }>;
   interface Subscriber {
-    readonly kind: "view" | "policy";
+    readonly kind: "view" | "policy" | "projection";
     readonly name: string;
     readonly route: Route;
   }
@@ -271,8 +324,14 @@ export const make = (definitions: Definitions): Kernel => {
     list.push(subscriber);
   };
 
-  const keyRoute = (view: View.Any, upstream: SourceEntry, source: string, tag: string): Route => {
-    const def = view.definition;
+  /** How a consumer keyed by `def.key` routes `tag` from `source`. */
+  const keyRoute = (
+    owner: string,
+    def: { readonly key: Aggregate.Any; readonly keyOf?: unknown },
+    upstream: SourceEntry,
+    source: string,
+    tag: string,
+  ): Route => {
     const custom = handlers(def.keyOf)?.[tag] ?? handlers(def.keyOf)?.[source];
     const routing = (input: RouteInput) => ({
       event: input.event,
@@ -303,7 +362,7 @@ export const make = (definitions: Definitions): Kernel => {
     if (keyAggregateOf(upstream) === def.key)
       return (input) => [{ key: input.source.id as string }];
     throw new DefinitionError(
-      `${view.viewName} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
+      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
     );
   };
 
@@ -334,31 +393,89 @@ export const make = (definitions: Definitions): Kernel => {
         subscribe(name, tag, {
           kind: "view",
           name: view.viewName,
-          route: keyRoute(view, upstream, name, tag),
+          route: keyRoute(view.viewName, def, upstream, name, tag),
         });
       }
     }
   }
+
+  const fromList = (from: Policy.From): ReadonlyArray<View.Source> =>
+    Array.isArray(from) ? from : [from as View.Source];
+
+  /** Subscribe a consumer to the `on` events its sources produce. */
+  const subscribeConsumer = (
+    kind: "policy" | "projection",
+    owner: string,
+    from: ReadonlyArray<View.Source>,
+    on: ReadonlyArray<Event.Any>,
+    route: (upstream: SourceEntry, source: string, tag: string) => Route,
+  ) => {
+    for (const event of on) {
+      let produced = false;
+      for (const source of from) {
+        const upstream = sourceEntry(owner, source);
+        if (!outputTags(upstream).has(event.tag)) continue;
+        produced = true;
+        const name = nameOf(source);
+        subscribe(name, event.tag, {
+          kind,
+          name: owner.replace(/^(Policy|Projection) /, ""),
+          route: route(upstream, name, event.tag),
+        });
+      }
+      if (!produced) {
+        throw new DefinitionError(
+          `${owner}: none of ${from.map(nameOf).join(", ")} emits '${event.tag}'`,
+        );
+      }
+    }
+  };
 
   const policyByName = new Map<string, Policy.Any>();
   for (const policy of definitions.policies) {
     if (policyByName.has(policy.policyName))
       throw new DefinitionError(`Duplicate policy '${policy.policyName}'`);
     policyByName.set(policy.policyName, policy);
-    const { from, on } = policy.definition;
-    const upstream = sourceEntry(`Policy ${policy.policyName}`, from);
-    for (const event of on) {
-      if (!outputTags(upstream).has(event.tag)) {
+    const def = policy.definition;
+    const owner = `Policy ${policy.policyName}`;
+    subscribeConsumer("policy", owner, fromList(def.from), def.on, (upstream, source, tag) =>
+      def.key
+        ? keyRoute(owner, { key: def.key, keyOf: def.keyOf }, upstream, source, tag)
+        : // Unkeyed: one partition per source instance, so its triggers run in order.
+          (input) => [{ key: input.stream }],
+    );
+  }
+
+  const projectionByName = new Map<string, Projection.Any>();
+  const writers = new Map<string, Projection.Any>();
+  const streamNames = new Set(definitions.streams.map((stream) => stream.streamName));
+  for (const projection of definitions.projections) {
+    const name = projection.projectionName;
+    if (projectionByName.has(name)) throw new DefinitionError(`Duplicate projection '${name}'`);
+    projectionByName.set(name, projection);
+    const def = projection.definition;
+    const owner = `Projection ${name}`;
+    subscribeConsumer("projection", owner, def.from, def.on, (upstream, source, tag) =>
+      keyRoute(owner, def, upstream, source, tag),
+    );
+    for (const stream of def.writes ?? []) {
+      if (!streamNames.has(stream.streamName)) {
         throw new DefinitionError(
-          `Policy ${policy.policyName}: ${nameOf(from)} does not emit '${event.tag}'`,
+          `${owner} writes ${stream.streamName}, which is not in the Domain`,
         );
       }
-      // One policy instance per source instance, so triggers run in order.
-      subscribe(nameOf(from), event.tag, {
-        kind: "policy",
-        name: policy.policyName,
-        route: (input) => [{ key: input.stream }],
-      });
+      const existing = writers.get(stream.streamName);
+      if (existing && existing !== projection) {
+        throw new DefinitionError(
+          `${stream.streamName} has two writers, ${existing.projectionName} and ${name}: a stream key has exactly one`,
+        );
+      }
+      if (stream.definition.key !== def.key) {
+        throw new DefinitionError(
+          `${owner} is keyed by ${def.key.aggregateName}, so it cannot write ${stream.streamName}, keyed by ${stream.definition.key.aggregateName}`,
+        );
+      }
+      writers.set(stream.streamName, projection);
     }
   }
 
@@ -673,32 +790,110 @@ export const make = (definitions: Definitions): Kernel => {
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
-    const upstream = sources.get(nameOf(policy.definition.from))!;
+    const keyAggregate = policy.definition.key;
     return {
       name: policy.policyName,
       run: (delivery) => {
         // Seeded history is the past; policies only react to what happens now.
         if (delivery.history) return Effect.void;
+        const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
-        const trigger = {
-          source: Aggregate.makeRef(keyAggregateOf(upstream), envelope.id),
-          event: decodeEvent(delivery.event),
-          envelope,
-          state: sourceState(upstream, delivery.state),
-        };
-        let n = 0;
-        const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}`;
-        return handler(trigger).pipe(
-          Effect.provideService(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }),
+        const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+        const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
+        const event = decodeEvent(delivery.event);
+        const state = sourceState(upstream, delivery.state);
+        return Effect.forEach(
+          delivery.routes ?? [undefined],
+          (route) => {
+            let n = 0;
+            const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
+            return handler({ key, route, source, event, envelope, state }).pipe(
+              Effect.provideService(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }),
+            );
+          },
+          { discard: true },
         );
       },
     };
+  };
+
+  const projectionInputs = (
+    projection: Projection.Any,
+    key: string,
+    batch: ReadonlyArray<Accepted>,
+  ): ReadonlyArray<unknown> => {
+    const keyRef = Aggregate.makeRef(projection.definition.key, key);
+    const inputs: Array<unknown> = [];
+    for (const { delivery, position } of batch) {
+      const upstream = sources.get(delivery.origin)!;
+      const envelope = decodeEnvelope(delivery.envelope);
+      const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+      const event = decodeEvent(delivery.event);
+      const state = sourceState(upstream, delivery.state);
+      // Shared by every route the delivery takes, so their appends count up together.
+      const meta: InputMetaValue = {
+        projection: projection.projectionName,
+        key,
+        position,
+        source: delivery.source,
+        sourceSeq: delivery.seq,
+        at: delivery.envelope.at,
+        commandId: delivery.envelope.commandId,
+        appends: 0,
+      };
+      for (const route of delivery.routes ?? [undefined]) {
+        const input = { key: keyRef, route, source, event, envelope, state, position };
+        Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
+        inputs.push(input);
+      }
+    }
+    return inputs;
+  };
+
+  const projectionKeys = (
+    projection: Projection.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ): ReadonlyArray<string> => {
+    const entry = sources.get(aggregate);
+    if (entry?.kind !== "aggregate") return [];
+    const stream = `${aggregate}/${id}`;
+    const envelope: Aggregate.Envelope = {
+      id,
+      stream,
+      seq,
+      at: DateTime.makeUnsafe(0),
+      commandId: "",
+    };
+    const keys: Array<string> = [];
+    for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {
+      if (subscriber.kind !== "projection" || subscriber.name !== projection.projectionName)
+        continue;
+      const input = {
+        event,
+        source: Aggregate.makeRef(entry.aggregate, id),
+        envelope,
+        state: undefined,
+        stream,
+      };
+      for (const { key } of subscriber.route(input)) keys.push(key);
+    }
+    return keys;
   };
 
   return {
     aggregateKit,
     viewKit,
     policyKit,
+    projectionInputs,
+    projectionKeys,
+    writerOf: (stream) => writers.get(stream.streamName),
+    decodeStreamEntry: (entry) => ({
+      event: decodeEvent(entry.event),
+      envelope: decodeEnvelope(entry.envelope),
+    }),
     decodeEvent,
     encodeEvent,
     encodeCommand: (aggregate, command) => {

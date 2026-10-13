@@ -4,6 +4,8 @@ import type * as Stream from "effect/Stream";
 import type { HttpEffect } from "../Http.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
+import type * as Projection from "./Projection.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -38,8 +40,8 @@ export interface StoredEvent {
  * `(source, target)`.
  */
 export interface Delivery {
-  readonly target: { readonly kind: "view" | "policy"; readonly name: string };
-  /** The target instance key (an aggregate id; the source stream for policies). */
+  readonly target: { readonly kind: "view" | "policy" | "projection"; readonly name: string };
+  /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
   /** Named routes (from `keyOf`) the event takes into this key; absent for the default route. */
   readonly routes?: ReadonlyArray<string>;
@@ -54,7 +56,7 @@ export interface Delivery {
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
   readonly state?: Json | null;
-  /** Seeded history (story `given`): views apply it, policies ignore it. */
+  /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
   readonly history?: boolean;
 }
 
@@ -331,8 +333,135 @@ export interface PolicyKit {
  * What a platform provides for a policy.
  */
 export interface PolicyStore {
-  /** Run deliveries at least once, in order per key (source instance). */
+  /** Run deliveries at least once, in order per key. */
   readonly receive: (delivery: Delivery) => Effect.Effect<void>;
+}
+
+/**
+ * One delivery a consumer's key accepted, in the key's immutable input log.
+ */
+export interface Accepted {
+  /** The delivery's place in the key's input log, from 1. */
+  readonly position: number;
+  readonly delivery: Delivery;
+  /** Epoch milliseconds it was accepted. */
+  readonly at: number;
+}
+
+/**
+ * How a projection's Layer tunes it (variants, not part of its meaning).
+ */
+export interface ProjectionOptions {
+  /** Hand the handler up to `size` accepted deliveries at once, waiting up to `wait` ms to fill. */
+  readonly batch?: { readonly size: number; readonly waitMillis: number };
+}
+
+/**
+ * The kernel for one projection, handed to a platform.
+ */
+export interface ProjectionKit {
+  readonly name: string;
+  readonly options: ProjectionOptions;
+  /**
+   * Run the handler for a run of one key's input log, in order. Succeeds only
+   * when every write the handler made succeeded; the platform then records
+   * the run as processed.
+   */
+  readonly run: (key: string, batch: ReadonlyArray<Accepted>) => Effect.Effect<void>;
+}
+
+/**
+ * What a platform provides for a projection.
+ */
+export interface ProjectionStore {
+  /**
+   * Accept a delivery into its key's input log (dropping one already
+   * accepted, by source and `seq`), then process the log in order, in batches.
+   */
+  readonly receive: (delivery: Delivery) => Effect.Effect<void>;
+  /** The last processed `seq` per source stream, for one key. */
+  readonly checkpoints: (key: string) => Effect.Effect<Readonly<Record<string, number>>>;
+}
+
+/**
+ * One entry appended to a stream key.
+ */
+export interface StreamEntry {
+  readonly seq: number;
+  readonly event: Json;
+  readonly envelope: EnvelopeJson;
+}
+
+/**
+ * The stored progress of one stream key.
+ */
+export interface StreamMeta {
+  /** Number of entries. */
+  readonly seq: number;
+  /** The last source `seq` the writer has handled, per source stream. */
+  readonly checkpoints: Readonly<Record<string, number>>;
+  /** The last write applied: the writer's input-log position and its append index there. */
+  readonly origin: readonly [number, number];
+}
+
+/** The meta of a stream key nothing has written. */
+export const emptyStreamMeta: StreamMeta = { seq: 0, checkpoints: {}, origin: [0, 0] };
+
+/**
+ * One append to a stream key, made by its writer while handling an input.
+ */
+export interface StreamWrite {
+  /** Where the write comes from: the writer's input-log position and the append's index there. */
+  readonly origin: readonly [number, number];
+  /** The source event being handled. */
+  readonly source: string;
+  readonly sourceSeq: number;
+  readonly at: number;
+  readonly commandId: string;
+  readonly events: ReadonlyArray<Json>;
+}
+
+/**
+ * The kernel for one stream, handed to a platform.
+ */
+export interface StreamKit {
+  readonly name: string;
+  /**
+   * What a subscriber of `key` receives, given its meta and the entries
+   * appended since (at least those after the subscription's cursor).
+   */
+  readonly push: (
+    key: string,
+    subscription: Subscription,
+    meta: StreamMeta,
+    entries: ReadonlyArray<StreamEntry>,
+    latest: StreamEntry | undefined,
+  ) => Effect.Effect<Push>;
+}
+
+/**
+ * What a platform provides for a stream.
+ */
+export interface StreamStore {
+  /**
+   * Append a write to one key (single writer per key). A write whose origin is
+   * not after the last applied one is a repeat and is dropped.
+   */
+  readonly append: (key: string, write: StreamWrite) => Effect.Effect<void>;
+  /** Record that the writer handled source events without appending. */
+  readonly advance: (
+    key: string,
+    checkpoints: Readonly<Record<string, number>>,
+  ) => Effect.Effect<void>;
+  readonly read: (key: string) => Effect.Effect<StreamMeta>;
+  /** The current meta, then every new one. */
+  readonly changes: (key: string) => Stream.Stream<StreamMeta>;
+  /** Every entry of a key. */
+  readonly list: (key: string) => Effect.Effect<ReadonlyArray<StreamEntry>>;
+  /** Entries with `seq > after`, then live entries. */
+  readonly tail: (key: string, after: number) => Stream.Stream<StreamEntry>;
+  /** Accept a WebSocket upgrade for a live read of `key` (optional, like views). */
+  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /**
@@ -352,5 +481,10 @@ export class Platform extends Context.Service<
     ) => Effect.Effect<AggregateStore>;
     readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
     readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
+    readonly projection: (
+      projection: Projection.Any,
+      kit: ProjectionKit,
+    ) => Effect.Effect<ProjectionStore>;
+    readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
   }
 >()("alchemy/Domain/Platform") {}

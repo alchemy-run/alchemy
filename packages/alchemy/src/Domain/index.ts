@@ -23,8 +23,10 @@ import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
+import * as ProjectionModule from "./Projection.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
+import * as StreamModule from "./Stream.ts";
 import * as ViewModule from "./View.ts";
 
 export declare namespace Event {
@@ -107,10 +109,32 @@ export declare namespace Policy {
   /** Any Policy class. */
   export type Any = PolicyModule.Any;
   /** What a policy reacts to: the event, its source and the source's state. */
-  export type Trigger<From extends ViewModule.Source, E> = PolicyModule.Trigger<From, E>;
+  export type Trigger<From extends PolicyModule.From, E> = PolicyModule.Trigger<From, E>;
 }
 /** A standing business rule: on an event, decide what to do next. See {@link PolicyModule.make}. */
 export const Policy = PolicyModule.make;
+
+export declare namespace Projection {
+  /** Any Projection class. */
+  export type Any = ProjectionModule.Any;
+  /** One input a projection's handler receives. */
+  export type Input<Key extends AggregateModule.Any, S, E> = ProjectionModule.Input<Key, S, E>;
+  /** How a projection's Layer tunes it. */
+  export type Options = ProjectionModule.Options;
+}
+/** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
+export const Projection = ProjectionModule.make;
+
+export declare namespace Stream {
+  /** Any Stream class. */
+  export type Any = StreamModule.Any;
+  export type EventOf<S extends StreamModule.Any> = StreamModule.EventOf<S>;
+  export type KeyOf<S extends StreamModule.Any> = StreamModule.KeyOf<S>;
+  /** One entry of a stream key. */
+  export type Entry<E, Id = string> = StreamModule.Entry<E, Id>;
+}
+/** A keyed, append-only, replayable log a projection writes and clients read. See {@link StreamModule.make}. */
+export const Stream = StreamModule.make;
 
 export declare namespace ExternalSystem {
   /** Any ExternalSystem class. */
@@ -128,6 +152,7 @@ export declare namespace Api {
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */
   export type ClientKey<Name extends string> = ApiModule.ClientKey<Name>;
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
+  export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
@@ -143,7 +168,7 @@ export declare namespace Model {
   /** Any Model class. */
   export type Any = ModelModule.Any;
 }
-/** The aggregates, views and policies hosted together. See {@link ModelModule.make}. */
+/** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */

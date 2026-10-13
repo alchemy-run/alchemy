@@ -107,7 +107,8 @@ export type Input<S> = S extends unknown
     : never
   : never;
 
-type Inputs<From extends ReadonlyArray<unknown>> = Input<From[number]>;
+/** Every input a list of sources produces. */
+export type Inputs<From extends ReadonlyArray<unknown>> = Input<From[number]>;
 type EventTag<From extends ReadonlyArray<unknown>> = Inputs<From>["event"] extends infer E
   ? E extends { readonly _tag: infer T extends string }
     ? T
@@ -117,8 +118,9 @@ type EventTag<From extends ReadonlyArray<unknown>> = Inputs<From>["event"] exten
  * What a handler may be keyed by: an event tag, or a source's name to handle
  * every event from that source.
  */
-type HandlerKey<From extends ReadonlyArray<unknown>> = EventTag<From> | Inputs<From>["name"];
-type InputFor<From extends ReadonlyArray<unknown>, K> =
+export type HandlerKey<From extends ReadonlyArray<unknown>> = EventTag<From> | Inputs<From>["name"];
+/** The inputs a handler keyed by `K` (an event tag or a source name) receives. */
+export type InputFor<From extends ReadonlyArray<unknown>, K> =
   | Extract<Inputs<From>, { readonly event: { readonly _tag: K } }>
   | Extract<Inputs<From>, { readonly name: K }>;
 
@@ -165,7 +167,10 @@ export interface EmitContext<Key extends Aggregate.Any, I, St> extends HandlerCo
   readonly after: St | null;
 }
 
-type KeyFn<Key extends Aggregate.Any, I> = (routing: Routing<I>) => Aggregate.Ref<Key> | undefined;
+/** Picks the key an input goes to, or `undefined` for none. */
+export type KeyFn<Key extends Aggregate.Any, I> = (
+  routing: Routing<I>,
+) => Aggregate.Ref<Key> | undefined;
 type EvolveFn<St, Key extends Aggregate.Any, I> = (
   state: St,
   event: Routing<I>["event"],
@@ -177,7 +182,7 @@ type EmitFn<St, Key extends Aggregate.Any, I, Out> = (
 ) => Out | ReadonlyArray<Out> | undefined;
 
 /** A handler, or one handler per route named in `keyOf`. */
-type Routed<F> = F | { readonly [route: string]: F };
+export type Routed<F> = F | { readonly [route: string]: F };
 
 /**
  * The pure definition of a view.

@@ -5,12 +5,16 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import type * as Aggregate from "./Aggregate.ts";
 import {
+  type Accepted,
   type Delivery,
   emptySnapshot,
+  emptyStreamMeta,
   Platform,
   type Json,
   type SendResult,
   type StoredEvent,
+  type StreamEntry,
+  type StreamMeta,
   type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
@@ -42,7 +46,7 @@ export interface Control {
   readonly idle: Effect.Effect<boolean>;
   /** Mark the current policy run as suspended while `effect` runs (story external systems). */
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
-  /** Defects raised by policy runs. */
+  /** Defects raised by policy and projection runs. */
   readonly failures: ReadonlyArray<unknown>;
 }
 
@@ -250,6 +254,8 @@ export const make = (
           {
             readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
             readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
+            /** The key's immutable input log: every delivery it applied, in order. */
+            readonly inputs: Array<Delivery>;
           }
         >();
         const lock = Semaphore.makeUnsafe(1);
@@ -260,7 +266,10 @@ export const make = (
             return Effect.all({
               snapshot: SubscriptionRef.make(emptySnapshot),
               entries: SubscriptionRef.make<ReadonlyArray<ViewEntry>>([]),
-            }).pipe(Effect.tap((created) => Effect.sync(() => keys.set(key, created))));
+            }).pipe(
+              Effect.map((created) => ({ ...created, inputs: [] as Array<Delivery> })),
+              Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
+            );
           });
         return {
           receive: (key, deliveries) =>
@@ -273,6 +282,10 @@ export const make = (
                   deliveries,
                 );
                 if (!result.changed) return;
+                const before = yield* SubscriptionRef.get(current.snapshot);
+                current.inputs.push(
+                  ...deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq),
+                );
                 if (result.entries.length > 0) {
                   yield* SubscriptionRef.update(current.entries, (entries) => [
                     ...entries,
@@ -288,6 +301,192 @@ export const make = (
           changes: (key) =>
             Stream.unwrap(
               get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+            ),
+          list: (key) =>
+            get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+          tail: (key, after) =>
+            Stream.unwrap(
+              get(key).pipe(
+                Effect.map((current) => {
+                  let last = after;
+                  return SubscriptionRef.changes(current.entries).pipe(
+                    Stream.flatMap((entries) => {
+                      const fresh = entries.filter((entry) => entry.seq > last);
+                      if (fresh.length > 0) last = fresh[fresh.length - 1]!.seq;
+                      return Stream.fromIterable(fresh);
+                    }),
+                  );
+                }),
+              ),
+            ),
+        };
+      }),
+
+    projection: (_projection, kit) =>
+      Effect.sync(() => {
+        interface Partition {
+          readonly log: Array<Accepted>;
+          processed: number;
+          readonly intake: Record<string, number>;
+          readonly checkpoints: Record<string, number>;
+          timer: boolean;
+          readonly lock: Semaphore.Semaphore;
+        }
+        const partitions = new Map<string, Partition>();
+        const partition = (key: string) => {
+          let found = partitions.get(key);
+          if (!found) {
+            partitions.set(
+              key,
+              (found = {
+                log: [],
+                processed: 0,
+                intake: {},
+                checkpoints: {},
+                timer: false,
+                lock: Semaphore.makeUnsafe(1),
+              }),
+            );
+          }
+          return found;
+        };
+        const batch = kit.options.batch;
+        /** Handle the key's unprocessed inputs in order, in batches; leave a short batch to fill. */
+        const process = (key: string, flush: boolean): Effect.Effect<void> =>
+          Effect.suspend(() => {
+            const p = partition(key);
+            return p.lock.withPermits(1)(
+              Effect.gen(function* () {
+                while (p.processed < p.log.length) {
+                  const pending = p.log.length - p.processed;
+                  const size = batch?.size ?? 1;
+                  const oldest = p.log[p.processed]!;
+                  if (
+                    !flush &&
+                    !options.manual &&
+                    pending < size &&
+                    batch &&
+                    now() - oldest.at < batch.waitMillis
+                  ) {
+                    if (!p.timer) {
+                      p.timer = true;
+                      running++;
+                      yield* Effect.forkDetach(
+                        Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
+                          Effect.andThen(
+                            Effect.sync(() => {
+                              p.timer = false;
+                            }),
+                          ),
+                          Effect.andThen(process(key, true)),
+                          Effect.ensuring(Effect.sync(() => running--)),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  const run = p.log.slice(p.processed, p.processed + size);
+                  yield* kit.run(key, run);
+                  p.processed += run.length;
+                  for (const { delivery } of run) {
+                    p.checkpoints[delivery.source] = Math.max(
+                      p.checkpoints[delivery.source] ?? 0,
+                      delivery.seq,
+                    );
+                  }
+                }
+              }),
+            );
+          });
+        return {
+          receive: (delivery) =>
+            Effect.suspend(() => {
+              const p = partition(delivery.key);
+              if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
+              p.intake[delivery.source] = delivery.seq;
+              p.log.push({ position: p.log.length + 1, delivery, at: now() });
+              running++;
+              return Effect.forkDetach(
+                process(delivery.key, false).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
+                    ),
+                  ),
+                  Effect.ensuring(Effect.sync(() => running--)),
+                ),
+              ).pipe(Effect.asVoid);
+            }),
+          checkpoints: (key) => Effect.sync(() => ({ ...partition(key).checkpoints })),
+        };
+      }),
+
+    stream: (_stream, _kit) =>
+      Effect.sync(() => {
+        const keys = new Map<
+          string,
+          {
+            readonly meta: SubscriptionRef.SubscriptionRef<StreamMeta>;
+            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<StreamEntry>>;
+          }
+        >();
+        const lock = Semaphore.makeUnsafe(1);
+        const get = (key: string) =>
+          Effect.suspend(() => {
+            const found = keys.get(key);
+            if (found) return Effect.succeed(found);
+            return Effect.all({
+              meta: SubscriptionRef.make(emptyStreamMeta),
+              entries: SubscriptionRef.make<ReadonlyArray<StreamEntry>>([]),
+            }).pipe(Effect.tap((created) => Effect.sync(() => keys.set(key, created))));
+          });
+        return {
+          append: (key, write) =>
+            lock.withPermits(1)(
+              Effect.gen(function* () {
+                const current = yield* get(key);
+                const meta = yield* SubscriptionRef.get(current.meta);
+                if (!isAfter(write.origin, meta.origin)) return;
+                const added: Array<StreamEntry> = write.events.map((event, index) => {
+                  const seq = meta.seq + index + 1;
+                  return {
+                    seq,
+                    event,
+                    envelope: {
+                      id: key,
+                      stream: `${_kit.name}/${key}`,
+                      seq,
+                      at: write.at,
+                      commandId: write.commandId,
+                    },
+                  };
+                });
+                yield* SubscriptionRef.update(current.entries, (entries) => [...entries, ...added]);
+                yield* SubscriptionRef.set(current.meta, {
+                  seq: meta.seq + added.length,
+                  origin: write.origin,
+                  checkpoints: {
+                    ...meta.checkpoints,
+                    [write.source]: Math.max(meta.checkpoints[write.source] ?? 0, write.sourceSeq),
+                  },
+                });
+              }),
+            ),
+          advance: (key, checkpoints) =>
+            lock.withPermits(1)(
+              Effect.gen(function* () {
+                const current = yield* get(key);
+                yield* SubscriptionRef.update(current.meta, (meta) => ({
+                  ...meta,
+                  checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
+                }));
+              }),
+            ),
+          read: (key) =>
+            get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.meta))),
+          changes: (key) =>
+            Stream.unwrap(
+              get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.meta))),
             ),
           list: (key) =>
             get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
@@ -360,3 +559,19 @@ export const make = (
  * @provides Domain.Platform
  */
 export const InMemory: Layer.Layer<Platform> = Layer.suspend(() => make().layer);
+
+/** Is a stream write's origin after the last one applied? @internal */
+export const isAfter = (
+  origin: readonly [number, number],
+  last: readonly [number, number],
+): boolean => origin[0] > last[0] || (origin[0] === last[0] && origin[1] > last[1]);
+
+/** The later of two sets of per-source checkpoints. @internal */
+export const mergeCheckpoints = (
+  a: Readonly<Record<string, number>>,
+  b: Readonly<Record<string, number>>,
+): Record<string, number> => {
+  const out: Record<string, number> = { ...a };
+  for (const [source, seq] of Object.entries(b)) out[source] = Math.max(out[source] ?? 0, seq);
+  return out;
+};

@@ -10,6 +10,7 @@ import * as Aggregate from "./Aggregate.ts";
 import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -57,6 +58,12 @@ export type Step =
       readonly view: View.Any;
       readonly key: Aggregate.Ref;
       readonly expected: unknown;
+    }
+  | {
+      readonly _tag: "Streamed";
+      readonly stream: DomainStream.Any;
+      readonly key: Aggregate.Ref;
+      readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | { readonly _tag: "ExpectCall"; readonly op: ExternalSystem.Op; readonly args: unknown }
   | { readonly _tag: "Resolve"; readonly op: ExternalSystem.Op; readonly value: unknown }
@@ -137,6 +144,21 @@ const emitted = <V extends View.Any>(
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
 ): Step => ({ _tag: "Emitted", view, key, expected });
 
+/**
+ * The next entries appended to a stream key (by its projection). With no
+ * events: nothing new was appended.
+ */
+const streamed = <S extends DomainStream.Any>(
+  stream: S,
+  key: Aggregate.Ref<DomainStream.KeyOf<S>>,
+  ...events: ReadonlyArray<DomainStream.EventOf<S>>
+): Step => ({
+  _tag: "Streamed",
+  stream,
+  key,
+  events: events as ReadonlyArray<{ readonly _tag: string }>,
+});
+
 /** A policy called this external system operation with these (partial) arguments and is waiting. */
 const expectCall = <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step => ({
   _tag: "ExpectCall",
@@ -204,7 +226,7 @@ interface PendingCall {
 
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
-  /** The policies' Layers. Required when the model has policies. */
+  /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /** External systems the policies call. Each is replaced by a scripted implementation. */
   readonly externalSystems?: ReadonlyArray<Systems>;
@@ -310,7 +332,7 @@ const make =
                   if (platform.control.failures.length > 0) {
                     return yield* new StoryFailure({
                       step,
-                      message: `a policy failed: ${String(platform.control.failures[0])}`,
+                      message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
                     });
                   }
                   return;
@@ -319,7 +341,7 @@ const make =
             }
             return yield* new StoryFailure({
               step,
-              message: "the domain did not settle (a policy is looping?)",
+              message: "the domain did not settle (a policy or projection is looping?)",
             });
           });
 
@@ -475,6 +497,26 @@ const make =
               }
               break;
             }
+            case "Streamed": {
+              const store = internals.streams.get(s.stream.streamName)!;
+              const id = `${s.stream.streamName}/${s.key.id}`;
+              const entries = yield* store.list(s.key.id as string);
+              const from = cursors.get(id) ?? 0;
+              const actual = entries.slice(from).map((e) => e.event);
+              const expected = s.events.map(encodeInstance);
+              if (s.events.length === 0) {
+                if (actual.length > 0)
+                  return yield* fail(`expected nothing new on ${id}, got ${show(actual)}`);
+                break;
+              }
+              if (!equal(actual.slice(0, expected.length), expected)) {
+                return yield* fail(
+                  `on ${id}\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
+                );
+              }
+              cursors.set(id, from + expected.length);
+              break;
+            }
             case "ExpectCall": {
               const call = calls.find(
                 (c) => c.system === s.op.system && c.op === s.op.op && !c.expected,
@@ -578,6 +620,7 @@ export const Story = {
   state,
   view,
   emitted,
+  streamed,
   expectCall,
   resolve,
   clock,

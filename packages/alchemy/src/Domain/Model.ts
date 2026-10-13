@@ -15,11 +15,17 @@ import {
   type Delivery,
   Platform,
   type PolicyStore,
+  type ProjectionStore,
+  type StreamEntry,
+  type StreamMeta,
+  type StreamStore,
   type ViewSnapshot,
   type ViewStore,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
+import * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -37,10 +43,13 @@ export class Internals extends Context.Service<
     readonly kernel: Kernel.Kernel;
     readonly aggregates: ReadonlyMap<string, AggregateStore>;
     readonly views: ReadonlyMap<string, ViewStore>;
+    readonly streams: ReadonlyMap<string, StreamStore>;
     /** The client of the aggregate that handles each command, by command tag. */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
     /** Each view's read API, by view name. */
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Aggregate.Any, unknown>>;
+    /** Each stream's API, by stream name. */
+    readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Aggregate.Any, unknown>>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -51,17 +60,22 @@ export interface Members<
   A extends ReadonlyArray<Aggregate.Any>,
   V extends ReadonlyArray<View.Any>,
   P extends ReadonlyArray<Policy.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
 > {
   readonly aggregates: A;
   readonly views?: V;
   readonly policies?: P;
+  readonly projections?: J;
+  readonly streams?: S;
 }
 
 /**
  * The class type returned by {@link make}.
  *
- * `Provided` is every aggregate and view service the Model provides;
- * `Policies` is every policy whose implementation `layer` requires.
+ * `Provided` is every aggregate, view, stream and projection-progress service
+ * the Model provides; `Policies` is every policy and projection whose
+ * implementation `layer` requires.
  */
 export interface ModelClass<Name extends string, Provided, Policies> {
   new (_: never): {};
@@ -69,12 +83,12 @@ export interface ModelClass<Name extends string, Provided, Policies> {
   readonly modelName: Name;
   readonly definitions: Kernel.Definitions;
   /**
-   * Host every entity on the ambient {@link Platform}. The policy Layers
-   * are built after the aggregates and views exist, so a policy can
-   * resolve their clients while it is constructed.
+   * Host every entity on the ambient {@link Platform}. The policy and
+   * projection Layers (`handlers`) are built after the aggregates, views and
+   * streams exist, so a handler can resolve them while it is constructed.
    */
   layer<E = never, R = never>(
-    policies: Layer.Layer<Policies, E, R>,
+    handlers: Layer.Layer<Policies, E, R>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
@@ -115,31 +129,46 @@ export interface Any {
  *
  * @primitive
  */
+type ProvidedBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+> =
+  | Identifier<A[number]>
+  | Identifier<V[number]>
+  | Identifier<S[number]>
+  | Projection.ProgressIdentifier<J[number]>;
+
 export const make = <
   const Name extends string,
   const A extends ReadonlyArray<Aggregate.Any>,
   const V extends ReadonlyArray<View.Any> = readonly [],
   const P extends ReadonlyArray<Policy.Any> = readonly [],
+  const J extends ReadonlyArray<Projection.Any> = readonly [],
+  const S extends ReadonlyArray<DomainStream.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P>,
-): ModelClass<Name, Identifier<A[number]> | Identifier<V[number]>, Identifier<P[number]>> => {
+  members: Members<A, V, P, J, S>,
+): ModelClass<Name, ProvidedBy<A, V, J, S>, Identifier<P[number]> | Identifier<J[number]>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
     policies: members.policies ?? [],
+    projections: members.projections ?? [],
+    streams: members.streams ?? [],
   };
   return class {
     static readonly kind = "Model" as const;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
-    static layer<E, R>(policies: Layer.Layer<Identifier<P[number]>, E, R>) {
-      return Layer.effectContext(build(definitions, policies));
+    static layer<E, R>(handlers: Layer.Layer<Identifier<P[number]> | Identifier<J[number]>, E, R>) {
+      return Layer.effectContext(build(definitions, handlers));
     }
   } as unknown as ModelClass<
     Name,
-    Identifier<A[number]> | Identifier<V[number]>,
-    Identifier<P[number]>
+    ProvidedBy<A, V, J, S>,
+    Identifier<P[number]> | Identifier<J[number]>
   >;
 };
 
@@ -151,15 +180,17 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
     const policyStores = new Map<string, PolicyStore>();
+    const projectionStores = new Map<string, ProjectionStore>();
+    const streamStores = new Map<string, StreamStore>();
 
     const deliver = (delivery: Delivery): Effect.Effect<void> =>
       Effect.suspend(() => {
         const { kind, name } = delivery.target;
         if (kind === "view") return viewStores.get(name)!.receive(delivery.key, [delivery]);
-        const store = policyStores.get(name);
+        const store = kind === "policy" ? policyStores.get(name) : projectionStores.get(name);
         return store
           ? store.receive(delivery)
-          : Effect.die(new Error(`Policy ${name} is not hosted yet`));
+          : Effect.die(new Error(`${kind} ${name} is not hosted yet`));
       });
 
     for (const aggregate of definitions.aggregates) {
@@ -181,6 +212,16 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       );
     }
 
+    for (const stream of definitions.streams) {
+      streamStores.set(
+        stream.streamName,
+        yield* platform.stream(stream, {
+          name: stream.streamName,
+          push: Watch.streamPush(kernel, stream),
+        }),
+      );
+    }
+
     let hosts = Context.empty() as Context.Context<unknown>;
     const commands = new Map<string, Aggregate.ClientImpl>();
     for (const aggregate of definitions.aggregates) {
@@ -198,9 +239,56 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
     }
+    const streamHosts = new Map<string, DomainStream.Host<Aggregate.Any, unknown>>();
+    for (const stream of definitions.streams) {
+      const host = streamHost(kernel, stream, streamStores.get(stream.streamName)!);
+      streamHosts.set(stream.streamName, host);
+      hosts = Context.add(hosts, stream, host);
+    }
+    for (const projection of definitions.projections) {
+      hosts = Context.add(
+        hosts,
+        projection.Progress,
+        projectionProgress(kernel, projection, () =>
+          projectionStores.get(projection.projectionName)!,
+        ),
+      );
+    }
 
-    // Policies are built with the clients available, then hosted.
+    // Policies and projections are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
+    for (const projection of definitions.projections) {
+      const implementation = Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        projection as Context.Key<unknown, Projection.Implementation<unknown>>,
+      );
+      const writes = (projection.definition.writes ?? []).map((stream) =>
+        streamStores.get(stream.streamName)!,
+      );
+      projectionStores.set(
+        projection.projectionName,
+        yield* platform.projection(projection, {
+          name: projection.projectionName,
+          options: { batch: Projection.batchMillis(implementation.options) },
+          run: (key, batch) =>
+            Effect.gen(function* () {
+              yield* implementation.handle(kernel.projectionInputs(projection, key, batch));
+              // What this run handled, so stream reads `atLeast` a receipt see it.
+              if (writes.length === 0) return;
+              const checkpoints: Record<string, number> = {};
+              for (const { delivery } of batch) {
+                checkpoints[delivery.source] = Math.max(
+                  checkpoints[delivery.source] ?? 0,
+                  delivery.seq,
+                );
+              }
+              yield* Effect.forEach(writes, (store) => store.advance(key, checkpoints), {
+                discard: true,
+              });
+            }),
+        }),
+      );
+    }
     for (const policy of definitions.policies) {
       const handler = Context.getUnsafe(
         implementations as Context.Context<unknown>,
@@ -216,8 +304,10 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       kernel,
       aggregates: aggregateStores,
       views: viewStores,
+      streams: streamStores,
       commands,
       viewHosts,
+      streamHosts,
     });
   });
 
@@ -380,3 +470,158 @@ const viewHost = (
       ),
   };
 };
+
+/** Wait until a progress check passes, retrying every 25ms up to `timeout`. */
+const waitUntil = <A>(
+  check: Effect.Effect<A, "stale">,
+  timeout: Duration.Input | undefined,
+  onTimeout: () => View.ConsistencyTimeout,
+) =>
+  check.pipe(
+    Effect.retry({
+      schedule: Schedule.spaced("25 millis"),
+      times: Math.ceil(Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25),
+    }),
+    Effect.mapError(onTimeout),
+  );
+
+const streamHost = (
+  kernel: Kernel.Kernel,
+  stream: DomainStream.Any,
+  store: StreamStore,
+): DomainStream.Host<Aggregate.Any, unknown> => {
+  const decode = (entry: StreamEntry) => kernel.decodeStreamEntry(entry);
+  const latest = (key: string, meta: StreamMeta) =>
+    meta.seq === 0
+      ? Effect.succeed(Option.none())
+      : store
+          .tail(key, meta.seq - 1)
+          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
+  return {
+    peek: (key, options) => {
+      const atLeast = options?.atLeast;
+      const read = atLeast
+        ? waitUntil(
+            store
+              .read(key.id)
+              .pipe(
+                Effect.flatMap((meta) =>
+                  (meta.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
+                    ? Effect.succeed(meta)
+                    : Effect.fail("stale" as const),
+                ),
+              ),
+            options?.timeout,
+            () =>
+              new View.ConsistencyTimeout({
+                view: stream.streamName,
+                key: key.id,
+                stream: atLeast.stream,
+                version: atLeast.version,
+              }),
+          )
+        : store.read(key.id);
+      return read.pipe(Effect.flatMap((meta) => latest(key.id, meta)));
+    },
+    watch: (key) =>
+      store.changes(key.id).pipe(
+        Stream.changesWith((a, b) => a.seq === b.seq),
+        Stream.mapEffect((meta) => latest(key.id, meta)),
+      ),
+    events: (key, options) =>
+      store.tail(key.id, options?.after ?? 0).pipe(
+        Stream.map(decode),
+        Stream.filter((entry) => matches(options?.where, entry.event)),
+      ),
+    list: (key, options) =>
+      store.list(key.id).pipe(
+        Effect.map((stored) => {
+          const desc = options?.order === "desc";
+          const after = options?.after === undefined ? undefined : Number(options.after);
+          const rows = (desc ? [...stored].reverse() : stored)
+            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
+            .map((row) => ({ seq: row.seq, entry: decode(row) }))
+            .filter((row) => matches(options?.where, row.entry.event));
+          const take = options?.take ?? rows.length;
+          const page = rows.slice(0, take);
+          return {
+            entries: page.map((row) => row.entry),
+            cursor:
+              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+          };
+        }),
+      ),
+    append: (origin, ...events) =>
+      Effect.suspend(() => {
+        const meta = (origin as unknown as Record<symbol, Kernel.InputMetaValue | undefined>)[
+          Kernel.InputMeta
+        ];
+        const writer = kernel.writerOf(stream);
+        if (!meta || !writer || writer.projectionName !== meta.projection) {
+          return Effect.die(
+            new Kernel.DefinitionError(
+              `Only the projection that lists ${stream.streamName} in \`writes\` may append to it, with the input it is handling`,
+            ),
+          );
+        }
+        meta.appends += 1;
+        return store.append(meta.key, {
+          origin: [meta.position, meta.appends],
+          source: meta.source,
+          sourceSeq: meta.sourceSeq,
+          at: meta.at,
+          commandId: meta.commandId,
+          events: events.map((event) => kernel.encodeEvent(event as { readonly _tag: string })),
+        });
+      }),
+  };
+};
+
+const projectionProgress = (
+  kernel: Kernel.Kernel,
+  projection: Projection.Any,
+  store: () => ProjectionStore,
+): Projection.Progress => ({
+  caughtUp: (receipt, options) =>
+    Effect.gen(function* () {
+      const [aggregate, ...rest] = receipt.stream.split("/");
+      const id = rest.join("/");
+      const first = receipt.version - receipt.events.length + 1;
+      const waits = new Map<string, number>();
+      receipt.events.forEach((event, index) => {
+        for (const key of kernel.projectionKeys(
+          projection,
+          aggregate!,
+          id,
+          event as { readonly _tag: string },
+          first + index,
+        )) {
+          waits.set(key, Math.max(waits.get(key) ?? 0, first + index));
+        }
+      });
+      yield* Effect.forEach(
+        waits,
+        ([key, seq]) =>
+          waitUntil(
+            store()
+              .checkpoints(key)
+              .pipe(
+                Effect.flatMap((checkpoints) =>
+                  (checkpoints[receipt.stream] ?? 0) >= seq
+                    ? Effect.void
+                    : Effect.fail("stale" as const),
+                ),
+              ),
+            options?.timeout,
+            () =>
+              new View.ConsistencyTimeout({
+                view: projection.projectionName,
+                key,
+                stream: receipt.stream,
+                version: seq,
+              }),
+          ),
+        { discard: true },
+      );
+    }),
+});

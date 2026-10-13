@@ -1,22 +1,41 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Schedule from "effect/Schedule";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type * as View from "./View.ts";
 
+/** One source, or several. */
+export type From = View.Source | ReadonlyArray<View.Source>;
+/** The sources of a `from`. */
+export type SourcesOf<F> = F extends ReadonlyArray<infer S> ? S : F;
+
 /**
  * What a policy receives for each event it subscribes to.
  */
-export interface Trigger<From extends View.Source, E> {
+export interface Trigger<F, E, Key extends Aggregate.Any = View.SourceKey<SourcesOf<F>>> {
+  /** The key the event was routed to: the source instance, unless the policy declares `key`. */
+  readonly key: Aggregate.Ref<Key>;
+  /** The route named in `keyOf` that brought it here, if any. */
+  readonly route: string | undefined;
   /** The aggregate or view instance the event came from. */
-  readonly source: Aggregate.Ref<View.SourceKey<From>>;
+  readonly source: Aggregate.Ref<View.SourceKey<SourcesOf<F>>>;
   /** The event. */
   readonly event: E;
   /** The event's envelope. */
-  readonly envelope: Aggregate.Envelope<Aggregate.IdOf<View.SourceKey<From>>>;
+  readonly envelope: Aggregate.Envelope<Aggregate.IdOf<View.SourceKey<SourcesOf<F>>>>;
   /** For a view source: the view's state after the event. */
-  readonly state: View.SourceState<From>;
+  readonly state: View.SourceState<SourcesOf<F>>;
+}
+
+/**
+ * How a policy's Layer tunes it. These are variants: they change how it runs,
+ * never what it means.
+ */
+export interface Options {
+  /** Retry a failed run on this schedule before leaving it to the platform's redelivery. */
+  readonly retry?: Schedule.Schedule<unknown, unknown>;
 }
 
 /**
@@ -34,16 +53,54 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Policy";
   readonly policyName: string;
   readonly definition: {
-    readonly from: View.Source;
+    readonly from: From;
+    readonly key?: Aggregate.Any;
+    readonly keyOf?: { readonly [key: string]: unknown };
     readonly on: ReadonlyArray<Event.Any>;
   };
 }
 
+type KeyOfDefinition<D> = D extends { readonly key: infer K extends Aggregate.Any }
+  ? K
+  : D extends { readonly from: infer F }
+    ? View.SourceKey<SourcesOf<F>>
+    : never;
+
 /** The trigger type of a policy class. */
 export type TriggerOf<P extends Any> = Trigger<
   P["definition"]["from"],
-  Aggregate.Inst<P["definition"]["on"][number]>
+  Aggregate.Inst<P["definition"]["on"][number]>,
+  KeyOfDefinition<P["definition"]>
 >;
+
+type AsList<F> = F extends ReadonlyArray<View.Source> ? F : readonly [F];
+
+/**
+ * The pure definition of a policy: its invariants.
+ */
+export interface Definition<
+  F extends From,
+  On extends ReadonlyArray<Event.Any>,
+  Key extends Aggregate.Any | undefined,
+> {
+  /** The aggregate or view, or several, whose events it reacts to. */
+  readonly from: F;
+  /**
+   * The aggregate whose refs partition it: triggers for one key run in order,
+   * one at a time. Defaults to the source instance.
+   */
+  readonly key?: Key;
+  /** Which key each trigger goes to, by event tag or source name (like a view's `keyOf`). */
+  readonly keyOf?: Key extends Aggregate.Any
+    ? {
+        readonly [K in View.HandlerKey<AsList<F>>]?: View.Routed<
+          View.KeyFn<Key, View.InputFor<AsList<F>, K>>
+        >;
+      }
+    : never;
+  /** The events it reacts to. */
+  readonly on: On;
+}
 
 /** The requirement identifier of a policy class. */
 export type Identifier<P extends Any> = P extends Context.Key<infer I, unknown> ? I : never;
@@ -116,16 +173,14 @@ export interface PolicyKey<Name extends string> {
  */
 export const make = <
   const Name extends string,
-  From extends View.Source,
+  const F extends From,
   const On extends ReadonlyArray<Event.Any>,
+  Key extends Aggregate.Any | undefined = undefined,
 >(
   name: Name,
-  definition: { readonly from: From; readonly on: On },
-): PolicyClass<Name, From, On> => {
-  const Tag = Context.Service<
-    PolicyKey<Name>,
-    Handler<Trigger<From, Aggregate.Inst<On[number]>>>
-  >()(`alchemy/Domain/Policy/${name}`);
+  definition: Definition<F, On, Key>,
+): PolicyClass<Name, F, On, Key extends Aggregate.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
+  const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
     static readonly policyName: Name = name;
@@ -133,13 +188,31 @@ export const make = <
     static toLayer<Self extends Any, E, R>(
       this: Self,
       build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
+      options: Options = {},
     ): Layer.Layer<Identifier<Self>, E, R> {
+      const retry = options.retry;
       return Layer.effect(
         this as unknown as Context.Key<Identifier<Self>, Handler<TriggerOf<Self>>>,
-        build,
+        retry
+          ? Effect.map(
+              build,
+              (handle): Handler<TriggerOf<Self>> =>
+                (trigger) =>
+                  handle(trigger).pipe(
+                    Effect.catchDefect((defect) => Effect.fail(defect)),
+                    Effect.retry(retry),
+                    Effect.orDie,
+                  ),
+            )
+          : build,
       );
     }
-  } as unknown as PolicyClass<Name, From, On>;
+  } as unknown as PolicyClass<
+    Name,
+    F,
+    On,
+    Key extends Aggregate.Any ? Key : View.SourceKey<SourcesOf<F>>
+  >;
 };
 
 /**
@@ -147,23 +220,30 @@ export const make = <
  */
 export interface PolicyClass<
   Name extends string,
-  From extends View.Source,
+  F extends From,
   On extends ReadonlyArray<Event.Any>,
+  Key extends Aggregate.Any,
 > extends Context.ServiceClass<
   PolicyKey<Name>,
   string,
-  Handler<Trigger<From, Aggregate.Inst<On[number]>>>
+  Handler<Trigger<F, Aggregate.Inst<On[number]>, Key>>
 > {
   readonly kind: "Policy";
   readonly policyName: Name;
-  readonly definition: { readonly from: From; readonly on: On };
+  readonly definition: {
+    readonly from: F;
+    readonly key?: Key;
+    readonly keyOf?: { readonly [key: string]: unknown };
+    readonly on: On;
+  };
   /**
    * Implement the policy. The construction Effect runs once, resolving every
    * service the handler uses (aggregate clients, views, Ports); the handler
-   * itself requires nothing.
+   * itself requires nothing. `options` tune how it runs, such as retries.
    */
   toLayer<Self extends Any, E, R>(
     this: Self,
     build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
+    options?: Options,
   ): Layer.Layer<Identifier<Self>, E, R>;
 }

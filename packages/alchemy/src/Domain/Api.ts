@@ -33,22 +33,24 @@ import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import type { AggregateStore, Subscription, ViewStore } from "./Platform.ts";
+import type { AggregateStore, StreamStore, Subscription, ViewStore } from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
 /**
- * What an Api exposes: commands (writes), views (reads), and aggregates that
- * declare a `read` contract.
+ * What an Api exposes: commands (writes); views, streams, and aggregates that
+ * declare a `read` contract (reads).
  */
-export type Entry = Command.Any | View.Any | Aggregate.Any;
+export type Entry = Command.Any | View.Any | Aggregate.Any | DomainStream.Any;
 
 type Commands<E extends Entry> = Extract<E, Command.Any>;
 type Views<E extends Entry> = Extract<E, View.Any>;
-type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any>;
+type Streams<E extends Entry> = Extract<E, DomainStream.Any>;
+type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any | DomainStream.Any>;
 
 // ---------------------------------------------------------------- client types
 
@@ -108,6 +110,53 @@ export interface ViewClient<V extends View.Any> {
   >;
 }
 
+/** The typed client of a stream exposed in an Api. */
+export interface StreamClient<S extends DomainStream.Any> {
+  /** The key's latest entry, or `null` if nothing was appended. */
+  readonly peek: (
+    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    options?: CallOptions & {
+      /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+    },
+  ) => Effect.Effect<
+    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    ReadError<S["definition"]>
+  >;
+  /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
+  readonly watch: (
+    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    options?: CallOptions,
+  ) => Stream.Stream<
+    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    ReadError<S["definition"]>
+  >;
+  /** The key's entries from `after` (an entry `seq`), then live ones. */
+  readonly events: (
+    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    options?: CallOptions & {
+      readonly after?: number;
+      readonly where?: Filter<DomainStream.EventOf<S>>;
+    },
+  ) => Stream.Stream<
+    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>,
+    ReadError<S["definition"]>
+  >;
+  /** A page of the key's entries. */
+  readonly list: (
+    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    options?: CallOptions & {
+      readonly where?: Filter<DomainStream.EventOf<S>>;
+      readonly order?: "asc" | "desc";
+      readonly take?: number;
+      readonly after?: string;
+    },
+  ) => Effect.Effect<
+    View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>>,
+    ReadError<S["definition"]>
+  >;
+}
+
 /** A committed event of an aggregate, as a client receives it. */
 export interface Recorded<E, Id> {
   readonly event: E;
@@ -145,6 +194,8 @@ export type ApiClient<E extends Entry> = RpcClient.RpcClient<
   RpcClientError.RpcClientError
 > & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
+} & {
+  readonly [S in Streams<E> as S["streamName"]]: StreamClient<S>;
 } & {
   readonly [A in Aggregates<E> as A["aggregateName"]]: AggregateClient<A>;
 };
@@ -212,7 +263,7 @@ export interface ApiClass<Name extends string, Entries extends ReadonlyArray<Ent
 
 type EntryMiddleware<E> = E extends Command.Any
   ? E["middleware"][number]
-  : E extends View.Any
+  : E extends View.Any | DomainStream.Any
     ? NonNullable<E["definition"]["middleware"]>[number]
     : E extends Aggregate.Any
       ? NonNullable<NonNullable<E["definition"]["read"]>["middleware"]>[number]
@@ -325,6 +376,56 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         (rpc: Rpc.Any, handle: (payload: ReadPayload) => Stream.Stream<unknown, unknown>) =>
         (payload: ReadPayload) =>
           declaredOnly(rpc).stream(handle(payload));
+
+      if (entry.kind === "Stream") {
+        const host = internals.streamHosts.get(name)!;
+        const key = entry.definition.key;
+        const refOf = (id: string) => ({ aggregate: key.aggregateName, id }) as Aggregate.Ref;
+        const latest = (id: string) =>
+          host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
+        handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
+          host.peek(refOf(id), { atLeast }).pipe(
+            Effect.orDie,
+            Effect.flatMap((found) => {
+              const entry = Option.getOrNull(found);
+              return check("get", refOf(id))(entry).pipe(Effect.as(entry));
+            }),
+          ),
+        );
+        handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
+          host.watch(refOf(id)).pipe(
+            Stream.mapEffect((found) => {
+              const entry = Option.getOrNull(found);
+              return check("watch", refOf(id))(entry).pipe(Effect.as(entry));
+            }),
+          ),
+        );
+        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) =>
+          host
+            .events(refOf(id), {
+              after: after === undefined ? undefined : Number(after),
+              where: where as Filter<unknown> | undefined,
+            })
+            .pipe(
+              // Each entry is judged as the key's latest entry at that point.
+              Stream.mapEffect((entry) => check("events", refOf(id))(entry).pipe(Effect.as(entry))),
+            ),
+        );
+        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
+          latest(id).pipe(
+            Effect.flatMap((entry) => check("list", refOf(id))(entry)),
+            Effect.andThen(
+              host.list(refOf(id), {
+                where: where as Filter<unknown> | undefined,
+                order,
+                take,
+                after: after === undefined ? undefined : String(after),
+              }),
+            ),
+          ),
+        );
+        continue;
+      }
 
       if (entry.kind === "View") {
         const host = internals.viewHosts.get(name)!;
@@ -451,14 +552,18 @@ const liveReads = (
     {
       readonly rpc: Rpc.AnyWithProps;
       readonly mode: "watch" | "events";
-      readonly store?: AggregateStore | ViewStore;
+      readonly store?: AggregateStore | ViewStore | StreamStore;
     }
   >();
   for (const entry of entries) {
     if (entry.kind === "Command") continue;
     const name = nameOf(entry);
     const store =
-      entry.kind === "View" ? internals.views.get(name) : internals.aggregates.get(name);
+      entry.kind === "View"
+        ? internals.views.get(name)
+        : entry.kind === "Stream"
+          ? internals.streams.get(name)
+          : internals.aggregates.get(name);
     const rpcs = readRpcs(entry);
     reads.set(`${name}.watch`, { rpc: rpcs.watch as Rpc.AnyWithProps, mode: "watch", store });
     reads.set(`${name}.events`, { rpc: rpcs.events as Rpc.AnyWithProps, mode: "events", store });
@@ -537,7 +642,9 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
     client[name] =
       entry.kind === "View"
         ? { get: call("get"), watch: call("watch"), events: call("events"), list: call("list") }
-        : { get: call("get"), watch: call("watch"), events: call("events") };
+        : entry.kind === "Stream"
+          ? { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") }
+          : { get: call("get"), watch: call("watch"), events: call("events") };
   }
   return client;
 };

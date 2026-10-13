@@ -4,6 +4,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -22,8 +23,15 @@ export const EnvelopeSchema = Schema.Struct({
   commandId: Schema.String,
 });
 
-export const nameOf = (entry: View.Any | Aggregate.Any) =>
-  entry.kind === "View" ? entry.viewName : entry.aggregateName;
+/** Something an Api can expose for reading. */
+export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
+
+export const nameOf = (entry: Readable) =>
+  entry.kind === "View"
+    ? entry.viewName
+    : entry.kind === "Stream"
+      ? entry.streamName
+      : entry.aggregateName;
 
 export const union = (members: ReadonlyArray<Schema.Top>) =>
   members.length === 0 ? Schema.Never : Schema.Union(members as ReadonlyArray<Schema.Top>);
@@ -47,14 +55,15 @@ export const outputEvents = (view: View.Any): ReadonlyArray<Event.Any> => {
 };
 
 export interface ReadRpcs {
+  /** `get` for views and aggregates; `peek` for streams. */
   readonly get: Rpc.Any;
   readonly watch: Rpc.Any;
   readonly events: Rpc.Any;
   readonly list?: Rpc.Any;
 }
 
-export const contractOf = (entry: View.Any | Aggregate.Any): Read.AnyContract => {
-  if (entry.kind === "View") return entry.definition;
+export const contractOf = (entry: Readable): Read.AnyContract => {
+  if (entry.kind === "View" || entry.kind === "Stream") return entry.definition;
   const read = entry.definition.read;
   if (!read) {
     throw new Error(`${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`);
@@ -65,7 +74,7 @@ export const contractOf = (entry: View.Any | Aggregate.Any): Read.AnyContract =>
 const rpcCache = new WeakMap<object, ReadRpcs>();
 
 /** The RPCs of a view or aggregate exposed in an Api. */
-export const readRpcs = (entry: View.Any | Aggregate.Any): ReadRpcs => {
+export const readRpcs = (entry: Readable): ReadRpcs => {
   const cached = rpcCache.get(entry);
   if (cached) return cached;
   const name = nameOf(entry);
@@ -73,7 +82,57 @@ export const readRpcs = (entry: View.Any | Aggregate.Any): ReadRpcs => {
   const guard = (rpc: Rpc.Any) => Middleware.apply(rpc, contract.middleware ?? []);
   const error = union(contract.rejects ?? []);
   let rpcs: ReadRpcs;
-  if (entry.kind === "View") {
+  if (entry.kind === "Stream") {
+    const def = entry.definition;
+    const key = def.key.definition.id;
+    const recorded = Schema.Struct({ event: union(def.entries), envelope: EnvelopeSchema });
+    const latest = Schema.NullOr(recorded);
+    rpcs = {
+      get: guard(
+        Rpc.make(`${name}.peek`, {
+          payload: {
+            key,
+            atLeast: Schema.optional(
+              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
+            ),
+          },
+          success: latest,
+          error,
+        }),
+      ),
+      watch: guard(
+        Rpc.make(`${name}.watch`, { payload: { key }, success: latest, error, stream: true }),
+      ),
+      events: guard(
+        Rpc.make(`${name}.events`, {
+          payload: {
+            key,
+            after: Schema.optional(Schema.Number),
+            where: Schema.optional(Schema.Unknown),
+          },
+          success: recorded,
+          error,
+          stream: true,
+        }),
+      ),
+      list: guard(
+        Rpc.make(`${name}.list`, {
+          payload: {
+            key,
+            where: Schema.optional(Schema.Unknown),
+            order: Schema.optional(Schema.Literals(["asc", "desc"])),
+            take: Schema.optional(Schema.Number),
+            after: Schema.optional(Schema.String),
+          },
+          success: Schema.Struct({
+            entries: Schema.Array(recorded),
+            cursor: Schema.NullOr(Schema.String),
+          }),
+          error,
+        }),
+      ),
+    };
+  } else if (entry.kind === "View") {
     const def = entry.definition;
     const key = def.key.definition.id;
     const state = Schema.NullOr(def.state ?? Schema.Null);

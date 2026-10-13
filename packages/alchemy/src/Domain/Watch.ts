@@ -8,10 +8,20 @@ import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { decodeEnvelope, type Kernel } from "./Kernel.ts";
-import type { Json, Push, StoredEvent, Subscription, ViewEntry, ViewSnapshot } from "./Platform.ts";
+import type {
+  Json,
+  Push,
+  StoredEvent,
+  StreamEntry,
+  StreamMeta,
+  Subscription,
+  ViewEntry,
+  ViewSnapshot,
+} from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -69,7 +79,7 @@ interface Item {
  * values, then, if `validate` rejected an item, the `Exit` that ends the read.
  */
 const encode = (
-  entry: View.Any | Aggregate.Any,
+  entry: View.Any | Aggregate.Any | DomainStream.Any,
   subscription: Subscription,
   ref: Aggregate.Ref,
   items: ReadonlyArray<Item>,
@@ -192,4 +202,42 @@ export const aggregatePush =
       }));
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
       return encode(aggregate, subscription, ref, items, cursor);
+    });
+
+/** What a stream key's subscriber receives after an append (or when it connects). */
+export const streamPush =
+  (kernel: Kernel, stream: DomainStream.Any) =>
+  (
+    key: string,
+    subscription: Subscription,
+    meta: StreamMeta,
+    entries: ReadonlyArray<StreamEntry>,
+    latest: StreamEntry | undefined,
+  ): Effect.Effect<Push> =>
+    Effect.suspend(() => {
+      const ref = { aggregate: stream.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      if (subscription.mode === "watch") {
+        if (meta.seq <= subscription.cursor) {
+          return Effect.succeed({ messages: [], subscription, done: false });
+        }
+        const decoded = latest ? kernel.decodeStreamEntry(latest) : null;
+        return encode(
+          stream,
+          subscription,
+          ref,
+          [{ state: decoded, value: Option.some(decoded) }],
+          meta.seq,
+        );
+      }
+      const fresh = entries.filter((entry) => entry.seq > subscription.cursor);
+      // Each entry is judged as the key's latest entry at that point.
+      const items = fresh.map((stored): Item => {
+        const decoded = kernel.decodeStreamEntry(stored);
+        return {
+          state: decoded,
+          value: matches(where(subscription), decoded.event) ? Option.some(decoded) : Option.none(),
+        };
+      });
+      const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
+      return encode(stream, subscription, ref, items, cursor);
     });

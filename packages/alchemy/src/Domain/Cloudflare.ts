@@ -15,17 +15,25 @@ import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Aggregate from "./Aggregate.ts";
+import { isAfter, mergeCheckpoints } from "./InMemory.ts";
 import { captureContext } from "./internal.ts";
 import {
+  type Accepted,
   type AggregateKit,
   type Delivery,
   emptySnapshot,
+  emptyStreamMeta,
   Platform,
   type Json,
   type PolicyKit,
+  type ProjectionKit,
   type Push,
   type SendResult,
   type StoredEvent,
+  type StreamEntry,
+  type StreamKit,
+  type StreamMeta,
+  type StreamWrite,
   type Subscription,
   type ViewEntry,
   type ViewKit,
@@ -444,12 +452,24 @@ const viewObject = (kit: ViewKit) =>
             Effect.gen(function* () {
               const kick = yield* exclusively(
                 Effect.gen(function* () {
-                  const result = kit.apply(key, yield* read, deliveries);
+                  const before = yield* read;
+                  const result = kit.apply(key, before, deliveries);
                   if (!result.changed) return false;
                   const rows: Record<string, ViewEntry> = {};
                   for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
+                  // The key's immutable input log: every delivery it applied, in order.
+                  const accepted = deliveries.filter(
+                    (d) => (before.checkpoints[d.source] ?? 0) < d.seq,
+                  );
                   yield* state.storage.transaction(
                     Effect.gen(function* () {
+                      const inputs = (yield* state.storage.get<number>("in-seq")) ?? 0;
+                      const log: Record<string, Delivery> = {};
+                      accepted.forEach((delivery, index) => {
+                        log[`in:${pad(inputs + index + 1)}`] = delivery;
+                      });
+                      yield* state.storage.put(log);
+                      yield* state.storage.put("in-seq", inputs + accepted.length);
                       yield* state.storage.put("snapshot", result.snapshot);
                       if (result.entries.length > 0) yield* state.storage.put(rows);
                       yield* outbox.stage(result.downstream);
@@ -511,6 +531,234 @@ const policyObject = (kit: PolicyKit) =>
               if (accepted) yield* inbox.kick;
             }),
           ),
+      };
+    });
+  });
+
+/** The stored progress of one projection key. */
+interface ProjectionMeta {
+  readonly key: string | null;
+  /** Inputs accepted into the log. */
+  readonly accepted: number;
+  /** Inputs handled. */
+  readonly processed: number;
+  /** The last accepted `seq` per source: duplicates are dropped on arrival. */
+  readonly intake: Readonly<Record<string, number>>;
+  /** The last handled `seq` per source. */
+  readonly checkpoints: Readonly<Record<string, number>>;
+}
+
+const emptyProjectionMeta: ProjectionMeta = {
+  key: null,
+  accepted: 0,
+  processed: 0,
+  intake: {},
+  checkpoints: {},
+};
+
+/** How long a failed or interrupted run waits before it is retried. */
+const PROJECTION_RETRY_MS = 10_000;
+
+const projectionObject = (kit: ProjectionKit) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return Effect.gen(function* () {
+      const readMeta = state.storage
+        .get<ProjectionMeta>("meta")
+        .pipe(Effect.map((meta) => meta ?? emptyProjectionMeta));
+      const size = kit.options.batch?.size ?? 1;
+      const waitMillis = kit.options.batch?.waitMillis ?? 0;
+      const lease = "drain-lease";
+      const acquire = exclusively(
+        Effect.gen(function* () {
+          const held = yield* state.storage.get<number>(lease);
+          if (held !== undefined && held > Date.now()) return false;
+          yield* state.storage.put(lease, Date.now() + LEASE_MS);
+          return true;
+        }),
+      );
+      // Re-run the drain later: when a short batch has waited long enough, or after a failure.
+      let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+      const drain: Effect.Effect<void> = Effect.gen(function* () {
+        if (!(yield* acquire)) return;
+        const exit = yield* Effect.exit(
+          Effect.gen(function* () {
+            while (true) {
+              const meta = yield* readMeta;
+              if (meta.key === null || meta.processed >= meta.accepted) return;
+              const rows = yield* state.storage.list<Accepted>({
+                prefix: "in:",
+                start: `in:${pad(meta.processed + 1)}`,
+                limit: size,
+              });
+              const run = [...rows.values()];
+              if (run.length === 0) return;
+              if (run.length < size && waitMillis > 0 && Date.now() - run[0]!.at < waitMillis) {
+                return yield* wake(run[0]!.at + waitMillis);
+              }
+              yield* kit.run(meta.key, run);
+              yield* exclusively(
+                Effect.gen(function* () {
+                  const current = yield* readMeta;
+                  const handled: Record<string, number> = {};
+                  for (const { delivery } of run) {
+                    handled[delivery.source] = Math.max(
+                      handled[delivery.source] ?? 0,
+                      delivery.seq,
+                    );
+                  }
+                  yield* state.storage.put("meta", {
+                    ...current,
+                    processed: run[run.length - 1]!.position,
+                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
+                  } satisfies ProjectionMeta);
+                }),
+              );
+            }
+          }),
+        );
+        yield* state.storage.delete(lease).pipe(Effect.ignore);
+        if (exit._tag === "Failure") {
+          yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
+          yield* wake(Date.now() + PROJECTION_RETRY_MS);
+        }
+      }) as Effect.Effect<void>;
+      const callback = yield* makeCallback("domain:projection", () => drain);
+      wake = (at) =>
+        callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
+      return {
+        receive: (key: string, delivery: Delivery) =>
+          reportDefects(
+            Effect.gen(function* () {
+              const accepted = yield* exclusively(
+                state.storage.transaction(
+                  Effect.gen(function* () {
+                    const meta = yield* readMeta;
+                    if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
+                    const position = meta.accepted + 1;
+                    yield* state.storage.put(`in:${pad(position)}`, {
+                      position,
+                      delivery,
+                      at: Date.now(),
+                    } satisfies Accepted);
+                    yield* state.storage.put("meta", {
+                      ...meta,
+                      key,
+                      accepted: position,
+                      intake: { ...meta.intake, [delivery.source]: delivery.seq },
+                    } satisfies ProjectionMeta);
+                    // The backstop: handled even if this instance dies before the drain runs.
+                    yield* callback.schedule("drain", {
+                      after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+                      payload: {},
+                    });
+                    return true;
+                  }),
+                ),
+              );
+              if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
+            }),
+          ),
+        checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+      };
+    });
+  });
+
+const streamObject = (kit: StreamKit) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return Effect.gen(function* () {
+      const readMeta = state.storage
+        .get<StreamMeta>("meta")
+        .pipe(Effect.map((meta) => meta ?? emptyStreamMeta));
+      const entriesAfter = (after: number) =>
+        state.storage
+          .list<StreamEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
+          .pipe(Effect.map((rows) => [...rows.values()]));
+      const latest = (meta: StreamMeta) =>
+        meta.seq === 0
+          ? Effect.succeed(undefined)
+          : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
+      return {
+        append: (key: string, write: StreamWrite) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                const meta = yield* readMeta;
+                if (!isAfter(write.origin, meta.origin)) return;
+                const added: Array<StreamEntry> = write.events.map((event, index) => {
+                  const seq = meta.seq + index + 1;
+                  return {
+                    seq,
+                    event,
+                    envelope: {
+                      id: key,
+                      stream: `${kit.name}/${key}`,
+                      seq,
+                      at: write.at,
+                      commandId: write.commandId,
+                    },
+                  };
+                });
+                const next: StreamMeta = {
+                  seq: meta.seq + added.length,
+                  origin: write.origin,
+                  checkpoints: mergeCheckpoints(meta.checkpoints, {
+                    [write.source]: write.sourceSeq,
+                  }),
+                };
+                yield* state.storage.transaction(
+                  Effect.gen(function* () {
+                    const rows: Record<string, StreamEntry> = {};
+                    for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
+                    if (added.length > 0) yield* state.storage.put(rows);
+                    yield* state.storage.put("meta", next);
+                  }),
+                );
+                if (added.length === 0) return;
+                yield* broadcast(({ key, subscription }) =>
+                  Effect.gen(function* () {
+                    // A subscriber behind this append's first entry reads the gap from storage.
+                    const entries =
+                      subscription.mode === "events" && subscription.cursor < added[0]!.seq - 1
+                        ? yield* entriesAfter(subscription.cursor)
+                        : added;
+                    return yield* kit.push(
+                      key,
+                      subscription,
+                      next,
+                      entries,
+                      added[added.length - 1],
+                    );
+                  }),
+                );
+              }),
+            ),
+          ),
+        advance: (checkpoints: Readonly<Record<string, number>>) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                const meta = yield* readMeta;
+                yield* state.storage.put("meta", {
+                  ...meta,
+                  checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
+                } satisfies StreamMeta);
+              }),
+            ),
+          ),
+        read: () => reportDefects(readMeta),
+        after: (after: number) => reportDefects(entriesAfter(after)),
+        // A live read of this key: accept its WebSocket, then push on every append.
+        fetch: accept((key, subscription) =>
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            const entries =
+              subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
+            return yield* kit.push(key, subscription, meta, entries, yield* latest(meta));
+          }),
+        ),
+        ...socketHandlers,
       };
     });
   });
@@ -661,6 +909,52 @@ export const DurableObjects: Layer.Layer<Platform, never, Worker> = Layer.effect
                     );
                   });
                 }),
+            };
+          }),
+        ),
+      projection: (projection, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(
+              `${projection.projectionName}Projection`,
+              projectionObject(kit),
+            );
+            return {
+              receive: (delivery) =>
+                unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
+              checkpoints: (key) =>
+                unwrapDefects<Readonly<Record<string, number>>>(
+                  namespace.getByName(key).checkpoints(),
+                ),
+            };
+          }),
+        ),
+      stream: (stream, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(`${stream.streamName}Stream`, streamObject(kit));
+            const read = (key: string) =>
+              unwrapDefects<StreamMeta>(namespace.getByName(key).read());
+            const after = (key: string, cursor: number) =>
+              unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
+            return {
+              append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
+              advance: (key, checkpoints) =>
+                unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+              read,
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
+              changes: (key) =>
+                Stream.fromEffectSchedule(read(key), POLL).pipe(
+                  Stream.changesWith((a, b) => a.seq === b.seq),
+                ),
+              list: (key) => after(key, 0),
+              tail: (key, from) =>
+                pollAfter(
+                  from,
+                  (cursor) => after(key, cursor),
+                  (e) => e.seq,
+                ),
+              connect: connectTo(namespace),
             };
           }),
         ),
