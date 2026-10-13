@@ -41,10 +41,7 @@ Here is the shape of the bank's model, which the rest of this page explains piec
 
 DDD asks that the model and the people who run the business use the same words for the same things. If the bank says customers *deposit money* into an *account*, the code says `DepositMoney` and `Account`, not `updateBalance` and `rows`.
 
-```typescript
-// src/language.ts
-import * as Domain from "alchemy/Domain";
-
+```typescript title="src/language.ts"
 export class AccountOpened extends Domain.Event("AccountOpened") {}
 export class MoneyDeposited extends Domain.Event("MoneyDeposited") {}
 export class InsufficientFunds extends Domain.Rejection("InsufficientFunds") {}
@@ -111,13 +108,50 @@ Each aggregate is also a **consistency boundary**. It handles one command at a t
 
 That makes the size of an aggregate a design decision. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
 
+Here is the whole account: its state, how it decides each command, and how each event changes the state.
+
 ```typescript title="src/Account.ts"
-WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : cmd.amount > s.balance
-      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+const State = Schema.Union([
+  Schema.TaggedStruct("Unopened", {}),
+  Schema.TaggedStruct("Open", { owner: Schema.String, balance: Schema.Int }),
+]);
+type State = typeof State.Type;
+
+// An event can only follow an open account; anything else is a bug.
+const mustBeOpen = (s: State) => {
+  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
+  return s;
+};
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: State,
+  initial: { _tag: "Unopened" },
+  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+  decide: {
+    OpenAccount: (s, cmd) =>
+      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (s, cmd) =>
+      s._tag !== "Open"
+        ? new NotOpen()
+        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+    WithdrawMoney: (s, cmd) =>
+      s._tag !== "Open"
+        ? new NotOpen()
+        : cmd.amount > s.balance
+          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+  },
+  evolve: {
+    AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
+    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+  },
+  reply: {
+    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  },
+}) {}
 ```
 
 See [Aggregate](/domain/aggregate).
@@ -180,16 +214,37 @@ The split lets each side do one job well. Aggregates stay small, holding only wh
 A **view**, also called a read model or projection, is the query side's unit. It reads events, folds them into state, and keeps that state current as new events arrive. The account summary below keeps an owner and a balance for every account.
 
 ```typescript title="src/AccountSummary.ts"
-evolve: {
-  AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
-  MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
-  MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
-},
+export class AccountSummary extends Domain.View("AccountSummary", {
+  from: [Account],
+  key: Account,
+  state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+  initial: { owner: null, balance: 0 },
+  evolve: {
+    AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+    MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
+  },
+}) {}
 ```
 
 Views are updated after events are recorded, not in the same step. A view is always correct, but it may be a moment behind the aggregate. That delay is called **eventual consistency**. A screen that has just sent a command and wants to show its effect waits until the view has caught up with it.
 
-Not every read model belongs in the model's own storage. A search index, a reporting database or a data warehouse is built the same way, by consuming events, but lives in a store you choose. That's a **projection**: a read model the model feeds and you own.
+Not every read model belongs in the model's own storage. A search index, a reporting database or a data warehouse is built the same way, by consuming events, but lives in a store you choose. That's a **projection**: a read model the model feeds and you own. The bank's ledger copies every money movement into a database table:
+
+```typescript title="src/Ledger/Ledger.ts"
+export class Ledger extends Domain.Projection("Ledger", {
+  from: [Account],
+  key: Account,
+  on: [
+    MoneyDeposited,
+    MoneyWithdrawn,
+    TransferDebited,
+    TransferCredited,
+    TransferRefunded,
+    SettlementReceived,
+  ],
+}) {}
+```
 
 See [View](/domain/view) and [Projection](/domain/projection).
 
@@ -211,6 +266,26 @@ A policy is triggered by an event, decides whether and how to act, and acts by s
   ]}
   caption="The registration is recorded first. The policy then sends OpenAccount to a different aggregate."
 />
+
+The main-account policy is declared with what triggers it, and implemented as a Layer that sends the command:
+
+```typescript title="src/MainAccountProvisioning.ts"
+export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
+  from: Customer,
+  on: [CustomerRegistered],
+}) {}
+
+export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    return Effect.fn(function* ({ source }) {
+      yield* accounts
+        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+    });
+  }),
+);
+```
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
