@@ -95,6 +95,7 @@ const program = Effect.gen(function* () {
   );
   yield* Effect.sleep("1 second");
   yield* bank.DepositMoney({ target: accountId, amount: 100 });
+  yield* Effect.sleep("1 second");
   yield* bank.WithdrawMoney({ target: accountId, amount: 30 });
   yield* Effect.sleep("1 second");
 });
@@ -118,7 +119,7 @@ balance: 100
 balance: 70
 ```
 
-Each change arrives as it happens: the view streams its new state after every deposit and withdrawal.
+The watch prints the balance each time it changes. Over HTTP it checks for changes a few times a second, so the script pauses between commands to show each one; [Part 6](/domain/tutorial/part-6) switches to WebSockets, where the bank pushes every change.
 
 ## Deploy
 

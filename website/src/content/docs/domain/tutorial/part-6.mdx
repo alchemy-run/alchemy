@@ -14,6 +14,18 @@ bun add foldkit @effect/platform-browser
 bun add -d vite @foldkit/vite-plugin
 ```
 
+## Add the browser's types
+
+The app runs in a browser. Add `"DOM"` to `lib` in your `tsconfig.json`, so `document` and `location` type-check:
+
+```json
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"]
+  }
+}
+```
+
 ## Configure Vite
 
 ```typescript
@@ -268,6 +280,8 @@ import { AccountId } from "../Account.ts";
 
 ```diff lang="typescript"
 // src/web/Bank.ts
+      yield* bank.DepositMoney({ target: accountId, amount });
+      return Message.Succeeded();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 });
 +
@@ -479,7 +493,7 @@ The app's Worker serves the built page and forwards `/api` to the bank. Sharing 
 bun alchemy dev
 ```
 
-Open the `app` URL it prints, with `?customer=c-1`. Open your account, deposit, and the balance updates as the bank records it. Open a second tab with the same customer: both update together.
+Open the `app` URL it prints, with `?customer=c-2`: Part 5's script already gave `c-1` an account. Open your account, deposit, and the balance updates as the bank records it. Open a second tab with the same customer: both update together.
 
 ```sh
 bun alchemy deploy
