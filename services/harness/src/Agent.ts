@@ -4,8 +4,10 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { AgentRpcs } from "./rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
+import { makeTerminals } from "./terminals.ts";
 
 /**
  * One Durable Object per issue, serving this app's `AgentRpcs`. Every call
@@ -68,6 +70,8 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
       ),
     );
 
+    const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
+
     return Effect.sync(() => {
       const claude = harness
         .start({
@@ -101,6 +105,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         info: ({ sessionId }) => call(sessionId, (s) => s.info()),
         // History is served from this object, with or without a container.
         events: ({ sessionId, after }) => harness.events(sessionId, { after }),
+        // A shell in the session's container (started, with its workspace).
+        terminal: ({ sessionId, cols, rows }) =>
+          Stream.unwrap(
+            Effect.scoped(claude).pipe(Effect.as(terminals.output(sessionId, cols, rows))),
+          ),
+        terminalInput: ({ sessionId, data }) => terminals.input(sessionId, data),
+        terminalResize: ({ sessionId, cols, rows }) => terminals.resize(sessionId, cols, rows),
       });
     });
   }),

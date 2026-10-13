@@ -2,6 +2,7 @@ import * as AI from "alchemy/AI/Client";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcClient from "effect/rpc/RpcClient";
@@ -152,6 +153,71 @@ export const agents = {
   respond: (id: string, requestId: string, answer: AI.Answer) =>
     call(id, (c) => c.respond({ sessionId: id, requestId, answer })),
 };
+
+//#region terminal
+
+/** Keystrokes waiting to be sent, per session: sent one batch at a time, in order. */
+const typed = new Map<string, { buffer: string; sending: boolean }>();
+
+const flushInput = (id: string) => {
+  const queue = typed.get(id);
+  if (!queue || queue.sending || queue.buffer === "") return;
+  const data = queue.buffer;
+  queue.buffer = "";
+  queue.sending = true;
+  void call(id, (c) => c.terminalInput({ sessionId: id, data }))
+    .catch(() => {})
+    .finally(() => {
+      queue.sending = false;
+      flushInput(id);
+    });
+};
+
+export const terminal = {
+  /**
+   * Stream the session's shell to `onData` (its recent output first, then
+   * live). `onEnd` runs when the shell exits or the stream fails. Returns a
+   * function that stops streaming (the shell keeps running).
+   */
+  open: (
+    id: string,
+    size: { readonly cols: number; readonly rows: number },
+    onData: (chunk: string) => void,
+    onEnd: (reason: string) => void,
+  ) => {
+    const live = sessions.get(id);
+    if (!live) {
+      onEnd(`session ${id} is not open`);
+      return () => {};
+    }
+    const fiber = runtime.runFork(
+      Effect.flatMap(Deferred.await(live.client), (client) =>
+        client
+          .terminal({ sessionId: id, ...size })
+          .pipe(Stream.runForEach((chunk) => Effect.sync(() => onData(chunk)))),
+      ).pipe(
+        Effect.matchCause({
+          onSuccess: () => onEnd("exited"),
+          onFailure: (cause) => onEnd(String(cause)),
+        }),
+      ),
+    );
+    return () => void runtime.runFork(Fiber.interrupt(fiber));
+  },
+  input: (id: string, data: string) => {
+    let queue = typed.get(id);
+    if (!queue) {
+      queue = { buffer: "", sending: false };
+      typed.set(id, queue);
+    }
+    queue.buffer += data;
+    flushInput(id);
+  },
+  resize: (id: string, cols: number, rows: number) =>
+    call(id, (c) => c.terminalResize({ sessionId: id, cols, rows })).catch(() => {}),
+};
+
+//#endregion
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);

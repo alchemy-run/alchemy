@@ -43,4 +43,21 @@ export class AgentRpcs extends RpcGroup.make(
     stream: true,
   }),
   Rpc.make("info", { payload: Session, success: AI.SessionInfo, error: Failure }),
+  /**
+   * A shell in the session's container, on a real terminal. Streams its
+   * output — first what it printed recently (so a reconnecting client gets
+   * its screen back), then live — until the shell exits.
+   */
+  Rpc.make("terminal", {
+    payload: { ...Session, cols: Schema.Number, rows: Schema.Number },
+    success: Schema.String,
+    error: Failure,
+    stream: true,
+  }),
+  /** Keystrokes for the session's shell. */
+  Rpc.make("terminalInput", { payload: { ...Session, data: Schema.String }, error: Failure }),
+  Rpc.make("terminalResize", {
+    payload: { ...Session, cols: Schema.Number, rows: Schema.Number },
+    error: Failure,
+  }),
 ) {}

@@ -10,6 +10,7 @@ import {
   PlusIcon,
   SquareIcon,
   TerminalIcon,
+  XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { agents, useSession, useSnapshot } from "./agents.ts";
@@ -50,6 +51,7 @@ import {
 } from "./components/ai-elements/prompt-input.tsx";
 import { Shimmer } from "./components/ai-elements/shimmer.tsx";
 import { AssistantTurn } from "./components/chat/work-log.tsx";
+import { SessionTerminal } from "./components/terminal/terminal.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { cn } from "./lib/utils.ts";
@@ -478,10 +480,88 @@ function Inspector({ id }: { id: string }) {
 
 //#endregion
 
+//#region terminal panel
+
+const TERMINAL_OPEN = "harness:terminal-open";
+const TERMINAL_HEIGHT = "harness:terminal-height";
+
+/** A setting kept across reloads. */
+const useStored = <A,>(key: string, initial: A) => {
+  const [value, setValue] = useState<A>(() => {
+    const stored = localStorage.getItem(key);
+    return stored === null ? initial : (JSON.parse(stored) as A);
+  });
+  useEffect(() => localStorage.setItem(key, JSON.stringify(value)), [key, value]);
+  return [value, setValue] as const;
+};
+
+/** The session's shell, docked under the conversation; drag its top edge to resize. */
+function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
+  const [height, setHeight] = useStored(TERMINAL_HEIGHT, 280);
+
+  const resize = (event: React.PointerEvent) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = height;
+    const move = (e: PointerEvent) =>
+      setHeight(
+        Math.round(
+          Math.min(Math.max(startHeight + startY - e.clientY, 120), window.innerHeight * 0.8),
+        ),
+      );
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  return (
+    <div
+      className="relative flex shrink-0 flex-col border-t bg-[#0a0a0a]"
+      style={{ height }}
+      data-testid="terminal-panel"
+    >
+      <div
+        className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize"
+        onPointerDown={resize}
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-1 right-2 z-10 size-6 text-muted-foreground"
+        onClick={onClose}
+        aria-label="Close terminal"
+      >
+        <XIcon className="size-3.5" />
+      </Button>
+      <div className="min-h-0 flex-1">
+        <SessionTerminal key={id} sessionId={id} />
+      </div>
+    </div>
+  );
+}
+
+//#endregion
+
 export function App() {
   const [ids, addId] = useSessionIds();
   const [current, setCurrent] = useState<string | undefined>(ids[0]);
   const [inspector, setInspector] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useStored(TERMINAL_OPEN, false);
+
+  // Ctrl+` toggles the terminal, as in VS Code and T3 Code.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === "`") {
+        event.preventDefault();
+        setTerminalOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setTerminalOpen]);
 
   // Connect to sessions as they are viewed; their status keeps updating in the sidebar.
   useEffect(() => {
@@ -506,6 +586,17 @@ export function App() {
             variant="ghost"
             size="icon"
             className="ml-auto size-8"
+            onClick={() => setTerminalOpen((open) => !open)}
+            aria-label="Toggle terminal"
+            aria-pressed={terminalOpen}
+            disabled={!current}
+          >
+            <TerminalIcon className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
             onClick={() => setInspector((v) => !v)}
           >
             <PanelRightIcon className="size-4" />
@@ -523,6 +614,9 @@ export function App() {
           )}
           {current && inspector && <Inspector id={current} />}
         </div>
+        {current && terminalOpen && (
+          <TerminalPanel id={current} onClose={() => setTerminalOpen(false)} />
+        )}
       </main>
     </div>
   );
