@@ -54,7 +54,10 @@ export default Cloudflare.Worker(
                 agents.getByName(session.id).pipe(
                   Effect.flatMap((agent) => agent.machine({ sessionId: session.id })),
                   Effect.map((machine) => ({ ...session, state: machine.state })),
-                  Effect.orElseSucceed(() => ({ ...session, state: "unknown" as const })),
+                  // Unreachable, or still on an older version: list it anyway.
+                  Effect.catchCause(() =>
+                    Effect.succeed({ ...session, state: "unknown" as const }),
+                  ),
                 ),
               { concurrency: 16 },
             ),
