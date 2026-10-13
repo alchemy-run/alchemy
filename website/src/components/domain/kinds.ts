@@ -8,6 +8,7 @@ export type Kind =
   | "aggregate"
   | "event"
   | "view"
+  | "query"
   | "projection"
   | "stream"
   | "policy"
@@ -17,6 +18,7 @@ export type Kind =
 /** How a kind's box is drawn. */
 export type Shape =
   | "arrow" // a request on its way: a box pointing right
+  | "arrowBack" // an answer on its way back: a box pointing left
   | "boundary" // a consistency boundary: a double outline
   | "record" // a fact on paper: a folded corner
   | "pill" // a read model: rounded ends
@@ -60,6 +62,12 @@ export const KINDS: Record<Kind, KindStyle> = {
       "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z",
       "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z",
     ],
+  },
+  query: {
+    name: "Query",
+    hue: "#e6d3a8",
+    shape: "arrowBack",
+    icon: ["M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14z", "M20 20l-4-4"],
   },
   projection: {
     name: "Projection",

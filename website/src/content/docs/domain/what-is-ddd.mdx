@@ -182,7 +182,7 @@ An account needs its balance to decide a withdrawal. It doesn't need a statement
     { id: "aggregates", label: "Aggregates", type: "decide", kind: "aggregate", col: 1, row: 0 },
     { id: "events", label: "Events", type: "the record", kind: "event", col: 2, row: 0 },
     { id: "views", label: "Views", type: "one per question", kind: "view", col: 1, row: 1 },
-    { id: "queries", label: "Queries", type: "read the views", col: 0, row: 1 },
+    { id: "queries", label: "Queries", type: "read the views", kind: "query", col: 0, row: 1 },
   ]}
   edges={[
     { from: "commands", to: "aggregates" },

@@ -33,6 +33,8 @@ const outline = (() => {
   switch (style.shape) {
     case "arrow":
       return `M 6 0 H ${w - TIP} L ${w} ${h / 2} L ${w - TIP} ${h} H 6 Q 0 ${h} 0 ${h - 6} V 6 Q 0 0 6 0 Z`;
+    case "arrowBack":
+      return `M ${TIP} 0 H ${w - 6} Q ${w} 0 ${w} 6 V ${h - 6} Q ${w} ${h} ${w - 6} ${h} H ${TIP} L 0 ${h / 2} Z`;
     case "record":
       return `M 4 0 H ${w - FOLD} L ${w} ${FOLD} V ${h - 4} Q ${w} ${h} ${w - 4} ${h} H 4 Q 0 ${h} 0 ${h - 4} V 4 Q 0 0 4 0 Z`;
     case "octagon":
