@@ -17,34 +17,34 @@ bun add -d vitest @effect/vitest
 ## Name account ids
 
 ```typescript
-// src/Account.ts
+// src/AccountId.ts
 import * as Schema from "effect/Schema";
 
 export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 ```
 
-A branded id keeps an account id from being mixed up with any other string.
+A branded id keeps an account id from being mixed up with any other string. The commands and the account all use it, so it gets a file of its own.
 
 ## Record that an account opened
 
-```diff lang="typescript"
-// src/Account.ts
-+import * as Domain from "alchemy/Domain";
+```typescript
+// src/OpenAccount.ts
+import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 
-export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
-+
-+export class AccountOpened extends Domain.Event("AccountOpened", {
-+  data: { owner: Schema.String },
-+}) {}
+export class AccountOpened extends Domain.Event("AccountOpened", {
+  data: { owner: Schema.String },
+}) {}
 ```
 
 An event is a fact, named in the past tense. Everything the account knows will come from its events.
 
+Each command gets a file named after it, holding the command, the events it records and the rejections only it returns. This event is what `OpenAccount` records, so it starts `src/OpenAccount.ts`.
+
 ## Refuse to open an account twice
 
 ```diff lang="typescript"
-// src/Account.ts
+// src/OpenAccount.ts
   data: { owner: Schema.String },
 }) {}
 +
@@ -56,7 +56,16 @@ A rejection is a typed reason to say no. Callers receive it exactly as declared.
 ## Ask to open an account
 
 ```diff lang="typescript"
-// src/Account.ts
+// src/OpenAccount.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
++import { AccountId } from "./AccountId.ts";
+
+export class AccountOpened extends Domain.Event("AccountOpened", {
+```
+
+```diff lang="typescript"
+// src/OpenAccount.ts
 
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 +
@@ -72,30 +81,32 @@ A command asks one account for a change. It lists every event it may record and 
 
 ## Declare the account
 
-```diff lang="typescript"
+```typescript
 // src/Account.ts
-  rejects: [AlreadyOpen],
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
+
+const State = Schema.Union([
+  Schema.TaggedStruct("Unopened", {}),
+  Schema.TaggedStruct("Open", { owner: Schema.String, balance: Schema.Int }),
+]);
+type State = typeof State.Type;
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: State,
+  initial: { _tag: "Unopened" },
+  commands: [OpenAccount],
+  decide: {
+    OpenAccount: (s, cmd) =>
+      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+  },
+  evolve: {
+    AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
+  },
 }) {}
-+
-+const State = Schema.Union([
-+  Schema.TaggedStruct("Unopened", {}),
-+  Schema.TaggedStruct("Open", { owner: Schema.String, balance: Schema.Int }),
-+]);
-+type State = typeof State.Type;
-+
-+export class Account extends Domain.Aggregate("Account", {
-+  id: AccountId,
-+  state: State,
-+  initial: { _tag: "Unopened" },
-+  commands: [OpenAccount],
-+  decide: {
-+    OpenAccount: (s, cmd) =>
-+      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-+  },
-+  evolve: {
-+    AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-+  },
-+}) {}
 ```
 
 The account is an aggregate. `decide` takes a command and the current state, and returns events or a rejection. `evolve` folds each event into the next state.
@@ -120,8 +131,9 @@ A model is everything you host together. You'll add views and policies to it in 
 // test/Account.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account, AccountOpened, AlreadyOpen, OpenAccount } from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { Bank } from "../src/Bank.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.ts";
 
 const story = Story.make(Bank);
 const account = Account.ref("a-1");
@@ -152,40 +164,42 @@ Both stories pass.
 
 ## Record deposits
 
-```diff lang="typescript"
-// src/Account.ts
-export class AccountOpened extends Domain.Event("AccountOpened", {
-  data: { owner: Schema.String },
-+}) {}
-+
-+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
-}) {}
+```typescript
+// src/DepositMoney.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
 
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
 ```
 
 The event carries the balance after the deposit, so anyone reading it knows the new balance without adding anything up.
 
 ## Refuse an account that isn't open
 
-```diff lang="typescript"
-// src/Account.ts
+```typescript
+// src/NotOpen.ts
+import * as Domain from "alchemy/Domain";
 
-export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
-+
-+export class NotOpen extends Domain.Rejection("NotOpen") {}
-
-export class OpenAccount extends Domain.Command("OpenAccount", {
+export class NotOpen extends Domain.Rejection("NotOpen") {}
 ```
 
-Deposits need an open account. `NotOpen` is the answer when there isn't one.
+Deposits need an open account, and so will withdrawals. A rejection two commands share gets a file of its own, instead of living in either command's file.
 
 ## Ask to deposit
 
 ```diff lang="typescript"
-// src/Account.ts
-}) {}
+// src/DepositMoney.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
++import { AccountId } from "./AccountId.ts";
++import { NotOpen } from "./NotOpen.ts";
 
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
++
 +export class DepositMoney extends Domain.Command("DepositMoney", {
 +  target: AccountId,
 +  input: { amount: Schema.Int },
@@ -193,14 +207,21 @@ Deposits need an open account. `NotOpen` is the answer when there isn't one.
 +  rejects: [NotOpen],
 +  reply: { balance: Schema.Int },
 +}) {}
-+
-const State = Schema.Union([
-  Schema.TaggedStruct("Unopened", {}),
 ```
 
 `reply` declares what the caller gets back once the deposit is recorded: the new balance.
 
 ## Decide deposits
+
+```diff lang="typescript"
+// src/Account.ts
+import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
++import { DepositMoney, MoneyDeposited } from "./DepositMoney.ts";
++import { NotOpen } from "./NotOpen.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
+
+```
 
 ```diff lang="typescript"
 // src/Account.ts
@@ -242,19 +263,11 @@ export class Account extends Domain.Aggregate("Account", {
 
 ```diff lang="typescript"
 // test/Account.test.ts
-import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
--import { Account, AccountOpened, AlreadyOpen, OpenAccount } from "../src/Account.ts";
-+import {
-+  Account,
-+  AccountOpened,
-+  AlreadyOpen,
-+  DepositMoney,
-+  MoneyDeposited,
-+  NotOpen,
-+  OpenAccount,
-+} from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { Bank } from "../src/Bank.ts";
++import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
++import { NotOpen } from "../src/NotOpen.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.ts";
 
 ```
 
@@ -282,37 +295,26 @@ import { Bank } from "../src/Bank.ts";
 
 ## Withdraw money
 
-```diff lang="typescript"
-// src/Account.ts
+```typescript
+// src/WithdrawMoney.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
+import { NotOpen } from "./NotOpen.ts";
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
 }) {}
 
-+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
-+}) {}
-+
-export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  data: { balance: Schema.Int, requested: Schema.Int },
+}) {}
 
-export class NotOpen extends Domain.Rejection("NotOpen") {}
-+
-+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-+  data: { balance: Schema.Int, requested: Schema.Int },
-+}) {}
-
-export class OpenAccount extends Domain.Command("OpenAccount", {
-```
-
-```diff lang="typescript"
-// src/Account.ts
-  events: [MoneyDeposited],
-  rejects: [NotOpen],
-+  reply: { balance: Schema.Int },
-+}) {}
-+
-+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-+  target: AccountId,
-+  input: { amount: Schema.Int },
-+  events: [MoneyWithdrawn],
-+  rejects: [NotOpen, InsufficientFunds],
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, InsufficientFunds],
   reply: { balance: Schema.Int },
 }) {}
 ```
@@ -320,6 +322,15 @@ export class OpenAccount extends Domain.Command("OpenAccount", {
 A withdrawal follows the same shape as a deposit, with one more way to say no: `InsufficientFunds` carries the balance and the amount asked for.
 
 ## Decide withdrawals
+
+```diff lang="typescript"
+// src/Account.ts
+import { NotOpen } from "./NotOpen.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
++import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.ts";
+
+const State = Schema.Union([
+```
 
 ```diff lang="typescript"
 // src/Account.ts
@@ -360,15 +371,11 @@ The account checks the balance it holds right now. Withdrawals to one account ru
 
 ```diff lang="typescript"
 // test/Account.test.ts
-  AlreadyOpen,
-  DepositMoney,
-+  InsufficientFunds,
-  MoneyDeposited,
-  NotOpen,
-  OpenAccount,
-+  WithdrawMoney,
-} from "../src/Account.ts";
-import { Bank } from "../src/Bank.ts";
+import { NotOpen } from "../src/NotOpen.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.ts";
++import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.ts";
+
+const story = Story.make(Bank);
 ```
 
 ```diff lang="typescript"

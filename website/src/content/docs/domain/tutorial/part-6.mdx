@@ -191,8 +191,8 @@ const BankLive = SessionLive.pipe(
 import type * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.ts";
-import { CustomerId } from "../Customer.ts";
+import { AccountId } from "../AccountId.ts";
+import { CustomerId } from "../CustomerId.ts";
 
 // The bank client this app runs on, provided when the app starts.
 type Bank = Domain.Api.ClientKey<"BankApi">;
@@ -230,9 +230,9 @@ import type * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 +import { Command } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.ts";
+import { AccountId } from "../AccountId.ts";
 +import { BankApi } from "../BankApi.ts";
-import { CustomerId } from "../Customer.ts";
+import { CustomerId } from "../CustomerId.ts";
 
 ```
 
@@ -275,7 +275,7 @@ import * as Schema from "effect/Schema";
 -import { Command } from "foldkit";
 +import { Command, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.ts";
+import { AccountId } from "../AccountId.ts";
 ```
 
 ```diff lang="typescript"
@@ -320,7 +320,7 @@ import * as Schema from "effect/Schema";
 +import * as Stream from "effect/Stream";
 +import { Command, Subscription, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.ts";
+import { AccountId } from "../AccountId.ts";
 ```
 
 ```diff lang="typescript"
@@ -360,7 +360,7 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 +import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.ts";
+import { AccountId } from "../AccountId.ts";
 ```
 
 ```diff lang="typescript"
@@ -406,7 +406,7 @@ import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { BankApi } from "../BankApi.ts";
-import { CustomerId } from "../Customer.ts";
+import { CustomerId } from "../CustomerId.ts";
 import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
 
 // A stand-in for a login page: `?customer=c-2` picks who you are.

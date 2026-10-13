@@ -201,8 +201,10 @@ Inside the hosted model, each aggregate and view is a service. `yield* Account` 
 ```typescript
 // src/depositAndRead.ts
 import * as Effect from "effect/Effect";
-import { Account, AccountId, DepositMoney } from "./Account.ts";
+import { Account } from "./Account.ts";
+import { AccountId } from "./AccountId.ts";
 import { AccountSummary } from "./AccountSummary.ts";
+import { DepositMoney } from "./DepositMoney.ts";
 
 export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;

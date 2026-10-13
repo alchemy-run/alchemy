@@ -13,7 +13,7 @@ Customers will reach the bank from outside. Give every request a signed-in custo
 // src/CurrentActor.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
-import { CustomerId } from "./Customer.ts";
+import { CustomerId } from "./CustomerId.ts";
 
 export class CurrentActor extends Domain.RequestContext<CurrentActor>()(
   "Bank/CurrentActor",
@@ -34,7 +34,7 @@ import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { CurrentActor } from "./CurrentActor.ts";
-import { CustomerId } from "./Customer.ts";
+import { CustomerId } from "./CustomerId.ts";
 
 export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
 
@@ -64,29 +64,31 @@ export const sessionClient = (customerId: string) =>
 
 `Session` is middleware: it runs before a command or read and provides `CurrentActor`. `SessionLive` is the server side, and `sessionClient` attaches the header from a client. [Part 6](/domain/tutorial/part-6) replaces the header with a browser cookie.
 
+## Refuse someone else's account
+
+```typescript
+// src/NotOwner.ts
+import * as Domain from "alchemy/Domain";
+
+export class NotOwner extends Domain.Rejection("NotOwner") {}
+```
+
+`NotOwner` is the answer for someone else's account. Deposits and withdrawals both return it, so it gets its own file.
+
 ## Guard deposits and withdrawals
 
 ```diff lang="typescript"
-// src/Account.ts
-import * as Domain from "alchemy/Domain";
-import * as Schema from "effect/Schema";
+// src/DepositMoney.ts
+import { AccountId } from "./AccountId.ts";
+import { NotOpen } from "./NotOpen.ts";
++import { NotOwner } from "./NotOwner.ts";
 +import { Session } from "./Session.ts";
 
-export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 ```
 
 ```diff lang="typescript"
-// src/Account.ts
-export class NotOpen extends Domain.Rejection("NotOpen") {}
-
-+export class NotOwner extends Domain.Rejection("NotOwner") {}
-+
-export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  data: { balance: Schema.Int, requested: Schema.Int },
-```
-
-```diff lang="typescript"
-// src/Account.ts
+// src/DepositMoney.ts
 export class DepositMoney extends Domain.Command("DepositMoney", {
   target: AccountId,
 +  middleware: [Session],
@@ -99,7 +101,17 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 ```
 
 ```diff lang="typescript"
-// src/Account.ts
+// src/WithdrawMoney.ts
+import { AccountId } from "./AccountId.ts";
+import { NotOpen } from "./NotOpen.ts";
++import { NotOwner } from "./NotOwner.ts";
++import { Session } from "./Session.ts";
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+```
+
+```diff lang="typescript"
+// src/WithdrawMoney.ts
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
 +  middleware: [Session],
@@ -111,7 +123,7 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 }) {}
 ```
 
-A command lists its middleware, and every way it can fail. `NotOwner` is the answer for someone else's account.
+Each command lists its middleware, here `Session`, and every way it can fail. Both change the same way, each in its own file.
 
 ## Check the owner
 
@@ -120,15 +132,20 @@ A command lists its middleware, and every way it can fail. `NotOwner` is the ans
 import * as Domain from "alchemy/Domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
 +import { CurrentActor } from "./CurrentActor.ts";
-import { Session } from "./Session.ts";
-
+import { DepositMoney, MoneyDeposited } from "./DepositMoney.ts";
+import { NotOpen } from "./NotOpen.ts";
++import { NotOwner } from "./NotOwner.ts";
+import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.ts";
+import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.ts";
 ```
 
 ```diff lang="typescript"
 // src/Account.ts
+]);
 type State = typeof State.Type;
-
++
 +// The open account, if the current customer owns it.
 +const owned = Effect.fn(function* (s: State) {
 +  if (s._tag !== "Open") return yield* new NotOpen();
@@ -136,9 +153,8 @@ type State = typeof State.Type;
 +  if (actor.customerId !== s.owner) return yield* new NotOwner();
 +  return s;
 +});
-+
+
 // An event can only follow an open account; anything else is a bug.
-const mustBeOpen = (s: State) => {
 ```
 
 ```diff lang="typescript"
@@ -172,21 +188,19 @@ const mustBeOpen = (s: State) => {
 
 `decide` can be an `Effect.fn` that reads what the middleware provides. `owned` checks the account is open and belongs to the customer asking. `OpenAccount` has no middleware: only the policy sends it.
 
-## Register only yourself
+## Refuse to register someone else
 
 ```diff lang="typescript"
-// src/Customer.ts
-import * as Domain from "alchemy/Domain";
-+import * as Effect from "effect/Effect";
+// src/RegisterCustomer.ts
 import * as Schema from "effect/Schema";
-+import { CurrentActor } from "./CurrentActor.ts";
+import { CustomerId } from "./CustomerId.ts";
 +import { Session } from "./Session.ts";
 
-export const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
+export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
 ```
 
 ```diff lang="typescript"
-// src/Customer.ts
+// src/RegisterCustomer.ts
 export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
 
 +export class NotYou extends Domain.Rejection("NotYou") {}
@@ -199,7 +213,28 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
 -  rejects: [AlreadyRegistered],
 +  rejects: [AlreadyRegistered, NotYou],
 }) {}
+```
 
+`RegisterCustomer` now needs a session, and can refuse with `NotYou`, which only it returns.
+
+## Register only yourself
+
+```diff lang="typescript"
+// src/Customer.ts
+import * as Domain from "alchemy/Domain";
++import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
++import { CurrentActor } from "./CurrentActor.ts";
+import { CustomerId } from "./CustomerId.ts";
+-import { AlreadyRegistered, CustomerRegistered, RegisterCustomer } from "./RegisterCustomer.ts";
++import {
++  AlreadyRegistered,
++  CustomerRegistered,
++  NotYou,
++  RegisterCustomer,
++} from "./RegisterCustomer.ts";
+
+export class Customer extends Domain.Aggregate("Customer", {
 ```
 
 ```diff lang="typescript"
@@ -227,9 +262,9 @@ The third argument to `decide` holds the id of the customer being registered, so
 import * as Domain from "alchemy/Domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
--import { Account } from "./Account.ts";
-+import { Account, NotOwner } from "./Account.ts";
+import { Account } from "./Account.ts";
 +import { CurrentActor } from "./CurrentActor.ts";
++import { NotOwner } from "./NotOwner.ts";
 +import { Session } from "./Session.ts";
 
 export class AccountSummary extends Domain.View("AccountSummary", {
@@ -258,10 +293,16 @@ A view guards its reads the same way. `validate` runs on every read, and again o
 
 ```diff lang="typescript"
 // test/Account.test.ts
-} from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
-+import { CustomerId } from "../src/Customer.ts";
++import { CustomerId } from "../src/CustomerId.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
+import { NotOpen } from "../src/NotOpen.ts";
+```
+
+```diff lang="typescript"
+// test/Account.test.ts
 
 const story = Story.make(Bank, { layer: BankPolicies });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
@@ -316,8 +357,13 @@ it.effect("refuses to withdraw more than the balance", () =>
 import { AccountSummary } from "../src/AccountSummary.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
-+import { CustomerId } from "../src/Customer.ts";
-import { Statement } from "../src/Statement.ts";
++import { CustomerId } from "../src/CustomerId.ts";
+import { DepositMoney } from "../src/DepositMoney.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
+```
+
+```diff lang="typescript"
+// test/views.test.ts
 
 const story = Story.make(Bank, { layer: BankPolicies });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
@@ -343,15 +389,12 @@ it.effect("the statement has one line per movement", () =>
 // test/registration.test.ts
 import { AccountSummary } from "../src/AccountSummary.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
--import { Customer, CustomerRegistered, RegisterCustomer } from "../src/Customer.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
-+import {
-+  Customer,
-+  CustomerId,
-+  CustomerRegistered,
-+  NotYou,
-+  RegisterCustomer,
-+} from "../src/Customer.ts";
+import { Customer } from "../src/Customer.ts";
++import { CustomerId } from "../src/CustomerId.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
+-import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.ts";
++import { CustomerRegistered, NotYou, RegisterCustomer } from "../src/RegisterCustomer.ts";
 
 const story = Story.make(Bank, { layer: BankPolicies });
 const sam = Customer.ref("c-1");
@@ -383,9 +426,10 @@ A story has no middleware, so `Story.provide` stands in for it, giving the follo
 ```typescript
 // src/BankApi.ts
 import * as Domain from "alchemy/Domain";
-import { DepositMoney, WithdrawMoney } from "./Account.ts";
 import { AccountSummary } from "./AccountSummary.ts";
-import { RegisterCustomer } from "./Customer.ts";
+import { DepositMoney } from "./DepositMoney.ts";
+import { RegisterCustomer } from "./RegisterCustomer.ts";
+import { WithdrawMoney } from "./WithdrawMoney.ts";
 
 export class BankApi extends Domain.Api(
   "BankApi",
@@ -408,10 +452,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { AccountId } from "../src/Account.ts";
+import { AccountId } from "../src/AccountId.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
 import { BankApi } from "../src/BankApi.ts";
-import { CustomerId } from "../src/Customer.ts";
+import { CustomerId } from "../src/CustomerId.ts";
 import { SessionLive, sessionClient } from "../src/Session.ts";
 
 // The bank in memory, with the same middleware a Worker would serve.

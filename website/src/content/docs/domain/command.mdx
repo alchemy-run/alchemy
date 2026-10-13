@@ -11,7 +11,7 @@ A command is also a contract. Before you send one, its declaration tells you whi
 
 Here is a withdrawal from the bank in the [tutorial](/domain/tutorial/part-1).
 
-```typescript title="src/Account.ts"
+```typescript title="src/WithdrawMoney.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
   input: { amount: Schema.Int },
@@ -23,11 +23,33 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 The first argument is the command's name. It's how the command is identified on the wire and in the aggregate's handlers, so it must be unique within a model.
 
+## Keep it with its events and rejections
+
+A command, the events it records and the rejections it returns are one unit: you read them together, and change them together. Put them in one file named after the command.
+
+```typescript title="src/WithdrawMoney.ts"
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+}) {}
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  data: { balance: Schema.Int, requested: Schema.Int },
+}) {}
+```
+
+When more than one command uses something, it moves to a file of its own. Deposits and withdrawals both refuse an account that isn't open, so `NotOpen` has its own file, and both import it.
+
+```typescript title="src/NotOpen.ts"
+export class NotOpen extends Domain.Rejection("NotOpen") {}
+```
+
+The aggregate's file then holds only its state and how it decides and evolves, and imports each command from its file. The same goes for ids, like `AccountId`, which the commands and the aggregate share.
+
 ## Address one instance
 
 `target` is the schema of the id the command is addressed to. A withdrawal goes to one account, so its target is an `AccountId`.
 
-```typescript title="src/Account.ts"
+```typescript title="src/AccountId.ts"
 export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 ```
 
@@ -56,7 +78,7 @@ A command can end in one of two ways: the aggregate records events, or it refuse
 
 A refusal is a `Domain.Rejection`, a typed error that can carry data about why.
 
-```typescript title="src/Account.ts"
+```typescript title="src/WithdrawMoney.ts"
 export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
   data: { balance: Schema.Int, requested: Schema.Int },
 }) {}

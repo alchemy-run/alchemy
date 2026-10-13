@@ -74,9 +74,9 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { AccountId } from "../src/Account.ts";
+import { AccountId } from "../src/AccountId.ts";
 import { BankApi } from "../src/BankApi.ts";
-import { CustomerId } from "../src/Customer.ts";
+import { CustomerId } from "../src/CustomerId.ts";
 import { sessionClient } from "../src/Session.ts";
 
 const [url, customerId = "c-1"] = process.argv.slice(2);

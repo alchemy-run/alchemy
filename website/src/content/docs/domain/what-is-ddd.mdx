@@ -58,7 +58,7 @@ A **command** is a request to change something in the domain: open an account, d
 
 A command is only a request. It can be refused: a withdrawal from an account that doesn't hold enough money is turned down. So a command also declares the ways it can be refused.
 
-```typescript title="src/Account.ts"
+```typescript title="src/WithdrawMoney.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
   input: { amount: Schema.Int },
@@ -76,7 +76,7 @@ An **event** records something that has happened in the domain: an account was o
 
 Facts can't be refused or undone. If a deposit was a mistake, the bank doesn't erase it; it records a correction as a new event, and the history shows both. So where a command may or may not succeed, an event already has.
 
-```typescript title="src/Account.ts"
+```typescript title="src/WithdrawMoney.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
   data: { amount: Schema.Int, balanceAfter: Schema.Int },
 }) {}

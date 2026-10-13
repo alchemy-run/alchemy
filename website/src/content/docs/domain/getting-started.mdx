@@ -12,16 +12,26 @@ bun add alchemy effect
 bun add -d vitest @effect/vitest
 ```
 
-## Model an account
+## Name account ids
 
-An event records what happened, a command asks for a change, and an aggregate decides whether it happens.
+An account is addressed by its id. The command and the account both use it, so it gets its own file.
 
 ```typescript
-// src/Account.ts
-import * as Domain from "alchemy/Domain";
+// src/AccountId.ts
 import * as Schema from "effect/Schema";
 
 export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+```
+
+## Declare a command
+
+A command asks for a change, and an event records what happened. Keep each command in a file named after it, with the events it records and the rejections it returns.
+
+```typescript
+// src/DepositMoney.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
   data: { amount: Schema.Int, balanceAfter: Schema.Int },
@@ -36,6 +46,18 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
   rejects: [AmountNotPositive],
   reply: { balance: Schema.Int },
 }) {}
+```
+
+## Decide it in an aggregate
+
+The account decides whether a deposit happens.
+
+```typescript
+// src/Account.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./AccountId.ts";
+import { AmountNotPositive, DepositMoney, MoneyDeposited } from "./DepositMoney.ts";
 
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
@@ -68,8 +90,9 @@ A story sends commands to an in-memory model and checks what it recorded and rep
 // test/Account.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account, AmountNotPositive, DepositMoney, MoneyDeposited } from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { Bank } from "../src/Bank.ts";
+import { AmountNotPositive, DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
 
 const story = Story.make(Bank);
 const account = Account.ref("a-1");
@@ -103,7 +126,8 @@ A model groups the aggregates you host together. An Api is what clients may call
 ```typescript
 // src/Bank.ts
 import * as Domain from "alchemy/Domain";
-import { Account, DepositMoney } from "./Account.ts";
+import { Account } from "./Account.ts";
+import { DepositMoney } from "./DepositMoney.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
@@ -174,7 +198,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
-import { AccountId } from "../src/Account.ts";
+import { AccountId } from "../src/AccountId.ts";
 import { BankApi } from "../src/Bank.ts";
 
 const url = process.argv[2]!;

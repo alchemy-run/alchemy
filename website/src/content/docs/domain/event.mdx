@@ -13,7 +13,7 @@ Events are the only thing an aggregate stores as its history. Its state, every v
 
 An event has a name and, usually, some data.
 
-```typescript title="src/Account.ts"
+```typescript title="src/WithdrawMoney.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
   data: { amount: Schema.Int, balanceAfter: Schema.Int },
 }) {}

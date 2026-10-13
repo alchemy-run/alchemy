@@ -7,14 +7,24 @@ sidebar:
 
 Every new customer should get a main account. Model customers, then add a policy that opens the account whenever a customer registers.
 
-## Model a customer
+## Name customer ids
 
 ```typescript
-// src/Customer.ts
-import * as Domain from "alchemy/Domain";
+// src/CustomerId.ts
 import * as Schema from "effect/Schema";
 
 export const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
+```
+
+Like the account, a customer has its own kind of id.
+
+## Register a customer
+
+```typescript
+// src/RegisterCustomer.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { CustomerId } from "./CustomerId.ts";
 
 export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
   data: { name: Schema.String },
@@ -28,6 +38,18 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
   events: [CustomerRegistered],
   rejects: [AlreadyRegistered],
 }) {}
+```
+
+`RegisterCustomer` lives in its own file, with the event it records and the rejection it returns.
+
+## Model a customer
+
+```typescript
+// src/Customer.ts
+import * as Domain from "alchemy/Domain";
+import * as Schema from "effect/Schema";
+import { CustomerId } from "./CustomerId.ts";
+import { AlreadyRegistered, CustomerRegistered, RegisterCustomer } from "./RegisterCustomer.ts";
 
 export class Customer extends Domain.Aggregate("Customer", {
   id: CustomerId,
@@ -44,14 +66,15 @@ export class Customer extends Domain.Aggregate("Customer", {
 }) {}
 ```
 
-A customer is an aggregate with the same shape as the account: an id, an event, a rejection, a command, and `decide` and `evolve`.
+A customer is an aggregate with the same shape as the account: an id, the commands it handles, and `decide` and `evolve`.
 
 ## Declare the policy
 
 ```typescript
 // src/MainAccountProvisioning.ts
 import * as Domain from "alchemy/Domain";
-import { Customer, CustomerRegistered } from "./Customer.ts";
+import { Customer } from "./Customer.ts";
+import { CustomerRegistered } from "./RegisterCustomer.ts";
 
 export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
   from: Customer,
@@ -67,8 +90,11 @@ A policy is "whenever this happens, do that". This one listens to customers, for
 // src/MainAccountProvisioning.ts
 import * as Domain from "alchemy/Domain";
 +import * as Effect from "effect/Effect";
-+import { Account, AccountId, OpenAccount } from "./Account.ts";
-import { Customer, CustomerRegistered } from "./Customer.ts";
++import { Account } from "./Account.ts";
++import { AccountId } from "./AccountId.ts";
+import { Customer } from "./Customer.ts";
++import { OpenAccount } from "./OpenAccount.ts";
+import { CustomerRegistered } from "./RegisterCustomer.ts";
 
 ```
 
@@ -122,10 +148,17 @@ The model lists the policy, and `BankPolicies` is its implementation. You provid
 
 ```diff lang="typescript"
 // test/Account.test.ts
-  WithdrawMoney,
-} from "../src/Account.ts";
+import { Story } from "alchemy/Domain/Story";
+import { Account } from "../src/Account.ts";
 -import { Bank } from "../src/Bank.ts";
 +import { Bank, BankPolicies } from "../src/Bank.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
+import { NotOpen } from "../src/NotOpen.ts";
+```
+
+```diff lang="typescript"
+// test/Account.test.ts
+import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.ts";
 
 -const story = Story.make(Bank);
 +const story = Story.make(Bank, { layer: BankPolicies });
@@ -135,11 +168,17 @@ const account = Account.ref("a-1");
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { Account, AccountOpened, DepositMoney, WithdrawMoney } from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { AccountSummary } from "../src/AccountSummary.ts";
 -import { Bank } from "../src/Bank.ts";
 +import { Bank, BankPolicies } from "../src/Bank.ts";
-import { Statement } from "../src/Statement.ts";
+import { DepositMoney } from "../src/DepositMoney.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
+```
+
+```diff lang="typescript"
+// test/views.test.ts
+import { WithdrawMoney } from "../src/WithdrawMoney.ts";
 
 -const story = Story.make(Bank);
 +const story = Story.make(Bank, { layer: BankPolicies });
@@ -155,10 +194,12 @@ A story runs the whole model, policies included, so every story now takes `BankP
 // test/registration.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account, AccountOpened } from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { AccountSummary } from "../src/AccountSummary.ts";
 import { Bank, BankPolicies } from "../src/Bank.ts";
-import { Customer, CustomerRegistered, RegisterCustomer } from "../src/Customer.ts";
+import { Customer } from "../src/Customer.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
+import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.ts";
 
 const story = Story.make(Bank, { layer: BankPolicies });
 const sam = Customer.ref("c-1");

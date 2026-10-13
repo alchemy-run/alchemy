@@ -50,9 +50,12 @@ export class Bank extends Domain.Model("Bank", {
 // test/views.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account, AccountOpened, DepositMoney, WithdrawMoney } from "../src/Account.ts";
+import { Account } from "../src/Account.ts";
 import { AccountSummary } from "../src/AccountSummary.ts";
 import { Bank } from "../src/Bank.ts";
+import { DepositMoney } from "../src/DepositMoney.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
+import { WithdrawMoney } from "../src/WithdrawMoney.ts";
 
 const story = Story.make(Bank);
 const account = Account.ref("a-1");
@@ -137,11 +140,11 @@ export class Bank extends Domain.Model("Bank", {
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank } from "../src/Bank.ts";
+import { DepositMoney } from "../src/DepositMoney.ts";
+import { AccountOpened } from "../src/OpenAccount.ts";
 +import { Statement } from "../src/Statement.ts";
+import { WithdrawMoney } from "../src/WithdrawMoney.ts";
 
-const story = Story.make(Bank);
 ```
 
 ```diff lang="typescript"
