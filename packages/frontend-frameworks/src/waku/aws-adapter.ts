@@ -79,8 +79,9 @@ const MIME_TYPES: Record<string, string> = {
  * the SSG pass (`isBuild`), which runs in Node — the dynamic `node:fs`
  * import keeps the module loadable on any runtime.
  */
-const makeBuildStaticMiddleware = (root: string): MiddlewareHandler => {
-  return async (c: Context, next: Next) => {
+const makeBuildStaticMiddleware =
+  (root: string): MiddlewareHandler =>
+  async (c: Context, next: Next) => {
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       return next();
     }
@@ -110,7 +111,6 @@ const makeBuildStaticMiddleware = (root: string): MiddlewareHandler => {
       MIME_TYPES[NodePath.extname(filePath).toLowerCase()] ?? "application/octet-stream";
     return c.body(data as never, 200, { "content-type": contentType });
   };
-};
 
 /** Options accepted by the adapter (superset of upstream's). */
 export interface AwsLambdaAdapterOptions {

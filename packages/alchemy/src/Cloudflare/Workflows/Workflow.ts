@@ -1402,25 +1402,22 @@ const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   terminate: () => Effect.tryPromise(() => raw.terminate()).pipe(Effect.orDie),
   delete: () => Effect.tryPromise(() => raw.delete()).pipe(Effect.orDie),
   subscribe: (options) =>
-    Stream.unwrap(
-      Effect.acquireRelease(
-        Effect.tryPromise(
-          () =>
-            raw.subscribe(options) as Promise<runtime.WorkflowInstanceSubscription & Disposable>,
-        ).pipe(Effect.orDie),
-        (subscription) => Effect.sync(() => subscription[Symbol.dispose]()),
-      ).pipe(
-        Effect.map((subscription) =>
-          Stream.fromAsyncIterable(
-            {
-              [Symbol.asyncIterator]: () => ({
-                next: () => subscription.next(),
-              }),
-            },
-            (error) => error,
-          ).pipe(Stream.orDie),
-        ),
+    Effect.acquireDisposable(
+      Effect.tryPromise(
+        () => raw.subscribe(options) as Promise<runtime.WorkflowInstanceSubscription & Disposable>,
+      ).pipe(Effect.orDie),
+    ).pipe(
+      Effect.map((subscription) =>
+        Stream.fromAsyncIterable(
+          {
+            [Symbol.asyncIterator]: () => ({
+              next: () => subscription.next(),
+            }),
+          },
+          (error) => error,
+        ).pipe(Stream.orDie),
       ),
+      Stream.unwrap,
     ),
   sendEvent: <Event = unknown>(event: WorkflowInstanceEvent<Event>) =>
     Effect.tryPromise(() => raw.sendEvent(event)).pipe(Effect.orDie),

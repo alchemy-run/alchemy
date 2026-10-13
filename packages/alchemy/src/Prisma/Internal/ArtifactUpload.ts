@@ -47,7 +47,7 @@ export const executeArtifactUpload = (
         UPLOAD_ERROR_BODY_BYTES,
       ).pipe(
         Effect.timeoutOption(Duration.seconds(2)),
-        Effect.catch(() => Effect.succeed(Option.none<number>())),
+        Effect.orElseSucceed(() => Option.none<number>()),
       );
       const diagnostic = Option.match(bodyBytesOption, {
         onNone: () => "diagnostic body unavailable",

@@ -67,10 +67,21 @@ test.provider(
 
               return Effect.fn(function* () {
                 const id = yield* instanceId;
-                const list = yield* ns.list().pipe(
+                // The namespace instance list is eventually consistent: right
+                // after create (especially under load) it can still come back
+                // without the new instance. Poll until it shows up — bounded,
+                // so a never-listed instance still fails the assertion below.
+                // `search` filters by instance id server-side, so each poll
+                // is one small page regardless of the namespace's size.
+                const list = yield* ns.list({ search: id }).pipe(
                   Effect.retry({
                     schedule: Schedule.exponential("500 millis"),
                     times: 6,
+                  }),
+                  Effect.repeat({
+                    schedule: Schedule.spaced("3 seconds"),
+                    until: (list) => list.result.some((i) => i.id === id),
+                    times: 15,
                   }),
                 );
                 const info = yield* ns
@@ -96,7 +107,7 @@ test.provider(
       );
 
       expect(out.instanceId).toBeTruthy();
-      // `list()` enumerates the namespace's instances via the current creds.
+      // `list({ search })` finds the instance via the current creds.
       expect(out.ids).toContain(out.instanceId);
       // `.get(id).info()` scopes a single-instance read to this namespace.
       expect(out.info.id).toEqual(out.instanceId);

@@ -34,6 +34,7 @@ import { withManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
  * (`Self`'s key). Typed loosely on purpose: the shape is the platform
  * instance, which differs per platform and is only ever read dynamically.
  */
+// oxlint-disable-next-line effecttsgo/service-not-as-class
 export const entrypointTag = Context.Service<any, any>(Self.key);
 
 /**

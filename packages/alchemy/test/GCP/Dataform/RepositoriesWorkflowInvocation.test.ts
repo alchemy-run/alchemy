@@ -3,7 +3,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { logLevel, currentProject, waitUntilGone } from "./common.ts";
+import { logLevel, currentProject, testServiceAccount, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -43,6 +43,7 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       const project = yield* currentProject;
       yield* stack.destroy();
+      const serviceAccount = yield* testServiceAccount;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -50,7 +51,7 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             displayName: "invocation-repo",
             labels: { env: "test" },
-            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount,
           });
           const workspace = yield* GCP.Dataform.RepositoriesWorkspace("Dev", {
             repository: repo.name,
@@ -102,7 +103,7 @@ test.provider.skipIf(!runLifecycle)(
             location: "us-central1",
             displayName: "invocation-repo",
             labels: { env: "test" },
-            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount,
           });
           const workspace = yield* GCP.Dataform.RepositoriesWorkspace("Dev", {
             repository: repo.name,

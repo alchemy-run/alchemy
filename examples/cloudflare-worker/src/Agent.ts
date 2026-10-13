@@ -10,6 +10,8 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const sessions = new Map<string, Cloudflare.WebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
@@ -20,15 +22,18 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
       }
 
       return {
-        exec: (command: string) => container.exec(command).pipe(Effect.orDie),
+        exec: (command: string) =>
+          start.pipe(Effect.andThen(container.shell(command)), Effect.orDie),
         hello: () =>
           Effect.gen(function* () {
+            yield* start;
             const { fetch } = yield* container.getTcpPort(3000);
             const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
         increment: () =>
           Effect.gen(function* () {
+            yield* start;
             const { fetch } = yield* container.getTcpPort(3000);
             const response = yield* fetch(HttpClientRequest.post("http://container/increment"));
             return yield* response.text;
@@ -65,11 +70,5 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

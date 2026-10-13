@@ -564,12 +564,10 @@ export const QueueProvider = () =>
         precreate: Effect.fn(function* ({ id, fqn, news = {} }) {
           const identity = { queueName: news.queueName, fifo: news.fifo };
           if (!isResolved(identity)) {
-            return yield* Effect.fail(
-              new UnresolvedQueueIdentity({
-                message:
-                  "Queue queueName and fifo must be known before precreation; use literal identity properties and put circular references in bindings.",
-              }),
-            );
+            return yield* new UnresolvedQueueIdentity({
+              message:
+                "Queue queueName and fifo must be known before precreation; use literal identity properties and put circular references in bindings.",
+            });
           }
           if (
             isResolved({
@@ -756,15 +754,17 @@ export const QueueProvider = () =>
               })
               .pipe(
                 Effect.as(false),
-                Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
-                Effect.catchTag("RequestThrottled", () => Effect.succeed(false)),
+                Effect.catchTags({
+                  QueueDoesNotExist: () => Effect.succeed(true),
+                  RequestThrottled: () => Effect.succeed(false),
+                }),
               );
             const absentFromList = yield* sqs.listQueues({ QueueNamePrefix: queueName }).pipe(
               Effect.map((result) => !(result.QueueUrls ?? []).includes(queueUrl)),
               Effect.catchTag("RequestThrottled", () => Effect.succeed(false)),
             );
             if (!attributesAbsent || !absentFromList) {
-              return yield* Effect.fail(new QueueStillExists({ queueUrl }));
+              return yield* new QueueStillExists({ queueUrl });
             }
           }).pipe(
             Effect.retry({

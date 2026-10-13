@@ -347,13 +347,11 @@ export const AdminTopicProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* retryInUse(
-        ignoreMissing(
-          pubsublite.deleteAdminProjectsLocationsTopics({
-            name: output.name,
-          }),
-        ),
-      );
+      yield* pubsublite
+        .deleteAdminProjectsLocationsTopics({
+          name: output.name,
+        })
+        .pipe(ignoreMissing, retryInUse);
       yield* waitUntilGone(getTopic(output.name));
     }),
   });

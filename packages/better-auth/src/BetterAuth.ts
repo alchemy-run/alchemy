@@ -158,6 +158,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
     } else if (typeof secret === "string") {
       secretAccessor = Effect.succeed(Redacted.make(secret));
     } else if (Effect.isEffect(secret)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RuntimeContext is satisfied by the host at runtime
       secretAccessor = secret as Effect.Effect<Redacted.Redacted<string>>;
     } else {
       secretAccessor = Effect.succeed(secret);

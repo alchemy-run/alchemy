@@ -105,7 +105,7 @@ export const KeyspaceProvider = () =>
         const tags = yield* keyspaces.listTagsForResource.items({ resourceArn: arn }).pipe(
           Stream.runCollect,
           Effect.map((c) => Array.from(c)),
-          Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
+          Effect.orElseSucceed(() => []),
         );
         return toTagRecord(tags);
       });
@@ -213,7 +213,7 @@ export const KeyspaceProvider = () =>
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
-            Effect.catch(() => Effect.void),
+            Effect.ignore,
           );
         }),
 

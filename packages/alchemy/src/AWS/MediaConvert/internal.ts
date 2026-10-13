@@ -22,7 +22,7 @@ export const toTagRecord = (
 export const readMcTags = Effect.fn(function* (arn: string) {
   const response = yield* mediaconvert
     .listTagsForResource({ Arn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.ResourceTags?.Tags);
 });
 

@@ -118,10 +118,41 @@ const assertDirectoryDeleting = (directoryId: string) =>
     }),
   );
 
+// Simple AD is closed to new customers: CreateDirectory fails with "Simple
+// AD is no longer open to new customers. For capabilities similar to Simple
+// AD, explore AWS Managed Microsoft AD." (wire ClientException, typed as
+// SimpleADClosedToNewCustomers). See
+// https://docs.aws.amazon.com/directoryservice/latest/admin-guide/directory_simple_ad.html
+// This ungated probe pins the typed rejection; it targets a nonexistent VPC
+// so it can never create a billable directory even if Simple AD reopens (it
+// would then fail with a different tag — re-enable the lifecycle below).
+test.provider(
+  "createDirectory (Simple AD) is rejected with a typed SimpleADClosedToNewCustomers",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        ds.createDirectory({
+          Name: "closed-probe.alchemy-test.internal",
+          Password: "AlchemyTest123!",
+          Size: "Small",
+          VpcSettings: {
+            VpcId: "vpc-00000000000000000",
+            SubnetIds: ["subnet-00000000000000000", "subnet-00000000000000001"],
+          },
+        }),
+      );
+      expect(error._tag).toBe("SimpleADClosedToNewCustomers");
+    }),
+  { tags: ["provider:aws", "provider:aws:directoryservice", "live"] },
+);
+
 // A Simple AD directory takes ~10 minutes to provision (Microsoft AD takes
-// 20-40) and bills hourly while it exists. The full lifecycle is gated
-// behind AWS_TEST_DIRECTORY=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
+// 20-40) and bills hourly while it exists. Because Simple AD is closed to new
+// customers (see the probe above), the full lifecycle is gated behind
+// AWS_TEST_DIRECTORY=1 AND AWS_TEST_DIRECTORY_SIMPLE_AD=1 (for an account
+// that is still an existing Simple AD customer) and always destroys what it
+// created.
+test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY || !process.env.AWS_TEST_DIRECTORY_SIMPLE_AD)(
   "create Simple AD directory, verify, update tags, destroy",
   (stack) =>
     Effect.gen(function* () {

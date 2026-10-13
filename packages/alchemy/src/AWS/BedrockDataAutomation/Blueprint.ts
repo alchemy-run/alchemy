@@ -231,7 +231,7 @@ export const BlueprintProvider = () =>
                       arn === undefined
                         ? undefined
                         : yield* observeBlueprint(arn, news.blueprintStage);
-                    return observed === undefined ? yield* Effect.fail(conflict) : observed;
+                    return observed === undefined ? yield* conflict : observed;
                   }),
                 ),
               );

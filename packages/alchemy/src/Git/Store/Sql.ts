@@ -372,7 +372,7 @@ export const makeSqlClient = (state: DurableObjectState["Service"]): SqlClient =
     Effect.try({
       try: () => sql.exec<Row>(query, ...bindings).toArray(),
       catch: (cause) =>
-        new StoreError({
+        StoreError.make({
           reason: `sql failed (${query.slice(0, 120)}): ${errorMessage(cause)}`,
         }),
     });
@@ -427,7 +427,7 @@ export const makeSqlClient = (state: DurableObjectState["Service"]): SqlClient =
         catch: (thrown): StoreError | E =>
           thrown instanceof RollbackSignal
             ? (thrown.error as E)
-            : new StoreError({
+            : StoreError.make({
                 reason: `transactionSync failed: ${errorMessage(thrown)}`,
               }),
       }),

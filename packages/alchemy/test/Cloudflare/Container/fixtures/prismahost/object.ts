@@ -29,10 +29,13 @@ export class PrismaHostContainerObject extends Cloudflare.DurableObject<PrismaHo
     const container = yield* PrismaHostContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       const get = (path: string) =>
         Effect.gen(function* () {
+          yield* start;
           const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return yield* response.text;
         });
@@ -42,11 +45,5 @@ export class PrismaHostContainerObject extends Cloudflare.DurableObject<PrismaHo
         getProbe: () => get("/probe"),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(PrismaHostContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

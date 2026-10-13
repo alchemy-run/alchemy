@@ -211,6 +211,8 @@ export interface Table extends Resource<
     tableName: TableName;
     /** The ARN of the table. */
     tableArn: TableArn;
+    /** The AWS region the table lives in. */
+    region: RegionID;
     /** The partition (hash) key attribute name. */
     partitionKey: string;
     /** The sort (range) key attribute name, if defined. */
@@ -353,6 +355,39 @@ export interface Table extends Resource<
  *     return yield* HttpServerResponse.json(result.Item);
  *   }),
  * };
+ * ```
+ *
+ * **Example:** Read and write items from a Cloudflare Worker
+ *
+ * The `*Http` layers also run on a Cloudflare Worker. Alchemy creates an
+ * IAM user, access key, and least-privilege role for the Worker, binds the
+ * key onto it, and signs each request with the assumed role in the table's
+ * region. The Stack needs both provider sets:
+ * `Layer.mergeAll(Cloudflare.providers(), AWS.providers())`.
+ * ```typescript
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const table = yield* AWS.DynamoDB.Table("Links", {
+ *       partitionKey: "id",
+ *       attributes: { id: "S" },
+ *     });
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
+ *     const putItem = yield* AWS.DynamoDB.PutItem(table);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* putItem({ Item: { id: { S: "a" }, url: { S: "https://alchemy.run" } } });
+ *         const { Item } = yield* getItem({ Key: { id: { S: "a" } } });
+ *         return yield* HttpServerResponse.json(Item);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  *
  * ### Table Features
@@ -573,16 +608,14 @@ export const TableProvider = () =>
 
           const [first, ...rest] = requested;
           if (!first?.StreamViewType) {
-            return yield* Effect.fail(new MissingStreamViewType());
+            return yield* new MissingStreamViewType();
           }
 
           for (const spec of rest) {
             if (spec.StreamViewType !== first.StreamViewType) {
-              return yield* Effect.fail(
-                new ConflictingStreamViewTypes({
-                  requested: requested.map((item) => item.StreamViewType),
-                }),
-              );
+              return yield* new ConflictingStreamViewTypes({
+                requested: requested.map((item) => item.StreamViewType),
+              });
             }
           }
 
@@ -736,7 +769,7 @@ export const TableProvider = () =>
           });
           const destinations = response.KinesisDataStreamDestinations ?? [];
           if (destinations.some(isKinesisDestinationTransitioning)) {
-            return yield* Effect.fail(new KinesisDestinationNotSettled());
+            return yield* new KinesisDestinationNotSettled();
           }
           return destinations;
         }).pipe(
@@ -827,7 +860,7 @@ export const TableProvider = () =>
           });
           const status = response.ContributorInsightsStatus ?? "DISABLED";
           if (status === "ENABLING" || status === "DISABLING") {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
           return status;
         }).pipe(
@@ -881,7 +914,7 @@ export const TableProvider = () =>
         Effect.gen(function* () {
           const remaining = yield* listContributorInsightsRules(tableName);
           if (remaining.length > 0) {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
         }).pipe(
           Effect.retry({
@@ -934,7 +967,7 @@ export const TableProvider = () =>
           });
           if (response.Table?.TableStatus !== "ACTIVE") {
             progressMessage = `DynamoDB Table provider: table ${tableName} not active yet (status=${response.Table?.TableStatus ?? "undefined"} gsiStatuses=${formatGlobalSecondaryIndexStatuses(response.Table?.GlobalSecondaryIndexes)})`;
-            return yield* Effect.fail(new TableNotActive());
+            return yield* new TableNotActive();
           }
           yield* session.note(
             `DynamoDB Table provider: table ${tableName} is ACTIVE (${formatPollingElapsed(elapsedSeconds)})`,
@@ -979,7 +1012,7 @@ export const TableProvider = () =>
 
           if (JSON.stringify(actualIndexNames) !== JSON.stringify(expected) || !allActive) {
             progressMessage = `DynamoDB Table provider: GSIs for ${tableName} not stable yet (expected=${JSON.stringify(expected)} actual=${JSON.stringify(actualIndexNames)} statuses=${JSON.stringify((table?.GlobalSecondaryIndexes ?? []).map((index) => ({ name: index.IndexName, status: index.IndexStatus })))} tableStatus=${table?.TableStatus ?? "undefined"})`;
-            return yield* Effect.fail(new TableIndexesNotStable());
+            return yield* new TableIndexesNotStable();
           }
 
           yield* session.note(
@@ -1014,13 +1047,13 @@ export const TableProvider = () =>
             TableName: tableName,
           });
           progressMessage = `DynamoDB Table provider: table ${tableName} still deleting (status=${response.Table?.TableStatus ?? "undefined"})`;
-          return yield* Effect.fail(new TableStillDeleting());
+          return yield* new TableStillDeleting();
         }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => {
-            return session.note(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            session.note(
               `DynamoDB Table provider: table ${tableName} deletion confirmed (${formatPollingElapsed(elapsedSeconds)})`,
-            );
-          }),
+            ),
+          ),
           Effect.retry({
             while: (error) =>
               error._tag === "TableStillDeleting" || isRetryableControlPlaneError(error),
@@ -1222,6 +1255,7 @@ export const TableProvider = () =>
         tableId: state.table.TableId!,
         tableName: state.table.TableName!,
         tableArn: state.table.TableArn! as TableArn,
+        region: state.table.TableArn!.split(":")[3] as RegionID,
         partitionKey:
           state.table.KeySchema?.find((key) => key.KeyType === "HASH")?.AttributeName ?? "",
         sortKey: state.table.KeySchema?.find((key) => key.KeyType === "RANGE")?.AttributeName,
@@ -1395,7 +1429,7 @@ export const TableProvider = () =>
       };
 
       return Table.Provider.of({
-        stables: ["tableName", "tableId", "tableArn"],
+        stables: ["tableName", "tableId", "tableArn", "region"],
         // Enumerate every table in the ambient account/region. `listTables`
         // returns only names, so each is hydrated to the full Attributes shape
         // via the same multi-API read helper (`readTableState`) `read` uses.
@@ -1823,14 +1857,12 @@ export const TableProvider = () =>
               (destination) => destination.StreamArn === desiredKinesisDestination.streamArn,
             );
             if (settledDestination?.DestinationStatus !== "ACTIVE") {
-              return yield* Effect.fail(
-                new KinesisStreamingDestinationFailed({
-                  tableName,
-                  streamArn: desiredKinesisDestination.streamArn,
-                  status: settledDestination?.DestinationStatus,
-                  description: settledDestination?.DestinationStatusDescription,
-                }),
-              );
+              return yield* new KinesisStreamingDestinationFailed({
+                tableName,
+                streamArn: desiredKinesisDestination.streamArn,
+                status: settledDestination?.DestinationStatus,
+                description: settledDestination?.DestinationStatusDescription,
+              });
             }
           }
 
@@ -1940,12 +1972,10 @@ export const TableProvider = () =>
               .pipe(
                 Effect.timeout(1000),
                 Effect.as("accepted" as const),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed("already-deleted" as const),
-                ),
-                Effect.catchTag("ResourceInUseException", () =>
-                  Effect.succeed("delete-gsis-first" as const),
-                ),
+                Effect.catchTags({
+                  ResourceNotFoundException: () => Effect.succeed("already-deleted" as const),
+                  ResourceInUseException: () => Effect.succeed("delete-gsis-first" as const),
+                }),
                 Effect.retry({
                   while: (error) =>
                     error._tag === "InternalServerError" || error._tag === "TimeoutError",

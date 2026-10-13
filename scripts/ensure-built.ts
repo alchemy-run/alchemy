@@ -51,7 +51,17 @@ const dependencyDirectories = Effect.fn(function* (root: string, name: PackageNa
   const output = yield* spawner.string(
     ChildProcess.make(
       "pnpm",
-      ["ls", "-r", "--filter", `{./packages/${name}}...`, "--depth", "-1", "--json"],
+      [
+        "ls",
+        "-r",
+        "--filter",
+        `{./packages/${name}}...`,
+        "--depth",
+        "-1",
+        "--json",
+        "--loglevel",
+        "error",
+      ],
       { cwd: root, shell },
     ),
   );

@@ -8,7 +8,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Bridge from "@/Cloudflare/Bridge";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { CloudflareEnvironment as RuntimeCloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironmentService";
-import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown";
+import { makeEffectVirtualEntry, WorkerBundle } from "@/Cloudflare/Workers/Sources/Rolldown";
 import * as WorkerRuntime from "@/Cloudflare/Workers/WorkerRuntime";
 import * as WorkflowRuntime from "@/Cloudflare/Workflows/WorkflowRuntime";
 import { Stack } from "@/Stack";
@@ -170,6 +170,43 @@ layer(NodeServices.layer)("alchemy/Cloudflare/Bridge (runtime-only entry)", (it)
         expect(sources.filter(isPlannerSource)).toEqual([]);
         expect(toolchainPackages.filter((name) => packages.has(name))).toEqual([]);
         expect(code).not.toContain("require.resolve");
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+
+  it.effect(
+    "keeps the stack builder and auth store out of a bundled Worker",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const packageRoot = yield* path.fromFileUrl(new URL("../../../", import.meta.url));
+        const rendered: string[] = [];
+        yield* (yield* WorkerBundle).build({
+          id: "runtime-entry",
+          main: path.join(packageRoot, "test/Cloudflare/Workers/fixtures/runtime-entry/worker.ts"),
+          compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
+          entry: { kind: "external" },
+          stack: { name: "runtime-entry", stage: "test" },
+          extraOptions: {
+            input: {
+              plugins: {
+                name: "collect-rendered-modules",
+                generateBundle: (_options, bundle) => {
+                  rendered.push(
+                    ...Object.values(bundle)
+                      .flatMap((chunk) =>
+                        chunk.type === "chunk" ? Object.entries(chunk.modules) : [],
+                      )
+                      .filter(([, module]) => module.renderedLength > 0)
+                      .map(([id]) => path.relative(packageRoot, id).replaceAll("\\", "/")),
+                  );
+                },
+              },
+            },
+          },
+        });
+        expect(rendered).toContain("src/Resource.ts");
+        expect(rendered.filter((id) => /^src\/(Stack\.ts$|Auth\/)/.test(id))).toEqual([]);
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );

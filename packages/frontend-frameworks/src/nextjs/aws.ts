@@ -195,9 +195,7 @@ const runOpenNextBuild = (options: {
         { concurrency: "unbounded" },
       ).pipe(Effect.mapError(fail("Failed reading the OpenNext build's output")));
       if (exitCode !== 0) {
-        return yield* Effect.fail(
-          fail(`The OpenNext build exited with code ${exitCode}`)(undefined),
-        );
+        return yield* fail(`The OpenNext build exited with code ${exitCode}`)(undefined);
       }
     }),
   );
@@ -325,11 +323,9 @@ const awaitNextDevReady = (options: {
   Effect.gen(function* () {
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          fail(
-            `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* fail(
+          `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.tryPromise({
         try: async () => {
@@ -343,9 +339,7 @@ const awaitNextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      fail(`Timed out waiting for the next dev server at ${options.url}`)(undefined),
-    );
+    return yield* fail(`Timed out waiting for the next dev server at ${options.url}`)(undefined);
   });
 
 /** The service shape {@link make} resolves to (the framework-module contract
@@ -433,29 +427,23 @@ export const make: (
       });
       const defaultOrigin = manifest.origins?.default;
       if (defaultOrigin?.type !== "function") {
-        return yield* Effect.fail(
-          fail(
-            `The OpenNext build's default origin is "${defaultOrigin?.type}", not a Lambda function. ` +
-              "The AWS deploy target only supports the function topology (no generateDockerfile).",
-          )(undefined),
-        );
+        return yield* fail(
+          `The OpenNext build's default origin is "${defaultOrigin?.type}", not a Lambda function. ` +
+            "The AWS deploy target only supports the function topology (no generateDockerfile).",
+        )(undefined);
       }
       if (defaultOrigin.streaming !== true) {
-        return yield* Effect.fail(
-          fail(
-            "The OpenNext build's default server does not stream. The Lambda Function URL is " +
-              "created with invokeMode: RESPONSE_STREAM, so open-next.config.ts must keep the streaming wrapper: " +
-              '`default: { override: { wrapper: "aws-lambda-streaming" } }`.',
-          )(undefined),
-        );
+        return yield* fail(
+          "The OpenNext build's default server does not stream. The Lambda Function URL is " +
+            "created with invokeMode: RESPONSE_STREAM, so open-next.config.ts must keep the streaming wrapper: " +
+            '`default: { override: { wrapper: "aws-lambda-streaming" } }`.',
+        )(undefined);
       }
 
       const entryName = deriveServerEntryName(defaultOrigin);
       const entryPath = path.join(distDirectory, entryName);
       if (!(yield* fs.exists(entryPath).pipe(Effect.orElseSucceed(() => false)))) {
-        return yield* Effect.fail(
-          fail(`The build produced no server entry at ${entryPath}`)(undefined),
-        );
+        return yield* fail(`The build produced no server entry at ${entryPath}`)(undefined);
       }
 
       return {

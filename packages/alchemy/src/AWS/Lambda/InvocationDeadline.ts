@@ -227,14 +227,11 @@ export const withInvocationDeadline = <A, E, R>(
     // when the handler settles. The flush itself is uninterruptible so a
     // handler finishing mid-flush waits for the export rather than
     // abandoning an in-flight batch.
-    const watcher = yield* Effect.forkChild(
-      Effect.sleep(Duration.millis(budgetMs)).pipe(
-        Effect.andThen(
-          Effect.suspend(() =>
-            claimed ? Effect.void : Effect.uninterruptible(flushBeforeDeadline),
-          ),
-        ),
+    const watcher = yield* Effect.sleep(Duration.millis(budgetMs)).pipe(
+      Effect.andThen(
+        Effect.suspend(() => (claimed ? Effect.void : Effect.uninterruptible(flushBeforeDeadline))),
       ),
+      Effect.forkChild,
     );
     return yield* self.pipe(
       Effect.provideService(InvocationDeadline, deadline),

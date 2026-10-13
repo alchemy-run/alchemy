@@ -27,7 +27,7 @@ const readinessSchedule = Schedule.min([
 ]);
 
 /**
- * `interceptOutboundHttp` / `interceptAllOutboundHttp` on a `Containers.layer`
+ * `interceptOutboundHttp` / `interceptAllOutboundHttp` on a container
  * handle must register the caller's Fetcher with workerd, so the container's
  * outbound HTTP reaches the Durable Object that owns it.
  */

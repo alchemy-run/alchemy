@@ -607,17 +607,18 @@ export const FirewallProvider = () =>
         yield* detachAll(id, observed.applied_to);
       }
       yield* Hetzner.firewalls.deleteFirewall({ id }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("UnprocessableEntity", () =>
-          Effect.gen(function* () {
-            const again = yield* getById(id);
-            if (again === undefined) return;
-            yield* detachAll(id, again.applied_to);
-            yield* Hetzner.firewalls
-              .deleteFirewall({ id })
-              .pipe(Effect.catchTag("NotFound", () => Effect.void));
-          }),
-        ),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          UnprocessableEntity: () =>
+            Effect.gen(function* () {
+              const again = yield* getById(id);
+              if (again === undefined) return;
+              yield* detachAll(id, again.applied_to);
+              yield* Hetzner.firewalls
+                .deleteFirewall({ id })
+                .pipe(Effect.catchTag("NotFound", () => Effect.void));
+            }),
+        }),
       );
     }),
   });

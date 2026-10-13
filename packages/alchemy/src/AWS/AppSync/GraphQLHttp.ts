@@ -102,7 +102,7 @@ export const GraphQLHttp = Layer.effect(
           catch: toError(response.status),
         });
         if (response.status < 200 || response.status >= 300) {
-          return yield* Effect.fail(new GraphQLApiError({ status: response.status, body: text }));
+          return yield* new GraphQLApiError({ status: response.status, body: text });
         }
         return yield* Effect.try({
           try: () => JSON.parse(text) as GraphQLResult,

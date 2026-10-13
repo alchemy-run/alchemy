@@ -33,7 +33,7 @@ export const normalizeGitHubBaseUrl = (
       return `${url.protocol}//${url.host}${path === "" ? "/api/v3" : path}`;
     },
     catch: () =>
-      new AuthError({
+      AuthError.make({
         message: `Invalid GitHub base URL: '${input}'. Provide a hostname (github.example.com) or URL (https://github.example.com/api/v3).`,
       }),
   });

@@ -99,11 +99,9 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
   );
   const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
   if (bin === undefined) {
-    return yield* Effect.fail(
-      new CliError({
-        message: `The installed "prisma" package declares no \`prisma\` bin (${manifestPath}).`,
-      }),
-    );
+    return yield* new CliError({
+      message: `The installed "prisma" package declares no \`prisma\` bin (${manifestPath}).`,
+    });
   }
   return path.resolve(path.dirname(manifestPath), bin);
 });
@@ -197,20 +195,16 @@ export const runPrismaCli = <T>(
       const fix = (error.nextActions ?? envelope.nextActions ?? []).find(
         (action) => typeof action.label === "string",
       )?.label;
-      return yield* Effect.fail(
-        new CliError({
-          code: error.code,
-          message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
-          fix,
-          meta: error.meta,
-        }),
-      );
+      return yield* new CliError({
+        code: error.code,
+        message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
+        fix,
+        meta: error.meta,
+      });
     }
-    return yield* Effect.fail(
-      new CliError({
-        message: `prisma ${args.slice(0, 2).join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
-      }),
-    );
+    return yield* new CliError({
+      message: `prisma ${args.slice(0, 2).join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
+    });
   });
 
 /** `prisma contract emit --json` result. */
@@ -301,15 +295,13 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
     }
     if (rewritten.includes("@internal/")) {
       const leftover = rewritten.split("\n").find((line) => line.includes("@internal/"));
-      return yield* Effect.fail(
-        new CliError({
-          message: [
-            `Emitted ${dtsPath} references an unpublished @internal/* module this`,
-            `integration does not know how to map yet: ${leftover?.trim()}`,
-            "Please report this — the emitted types will not resolve until it is mapped.",
-          ].join("\n"),
-        }),
-      );
+      return yield* new CliError({
+        message: [
+          `Emitted ${dtsPath} references an unpublished @internal/* module this`,
+          `integration does not know how to map yet: ${leftover?.trim()}`,
+          "Please report this — the emitted types will not resolve until it is mapped.",
+        ].join("\n"),
+      });
     }
     yield* fs.writeFileString(dtsPath, rewritten);
   });

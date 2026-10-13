@@ -180,8 +180,10 @@ const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(undefined),
+          SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+        }),
       );
 
 const waitUntilExists = (name: string) =>
@@ -330,9 +332,11 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           })
           .pipe(
             GcpRetry.none,
-            Effect.catchTag("SandboxEnvironmentsNotEnabled", () => Effect.succeed(undefined)),
-            Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+              BadRequest: () => Effect.succeed(undefined),
+              Conflict: () => Effect.succeed(undefined),
+            }),
             Effect.timeoutOption("20 seconds"),
           );
         const createdOp = Option.getOrUndefined(created);

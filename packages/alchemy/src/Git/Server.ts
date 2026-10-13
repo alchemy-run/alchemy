@@ -160,7 +160,7 @@ const makeCore = Effect.gen(function* () {
       const result = yield* effect;
       const request = yield* HttpServerRequest.HttpServerRequest;
       const host = request.headers.host;
-      return new RepoCreated({
+      return RepoCreated.make({
         repo: result.repo,
         remote:
           host === undefined
@@ -359,7 +359,7 @@ const makeCore = Effect.gen(function* () {
     if (Result.isFailure(bodyResult)) return undefined;
     const req = yield* decodePktLines(new Uint8Array(bodyResult.success)).pipe(
       Effect.flatMap(parseUploadPackRequest),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (req === undefined) return undefined;
     if (
@@ -456,11 +456,12 @@ const makeCore = Effect.gen(function* () {
       );
     }),
   ).pipe(
-    Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
-    Effect.catchTag("StoreError", (error) => Effect.succeed(ReceivePackHttp.failure(error.reason))),
-    Effect.catchTag(["WireProtocolError", "PackIngestError"], (error) =>
-      Effect.succeed(ReceivePackHttp.failure(error.reason)),
-    ),
+    Effect.catchTags({
+      RepoNotFound: () => Effect.succeed(notFound),
+      StoreError: (error) => Effect.succeed(ReceivePackHttp.failure(error.reason)),
+      WireProtocolError: (error) => Effect.succeed(ReceivePackHttp.failure(error.reason)),
+      PackIngestError: (error) => Effect.succeed(ReceivePackHttp.failure(error.reason)),
+    }),
   );
 
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
@@ -494,18 +495,19 @@ const makeCore = Effect.gen(function* () {
             contentType: "application/octet-stream",
           }),
         ),
-        Effect.catchTag(["RepoNotFound", "ObjectNotFound"], () =>
-          Effect.succeed(HttpServerResponse.text("not found", { status: 404 })),
-        ),
-        Effect.catchTag("WrongObjectType", (error) =>
-          Effect.succeed(
-            HttpServerResponse.text(
-              `object ${error.oid} is a ${error.actual}, not a ${error.expected}`,
-              { status: 422 },
+        Effect.catchTags({
+          RepoNotFound: () => Effect.succeed(HttpServerResponse.text("not found", { status: 404 })),
+          ObjectNotFound: () =>
+            Effect.succeed(HttpServerResponse.text("not found", { status: 404 })),
+          WrongObjectType: (error) =>
+            Effect.succeed(
+              HttpServerResponse.text(
+                `object ${error.oid} is a ${error.actual}, not a ${error.expected}`,
+                { status: 422 },
+              ),
             ),
-          ),
-        ),
-        Effect.catchTag("StoreError", () => Effect.succeed(internalError)),
+          StoreError: () => Effect.succeed(internalError),
+        }),
       );
   });
 
@@ -635,7 +637,7 @@ const makeCore = Effect.gen(function* () {
     // A plain async writer, like the clone pump: writes settle only as the
     // response is read, and the open stream keeps this invocation alive
     // until the part's upload has finished.
-    const partDone = Effect.runPromise(Fiber.join(upload));
+    const partDone = upload.pipe(Fiber.join, Effect.runPromise);
     yield* Effect.sync(() => {
       void (async () => {
         const writer = writable.getWriter();

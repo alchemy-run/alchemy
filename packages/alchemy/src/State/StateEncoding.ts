@@ -80,7 +80,7 @@ export const encodeState = (value: unknown): unknown => {
     return value;
   if (Redacted.isRedacted(value)) {
     return {
-      [REDACTED_MARKER]: encodeState(Redacted.value(value)),
+      [REDACTED_MARKER]: value.pipe(Redacted.value, encodeState),
     };
   }
   if (Duration.isDuration(value)) {

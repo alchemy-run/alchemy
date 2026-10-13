@@ -23,7 +23,7 @@ export const fetchObservedTags = Effect.fn("AWS.DataBrew.fetchObservedTags")(fun
 ) {
   const response = yield* databrew
     .listTagsForResource({ ResourceArn: resourceArn })
-    .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
+    .pipe(Effect.orElseSucceed(() => ({ Tags: undefined })));
   return cleanMap(response.Tags);
 });
 

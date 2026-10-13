@@ -225,6 +225,6 @@ export const UsersSshPublicKeyProvider = () =>
         output.name ||
         (output.fingerprint ? resourceName(output.user || DEFAULT_USER, output.fingerprint) : "");
       if (name.length === 0) return;
-      yield* ignoreMissing(retryConflict(oslogin.deleteUsersSshPublicKeys({ name })));
+      yield* oslogin.deleteUsersSshPublicKeys({ name }).pipe(retryConflict, ignoreMissing);
     }),
   });

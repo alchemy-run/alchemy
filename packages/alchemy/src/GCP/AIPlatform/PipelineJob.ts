@@ -204,12 +204,14 @@ const cancelUntilTerminal = (name: string) =>
     const job = yield* getByName(name);
     if (job === undefined || TERMINAL_STATES.has(job.state ?? "")) return;
     yield* aiplatform.cancelProjectsLocationsPipelineJobs({ name, body: {} }).pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      // The job can reach a terminal state between the read above and the
-      // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
-      // the wait below re-reads the state and still fails if it is not
-      // terminal.
-      Effect.catchTag("BadRequest", () => Effect.void),
+      Effect.catchTags({
+        NotFound: () => Effect.void,
+        // The job can reach a terminal state between the read above and the
+        // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
+        // the wait below re-reads the state and still fails if it is not
+        // terminal.
+        BadRequest: () => Effect.void,
+      }),
     );
     yield* getByName(name).pipe(
       Effect.flatMap((current) =>

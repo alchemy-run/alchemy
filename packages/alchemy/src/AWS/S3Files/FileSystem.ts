@@ -207,12 +207,10 @@ export const FileSystemProvider = () =>
           fs.roleArn === undefined ||
           fs.status === undefined
         ) {
-          return yield* Effect.fail(
-            new S3FilesNotConverged({
-              resource: fs.fileSystemId ?? "unknown file system",
-              status: fs.status,
-            }),
-          );
+          return yield* new S3FilesNotConverged({
+            resource: fs.fileSystemId ?? "unknown file system",
+            status: fs.status,
+          });
         }
         return {
           fileSystemId: fs.fileSystemId,
@@ -352,12 +350,10 @@ export const FileSystemProvider = () =>
                 : yield* findByAlchemyTags(id, news.bucket);
           }
           if (live?.fileSystemId === undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: `file system for bucket ${news.bucket}`,
-                status: live?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: `file system for bucket ${news.bucket}`,
+              status: live?.status,
+            });
           }
           const fileSystemId = live.fileSystemId;
 
@@ -367,12 +363,10 @@ export const FileSystemProvider = () =>
             (fs) => fs === undefined || fs.status !== "creating",
           );
           if (settled === undefined || settled.status !== "available") {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: fileSystemId,
-                status: settled?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: fileSystemId,
+              status: settled?.status,
+            });
           }
 
           // 3. SYNC — tags against observed cloud tags; policy against the
@@ -405,12 +399,10 @@ export const FileSystemProvider = () =>
             (fs) => fs === undefined,
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: output.fileSystemId,
-                status: remaining.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: output.fileSystemId,
+              status: remaining.status,
+            });
           }
         }),
       });

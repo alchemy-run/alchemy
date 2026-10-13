@@ -17,7 +17,7 @@ export const toTagRecord = (
 export const readElastiCacheTags = Effect.fn(function* (arn: string) {
   const response = yield* elasticache
     .listTagsForResource({ ResourceName: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.TagList);
 });
 

@@ -106,9 +106,9 @@ const resolveSubnets = Effect.gen(function* () {
 });
 
 // MSK Serverless clusters take ~5-10 minutes to create and are metered while
-// they exist. The full lifecycle is gated behind AWS_TEST_SLOW=1 and always
+// they exist. The full lifecycle is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create serverless cluster, verify IAM-auth brokers, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

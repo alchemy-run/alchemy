@@ -82,9 +82,6 @@ export const D1Layer = <E = never, R = never>(
 ) =>
   // Derive SqlClient from the single D1Client build so both tags share one
   // per-execution client (and one prepared-statement cache).
-  Layer.effect(
-    Sql.SqlClient,
-    Effect.gen(function* () {
-      return yield* D1Client.D1Client;
-    }),
-  ).pipe(Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))));
+  Layer.effect(Sql.SqlClient, D1Client.D1Client).pipe(
+    Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))),
+  );

@@ -169,6 +169,12 @@ describe(
       const { flags } = getCompatibility({} as WorkerProps);
       expect(flags).not.toContain("handle_cross_request_promise_resolution");
     });
+
+    test("rejects disable_ctx_exports on Effect workers", () => {
+      expect(() =>
+        getCompatibility({ compatibility: { flags: ["disable_ctx_exports"] } } as WorkerProps),
+      ).toThrow(/disable_ctx_exports/);
+    });
   },
 );
 

@@ -692,9 +692,11 @@ const disableIfNeeded = (current: privateca.CertificateAuthority) => {
       body: { ignoreDependentResources: true },
     })
     .pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+      Effect.catchTags({
+        NotFound: () => Effect.succeed(undefined),
+        BadRequest: () => Effect.succeed(undefined),
+        Conflict: () => Effect.succeed(undefined),
+      }),
       Effect.flatMap((operation) => runOperation(operation)),
       Effect.flatMap(() => waitUntilSteady(name)),
       Effect.catchTag("GCP.PrivateCA.CertificateAuthorityNotResolved", () =>
@@ -717,8 +719,10 @@ const syncDesiredState = (
       })
       .pipe(
         Effect.flatMap((operation) => waitForOperation(operation)),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
         Effect.flatMap(() => waitUntilSteady(name)),
       );
   }
@@ -730,8 +734,10 @@ const syncDesiredState = (
       })
       .pipe(
         Effect.flatMap((operation) => waitForOperation(operation)),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
         Effect.flatMap(() => waitUntilSteady(name)),
       );
   }
@@ -839,6 +845,14 @@ export const CertificateAuthorityProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const caPool = olds?.caPool ?? output?.caPool;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (output?.name === undefined && (typeof caPool !== "string" || caPool.length === 0)) {
+        return undefined;
+      }
       const certificateAuthorityId = yield* toId(
         id,
         olds?.certificateAuthorityId,
@@ -846,7 +860,7 @@ export const CertificateAuthorityProvider = () =>
       );
       const { parent } = resolveParent(
         env.project,
-        olds?.caPool ?? output?.caPool ?? "",
+        typeof caPool === "string" ? caPool : "",
         olds?.location ?? output?.location ?? env.region,
       );
       const name = output?.name ?? resourceName(parent, certificateAuthorityId);
@@ -967,8 +981,10 @@ export const CertificateAuthorityProvider = () =>
             ignoreDependentResources: true,
           })
           .pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(undefined),
+              BadRequest: () => Effect.succeed(undefined),
+            }),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,

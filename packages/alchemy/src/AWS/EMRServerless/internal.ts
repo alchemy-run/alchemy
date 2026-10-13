@@ -43,14 +43,12 @@ export const awaitApplicationCreated = Effect.fn("AWS.EMRServerless.awaitApplica
     const application = yield* untilNotInState(emr.getApplication({ applicationId }), ["CREATING"]);
     const settled = ["CREATED", "STARTING", "STARTED"];
     if (!settled.includes(application.state)) {
-      return yield* Effect.fail(
-        new EmrServerlessStateTimeout({
-          applicationId,
-          expected: settled,
-          actual: application.state,
-          stateDetails: application.stateDetails,
-        }),
-      );
+      return yield* new EmrServerlessStateTimeout({
+        applicationId,
+        expected: settled,
+        actual: application.state,
+        stateDetails: application.stateDetails,
+      });
     }
     return application;
   },
@@ -74,14 +72,12 @@ export const awaitApplicationStopped = Effect.fn("AWS.EMRServerless.awaitApplica
     // and the delete path (nothing left to delete).
     const settled = ["CREATED", "STOPPED", "TERMINATED"];
     if (!settled.includes(application.state)) {
-      return yield* Effect.fail(
-        new EmrServerlessStateTimeout({
-          applicationId,
-          expected: settled,
-          actual: application.state,
-          stateDetails: application.stateDetails,
-        }),
-      );
+      return yield* new EmrServerlessStateTimeout({
+        applicationId,
+        expected: settled,
+        actual: application.state,
+        stateDetails: application.stateDetails,
+      });
     }
     return application;
   },

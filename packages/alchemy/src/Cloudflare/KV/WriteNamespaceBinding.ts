@@ -16,11 +16,8 @@ export const WriteNamespaceBinding = Layer.effect(
 /** Build the write half of the binding client. */
 export const makeWriteKVClient = ({
   use,
-}: ReturnType<typeof makeKVNamespaceHelpers>): WriteNamespaceClient => {
-  return {
-    put: ((...args: Parameters<runtime.KVNamespace["put"]>) =>
-      use((raw) => raw.put(...args))) as any,
-    delete: ((...args: Parameters<runtime.KVNamespace["delete"]>) =>
-      use((raw) => raw.delete(...args))) as any,
-  };
-};
+}: ReturnType<typeof makeKVNamespaceHelpers>): WriteNamespaceClient => ({
+  put: ((...args: Parameters<runtime.KVNamespace["put"]>) => use((raw) => raw.put(...args))) as any,
+  delete: ((...args: Parameters<runtime.KVNamespace["delete"]>) =>
+    use((raw) => raw.delete(...args))) as any,
+});

@@ -136,8 +136,8 @@ export const runBundleJob = (
         { contentLength: size },
       )
       .pipe(
-        Effect.mapError(
-          (error: BlobStoreError) => new StoreError({ reason: `blob put ${key}: ${error.reason}` }),
+        Effect.mapError((error: BlobStoreError) =>
+          StoreError.make({ reason: `blob put ${key}: ${error.reason}` }),
         ),
         Effect.provide(RuntimeContext.phantom),
       );
@@ -155,11 +155,10 @@ export const runBundleJob = (
         { contentLength: sidebandFramedLength(size) },
       )
       .pipe(
-        Effect.mapError(
-          (error: BlobStoreError) =>
-            new StoreError({
-              reason: `blob put ${sidebandKey}: ${error.reason}`,
-            }),
+        Effect.mapError((error: BlobStoreError) =>
+          StoreError.make({
+            reason: `blob put ${sidebandKey}: ${error.reason}`,
+          }),
         ),
         Effect.provide(RuntimeContext.phantom),
       );

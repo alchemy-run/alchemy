@@ -391,7 +391,7 @@ export const SettingProvider = () =>
             // here — skip the undecodable setting rather than failing the
             // whole listing. See the agent report's neededPatch (widen the
             // `GetSettingResponse` member to accept the scalar form).
-            Effect.catch(() => Effect.succeed<SettingAttributes | undefined>(undefined)),
+            Effect.orElseSucceed(() => undefined),
           ),
         { concurrency: 10 },
       );

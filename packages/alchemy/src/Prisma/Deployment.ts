@@ -231,12 +231,10 @@ const listAppDeployments = (appId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -368,7 +366,7 @@ const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
 const TRIGGERS_HASH_SALT = "alchemy/Prisma.Deployment/triggers/v1";
 
 const unwrapRedacted = (value: unknown): unknown => {
-  if (Redacted.isRedacted(value)) return unwrapRedacted(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, unwrapRedacted);
   if (Array.isArray(value)) return value.map(unwrapRedacted);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
@@ -601,15 +599,13 @@ const ProviderLive = () =>
           const cleanupCreatedDeploymentOnFailure = (failedDeploymentId: string, error: unknown) =>
             createdDeploymentId === failedDeploymentId
               ? destroyDeployment(failedDeploymentId).pipe(
-                  Effect.catch((cleanupError) =>
-                    Effect.fail(
-                      aggregateCleanupFailure(
-                        "deployment",
-                        failedDeploymentId,
-                        `/v1/deployments/${failedDeploymentId}`,
-                        error,
-                        cleanupError,
-                      ),
+                  Effect.mapError((cleanupError) =>
+                    aggregateCleanupFailure(
+                      "deployment",
+                      failedDeploymentId,
+                      `/v1/deployments/${failedDeploymentId}`,
+                      error,
+                      cleanupError,
                     ),
                   ),
                   Effect.andThen(() => Effect.fail(error)),
@@ -688,13 +684,11 @@ const ProviderLive = () =>
             );
           }
           if (news.promote ?? false) {
-            appEndpointDomain = yield* Effect.gen(function* () {
-              // Promotion is deliberately replayed even when the control-plane
-              // record already names this deployment. The endpoint operation also
-              // repairs provider routing and custom-domain assignment drift.
-              const promoted = yield* promoteAppObserved(appId, deployment.id);
-              return promoted.appEndpointDomain;
-            });
+            // Promotion is deliberately replayed even when the control-plane
+            // record already names this deployment. The endpoint operation also
+            // repairs provider routing and custom-domain assignment drift.
+            const promoted = yield* promoteAppObserved(appId, deployment.id);
+            appEndpointDomain = promoted.appEndpointDomain;
           }
 
           return attrsFrom(deployment, appId, {

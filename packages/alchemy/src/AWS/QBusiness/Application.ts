@@ -272,22 +272,16 @@ const waitForApplicationStatus = (applicationId: string, target: "ACTIVE" | "DEL
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new ApplicationNotReady({ applicationId, status: described.status }),
-        );
+        return yield* new ApplicationNotReady({ applicationId, status: described.status });
       }
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(
-          new ApplicationProvisioningFailed({
-            applicationId,
-            message: described.error?.errorMessage,
-          }),
-        );
+        return yield* new ApplicationProvisioningFailed({
+          applicationId,
+          message: described.error?.errorMessage,
+        });
       }
-      return yield* Effect.fail(
-        new ApplicationNotReady({ applicationId, status: described?.status }),
-      );
+      return yield* new ApplicationNotReady({ applicationId, status: described?.status });
     }),
   );
 

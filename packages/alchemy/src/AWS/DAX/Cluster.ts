@@ -464,22 +464,38 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // InvalidClusterStateFault — wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
-          const settled = yield* waitUntilSettled(name).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-          if (settled === undefined || settled.Status === "deleting") {
+          const settled = yield* waitUntilSettled(name).pipe(Effect.orElseSucceed(() => undefined));
+          if (settled === undefined) {
             return;
           }
-          yield* dax.deleteCluster({ ClusterName: name }).pipe(
-            Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
+          if (settled.Status !== "deleting") {
+            yield* dax.deleteCluster({ ClusterName: name }).pipe(
+              Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
+              Effect.retry({
+                while: (e) => e._tag === "InvalidClusterStateFault",
+                schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
+              }),
+              // Exhausted retries: the cluster is in a state (e.g. an
+              // out-of-band delete already in flight) where deletion is
+              // already converging — treat as success like the NotFound case.
+              Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
+            );
+          }
+          // Wait until the cluster is actually gone: a `deleting` cluster
+          // still holds its subnet/parameter groups, so dependents deleted
+          // right after would fail with SubnetGroupInUseFault. DAX cluster
+          // deletion typically takes 5-10 minutes; budget ~15 min (60 * 15s).
+          yield* readCluster(name).pipe(
+            Effect.flatMap((cluster) =>
+              cluster === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new Error(`DAX cluster '${name}' still deleting (status: ${cluster.Status})`),
+                  ),
+            ),
             Effect.retry({
-              while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
             }),
-            // Exhausted retries: the cluster is in a state (e.g. an
-            // out-of-band delete already in flight) where deletion is
-            // already converging — treat as success like the NotFound case.
-            Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
           );
         }),
 

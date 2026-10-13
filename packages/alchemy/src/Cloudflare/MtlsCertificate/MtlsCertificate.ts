@@ -296,7 +296,7 @@ export const MtlsCertificateProvider = () =>
             Effect.catchTag("CertificateAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const match = yield* findByContent(accountId, news.certificates);
-                if (!match) return yield* Effect.fail(originalError);
+                if (!match) return yield* originalError;
                 return match;
               }),
             ),

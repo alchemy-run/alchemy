@@ -22,7 +22,7 @@ export const toTagRecord = (
 export const readAmpTags = Effect.fn(function* (arn: string) {
   const response = yield* amp
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

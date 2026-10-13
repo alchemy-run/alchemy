@@ -372,9 +372,11 @@ export const TrainingPipelineProvider = () =>
           ? (metadata as { backingCustomJob?: unknown }).backingCustomJob
           : undefined;
       yield* aiplatform.cancelProjectsLocationsTrainingPipelines({ name, body: {} }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
       );
       // Delete is rejected until the cancellation reaches a terminal state,
       // which can take a couple of minutes.

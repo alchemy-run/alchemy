@@ -393,7 +393,7 @@ export const CertificateAuthorityProvider = () =>
                 .map((t) => [t.Key, t.Value!] as const),
             ),
           ),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
         return tags;
       });

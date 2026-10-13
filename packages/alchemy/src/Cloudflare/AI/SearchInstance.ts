@@ -661,7 +661,7 @@ export const SearchInstanceProvider = () =>
             Effect.catchTag("InstanceAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const existing = yield* getInstance(acct, namespace, instanceId);
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return { created: false as const, instance: existing };
               }),
             ),

@@ -234,13 +234,10 @@ export const dispatchAlarmCallbacks = (state: cf.DurableObjectState, hasLegacyHa
         raw.sql.exec("SELECT id FROM alchemy_scheduled_events LIMIT 1").toArray(),
       );
       if (legacy.length > 0) {
-        return yield* Effect.fail(
-          new CallbackError({
-            callback: "scheduleEvent",
-            message:
-              "Pending legacy events require an alarm handler calling processScheduledEvents",
-          }),
-        );
+        return yield* new CallbackError({
+          callback: "scheduleEvent",
+          message: "Pending legacy events require an alarm handler calling processScheduledEvents",
+        });
       }
     }
     const now = yield* Clock.currentTimeMillis;
@@ -277,12 +274,10 @@ export const dispatchAlarmCallbacks = (state: cf.DurableObjectState, hasLegacyHa
       yield* storage.sync();
       const result = yield* Effect.gen(function* () {
         if (!callback) {
-          return yield* Effect.fail(
-            new CallbackError({
-              callback: job.callback,
-              message: "No handler is registered for a pending alarm",
-            }),
-          );
+          return yield* new CallbackError({
+            callback: job.callback,
+            message: "No handler is registered for a pending alarm",
+          });
         }
         const payload = yield* Effect.try({
           try: () => JSON.parse(job.payload),

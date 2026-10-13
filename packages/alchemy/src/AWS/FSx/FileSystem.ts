@@ -154,10 +154,16 @@ export const FileSystem = Resource<FileSystem>("AWS.FSx.FileSystem");
 const fsxTagsToRecord = (tags: readonly fsx.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
-const deleteConfigFor = (type: fsx.FileSystemType): Partial<fsx.DeleteFileSystemRequest> => {
-  switch (type) {
+const deleteConfigFor = (fs: fsx.FileSystem): Partial<fsx.DeleteFileSystemRequest> => {
+  switch (fs.FileSystemType) {
     case "LUSTRE":
-      return { LustreConfiguration: { SkipFinalBackup: true } };
+      // Scratch deployments have no backups at all — FSx rejects ANY
+      // LustreConfiguration on delete ("Final backup during delete is not
+      // supported on file systems using the Scratch deployment type"), even
+      // SkipFinalBackup: true.
+      return fs.LustreConfiguration?.DeploymentType?.startsWith("SCRATCH")
+        ? {}
+        : { LustreConfiguration: { SkipFinalBackup: true } };
     case "WINDOWS":
       return { WindowsConfiguration: { SkipFinalBackup: true } };
     case "OPENZFS":
@@ -348,10 +354,13 @@ export const FileSystemProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // Observe first: the delete options depend on the deployment type.
+          const fs = yield* findById(output.fileSystemId);
+          if (fs === undefined || fs.Lifecycle === "DELETING") return;
           yield* fsx
             .deleteFileSystem({
               FileSystemId: output.fileSystemId,
-              ...deleteConfigFor(output.fileSystemType),
+              ...deleteConfigFor(fs),
             })
             .pipe(Effect.catchTag("FileSystemNotFound", () => Effect.void));
         }),

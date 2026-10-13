@@ -134,7 +134,7 @@ export const packEnvValue = (value: unknown): string =>
  * payload still carries the marker for the runtime `get` accessor.
  */
 export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Redacted<string> =>
-  Redacted.isRedacted(value) ? Redacted.make(packEnvValue(value)) : packEnvValue(value);
+  Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its

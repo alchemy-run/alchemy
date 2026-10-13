@@ -174,11 +174,9 @@ export const ConfigurationSetProvider = () =>
             observed = yield* getByName(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new SmsVoiceConfigurationSetMissing({
-                message: `configuration set '${name}' not observable after create`,
-              }),
-            );
+            return yield* new SmsVoiceConfigurationSetMissing({
+              message: `configuration set '${name}' not observable after create`,
+            });
           }
 
           // 3. Sync default message type — diff observed against desired;

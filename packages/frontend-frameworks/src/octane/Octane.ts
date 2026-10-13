@@ -230,29 +230,25 @@ export const make: (
         catch: (error) => fail("Failed to load the project's octane.config.ts", error),
       });
       if (config === null || config.router.routes.length === 0) {
-        return yield* Effect.fail(
-          fail(
-            "The project has no octane.config.ts routes. A fullstack Octane app " +
-              "(routes + SSR) is required here; a client-only Octane SPA deploys " +
-              "through the plain Vite integration instead.",
-          ),
+        return yield* fail(
+          "The project has no octane.config.ts routes. A fullstack Octane app " +
+            "(routes + SSR) is required here; a client-only Octane SPA deploys " +
+            "through the plain Vite integration instead.",
         );
       }
       if (
         (config.adapter !== undefined || target.requiresAdapter) &&
         config.adapter?.name !== target.adapterName
       ) {
-        return yield* Effect.fail(
-          fail(
-            config.adapter?.name === undefined
-              ? `octane.config.ts selects no deploy adapter. Add the "${target.platform}" ` +
-                  `adapter from ${target.adapterPackage}, e.g. ` +
-                  `\`import { ${target.adapterName} } from "${target.adapterPackage}"\` ` +
-                  `and \`adapter: ${target.adapterName}()\`.`
-              : `octane.config.ts selects the "${config.adapter.name}" deploy adapter, but ` +
-                  `this build targets "${target.platform}" — use the "${target.adapterName}" ` +
-                  `adapter from ${target.adapterPackage} instead.`,
-          ),
+        return yield* fail(
+          config.adapter?.name === undefined
+            ? `octane.config.ts selects no deploy adapter. Add the "${target.platform}" ` +
+                `adapter from ${target.adapterPackage}, e.g. ` +
+                `\`import { ${target.adapterName} } from "${target.adapterPackage}"\` ` +
+                `and \`adapter: ${target.adapterName}()\`.`
+            : `octane.config.ts selects the "${config.adapter.name}" deploy adapter, but ` +
+                `this build targets "${target.platform}" — use the "${target.adapterName}" ` +
+                `adapter from ${target.adapterPackage} instead.`,
         );
       }
 
@@ -324,7 +320,7 @@ export const make: (
 
       const url = server.resolvedUrls?.local[0];
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
 
       // Bounded readiness probe: any HTTP response counts (vite serves
@@ -391,16 +387,12 @@ export const readOctaneOutput = (
       entryName,
     );
     if (serverModules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The Octane build produced no server modules in ${dirs.serverDir}`),
-      );
+      return yield* fail(`The Octane build produced no server modules in ${dirs.serverDir}`);
     }
     if (serverModules[0]?.name !== entryName) {
-      return yield* Effect.fail(
-        fail(
-          `The Octane build produced no "${entryName}" entry in ${dirs.serverDir} — ` +
-            "did the deploy adapter's adapt() pass run?",
-        ),
+      return yield* fail(
+        `The Octane build produced no "${entryName}" entry in ${dirs.serverDir} — ` +
+          "did the deploy adapter's adapt() pass run?",
       );
     }
     return {

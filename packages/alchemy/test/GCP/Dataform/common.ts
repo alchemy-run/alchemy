@@ -10,6 +10,11 @@ export const logLevel = Effect.provideService(
 
 export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
+/** The testing profile's own service account, derived from the configured project. */
+export const testServiceAccount = currentProject.pipe(
+  Effect.map((project) => `alchemy-testing@${project}.iam.gserviceaccount.com`),
+);
+
 export const waitUntilGone = <E extends { readonly _tag: string }, R>(
   get: Effect.Effect<unknown, E, R>,
 ) =>
