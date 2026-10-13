@@ -167,29 +167,75 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```
 
 ```ts
-// src/Sandbox.ts
+// src/Sandbox.ts — the shape the Durable Object uses (start, exec, setEgress, stop).
+// No host and no implementation: that's chosen per platform below.
 import * as AI from "alchemy/AI";
 
 export class Sandbox extends AI.Sandbox<Sandbox>()("Sandbox") {}
 ```
 
+There is no `Sandbox.make`. A host constructor takes the declaration, the
+host's props, and the program, and the program provides its own layers,
+because only code written for a host knows what that host offers:
+
 ```ts
-// src/Sandbox.runtime.ts — nothing about the proxy here
+// src/Sandbox.microvm.ts — the program on an AWS microVM
 import * as AI from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
+import * as AWS from "alchemy/AWS";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Gateway from "./gateway.ts";
 import { Sandbox } from "./Sandbox.ts";
 
-export default Sandbox.make(
-  { main: import.meta.url, runtime: "node", image: "node:24-bookworm" },
+export default AWS.MicroVM.Sandbox(
+  Sandbox,
+  {
+    main: import.meta.url,
+    image: "node:24-bookworm",
+    memory: "32 GB",
+    cpu: 8,
+    // Where the proxy sends egress traffic. One Worker instead: `{ worker: Api, path: "/egress" }`.
+    gateway: { worker: Gateway },
+  },
   Effect.gen(function* () {
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" });
     return { fetch: yield* AI.serveHarnessHttp(claude) };
-  }),
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata))),
 );
 ```
 
+```ts
+// src/Sandbox.cloudflare.ts — the same program in a Cloudflare Container
+import * as AI from "alchemy/AI";
+import * as Anthropic from "alchemy/Anthropic";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import { Sandbox } from "./Sandbox.ts";
+
+export default Cloudflare.Containers.Sandbox(
+  Sandbox,
+  {
+    main: import.meta.url,
+    image: "node:24-bookworm",
+    instance: "standard-4",
+    schedulingPolicy: "durable_object",
+  },
+  Effect.gen(function* () {
+    const claude = yield* Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" });
+    return { fetch: yield* AI.serveHarnessHttp(claude) };
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+Nothing about the proxy appears in either: on a microVM the bootstrap starts
+it (section 7); in a Cloudflare Container there is none (section 11).
+
 ## 3. User code: pick the platform
+
+Pick the platform by choosing which implementation to provide:
 
 ```ts
 // alchemy.run.ts
@@ -199,8 +245,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import Gateway from "./src/gateway.ts";
-import SandboxLive from "./src/Sandbox.runtime.ts";
+import SandboxLive from "./src/Sandbox.microvm.ts"; // or ./src/Sandbox.cloudflare.ts
 import Api from "./src/worker.ts";
 
 export default Alchemy.Stack(
@@ -212,17 +257,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const api = yield* Api;
     return { api: api.url.as<string>() };
-  }).pipe(
-    // Cloudflare: Effect.provide(Cloudflare.Containers.Sandbox(SandboxLive, { instance: "standard-4" })),
-    Effect.provide(
-      AWS.MicroVM.Sandbox(SandboxLive, {
-        memory: "32 GB",
-        cpu: 8,
-        // Where the sandbox's proxy sends egress traffic. One Worker: `{ worker: Api, path: "/egress" }`.
-        gateway: { worker: Gateway },
-      }),
-    ),
-  ),
+  }).pipe(Effect.provide(SandboxLive)),
 );
 ```
 
@@ -252,7 +287,7 @@ from the grant at runtime (section 7).
 ## 5. Deploy time: what the microVM Layer binds into the hosting Worker
 
 ```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts (Layer construction, deploy time)
+// alchemy internal: AWS/MicroVM/Sandbox.ts (when the Durable Object yields Sandbox, deploy time)
 const worker = yield* Cloudflare.Worker; // the Worker hosting the Durable Object
 
 // Signs grants here; Cloudflare.EgressGateway yields the same declaration to verify them,
@@ -307,7 +342,7 @@ start: ({ egress }) =>
     // Only this Durable Object can change the sandbox's grant.
     controlSecret = crypto.randomUUID();
     yield* microvms.run({
-      image: imageRef, // Sandbox.make's bundle + Alchemy's bootstrap + section 4's layers
+      image: imageRef, // the program's bundle + Alchemy's bootstrap + section 4's layers
       env: {
         ...imageEnv, // GH_TOKEN=alchemy-egress, ALCHEMY_EGRESS_PROXY=1
         ALCHEMY_EGRESS_GATEWAY: env.ALCHEMY_EGRESS_GATEWAY,
@@ -510,30 +545,29 @@ minutes. The tokens stay in the Worker.
 
 ## 11. Cloudflare Containers stay as they are
 
-```ts
-Effect.provide(Cloudflare.Containers.Sandbox(SandboxLive, { instance: "standard-4" }));
-```
-
-There's no proxy, no grant and no gateway here: the Durable Object intercepts
-the container's traffic and runs the same handlers (built). The one change
-for Cloudflare is streaming request bodies instead of buffering them; today
-`makeEgressHandle` reads the whole body.
+`src/Sandbox.cloudflare.ts` (section 2) needs no proxy, grant or gateway:
+the Durable Object intercepts the container's traffic and runs the same
+handlers (built). The one change for Cloudflare is streaming request bodies
+instead of buffering them; today `makeEgressHandle` reads the whole body.
 
 ## 12. Every environment
 
+Each host is a constructor over the same `Sandbox` declaration, taking that
+host's props and a program that provides that host's layers:
+
 ```ts
 // Cloudflare Container: interception (built)
-Effect.provide(Cloudflare.Containers.Sandbox(SandboxLive, { instance: "standard-4" }));
+Cloudflare.Containers.Sandbox(Sandbox, { main, image, instance: "standard-4" }, program);
 
 // AWS microVM: sections 4–10
-Effect.provide(AWS.MicroVM.Sandbox(SandboxLive, { memory: "32 GB", cpu: 8 }));
+AWS.MicroVM.Sandbox(Sandbox, { main, image, memory: "32 GB", cpu: 8, gateway }, program);
 
 // ECS / Fly / Kubernetes: the same proxy and gateway; only how the sandbox starts differs
-Effect.provide(AWS.ECS.Sandbox(SandboxLive, { cpu: 8, memory: "32 GB" }));
-Effect.provide(Fly.Sandbox(SandboxLive, { size: "performance-8x" }));
+AWS.ECS.Sandbox(Sandbox, { main, image, cpu: 8, memory: "32 GB", gateway }, program);
+Fly.Sandbox(Sandbox, { main, image, size: "performance-8x", gateway }, program);
 
 // A process on your machine under alchemy dev: the same proxy; the gateway is the local Worker
-Effect.provide(Local.Sandbox(SandboxLive));
+Local.Sandbox(Sandbox, { main, gateway }, program);
 ```
 
 ## 13. Open questions
