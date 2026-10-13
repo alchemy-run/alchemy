@@ -178,21 +178,19 @@ An account needs its balance to decide a withdrawal. It doesn't need a statement
 
 <DAG
   nodes={[
-    { id: "commands", label: "commands", type: "change something", kind: "command" },
-    { id: "aggregates", label: "aggregates", type: "decide", kind: "aggregate" },
-    { id: "events", label: "events", type: "the record", kind: "event" },
-    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
-    { id: "statement", label: "Statement", type: "view", kind: "view" },
-    { id: "dashboard", label: "Dashboard", type: "view", kind: "view" },
+    { id: "commands", label: "Commands", type: "change something", kind: "command", col: 0, row: 0 },
+    { id: "aggregates", label: "Aggregates", type: "decide", kind: "aggregate", col: 1, row: 0 },
+    { id: "events", label: "Events", type: "the record", kind: "event", col: 2, row: 0 },
+    { id: "views", label: "Views", type: "one per question", kind: "view", col: 1, row: 1 },
+    { id: "queries", label: "Queries", type: "read the views", col: 0, row: 1 },
   ]}
   edges={[
     { from: "commands", to: "aggregates" },
     { from: "aggregates", to: "events" },
-    { from: "events", to: "summary", dashed: true },
-    { from: "events", to: "statement", dashed: true },
-    { from: "events", to: "dashboard", dashed: true },
+    { from: "events", to: "views", dashed: true },
+    { from: "views", to: "queries" },
   ]}
-  caption="The command side records events. The query side builds a view for each question from them."
+  caption="The command side records events. The query side builds views from them, and reads go to the views."
 />
 
 The split lets each side do one job well. Aggregates stay small, holding only what their rules need. Views can be as numerous and as specialized as the screens that use them, and adding one never touches a rule. A new question about past activity can be answered by building a new view from the existing events.
