@@ -355,6 +355,20 @@ export interface ExternalContainerProps extends ContainerApplicationPropsBase {
    * with {@link context}).
    */
   dockerfile?: string | InlineDockerfile;
+  /**
+   * Docker build arguments (`--build-arg`). They are part of the image's
+   * input hash, so changing one rebuilds the image.
+   */
+  buildArgs?: Record<string, string>;
+  /**
+   * BuildKit secrets for the build, keyed by id. Mount one in a `RUN` step
+   * with `--mount=type=secret,id=<id>` (read it from `/run/secrets/<id>`, or
+   * add `env=<NAME>` to expose it as an environment variable).
+   *
+   * Secrets never enter the image or its build history, and they are left
+   * out of the image's input hash: rotating one does not rebuild the image.
+   */
+  buildSecrets?: Record<string, Redacted.Redacted<string>>;
 }
 
 /**
@@ -476,6 +490,8 @@ export interface AnyContainerApplicationProps extends Omit<
   image?: string;
   context?: string;
   dockerfile?: string | InlineDockerfile;
+  buildArgs?: Record<string, string>;
+  buildSecrets?: Record<string, Redacted.Redacted<string>>;
   handler?: string;
   runtime?: "bun" | "node";
   external?: string[];
@@ -918,6 +934,7 @@ export declare namespace DevContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;

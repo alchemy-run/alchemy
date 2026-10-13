@@ -486,6 +486,22 @@ type ContainerShape<Shape> = {
  * }) {}
  * ```
  *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // `buildSecrets` are BuildKit secrets: mounted only into the `RUN` step
+ * // that asks for one, never written to a layer, and left out of the
+ * // image hash, so rotating a token does not rebuild the image.
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   context: `${import.meta.dirname}/api`,
+ *   buildArgs: { NODE_ENV: "production" },
+ *   buildSecrets: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) },
+ * }) {}
+ * ```
+ *
+ * ```dockerfile
+ * RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * ```
+ *
  * Builds are cached by default at
  * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
  * The generated physical name includes the stage and resource instance, so

@@ -111,8 +111,9 @@ export const LocalContainerProvider = () =>
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: "Dockerfile",
+                buildArgs: news.buildArgs,
               } as DevContainerImage,
-              hash: yield* sha256Object({ dockerfile: content }),
+              hash: yield* sha256Object({ dockerfile: content, buildArgs: news.buildArgs }),
             };
           }
 
@@ -130,10 +131,12 @@ export const LocalContainerProvider = () =>
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
+              buildArgs: news.buildArgs,
             } as DevContainerImage,
             hash: yield* sha256Object({
               contextHash,
               dockerfile: dockerfileContent,
+              buildArgs: news.buildArgs,
             }),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
@@ -154,6 +157,7 @@ export const LocalContainerProvider = () =>
           image: news.image,
           dockerfile: news.dockerfile,
           context: news.context,
+          buildArgs: news.buildArgs,
           runtime: news.runtime,
           handler: news.handler,
           isExternal: news.isExternal,
@@ -173,6 +177,16 @@ export const LocalContainerProvider = () =>
         }
         return picked as AnyContainerApplicationProps;
       };
+
+      // Attached outside `prepareImage` for the same reason env is: secrets
+      // may be binding Outputs that have not resolved when its cache warms.
+      const withBuildSecrets = (
+        dev: DevContainerImage,
+        news: AnyContainerApplicationProps,
+      ): DevContainerImage =>
+        "dockerfile" in dev && news.buildSecrets !== undefined
+          ? { ...dev, buildSecrets: news.buildSecrets }
+          : dev;
 
       const placeholderConfiguration = (
         props: AnyContainerApplicationProps,
@@ -229,7 +243,7 @@ export const LocalContainerProvider = () =>
             // workerd resolves each image by its key in the class's image
             // map, so locally the image reference is the Container's id.
             image: id,
-            dev,
+            dev: withBuildSecrets(dev, news),
             hash: { image: hash },
           } satisfies ContainerApplication["Attributes"];
         }
@@ -248,7 +262,7 @@ export const LocalContainerProvider = () =>
           durableObjects: undefined,
           createdAt: new Date().toISOString(),
           version: 1,
-          dev: { ...dev, env },
+          dev: { ...withBuildSecrets(dev, news), env },
           hash: { image: hash },
         } satisfies ContainerApplication["Attributes"];
       });

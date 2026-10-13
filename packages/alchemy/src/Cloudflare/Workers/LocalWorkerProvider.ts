@@ -428,6 +428,9 @@ export const LocalWorkerProvider = () =>
         const toRuntimeImage = (image: DevContainerImage) => ({
           ...image,
           env: unwrapRedacted(image.env),
+          ...("buildSecrets" in image
+            ? { buildSecrets: unwrapRedacted(image.buildSecrets) }
+            : undefined),
         });
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
         yield* assertBindingContainersOnAsyncClasses(
