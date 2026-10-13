@@ -36,7 +36,27 @@ A client deposits 100 into account `a-1`. Here is everything that happens, from 
 
 Every command names its target, the id of one aggregate instance. `DepositMoney` targets an `AccountId`, so the model routes it to account `a-1` and nowhere else.
 
+```typescript title="src/depositAndRead.ts"
+const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+```
+
 Each instance handles one command at a time. If two commands for `a-1` arrive together, the second waits until the first has committed, then sees the state it left behind. Commands for different accounts run in parallel, since they can't affect each other.
+
+<DAG
+  nodes={[
+    { id: "d1", label: "DepositMoney", type: "to a-1", layer: 0 },
+    { id: "w1", label: "WithdrawMoney", type: "to a-1", layer: 0 },
+    { id: "d2", label: "DepositMoney", type: "to a-2", layer: 0 },
+    { id: "a1", label: "Account a-1", type: "one at a time", layer: 1, tone: "accent" },
+    { id: "a2", label: "Account a-2", type: "one at a time", layer: 1, tone: "accent" },
+  ]}
+  edges={[
+    { from: "d1", to: "a1" },
+    { from: "w1", to: "a1" },
+    { from: "d2", to: "a2" },
+  ]}
+  caption="Commands to the same account queue; commands to different accounts don't wait for each other."
+/>
 
 ## The aggregate decides
 
@@ -57,6 +77,24 @@ If it returns events, each one is folded into the state with `evolve`, in order.
 
 The new events are appended to the instance's stream, each with the next sequence number. In the same atomic write, the instance stores its new state and version, the reply to the caller, and a delivery for every view and policy that consumes these events. Either all of it is stored, or none of it is.
 
+<DAG
+  nodes={[
+    { id: "decide", label: "decide", type: "MoneyDeposited", layer: 0 },
+    { id: "commit", label: "one atomic write", layer: 1, tone: "accent" },
+    { id: "events", label: "events", type: "seq 3", layer: 2 },
+    { id: "state", label: "state", type: "version 3", layer: 2 },
+    { id: "receipt", label: "receipt", type: "reply", layer: 2 },
+    { id: "deliveries", label: "deliveries", type: "views, policies", layer: 2 },
+  ]}
+  edges={[
+    { from: "decide", to: "commit" },
+    { from: "commit", to: "events" },
+    { from: "commit", to: "state" },
+    { from: "commit", to: "receipt" },
+    { from: "commit", to: "deliveries" },
+  ]}
+/>
+
 The caller then gets a receipt: the stream and the version it committed at, the events, and the reply.
 
 Every command also carries an id. If a client resends the same command after a dropped connection, the instance finds the receipt it stored for that id and returns it again. The money is deposited once.
@@ -66,6 +104,10 @@ Every command also carries an id. If a client resends the same command after a d
 After the commit, each delivery is sent on. `AccountSummary` folds `MoneyDeposited` into its balance; `Statement` adds a line. Each one receives every event it consumes at least once, in the order its source recorded them, even if something restarts in between.
 
 That's why the dashed edges above come after the receipt. For a moment, the account knows the new balance and the summary doesn't yet. A reader who needs their own write passes the receipt along, and the view waits until it has applied that version before answering.
+
+```typescript title="src/depositAndRead.ts"
+return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+```
 
 ## Declare the model
 
@@ -158,5 +200,17 @@ Clients outside the model, a browser or another service, reach it through an [Ap
 ## Keep one language per model
 
 A model is one bounded context, so every name in it means one thing. When two parts of the business use a word differently, give each its own model. One model never sends commands to another model's aggregates directly; it calls that model's Api.
+
+<DAG
+  nodes={[
+    { id: "support", label: "Support", type: "Domain.Model", layer: 0 },
+    { id: "api", label: "BankApi", type: "Domain.Api", layer: 1 },
+    { id: "bank", label: "Bank", type: "Domain.Model", layer: 2, tone: "accent" },
+  ]}
+  edges={[
+    { from: "support", to: "api" },
+    { from: "api", to: "bank" },
+  ]}
+/>
 
 The pages that follow take each building block in turn, in the order a command meets them: [Command](/domain/command), [Event](/domain/event), [Aggregate](/domain/aggregate), [View](/domain/view), [Policy](/domain/policy) and [Api](/domain/api).

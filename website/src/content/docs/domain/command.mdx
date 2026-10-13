@@ -143,4 +143,8 @@ Commands sent by a [policy](/domain/policy) get ids derived from the event that 
 
 A command can also be scheduled to arrive at a later time, which is how deadlines work: "expire this transfer if nobody approves it within a day". Only commands that can't be refused can be scheduled, because there's no caller waiting to handle a rejection. See [Deadlines](/domain/deadlines).
 
+```typescript title="src/Transfer/TransferApprovalDeadline.ts"
+yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+```
+
 Next, [Event](/domain/event) covers what a command records when it succeeds.

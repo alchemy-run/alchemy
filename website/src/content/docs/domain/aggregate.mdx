@@ -123,6 +123,23 @@ if (used + cmd.amount > DAILY_LIMIT)
 
 Each instance processes one command at a time. When two withdrawals for the same account arrive together, the second is decided against the state the first one left. Both can't pass the balance check on the same money.
 
+<DAG
+  nodes={[
+    { id: "first", label: "WithdrawMoney 80", type: "arrives first", layer: 0 },
+    { id: "second", label: "WithdrawMoney 80", type: "arrives second", layer: 0 },
+    { id: "account", label: "Account a-1", type: "balance: 100", layer: 1, tone: "accent" },
+    { id: "ok", label: "MoneyWithdrawn", type: "balance: 20", layer: 2 },
+    { id: "no", label: "InsufficientFunds", type: "balance: 20", layer: 2, tone: "warn" },
+  ]}
+  edges={[
+    { from: "first", to: "account" },
+    { from: "second", to: "account" },
+    { from: "account", to: "ok" },
+    { from: "account", to: "no" },
+  ]}
+  caption="The second withdrawal is decided against the balance the first one left."
+/>
+
 Everything a command produces, its events, the new state, the reply and the deliveries to views and policies, commits together or not at all. This is what makes an instance a consistency boundary: its rules hold at every moment, for every observer.
 
 Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/sagas) drives the steps in order.

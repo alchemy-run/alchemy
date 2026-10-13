@@ -76,6 +76,21 @@ The `commandId` lets a client recognize the events its own commands caused, whic
 
 In the same commit that stores an event, the instance records a delivery for every [view](/domain/view) and [policy](/domain/policy) that consumes it. After the commit, each delivery is sent. Every consumer receives every event it consumes at least once, and in the order the instance recorded them.
 
+<DAG
+  nodes={[
+    { id: "event", label: "MoneyWithdrawn", type: "Account a-1", tone: "accent" },
+    { id: "summary", label: "AccountSummary", type: "view" },
+    { id: "statement", label: "Statement", type: "view" },
+    { id: "outflow", label: "DailyOutflow", type: "view" },
+  ]}
+  edges={[
+    { from: "event", to: "summary", dashed: true },
+    { from: "event", to: "statement", dashed: true },
+    { from: "event", to: "outflow", dashed: true },
+  ]}
+  caption="One event, delivered to every view that reads it."
+/>
+
 A view can record events of its own as it folds, such as one `StatementLine` per deposit or withdrawal. Those are delivered the same way, so another view or policy can build on them.
 
 ## Follow an instance's events

@@ -101,8 +101,37 @@ The client needs to know how to reach the server. `Domain.protocolWebSocket(url)
 
 Every call's error type says exactly what can fail. It's one of the rejections the entry declares, like `InsufficientFunds`; an error from its middleware, like `Unauthorized`; or an `RpcClientError` when the server can't be reached. Because each is a tagged error, `Effect.catchTag` handles the cases you expect and leaves the rest to propagate.
 
+```typescript
+// test/withdraw.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "../src/Account/AccountId.ts";
+import { type CustomerClient, mfa } from "./flows.ts";
+
+export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000 }, mfa).pipe(
+    Effect.catchTag("InsufficientFunds", (r) => Effect.fail(`only ${r.balance} available`)),
+  );
+  return receipt.reply.balance;
+});
+```
+
 ## Provide the client to an app
 
-An app usually wants one client for its whole lifetime. `CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` provides it. Code that sends commands depends on `CustomerApi.Client` and leaves the connection details to whoever provides the Layer. See [Integrate with foldkit](/domain/foldkit) for a full browser app.
+An app usually wants one client for its whole lifetime. `CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` provides it. The app's entry point provides it once, with the protocol to use:
+
+```typescript title="src/web/entry.ts"
+return CustomerApi.layerClient.pipe(
+  Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
+  Layer.provide(Socket.layerWebSocketConstructorGlobal),
+);
+```
+
+Anything that sends a command asks for the client, and doesn't care how it's connected:
+
+```typescript title="src/web/Bank.ts"
+const bank = yield* CustomerApi.Client;
+```
+
+See [Integrate with foldkit](/domain/foldkit) for a full browser app.
 
 To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).

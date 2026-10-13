@@ -17,9 +17,38 @@ A **domain model** is a deliberate simplification of the domain, written as code
 
 The model is about behaviour, not storage. It says what can happen in the domain, which rules govern it, and what's remembered as a result. How that's stored is a separate concern.
 
+Here is the shape of the bank's model, which the rest of this page explains piece by piece. A customer's app sends commands; aggregates decide them and record events; views turn events into what the app reads; and policies turn events into further commands.
+
+<DAG
+  nodes={[
+    { id: "commands", label: "Commands", type: "DepositMoney", layer: 0 },
+    { id: "aggregates", label: "Aggregates", type: "Account", layer: 1, tone: "accent" },
+    { id: "events", label: "Events", type: "MoneyDeposited", layer: 2 },
+    { id: "views", label: "Views", type: "AccountSummary", layer: 3 },
+    { id: "policies", label: "Policies", type: "FraudReview", layer: 3 },
+  ]}
+  edges={[
+    { from: "commands", to: "aggregates" },
+    { from: "aggregates", to: "events" },
+    { from: "events", to: "views", dashed: true },
+    { from: "events", to: "policies", dashed: true },
+    { from: "policies", to: "commands" },
+  ]}
+  caption="Clients send commands and read views. Dashed edges happen shortly after the events are recorded."
+/>
+
 ## A shared language
 
 DDD asks that the model and the people who run the business use the same words for the same things. If the bank says customers *deposit money* into an *account*, the code says `DepositMoney` and `Account`, not `updateBalance` and `rows`.
+
+```typescript
+// src/language.ts
+import * as Domain from "alchemy/Domain";
+
+export class AccountOpened extends Domain.Event("AccountOpened") {}
+export class MoneyDeposited extends Domain.Event("MoneyDeposited") {}
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds") {}
+```
 
 This shared vocabulary is called the **ubiquitous language**. It means a conversation about a rule turns directly into a change in the code, and reading the code tells you how the business works. When the business has a word for something, the model uses it. When the model needs a word the business lacks, that's a sign something hasn't been understood yet.
 
@@ -191,8 +220,31 @@ Large businesses don't have a single language. To the bank, an "account" holds m
 
 DDD splits the business into **bounded contexts**: areas in which one model and one language apply consistently. Each has its own aggregates, views and policies. Contexts talk to each other through published interfaces, and never by reaching into each other's aggregates.
 
+<DAG
+  nodes={[
+    { id: "bank", label: "Account", type: "Banking: holds money", layer: 0, tone: "accent" },
+    { id: "api", label: "BankApi", type: "published interface", layer: 1 },
+    { id: "logins", label: "Account", type: "Identity: a login", layer: 2, tone: "accent" },
+  ]}
+  edges={[
+    { from: "logins", to: "api" },
+    { from: "api", to: "bank" },
+  ]}
+  caption="Two bounded contexts, each with its own meaning of Account, talking through an Api."
+/>
+
 ## How alchemy/Domain models these concepts
 
 Each concept on this page is a building block in `alchemy/Domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
+
+A model lists its building blocks:
+
+```typescript title="src/Bank.ts"
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account, Customer],
+  views: [AccountSummary, Statement],
+  policies: [MainAccountProvisioning],
+}) {}
+```
 
 Next, [Domain model](/domain/model) follows a single command through a running model.

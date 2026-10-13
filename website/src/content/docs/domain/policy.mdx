@@ -64,6 +64,19 @@ A policy never runs in the same step as the event it reacts to. The customer's r
 
 So there's a moment when the customer exists and their account doesn't yet. That's fine for opening an account, and it's the only way to coordinate two aggregates, since each is its own consistency boundary. It's not fine for a rule that must hold the instant a command commits, like "a frozen account can't be withdrawn from". That rule belongs in the aggregate's `decide`, even when it's about the aggregate's own events. See [Aggregate](/domain/aggregate#one-command-at-a-time).
 
+<DAG
+  nodes={[
+    { id: "c1", label: "commit 1", type: "Customer c-1", layer: 0 },
+    { id: "policy", label: "policy", type: "MainAccountProvisioning", layer: 1, tone: "accent" },
+    { id: "c2", label: "commit 2", type: "Account c-1-main", layer: 2 },
+  ]}
+  edges={[
+    { from: "c1", to: "policy", dashed: true },
+    { from: "policy", to: "c2" },
+  ]}
+  caption="Two commits, in two aggregates. Between them, the customer exists and the account doesn't yet."
+/>
+
 ## Make it safe to run twice
 
 Every event reaches every policy that reacts to it, in order for each source instance, even across restarts. To guarantee that, the model may deliver an event more than once: if a handler fails or the host restarts midway, it's run again.
@@ -143,5 +156,20 @@ The freeze is then recorded as done by `FraudReview`, so the account's history s
 ## Chain policies into a process
 
 One policy covers one reaction. A process with several steps, like a transfer that debits one account, credits another, and refunds the first if the second fails, is a chain of policies, each reacting to the previous step's events. That's a [saga](/domain/sagas).
+
+<DAG
+  nodes={[
+    { id: "requested", label: "Transfer t-1", type: "TransferRequested", layer: 0 },
+    { id: "debit", label: "Account a-1", type: "DebitTransfer", layer: 1 },
+    { id: "credit", label: "Account a-2", type: "CreditTransfer", layer: 2 },
+    { id: "refund", label: "Account a-1", type: "RefundTransfer", layer: 3, tone: "warn" },
+  ]}
+  edges={[
+    { from: "requested", to: "debit", dashed: true },
+    { from: "debit", to: "credit", dashed: true },
+    { from: "credit", to: "refund", dashed: true },
+  ]}
+  caption="Each step is a policy reacting to the last. If the credit is refused, a refund undoes the debit."
+/>
 
 Next, [Api](/domain/api) decides which commands and reads each kind of client can reach.
