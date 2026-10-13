@@ -256,6 +256,8 @@ export default defineConfig({
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
     // The Birthday Week post was published as beta.82, then re-released as beta.83.
     "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
+    // Get started was folded into the overview and the tutorial.
+    "/domain/getting-started": "/domain/tutorial/part-1",
   },
   prefetch: true,
   devToolbar: { enabled: false },
@@ -1483,7 +1485,6 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/domain" },
             { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
-            { label: "Get started", link: "/domain/getting-started" },
             {
               label: "Tutorial",
               collapsed: false,
