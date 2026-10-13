@@ -3,7 +3,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
-import { terminal } from "../../agents.ts";
+import { agents, terminal } from "../../agents.ts";
 import { PredictiveEcho } from "./predict.ts";
 
 const THEME = {
@@ -62,7 +62,22 @@ export function SessionTerminal({ sessionId }: { sessionId: string }) {
         },
       );
     };
-    connect();
+    // Attach only to a running machine: a suspended (or settled) one starts
+    // only when asked, with a keypress.
+    let disposed = false;
+    void agents
+      .machine(sessionId)
+      .then((machine) => machine.state)
+      .catch(() => "suspended" as const)
+      .then((state) => {
+        if (disposed) return;
+        if (state === "running") {
+          connect();
+        } else {
+          ended = true;
+          term.write("\x1b[2m[machine suspended — press any key to start it]\x1b[22m\r\n");
+        }
+      });
 
     const input = term.onData((data) => {
       if (ended) {
@@ -78,6 +93,7 @@ export function SessionTerminal({ sessionId }: { sessionId: string }) {
     term.focus();
 
     return () => {
+      disposed = true;
       observer.disconnect();
       input.dispose();
       resize.dispose();

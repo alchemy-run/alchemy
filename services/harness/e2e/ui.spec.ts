@@ -208,8 +208,27 @@ test("viewing or settling a session doesn't wake its machine", async ({ page, re
   await expect(page.locator(".is-user").filter({ hasText: "asleep" })).toBeVisible({
     timeout: 60_000,
   });
+  // Nor does opening its terminal: it says so, and waits for a keypress.
+  await page.getByRole("button", { name: "Toggle terminal" }).click();
+  await expect
+    .poll(() =>
+      page.getByTestId("terminal").evaluate((element) => {
+        const term = (
+          element as unknown as {
+            xterm: {
+              buffer: {
+                active: { getLine(i: number): { translateToString(): string } | undefined };
+              };
+            };
+          }
+        ).xterm;
+        return term.buffer.active.getLine(0)?.translateToString() ?? "";
+      }),
+    )
+    .toContain("machine suspended");
   await page.waitForTimeout(5_000);
   expect((await listed(viewed))?.state).toBe("suspended");
+  await page.getByRole("button", { name: "Toggle terminal" }).click();
 
   // Settled from the sidebar, never opened: it settles, and its machine stops.
   const row = page.locator("aside nav > div.group").filter({ hasText: unopened });

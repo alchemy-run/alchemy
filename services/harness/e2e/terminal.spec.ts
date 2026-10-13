@@ -33,6 +33,12 @@ test("the terminal toggles open at the bottom and runs commands in the session's
   await page.getByRole("button", { name: "Toggle terminal" }).click();
   await expect(page.getByTestId("terminal-panel")).toBeVisible();
 
+  // A machine that isn't running yet starts on a keypress.
+  await expect.poll(() => screen(page), { timeout: 60_000 }).toMatch(/[$#] *$|machine suspended/m);
+  if ((await screen(page)).includes("machine suspended")) {
+    await page.getByTestId("terminal").click();
+    await page.keyboard.press("Enter");
+  }
   // The shell starts once the session's container is up.
   await expect.poll(() => screen(page), { timeout: 180_000 }).toMatch(/[$#] *$/m);
   await page.getByTestId("terminal").click();
