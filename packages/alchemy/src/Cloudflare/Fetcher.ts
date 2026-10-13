@@ -119,8 +119,9 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
       request: HttpClientRequest.HttpClientRequest | HttpServerRequest.HttpServerRequest,
     ): any =>
       HttpClientRequest.isHttpClientRequest(request)
-        ? pipe(
-            HttpServerRequest.toWeb(HttpServerRequest.fromClientRequest(request)),
+        ? request.pipe(
+            HttpServerRequest.fromClientRequest,
+            HttpServerRequest.toWeb,
             Effect.flatMap(fetch),
             Effect.map((response) =>
               HttpClientResponse.fromWeb(request, response as any as Response),
@@ -208,8 +209,8 @@ export const toHttpClient = (fetcher: {
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 }) =>
-  HttpClient.make((request) => {
-    return Effect.suspend(() =>
+  HttpClient.make((request) =>
+    Effect.suspend(() =>
       // Rebuild the server request on every attempt so a retry re-serializes
       // the body instead of replaying a consumed one.
       fetcher
@@ -238,28 +239,24 @@ export const toHttpClient = (fetcher: {
           }),
         );
       }),
-    );
-  });
+    ),
+  );
 
 export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
   // `fromTransformStream` snapshots fiber context, then waits to acquire
   // the streams until a consumer opens the reader. `runSync` is only that
   // snapshot — connection still happens on first `socket.reader`.
-  Effect.runSync(
-    Socket.fromTransformStream(
-      Effect.tryPromise({
-        try: () =>
-          Promise.resolve(cfSocket.opened).then(
-            () =>
-              ({
-                readable: cfSocket.readable,
-                writable: cfSocket.writable,
-              }) as Socket.InputTransformStream,
-          ),
-        catch: (cause) =>
-          new Socket.SocketError({
-            reason: new Socket.SocketOpenError({ kind: "Unknown", cause }),
-          }),
+  Effect.tryPromise({
+    try: () =>
+      Promise.resolve(cfSocket.opened).then(
+        () =>
+          ({
+            readable: cfSocket.readable,
+            writable: cfSocket.writable,
+          }) as Socket.InputTransformStream,
+      ),
+    catch: (cause) =>
+      Socket.SocketError.make({
+        reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
       }),
-    ),
-  );
+  }).pipe(Socket.fromTransformStream, Effect.runSync);

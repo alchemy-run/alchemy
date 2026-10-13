@@ -43,9 +43,9 @@ const assertDomainDeleting = (name: string) =>
   );
 
 // OpenSearch domains take ~15-25 minutes to provision and are billed per
-// instance-hour while they exist. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// instance-hour while they exist. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create encrypted single-node domain, verify, destroy",
   (stack) =>
     Effect.gen(function* () {

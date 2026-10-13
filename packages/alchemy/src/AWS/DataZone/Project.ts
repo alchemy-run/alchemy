@@ -116,15 +116,19 @@ export const ProjectProvider = () =>
         return yield* datazone
           .getProject({ domainIdentifier: domainId, identifier: projectId })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.succeed(undefined),
+              AccessDeniedException: () => Effect.succeed(undefined),
+            }),
           );
       });
 
       const findByName = Effect.fn(function* (domainId: string, name: string) {
         const found = yield* datazone.listProjects({ domainIdentifier: domainId, name }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.succeed(undefined),
+          }),
         );
         const summary = (found?.items ?? []).find(
           (s) => unredact(s.name) === name && s.projectStatus !== "DELETING",
@@ -262,10 +266,12 @@ export const ProjectProvider = () =>
               skipDeletionCheck: true,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // deleting a project whose domain is already gone surfaces as
-              // AccessDenied — auth is checked before existence.
-              Effect.catchTag("AccessDeniedException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // deleting a project whose domain is already gone surfaces as
+                // AccessDenied — auth is checked before existence.
+                AccessDeniedException: () => Effect.void,
+              }),
             );
           yield* waitForGone(output.domainId, output.projectId);
         }),

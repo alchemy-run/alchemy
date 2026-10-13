@@ -3,9 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import path from "pathe";
 import type * as rolldown from "rolldown";
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
@@ -131,7 +129,6 @@ const configureCloudflarePlugins = (
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-  const dotAlchemy = yield* dotAlchemyDirectory;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
@@ -146,12 +143,11 @@ export const WorkerBundle = Effect.gen(function* () {
     );
     const realMain = yield* sanitizeMain(options.main);
     const cwd = yield* findCwdForBundle(realMain).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find cwd for bundle: ${realMain}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find cwd for bundle: ${realMain}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );
@@ -222,7 +218,6 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      dir: path.join(dotAlchemy, "bundles", options.id),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
@@ -230,12 +225,11 @@ export const WorkerBundle = Effect.gen(function* () {
 
   const sanitizeMain = (main: string) =>
     resolveMainPath(main).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find real path for bundle: ${main}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find real path for bundle: ${main}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );

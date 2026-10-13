@@ -418,7 +418,7 @@ export const DynamicRoutingProvider = () =>
               Effect.gen(function* () {
                 const holder = yield* findByName(accountId, gatewayId, name);
                 if (holder === undefined || holder.id === routeId) {
-                  return yield* Effect.fail(error);
+                  return yield* error;
                 }
                 yield* aiGateway
                   .deleteDynamicRouting({
@@ -474,8 +474,10 @@ export const DynamicRoutingProvider = () =>
         })
         .pipe(
           // Route already gone — or the whole parent gateway is gone.
-          Effect.catchTag("RouteNotFound", () => Effect.void),
-          Effect.catchTag("GatewayNotFound", () => Effect.void),
+          Effect.catchTags({
+            RouteNotFound: () => Effect.void,
+            GatewayNotFound: () => Effect.void,
+          }),
         );
     }),
     list: Effect.fn(function* () {
@@ -543,8 +545,10 @@ const listRoutes = (accountId: string, gatewayId: string) =>
  */
 const getRoute = (accountId: string, gatewayId: string, id: string) =>
   aiGateway.getDynamicRouting({ accountId, gatewayId, id }).pipe(
-    Effect.catchTag("RouteNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      RouteNotFound: () => Effect.succeed(undefined),
+      GatewayNotFound: () => Effect.succeed(undefined),
+    }),
   );
 
 /**

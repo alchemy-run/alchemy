@@ -193,11 +193,9 @@ export const DatastoreProvider = () =>
 
       const requireArn = Effect.fn(function* (properties: medicalimaging.DatastoreProperties) {
         if (properties.datastoreArn === undefined) {
-          return yield* Effect.fail(
-            new DatastoreIncomplete({
-              message: `data store '${properties.datastoreId}' has no ARN in the GetDatastore response`,
-            }),
-          );
+          return yield* new DatastoreIncomplete({
+            message: `data store '${properties.datastoreId}' has no ARN in the GetDatastore response`,
+          });
         }
         return properties.datastoreArn;
       });
@@ -205,7 +203,7 @@ export const DatastoreProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* medicalimaging
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         return toTagRecord(response?.tags);
       });
 
@@ -225,25 +223,19 @@ export const DatastoreProvider = () =>
         return yield* Effect.gen(function* () {
           const properties = yield* getById(datastoreId);
           if (properties === undefined) {
-            return yield* Effect.fail(
-              new DatastoreNotReady({
-                message: `data store '${datastoreId}' disappeared while waiting for ACTIVE`,
-              }),
-            );
+            return yield* new DatastoreNotReady({
+              message: `data store '${datastoreId}' disappeared while waiting for ACTIVE`,
+            });
           }
           if (properties.datastoreStatus === "CREATE_FAILED") {
-            return yield* Effect.fail(
-              new DatastoreIncomplete({
-                message: `data store '${datastoreId}' failed to create (status: CREATE_FAILED)`,
-              }),
-            );
+            return yield* new DatastoreIncomplete({
+              message: `data store '${datastoreId}' failed to create (status: CREATE_FAILED)`,
+            });
           }
           if (properties.datastoreStatus !== "ACTIVE") {
-            return yield* Effect.fail(
-              new DatastoreNotReady({
-                message: `data store '${datastoreId}' not active (status: ${properties.datastoreStatus})`,
-              }),
-            );
+            return yield* new DatastoreNotReady({
+              message: `data store '${datastoreId}' not active (status: ${properties.datastoreStatus})`,
+            });
           }
           return properties;
         }).pipe(retryWhileNotReady);
@@ -309,11 +301,9 @@ export const DatastoreProvider = () =>
               created !== undefined ? yield* getById(created.datastoreId) : yield* findByName(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new DatastoreIncomplete({
-                message: `data store '${name}' not found after create`,
-              }),
-            );
+            return yield* new DatastoreIncomplete({
+              message: `data store '${name}' not found after create`,
+            });
           }
 
           // Provisioning is async (CREATING → ACTIVE); wait bounded so tag

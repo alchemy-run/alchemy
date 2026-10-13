@@ -24,6 +24,12 @@ import {
   prepareContainerBuildContext,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
+import {
+  durableObjectPlaceholder,
+  hasImageSource,
+  isDurableObjectContainer,
+  validateContainerConfiguration,
+} from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
@@ -143,6 +149,7 @@ export const LocalContainerProvider = () =>
         if (typeof input !== "object" || input === null) return undefined;
         const news = input as AnyContainerApplicationProps;
         const picked = {
+          schedulingPolicy: news.schedulingPolicy,
           main: news.main,
           image: news.image,
           dockerfile: news.dockerfile,
@@ -155,7 +162,13 @@ export const LocalContainerProvider = () =>
           autoInstallExternals: news.autoInstallExternals,
         };
         if (!isResolved(picked)) return undefined;
-        if (!picked.main && !picked.image && !picked.dockerfile && !picked.context) {
+        if (
+          picked.schedulingPolicy !== "durable_object" &&
+          !picked.main &&
+          !picked.image &&
+          !picked.dockerfile &&
+          !picked.context
+        ) {
           return undefined;
         }
         return picked as AnyContainerApplicationProps;
@@ -199,7 +212,27 @@ export const LocalContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
       }) {
+        yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
+        if (isDurableObjectContainer(news)) {
+          const attributes = durableObjectPlaceholder({
+            applicationId: output?.applicationId ?? generateLocalId(),
+            applicationName: yield* createContainerApplicationName(id, undefined),
+            accountId,
+            createdAt: output?.createdAt ?? new Date().toISOString(),
+            observability: news.observability,
+          });
+          if (!hasImageSource(news)) return attributes;
+          const { dev, hash } = yield* prepareImage(id, news);
+          return {
+            ...attributes,
+            // workerd resolves each image by its key in the class's image
+            // map, so locally the image reference is the Container's id.
+            image: id,
+            dev,
+            hash: { image: hash },
+          } satisfies ContainerApplication["Attributes"];
+        }
         const env = makeContainerEnv(news, accountId, bindings);
         const { dev, hash } = yield* prepareImage(id, news);
         return {
@@ -223,6 +256,9 @@ export const LocalContainerProvider = () =>
       return {
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
+          if (isResolved(news)) {
+            yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          }
           if (!output) return { action: "update" };
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
@@ -234,6 +270,9 @@ export const LocalContainerProvider = () =>
           // disabled this check for every effectful container.
           const imageInputs = resolvedImageInputs(news);
           if (imageInputs !== undefined) {
+            if (isDurableObjectContainer(imageInputs) && !hasImageSource(imageInputs)) {
+              return output.image !== undefined ? { action: "update" } : undefined;
+            }
             // Recompute fresh on every plan. `prepareImage` is memoized so
             // a plan's diff→precreate→reconcile chain bundles once — but
             // this provider runs in the RPC sidecar, whose `ArtifactStore`

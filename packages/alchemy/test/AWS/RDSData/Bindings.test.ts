@@ -15,9 +15,9 @@ import { reapRDSDataOrphans } from "./reap";
 
 // Aurora Serverless v2 cluster + writer-instance provisioning takes 5-15
 // minutes — far beyond the speed doctrine's budget — so the ENTIRE live suite
-// (deploy hook, every test, destroy hook) is opt-in behind AWS_TEST_SLOW=1.
+// (deploy hook, every test, destroy hook) skipped under `--fast`.
 // A run without the env var is skip-clean: no AWS calls, no side effects.
-const SLOW = !!process.env.AWS_TEST_SLOW;
+const SLOW = !process.env.FAST;
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);

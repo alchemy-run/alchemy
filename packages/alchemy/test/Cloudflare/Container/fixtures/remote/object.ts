@@ -48,11 +48,14 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
     const container = yield* RemoteContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: () =>
           Effect.gen(function* () {
+            yield* start;
             const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
@@ -62,15 +65,10 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
         // runtime must downgrade the scheme on the container hop.
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
+          yield* start;
           return yield* fetch(request);
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(RemoteContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

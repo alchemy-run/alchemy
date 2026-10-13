@@ -116,8 +116,10 @@ export const SecuritySettingsProvider = () =>
             }),
             // Entitlement-gated or out-of-band-deleted zones reject the
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
-            Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              AiSecurityNotEntitled: () => Effect.succeed(undefined),
+              ZoneNotAuthorized: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -184,8 +186,10 @@ export const SecuritySettingsProvider = () =>
       // entitlement was revoked, the setting is unreachable and there is
       // nothing we can restore.
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(
-        Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
-        Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          ZoneNotAuthorized: () => Effect.succeed(undefined),
+          AiSecurityNotEntitled: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

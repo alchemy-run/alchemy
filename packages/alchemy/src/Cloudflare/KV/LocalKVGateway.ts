@@ -23,6 +23,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
+import { isInstantNamespaceLocalId } from "./InstantNamespaceLocal.ts";
 import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -53,11 +54,18 @@ export const makeProxyKVNamespaceHelpers = (
   const use = <T>(
     fn: (raw: runtime.KVNamespace<string>) => Promise<T>,
   ): Effect.Effect<T, NamespaceError> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining requirements are satisfied by the captured ambient context
     Effect.scoped(
       Effect.gen(function* () {
         const proxy = yield* open({
           name: gatewayName("alchemy-kv-gateway", namespaceId),
-          bindings: [KvNamespace.local({ binding: "KV", id: namespaceId })],
+          bindings: [
+            KvNamespace.local({
+              binding: "KV",
+              id: namespaceId,
+              mode: isInstantNamespaceLocalId(namespaceId) ? "instant" : undefined,
+            }),
+          ],
         });
         const kv = (proxy.env as Record<string, unknown>).KV as runtime.KVNamespace<string>;
         return yield* tryPromise(() => fn(kv));

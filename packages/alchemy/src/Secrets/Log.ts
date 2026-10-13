@@ -24,7 +24,7 @@ export const envKeys = (provider: ConfigProvider.ConfigProvider) => {
       const own = node.value === undefined ? [] : [name];
       return [...own, ...children.flat()];
     });
-  return walk([]).pipe(Effect.catch(() => Effect.succeed([])));
+  return walk([]).pipe(Effect.orElseSucceed(() => []));
 };
 
 /** `Loaded 3 secrets from <source>: A, B, C` at debug level. Names are sorted. */

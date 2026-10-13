@@ -58,38 +58,35 @@ export const CredentialsStoreLive = Layer.effect(
         const filePath = yield* validateCredentialPath(profile, provider);
         const data = yield* fs.readFileString(filePath).pipe(
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Could not read credentials at '${filePath}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Could not read credentials at '${filePath}'.`,
+              cause,
+            }),
           ),
         );
         if (data === undefined) return undefined;
         const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
           data,
         ).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Stored credentials at '${filePath}' contain invalid JSON.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Stored credentials at '${filePath}' contain invalid JSON.`,
+              cause,
+            }),
           ),
         );
         const command = yield* profileCommandHint(
           `alchemy profile edit --profile ${profile} --reconfigure ${provider}`,
         );
         return yield* Schema.decodeUnknownEffect(schema)(json).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message:
-                  `Stored credentials at '${filePath}' do not match the expected shape. ` +
-                  `Run \`${command}\` to replace them.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message:
+                `Stored credentials at '${filePath}' do not match the expected shape. ` +
+                `Run \`${command}\` to replace them.`,
+              cause,
+            }),
           ),
         );
       });
@@ -103,12 +100,11 @@ export const CredentialsStoreLive = Layer.effect(
       Effect.gen(function* () {
         const filePath = yield* validateCredentialPath(profile, provider);
         const encoded = yield* Schema.encodeEffect(schema)(credentials).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Credentials for '${provider}' do not match the declared schema.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Credentials for '${provider}' do not match the declared schema.`,
+              cause,
+            }),
           ),
         );
         yield* Effect.gen(function* () {
@@ -117,12 +113,11 @@ export const CredentialsStoreLive = Layer.effect(
           yield* fs.chmod(directory, 0o700);
           yield* writeFileAtomic(fs, filePath, JSON.stringify(encoded, null, 2), 0o600);
         }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Could not write credentials at '${filePath}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Could not write credentials at '${filePath}'.`,
+              cause,
+            }),
           ),
         );
       });
@@ -132,12 +127,11 @@ export const CredentialsStoreLive = Layer.effect(
         Effect.flatMap((filePath) =>
           fs.remove(filePath).pipe(
             Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-            Effect.mapError(
-              (cause) =>
-                new AuthError({
-                  message: `Could not delete credentials at '${filePath}'.`,
-                  cause,
-                }),
+            Effect.mapError((cause) =>
+              AuthError.make({
+                message: `Could not delete credentials at '${filePath}'.`,
+                cause,
+              }),
             ),
           ),
         ),
@@ -146,16 +140,15 @@ export const CredentialsStoreLive = Layer.effect(
     const deleteProfile = (profile: string) =>
       Effect.gen(function* () {
         yield* validateProfileName(profile).pipe(
-          Effect.mapError((cause) => new AuthError({ message: cause.message, cause })),
+          Effect.mapError((cause) => AuthError.make({ message: cause.message, cause })),
         );
         yield* fs.remove(profileCredentialsDirPath(profile), { recursive: true }).pipe(
           Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `Could not delete credentials for profile '${profile}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `Could not delete credentials for profile '${profile}'.`,
+              cause,
+            }),
           ),
         );
       });
@@ -174,10 +167,10 @@ const CREDENTIAL_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const validateCredentialPath = (profile: string, provider: string) =>
   Effect.gen(function* () {
     yield* validateProfileName(profile).pipe(
-      Effect.mapError((cause) => new AuthError({ message: cause.message, cause })),
+      Effect.mapError((cause) => AuthError.make({ message: cause.message, cause })),
     );
     if (!CREDENTIAL_KEY_PATTERN.test(provider)) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: `Invalid credential key '${provider}'.`,
       });
     }

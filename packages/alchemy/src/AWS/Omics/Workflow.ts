@@ -164,11 +164,9 @@ export const WorkflowProvider = () =>
           }),
         );
         if (final.status === "FAILED") {
-          return yield* Effect.fail(
-            new omics.ValidationException({
-              message: `Workflow ${workflowId} failed: ${final.statusMessage ?? "unknown"}`,
-            }),
-          );
+          return yield* omics.ValidationException.make({
+            message: `Workflow ${workflowId} failed: ${final.statusMessage ?? "unknown"}`,
+          });
         }
         return final;
       });

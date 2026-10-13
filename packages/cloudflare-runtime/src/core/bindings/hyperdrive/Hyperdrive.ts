@@ -57,7 +57,7 @@ export const local = (binding: string, hyperdriveId: string): BindingHook<Hyperd
           },
         })
       : Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "HyperdriveOriginMissing",
             message: `No hyperdrive origin was provided for binding "${binding}" (id: ${hyperdriveId}).`,
             hint: `Add an entry for "${hyperdriveId}" to \`worker.hyperdrives\`.`,

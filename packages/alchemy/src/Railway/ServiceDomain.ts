@@ -309,10 +309,11 @@ const createViaMutation = (input: {
     Effect.flatMap((created) =>
       input.domainId === undefined ? listedOrFail(missing()) : Effect.succeed(created),
     ),
-    Effect.catchTag("RailwayServiceDomainCreateFailed", (error) => listedOrFail(error)),
-    Effect.catchTag("RailwayServiceInstanceNotFound", (error) =>
-      input.domainId !== undefined ? listedOrFail(error) : Effect.fail(error),
-    ),
+    Effect.catchTags({
+      RailwayServiceDomainCreateFailed: (error) => listedOrFail(error),
+      RailwayServiceInstanceNotFound: (error) =>
+        input.domainId !== undefined ? listedOrFail(error) : Effect.fail(error),
+    }),
     Effect.catchTag("RailwayValidationError", (error) => listedOrFail(error)),
   );
 

@@ -216,7 +216,7 @@ const readInstance = Effect.fn(function* ({
 }: Pick<InstanceProps, "instanceArn" | "name">) {
   if (instanceArn) {
     const instance = yield* resolveInstance(instanceArn).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     return instance ? toInstanceAttributes(instance) : undefined;
   }

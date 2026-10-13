@@ -18,7 +18,7 @@ const armFunctionName = "alchemy-test-lambda-container-image-arm64";
 const zipFunctionName = "alchemy-test-lambda-container-image-zip";
 const externalFunctionName = "alchemy-test-lambda-container-image-external";
 const externalRepositoryName = "alchemy-test-lambda-external-image";
-const skipLive = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
+const skipLive = !!process.env.FAST;
 const liveTestTimeout = 240_000;
 
 const imageFunction = (
@@ -47,8 +47,8 @@ const zipFunction = (functionName: string) =>
 
 // Docker builds, ECR pushes, Lambda propagation, and the provider's bounded
 // CloudWatch Logs cleanup make these unsuitable for the default fast sweep.
-// Each test is kept within one deletion window and runs only when explicitly
-// requested with `AWS_TEST_SLOW=1`.
+// Each test is kept within one deletion window (~1-2 min each) and is
+// skipped under --fast.
 test.provider.skipIf(skipLive)(
   "builds, invokes, updates, and destroys an image function",
   (stack) =>

@@ -177,8 +177,10 @@ export const ZoneVpcAssociationProvider = () =>
             })
             .pipe(
               Effect.asVoid,
-              Effect.catchTag("VPCAssociationNotFound", () => Effect.void),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+              Effect.catchTags({
+                VPCAssociationNotFound: () => Effect.void,
+                NoSuchHostedZone: () => Effect.void,
+              }),
             );
         }),
       };

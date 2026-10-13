@@ -182,12 +182,10 @@ export const VpcPeeringConnectionProvider = () =>
       const describePeering = (pcxId: string) =>
         ec2.describeVpcPeeringConnections({ VpcPeeringConnectionIds: [pcxId] }).pipe(
           Effect.map((r) => r.VpcPeeringConnections?.[0]),
-          Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTags({
+            "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
+            "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+          }),
         );
 
       // Poll until the connection reaches a settled state (out of the transient
@@ -308,12 +306,10 @@ export const VpcPeeringConnectionProvider = () =>
               yield* session.note("Accepting VPC peering connection...");
               yield* ec2.acceptVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
                 // A concurrent reconcile may have accepted it already.
-                Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTags({
+                  "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
+                  "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+                }),
               );
               yield* waitFor(pcxId, "active");
             }
@@ -367,8 +363,10 @@ export const VpcPeeringConnectionProvider = () =>
 
           yield* session.note(`Deleting VPC peering connection: ${pcxId}`);
           yield* ec2.deleteVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
-            Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () => Effect.void),
-            Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () => Effect.void),
+            Effect.catchTags({
+              "InvalidVpcPeeringConnectionID.NotFound": () => Effect.void,
+              "InvalidVpcPeeringConnectionId.NotFound": () => Effect.void,
+            }),
           );
         }),
       };

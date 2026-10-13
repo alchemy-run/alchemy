@@ -143,8 +143,8 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         provideAnonymousRailway(effect, apiBaseUrl);
 
       const code = yield* withAnonymous(createLoginSession()).pipe(
-        Effect.mapError(
-          (e) => new AuthError({ message: "Railway login session create failed", cause: e }),
+        Effect.mapError((e) =>
+          AuthError.make({ message: "Railway login session create failed", cause: e }),
         ),
       );
 
@@ -158,7 +158,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       const runOpenUrl = Effect.runPromiseWith(services);
       const openFailed = yield* Interaction.openUrl(url).pipe(
         Effect.as(false),
-        Effect.catch(() => Effect.succeed(true)),
+        Effect.orElseSucceed(() => true),
       );
 
       const cancel = withAnonymous(cancelLoginSession(code)).pipe(Effect.catch(() => Effect.void));
@@ -183,15 +183,15 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         Effect.onInterrupt(() => cancel),
         Effect.tapError(() => cancel),
         Effect.mapError((e) =>
-          e instanceof AuthError
+          Schema.is(AuthError)(e)
             ? e
-            : new AuthError({ message: "Railway login session poll failed", cause: e }),
+            : AuthError.make({ message: "Railway login session poll failed", cause: e }),
         ),
       );
 
       if (token == null || token.length === 0) {
         yield* cancel;
-        return yield* new AuthError({
+        return yield* AuthError.make({
           message: "Railway login session timed out after 5 minutes.",
         });
       }
@@ -228,8 +228,8 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
 
     const configureCredentials = (profileName: string) =>
       configureInteractive(profileName).pipe(
-        Effect.mapError(
-          (e) => new AuthError({ message: "failed to configure credentials", cause: e }),
+        Effect.mapError((e) =>
+          AuthError.make({ message: "failed to configure credentials", cause: e }),
         ),
       );
 
@@ -269,7 +269,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
         : input.method === "env"
           ? Effect.succeed({ method: "env" as const })
           : Effect.fail(
-              new AuthError({
+              AuthError.make({
                 message: `Railway: unknown method '${input.method}'. Valid methods: stored, env. (OAuth is interactive-only.)`,
               }),
             );
@@ -292,32 +292,30 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       profileName: string,
       config: RailwayAuthConfig,
     ): Effect.Effect<RailwayResolvedCredentials, AuthError | NeedsReauth> =>
-      Effect.gen(function* () {
-        return yield* Match.value(config).pipe(
-          Match.when(
-            { method: "env" },
-            Effect.fn(function* () {
-              const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
-              if (!token) {
-                return yield* new AuthError({
-                  message: `Railway env credentials not found. Set ${RAILWAY_API_TOKEN_ENV}.`,
-                });
-              }
-              const apiBaseUrl = yield* resolveApiBaseUrl();
-              return {
-                type: "token" as const,
-                token,
-                tokenKind: "account" as const,
-                apiBaseUrl,
-                source: { type: "env" as const, details: RAILWAY_API_TOKEN_ENV },
-              } satisfies RailwayResolvedCredentials;
-            }),
-          ),
-          Match.when({ method: "stored" }, readStoredToken),
-          Match.when({ method: "oauth" }, readStoredToken),
-          Match.exhaustive,
-        );
-      });
+      Match.value(config).pipe(
+        Match.when(
+          { method: "env" },
+          Effect.fn(function* () {
+            const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
+            if (!token) {
+              return yield* AuthError.make({
+                message: `Railway env credentials not found. Set ${RAILWAY_API_TOKEN_ENV}.`,
+              });
+            }
+            const apiBaseUrl = yield* resolveApiBaseUrl();
+            return {
+              type: "token" as const,
+              token,
+              tokenKind: "account" as const,
+              apiBaseUrl,
+              source: { type: "env" as const, details: RAILWAY_API_TOKEN_ENV },
+            } satisfies RailwayResolvedCredentials;
+          }),
+        ),
+        Match.when({ method: "stored" }, readStoredToken),
+        Match.when({ method: "oauth" }, readStoredToken),
+        Match.exhaustive,
+      );
 
     const logout = (_profileName: string, config: RailwayAuthConfig) =>
       Match.value(config).pipe(
@@ -330,34 +328,31 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
       );
 
     const login = (profileName: string, config: RailwayAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "env" }, () =>
-            getEnvRedacted(RAILWAY_API_TOKEN_ENV).pipe(
-              Effect.flatMap((token) =>
-                token
-                  ? Effect.void
-                  : Effect.fail(
-                      new AuthError({
-                        message:
-                          `Railway: ${RAILWAY_API_TOKEN_ENV} is not set. Export it, or run ` +
-                          `\`alchemy profile edit --profile ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
-                      }),
-                    ),
-              ),
+      Match.value(config).pipe(
+        Match.when({ method: "env" }, () =>
+          getEnvRedacted(RAILWAY_API_TOKEN_ENV).pipe(
+            Effect.flatMap((token) =>
+              token
+                ? Effect.void
+                : Effect.fail(
+                    AuthError.make({
+                      message:
+                        `Railway: ${RAILWAY_API_TOKEN_ENV} is not set. Export it, or run ` +
+                        `\`alchemy profile edit --profile ${profileName} --reconfigure ${RAILWAY_AUTH_PROVIDER_NAME}\` to switch methods.`,
+                    }),
+                  ),
             ),
           ),
-          // Railway account tokens neither expire nor refresh, so login only
-          // (re-)prompts when no credential is stored yet.
-          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
-          Match.when({ method: "oauth" }, (config) => Effect.succeed(config)),
-          Match.exhaustive,
-        )
-        .pipe(
-          Effect.mapError((e) =>
-            e instanceof AuthError ? e : new AuthError({ message: "login failed", cause: e }),
-          ),
-        );
+        ),
+        // Railway account tokens neither expire nor refresh, so login only
+        // (re-)prompts when no credential is stored yet.
+        Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
+        Match.when({ method: "oauth" }, (config) => Effect.succeed(config)),
+        Match.exhaustive,
+        Effect.mapError((e) =>
+          Schema.is(AuthError)(e) ? e : AuthError.make({ message: "login failed", cause: e }),
+        ),
+      );
 
     const details = (
       profileName: string,

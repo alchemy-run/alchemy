@@ -266,7 +266,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
         context: statics.context,
       });
       const tx: PostgresTransaction<C> = {
-        orm: makeOrmProxy<C, never, never>(Effect.sync(() => txOrm)),
+        orm: makeOrmProxy<C, never, never>(Effect.succeed(txOrm)),
         prepare: makePrepare(Effect.succeed(runtime), statics.sql, Effect.succeed(txn)),
         execute: <Row>(plan: Plan<Row>) =>
           Effect.tryPromise({

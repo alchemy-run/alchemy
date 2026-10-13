@@ -47,8 +47,8 @@ test.provider(
 
 // ---------------------------------------------------------------------------
 // Full live suite: deploys a Redshift Serverless namespace + workgroup (a
-// real-money RPU floor while it exists) plus a Lambda, so it is gated behind
-// AWS_TEST_SLOW=1 and destroys everything in afterAll. A run without the env
+// real-money RPU floor while it exists) plus a Lambda, so it is skipped under
+// `--fast` and destroys everything in afterAll. A run without the env
 // var is skip-clean: no AWS calls, no side effects.
 // ---------------------------------------------------------------------------
 
@@ -71,7 +71,7 @@ const get = (route: string) =>
     Effect.flatMap((res) => res.json),
   );
 
-describe.skipIf(!process.env.AWS_TEST_SLOW)(
+describe.skipIf(!!process.env.FAST)(
   "RedshiftData client",
   {
     tags: [

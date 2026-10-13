@@ -182,7 +182,7 @@ const concatBytes = (chunks: readonly Uint8Array[]): Uint8Array => {
 export const objectBodyFrom = (key: string, response: S3.GetObjectOutput): BucketObjectBody => {
   const body = (response.Body ?? Stream.empty).pipe(Stream.mapError(toBucketError));
   const bytes = () => Stream.runCollect(body).pipe(Effect.map(concatBytes));
-  const text = () => Stream.mkString(Stream.decodeText(body));
+  const text = () => body.pipe(Stream.decodeText, Stream.mkString);
   return {
     ...objectFrom(key, response),
     body,

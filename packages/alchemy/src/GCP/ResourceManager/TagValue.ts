@@ -151,19 +151,17 @@ const toShortName = (id: string, shortName: string | undefined, existing?: strin
     return named.replace(/-+$/g, "").slice(0, MAX_NAME_LENGTH);
   });
 
-const toAttrs = (value: crm.TagValue, project: string): TagValue["Attributes"] => {
-  return {
-    name: value.name ?? "",
-    parent: value.parent ?? "",
-    shortName: value.shortName ?? lastSegment(value.namespacedName ?? ""),
-    namespacedName: value.namespacedName,
-    description: value.description,
-    project,
-    etag: value.etag,
-    createTime: value.createTime,
-    updateTime: value.updateTime,
-  };
-};
+const toAttrs = (value: crm.TagValue, project: string): TagValue["Attributes"] => ({
+  name: value.name ?? "",
+  parent: value.parent ?? "",
+  shortName: value.shortName ?? lastSegment(value.namespacedName ?? ""),
+  namespacedName: value.namespacedName,
+  description: value.description,
+  project,
+  etag: value.etag,
+  createTime: value.createTime,
+  updateTime: value.updateTime,
+});
 
 const getByName = (name: string) =>
   crm

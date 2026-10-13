@@ -100,7 +100,7 @@ export const diffTrees = (
       }
       const content = yield* objects.readContent(oid);
       return yield* parseTree(content).pipe(
-        Effect.mapError((e) => new StoreError({ reason: e.reason })),
+        Effect.mapError((e) => StoreError.make({ reason: e.reason })),
       );
     });
 
@@ -357,7 +357,7 @@ export const applyTreeChanges = (
       const metas = yield* objects.getMetaBatch(Array.from(requiredBlobs));
       for (const oid of requiredBlobs) {
         if (!metas.has(oid)) {
-          return yield* new StoreError({
+          return yield* StoreError.make({
             reason: `applyTreeChanges: referenced blob ${oid} is missing from the store`,
           });
         }
@@ -387,7 +387,7 @@ export const applyTreeChanges = (
     const readEntries = Effect.fn(function* (oid: Oid) {
       const content = yield* objects.readContent(oid);
       return yield* parseTree(content).pipe(
-        Effect.mapError((e) => new StoreError({ reason: e.reason })),
+        Effect.mapError((e) => StoreError.make({ reason: e.reason })),
       );
     });
 
@@ -438,7 +438,7 @@ export const applyTreeChanges = (
         const entries = Array.from(byName.values());
         if (entries.length === 0) return undefined;
         const content = yield* encodeTree(entries).pipe(
-          Effect.mapError((e) => new StoreError({ reason: e.reason })),
+          Effect.mapError((e) => StoreError.make({ reason: e.reason })),
         );
         const oid = yield* hashObject(ObjectType.tree, content);
         if (oid !== baseOid) {

@@ -242,7 +242,9 @@ test.provider(
       "provider:fly:service",
       "live",
     ],
-    timeout: 120_000,
+    // Deploys a Fly Service (image build + push + machine health checks)
+    // and a Tigris bucket, then destroys both: measured 336–380s.
+    timeout: 600_000,
   },
 );
 

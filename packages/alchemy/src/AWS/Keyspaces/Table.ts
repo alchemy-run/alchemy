@@ -254,7 +254,7 @@ export const TableProvider = () =>
         const tags = yield* keyspaces.listTagsForResource.items({ resourceArn: arn }).pipe(
           Stream.runCollect,
           Effect.map((c) => Array.from(c)),
-          Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
+          Effect.orElseSucceed(() => []),
         );
         return toTagRecord(tags);
       });
@@ -292,7 +292,7 @@ export const TableProvider = () =>
           Effect.retry({
             schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
           }),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         );
       });
 
@@ -562,7 +562,7 @@ export const TableProvider = () =>
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
-            Effect.catch(() => Effect.void),
+            Effect.ignore,
           );
         }),
 

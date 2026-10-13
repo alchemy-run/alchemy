@@ -20,9 +20,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // loop is actually executing inside the deployed container (`/ticks` climbs).
 //
 // It is heavy (Docker build + ECR push + 3-5 min App Runner provisioning,
-// bills while running), so it is gated behind AWS_TEST_SLOW=1 and always
+// bills while running), so it is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "deploys an Effect-native App Runner service and serves HTTP",
   (stack) =>
     Effect.gen(function* () {

@@ -484,8 +484,10 @@ export const RouteProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidRoute.NotFound", () => Effect.void),
-              Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
+              Effect.catchTags({
+                "InvalidRoute.NotFound": () => Effect.void,
+                "InvalidRouteTableID.NotFound": () => Effect.void,
+              }),
             );
 
           yield* session.note(`Route ${dest} deleted successfully`);

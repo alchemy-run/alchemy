@@ -554,8 +554,10 @@ export const LogBucketProvider = () =>
         );
 
       const deleteBucket = logging.deleteProjectsLocationsBuckets({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", ignoreIfGone),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: ignoreIfGone,
+        }),
       );
 
       yield* deleteBucket.pipe(

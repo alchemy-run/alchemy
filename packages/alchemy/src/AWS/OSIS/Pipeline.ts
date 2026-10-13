@@ -410,7 +410,7 @@ export const PipelineProvider = () =>
           // ConflictException — wait (bounded, tolerant) for it to settle,
           // then retry conflicts through any residual transition.
           yield* waitForPipelineSettled(name, readPipeline(name)).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
           yield* retryWhilePipelineConflict(
             osis

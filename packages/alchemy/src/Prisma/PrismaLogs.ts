@@ -234,19 +234,16 @@ const tailDeploymentLogsWith = (
               } else if (closeMode === "terminate") {
                 socket.terminate();
               }
-              Effect.runFork(
-                Effect.sleep(
-                  Duration.millis(
-                    Math.min(RECONNECT_BACKOFF_MS * 2 ** noProgressReconnects, 1_000),
-                  ),
-                ).pipe(
-                  Effect.andThen(connect(reconnectCursor)),
-                  Effect.catch((error) =>
-                    Effect.sync(() => {
-                      fail(error);
-                    }),
-                  ),
+              Effect.sleep(
+                Duration.millis(Math.min(RECONNECT_BACKOFF_MS * 2 ** noProgressReconnects, 1_000)),
+              ).pipe(
+                Effect.andThen(connect(reconnectCursor)),
+                Effect.catch((error) =>
+                  Effect.sync(() => {
+                    fail(error);
+                  }),
                 ),
+                Effect.runFork,
               );
             };
 

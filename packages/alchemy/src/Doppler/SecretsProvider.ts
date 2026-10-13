@@ -154,7 +154,7 @@ export const Secrets = (options: SecretsOption<DopplerOptions> = {}) =>
         // so Doppler needs to be told which one to read.
         const missingSelector = !resolved.project || !resolved.config;
         if (credentials.method === "login" && missingSelector) {
-          return yield* new AuthError({
+          return yield* AuthError.make({
             message:
               "Doppler browser login requires both project and config in Doppler.Secrets({ project, config }).",
           });

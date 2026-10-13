@@ -116,11 +116,9 @@ export const InvalidationProvider = () =>
                     yield* Effect.logInfo(
                       `CloudFront Invalidation wait: ${invalidationId} status=${invalidation?.Status ?? "unknown"}`,
                     );
-                    return yield* Effect.fail(
-                      new InvalidationInProgress({
-                        message: `Invalidation ${invalidationId} is still in progress`,
-                      }),
-                    );
+                    return yield* new InvalidationInProgress({
+                      message: `Invalidation ${invalidationId} is still in progress`,
+                    });
                   }),
             ),
             Effect.retry({

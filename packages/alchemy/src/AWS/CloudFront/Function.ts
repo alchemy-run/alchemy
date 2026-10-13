@@ -189,40 +189,40 @@ export const FunctionProvider = () =>
           // newly created function lives in DEVELOPMENT; we publish it to
           // LIVE below, in the same flow that handles already-existing
           // functions.
+          const createDevelopmentFunction = Effect.gen(function* () {
+            const created = yield* cloudfront
+              .createFunction({
+                Name: name,
+                FunctionConfig: {
+                  Comment: news.comment ?? "",
+                  Runtime: news.runtime ?? "cloudfront-js-2.0",
+                  KeyValueStoreAssociations: toKvAssociations(news.keyValueStoreArns),
+                },
+                FunctionCode: new TextEncoder().encode(news.code),
+              })
+              .pipe(
+                Effect.catchTag("FunctionAlreadyExists", () =>
+                  describe(name, "DEVELOPMENT").pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed(existing)
+                        : Effect.die(
+                            `CloudFront Function '${name}' already exists but could not be recovered`,
+                          ),
+                    ),
+                  ),
+                ),
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "InvalidArgument" && isKeyValueStoreAssociationPending(error),
+                  schedule: cappedCloudFrontRetrySchedule,
+                }),
+              );
+            return created.ETag;
+          });
           const developmentEtag = observedDevelopment
             ? observedDevelopment.ETag
-            : yield* Effect.gen(function* () {
-                const created = yield* cloudfront
-                  .createFunction({
-                    Name: name,
-                    FunctionConfig: {
-                      Comment: news.comment ?? "",
-                      Runtime: news.runtime ?? "cloudfront-js-2.0",
-                      KeyValueStoreAssociations: toKvAssociations(news.keyValueStoreArns),
-                    },
-                    FunctionCode: new TextEncoder().encode(news.code),
-                  })
-                  .pipe(
-                    Effect.catchTag("FunctionAlreadyExists", () =>
-                      describe(name, "DEVELOPMENT").pipe(
-                        Effect.flatMap((existing) =>
-                          existing
-                            ? Effect.succeed(existing)
-                            : Effect.die(
-                                `CloudFront Function '${name}' already exists but could not be recovered`,
-                              ),
-                        ),
-                      ),
-                    ),
-                    Effect.retry({
-                      while: (error) =>
-                        error._tag === "InvalidArgument" &&
-                        isKeyValueStoreAssociationPending(error),
-                      schedule: cappedCloudFrontRetrySchedule,
-                    }),
-                  );
-                return created.ETag;
-              });
+            : yield* createDevelopmentFunction;
 
           // Sync — push desired config/code to DEVELOPMENT when the
           // function already existed. Skip when we just created it (the

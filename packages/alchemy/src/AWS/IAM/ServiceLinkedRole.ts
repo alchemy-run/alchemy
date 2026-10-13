@@ -202,10 +202,10 @@ export const ServiceLinkedRoleProvider = () =>
                 // Both the task record and IAM itself are eventually
                 // consistent. Keep polling the role on transient status-read
                 // failures; never translate them into successful deletion.
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed("TASK_NOT_FOUND" as const),
-                ),
-                Effect.catchTag("ServiceFailureException", () => Effect.succeed(undefined)),
+                Effect.catchTags({
+                  NoSuchEntityException: () => Effect.succeed("TASK_NOT_FOUND" as const),
+                  ServiceFailureException: () => Effect.succeed(undefined),
+                }),
               );
             if (status === "TASK_NOT_FOUND") {
               lastStatus = status;
@@ -225,15 +225,13 @@ export const ServiceLinkedRoleProvider = () =>
           }
           yield* Effect.sleep("2 seconds");
         }
-        return yield* Effect.fail(
-          new ServiceLinkedRoleDeletionFailed({
-            roleName,
-            status: "TIMED_OUT",
-            reason:
-              lastReason ??
-              `deletion task ${deletionTaskId ?? "not returned"} was ${lastStatus}, but role remained observable after 60s`,
-          }),
-        );
+        return yield* new ServiceLinkedRoleDeletionFailed({
+          roleName,
+          status: "TIMED_OUT",
+          reason:
+            lastReason ??
+            `deletion task ${deletionTaskId ?? "not returned"} was ${lastStatus}, but role remained observable after 60s`,
+        });
       });
 
       return {

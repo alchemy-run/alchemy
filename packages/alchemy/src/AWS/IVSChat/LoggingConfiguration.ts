@@ -185,11 +185,9 @@ export const LoggingConfigurationProvider = () =>
 
       const toAttrs = Effect.fn(function* (config: LoggingConfigurationState) {
         if (!config.arn || !config.id || !config.name) {
-          return yield* Effect.fail(
-            new IvsChatLoggingConfigurationInvalid({
-              message: "IVS Chat logging configuration is missing its ARN, ID, or name",
-            }),
-          );
+          return yield* new IvsChatLoggingConfigurationInvalid({
+            message: "IVS Chat logging configuration is missing its ARN, ID, or name",
+          });
         }
         return {
           loggingConfigurationName: config.name,
@@ -263,11 +261,9 @@ export const LoggingConfigurationProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsChatLoggingConfigurationInvalid({
-                message: "IVS Chat CreateLoggingConfiguration returned no ARN",
-              }),
-            );
+            return yield* new IvsChatLoggingConfigurationInvalid({
+              message: "IVS Chat CreateLoggingConfiguration returned no ARN",
+            });
           }
 
           // 3. Sync — name and destination are mutable via
@@ -292,11 +288,9 @@ export const LoggingConfigurationProvider = () =>
           // 4. Return fresh, settled attributes.
           const final = yield* pollUntilSettled(getByIdentifier(arn));
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsChatLoggingConfigurationInvalid({
-                message: `IVS Chat logging configuration '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsChatLoggingConfigurationInvalid({
+              message: `IVS Chat logging configuration '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

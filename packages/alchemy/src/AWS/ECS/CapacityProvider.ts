@@ -350,8 +350,10 @@ export const CapacityProviderProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* ecs.deleteCapacityProvider({ capacityProvider: output.name }).pipe(
             // Already gone — treat as success.
-            Effect.catchTag("InvalidParameterException", () => Effect.void),
-            Effect.catchTag("ClientException", () => Effect.void),
+            Effect.catchTags({
+              InvalidParameterException: () => Effect.void,
+              ClientException: () => Effect.void,
+            }),
           );
         }),
       };

@@ -103,9 +103,9 @@ const assertClusterDeleting = (identifier: string) =>
   );
 
 // A DocumentDB cluster + instance take ~5-10 minutes to provision and bill per
-// instance-hour while they exist. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// instance-hour while they exist. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create DocumentDB cluster + instance, verify, destroy",
   (stack) =>
     Effect.gen(function* () {

@@ -136,13 +136,13 @@ const parseCommandLine = (line: string): Effect.Effect<RefCommand, ProtocolError
       line[81] !== " " ||
       ref.length === 0
     ) {
-      return Effect.fail(new ProtocolError({ reason: `malformed command line: ${line}` }));
+      return Effect.fail(ProtocolError.make({ reason: `malformed command line: ${line}` }));
     }
     if (!validRefName(ref)) {
-      return Effect.fail(new ProtocolError({ reason: `invalid refname: ${ref}` }));
+      return Effect.fail(ProtocolError.make({ reason: `invalid refname: ${ref}` }));
     }
     if (oldOid === ZERO_OID && newOid === ZERO_OID) {
-      return Effect.fail(new ProtocolError({ reason: `zero-to-zero command for ${ref}` }));
+      return Effect.fail(ProtocolError.make({ reason: `zero-to-zero command for ${ref}` }));
     }
     return Effect.succeed({ oldOid, newOid, ref });
   });
@@ -162,12 +162,12 @@ export const parseReceivePackRequest = Effect.fn(function* (body: Uint8Array) {
   for (;;) {
     const result = readPktLineAt(body, pos);
     if (result._tag === "incomplete") {
-      return yield* new PktLineError({
+      return yield* PktLineError.make({
         reason: `truncated receive-pack request at offset ${pos}`,
       });
     }
     if (result._tag === "invalid") {
-      return yield* new PktLineError({ reason: result.reason });
+      return yield* PktLineError.make({ reason: result.reason });
     }
     const pkt = result.pkt;
     if (pkt._tag === "flush") {
@@ -175,7 +175,7 @@ export const parseReceivePackRequest = Effect.fn(function* (body: Uint8Array) {
       break;
     }
     if (pkt._tag !== "data") {
-      return yield* new ProtocolError({
+      return yield* ProtocolError.make({
         reason: `unexpected ${pkt._tag} packet in receive-pack request`,
       });
     }
@@ -183,7 +183,7 @@ export const parseReceivePackRequest = Effect.fn(function* (body: Uint8Array) {
     if (text.startsWith("shallow ")) {
       const oid = text.slice(8);
       if (!isOid(oid)) {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `malformed shallow line: ${text}`,
         });
       }

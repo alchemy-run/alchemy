@@ -563,9 +563,11 @@ export const ClusterProvider = () =>
           schedule: Schedule.spaced("5 seconds"),
         }),
         Effect.as("deleted" as const),
-        Effect.catchTag("NotFound", () => Effect.succeed("deleted" as const)),
-        // The instance's last cluster goes away with the instance.
-        Effect.catchTag("LastClusterDeletion", () => Effect.succeed("kept" as const)),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed("deleted" as const),
+          // The instance's last cluster goes away with the instance.
+          LastClusterDeletion: () => Effect.succeed("kept" as const),
+        }),
       );
       if (result === "deleted") {
         yield* waitUntilGone(output.name);

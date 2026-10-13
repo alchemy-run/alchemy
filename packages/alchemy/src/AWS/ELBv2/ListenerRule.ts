@@ -177,8 +177,10 @@ export const ListenerRuleProvider = () =>
                 ),
               ),
             ),
-            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
-            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTags({
+              LoadBalancerNotFoundException: () => Effect.succeed([]),
+              ListenerNotFoundException: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -197,8 +199,10 @@ export const ListenerRuleProvider = () =>
             })),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
-            Effect.catchTag("RuleNotFoundException", () => Effect.succeed([])),
+            Effect.catchTags({
+              ListenerNotFoundException: () => Effect.succeed([]),
+              RuleNotFoundException: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );

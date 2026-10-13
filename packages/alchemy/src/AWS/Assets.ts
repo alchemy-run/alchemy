@@ -169,7 +169,7 @@ export const lookupAssetsBuckets = Effect.gen(function* () {
           ? Effect.succeed(false)
           : getBucketTags(bucket.Name).pipe(
               Effect.map((tags) => hasAssetsBucketTag(tags)),
-              Effect.catch(() => Effect.succeed(false)),
+              Effect.orElseSucceed(() => false),
             ),
       ),
       Stream.map((bucket) => bucket.Name!),

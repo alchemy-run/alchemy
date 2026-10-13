@@ -54,9 +54,9 @@ const resolveSubnet = Effect.gen(function* () {
 
 // A provisioned EMR cluster takes ~10-15 minutes to reach WAITING, bills per
 // instance-hour for 3 m5.xlarge-class instances while it exists, and takes
-// ~5-10 more minutes to terminate. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// ~5-10 more minutes to terminate. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create Spark cluster, verify WAITING, update in place, destroy, verify terminating",
   (stack) =>
     Effect.gen(function* () {

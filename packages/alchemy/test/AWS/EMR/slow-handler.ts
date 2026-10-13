@@ -16,8 +16,8 @@ export class EmrSlowTestFunction extends Lambda.Function<Lambda.Function>()(
 
 /**
  * Cluster-scoped binding fixture: deploys a real single-node Spark cluster
- * (~10-15 minutes to WAITING, billed per instance-hour — gated behind
- * AWS_TEST_SLOW) and a Lambda bound to it with the steps data plane, the
+ * (~10-15 minutes to WAITING, billed per instance-hour — skipped under
+ * `--fast`) and a Lambda bound to it with the steps data plane, the
  * cluster-inspection reads, and the managed scaling policy ops.
  *
  * The cluster launches into an EMR-chosen subnet of the account's default

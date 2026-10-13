@@ -381,8 +381,9 @@ test.provider.skipIf(!dockerAvailable)(
           }),
         );
 
-      // Control: without `logging` the provider does not touch CloudWatch
-      // Logs, and the function is never invoked, so no group exists.
+      // Alchemy always owns the function's log group (the execution role
+      // cannot create it), so it exists before any invoke — with no
+      // retention until `logging` sets one.
       const fn = yield* deploy();
       const logGroupName = `/aws/lambda/${fn.functionName}`;
       const findGroup = Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
@@ -392,7 +393,9 @@ test.provider.skipIf(!dockerAvailable)(
       yield* Effect.addFinalizer(() =>
         Logs.deleteLogGroup({ logGroupName }).pipe(Effect.provide(flociContext), Effect.ignore),
       );
-      expect(yield* findGroup).toBeUndefined();
+      const initial = yield* findGroup;
+      expect(initial).toBeDefined();
+      expect(initial?.retentionInDays).toBeUndefined();
 
       // 10 days rounds up to CloudWatch's 14.
       yield* deploy({ retention: "10 days" });

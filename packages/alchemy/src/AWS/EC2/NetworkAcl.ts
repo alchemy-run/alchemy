@@ -330,9 +330,7 @@ export const NetworkAclProvider = () =>
               Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
               // Retry on dependency violations (e.g., associations still being removed)
               Effect.retry({
-                while: (e) => {
-                  return e._tag === "DependencyViolation";
-                },
+                while: (e) => e._tag === "DependencyViolation",
                 schedule: Schedule.max([Schedule.exponential(1000, 1.5), Schedule.recurs(15)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),

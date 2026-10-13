@@ -8,6 +8,7 @@ import {
   createConnection,
   createConnectionRotate,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -278,12 +279,10 @@ const listDatabaseConnections = (databaseId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getDatabaseConnections: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getDatabaseConnections: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -300,12 +299,10 @@ const listAllConnections = () =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getConnections: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getConnections: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -320,21 +317,21 @@ const findConnection = (
     Effect.map((connections) => connections.filter(predicate)),
   );
 
-class AmbiguousPrismaConnectionError extends Error {
-  readonly _tag = "AmbiguousPrismaConnectionError";
-
-  constructor(databaseId: string, name: string, count: number) {
-    super(
-      `Prisma database '${databaseId}' has ${count} connections named '${name}'; use a unique connection name before importing it into Alchemy`,
-    );
+class AmbiguousPrismaConnectionError extends Data.TaggedError("AmbiguousPrismaConnectionError")<{
+  readonly databaseId: string;
+  readonly connectionName: string;
+  readonly count: number;
+}> {
+  override get message() {
+    return `Prisma database '${this.databaseId}' has ${this.count} connections named '${this.connectionName}'; use a unique connection name before importing it into Alchemy`;
   }
 }
 
-class InvalidPrismaConnectionNameError extends Error {
-  readonly _tag = "InvalidPrismaConnectionNameError";
-
-  constructor() {
-    super("Prisma connection name must contain at least one non-space character");
+class InvalidPrismaConnectionNameError extends Data.TaggedError(
+  "InvalidPrismaConnectionNameError",
+) {
+  override get message() {
+    return "Prisma connection name must contain at least one non-space character";
   }
 }
 
@@ -355,12 +352,18 @@ const uniqueConnection = (
       connections.length <= 1
         ? Effect.succeed(connections[0])
         : Effect.fail(
-            new AmbiguousPrismaConnectionError(databaseId, description, connections.length),
+            new AmbiguousPrismaConnectionError({
+              databaseId,
+              connectionName: description,
+              count: connections.length,
+            }),
           ),
     ),
   );
 
-class GeneratedConnectionNotVisible extends Error {}
+class GeneratedConnectionNotVisible extends Data.TaggedError("GeneratedConnectionNotVisible")<{
+  readonly message: string;
+}> {}
 
 const generatedConnectionRecoverySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -373,9 +376,9 @@ const recoverGeneratedConnectionAfterConflict = (databaseId: string, expectedNam
       connection
         ? Effect.succeed(connection)
         : Effect.fail(
-            new GeneratedConnectionNotVisible(
-              `Generated Prisma connection '${expectedName}' is not visible yet.`,
-            ),
+            new GeneratedConnectionNotVisible({
+              message: `Generated Prisma connection '${expectedName}' is not visible yet.`,
+            }),
           ),
     ),
     Effect.retry({
