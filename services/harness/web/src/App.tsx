@@ -730,6 +730,13 @@ export function App() {
     setCurrentState(id);
     history.replaceState(null, "", id ? `#${encodeURIComponent(id)}` : location.pathname);
   };
+  // Follow the URL when only its hash changes (a pasted link, back / forward).
+  useEffect(() => {
+    const onHashChange = () =>
+      setCurrentState(decodeURIComponent(location.hash.slice(1)) || undefined);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
   // Nothing in the URL: open the newest session once the list arrives.
   useEffect(() => {
     if (current === undefined && ids[0] !== undefined) setCurrent(ids[0]);
