@@ -112,9 +112,6 @@ export interface Ports {
 }
 
 const HOSTS: Set<string> = new Set([
-  "0.0.0.0",
-  "::",
-  "0000:0000:0000:0000:0000:0000:0000:0000",
   "localhost",
   "127.0.0.1",
   "::1",
