@@ -102,7 +102,7 @@ test("another browser sees the same sessions", async ({ page, browser }) => {
   });
   // Its status and cost come from the server, though this browser never opened it.
   const row = elsewhere.locator("aside nav button").filter({ hasText: id });
-  await expect(row).toContainText("Idle", { timeout: 30_000 });
+  await expect(row).toContainText(/idle/i, { timeout: 30_000 });
   await expect(row).toContainText("$");
   // And a link opens the session with its transcript.
   await elsewhere.goto(`/#${encodeURIComponent(id)}`);
