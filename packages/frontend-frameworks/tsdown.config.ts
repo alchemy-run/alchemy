@@ -6,6 +6,7 @@ export default defineConfig([
     entry: {
       "core/index": "src/core/index.ts",
       "astro/neon": "src/astro/neon.ts",
+      "foldkit/neon": "src/foldkit/neon.ts",
       "nextjs/neon": "src/nextjs/neon.ts",
       "nuxt/neon": "src/nuxt/neon.ts",
       "octane/neon": "src/octane/neon.ts",
@@ -31,6 +32,9 @@ export default defineConfig([
       "astro/runtime/entrypoints/server": "src/astro/runtime/entrypoints/server.ts",
       "astro/runtime/entrypoints/image-passthrough-endpoint":
         "src/astro/runtime/entrypoints/image-passthrough-endpoint.ts",
+      "foldkit/index": "src/foldkit/index.ts",
+      "foldkit/aws": "src/foldkit/aws.ts",
+      "foldkit/node": "src/foldkit/node.ts",
       "nextjs/index": "src/nextjs/index.ts",
       "nextjs/aws": "src/nextjs/aws.ts",
       "nextjs/node": "src/nextjs/node.ts",

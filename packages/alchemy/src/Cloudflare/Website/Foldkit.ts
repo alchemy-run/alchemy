@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -7,6 +6,7 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
+  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
@@ -17,90 +17,46 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
   /**
-   * Overrides the module that becomes the deployed Worker entry. Relative
-   * paths resolve from {@link rootDir}.
-   *
-   * A Foldkit deployment is assets-only by default — no Worker code runs
-   * at request time. Point `main` at a custom module when the deployment
-   * needs code at the edge — API routes, error reporting, Durable Object
-   * classes. The entry serves the client build through its `ASSETS`
-   * binding:
-   *
-   * ```typescript
-   * // src/worker.ts
-   * export default {
-   *   async fetch(request: Request, env: { ASSETS: Fetcher }) {
-   *     const url = new URL(request.url);
-   *     if (url.pathname === "/api/health") {
-   *       return Response.json({ ok: true });
-   *     }
-   *     return env.ASSETS.fetch(request);
-   *   },
-   * };
-   * ```
+   * Custom Worker entry for a client-only app. Relative paths resolve from
+   * {@link rootDir}; the Worker can serve client assets through `ASSETS`.
+   * Cannot be combined with Foldkit's `ssr.build`, which generates the
+   * Worker handler from the app's server entry.
    */
   main?: string;
   /**
-   * Foldkit project root directory.
-   * Defaults to the current working directory (`process.cwd()`).
+   * Foldkit project root directory, resolved from the working directory.
+   * @default process.cwd()
    */
   rootDir?: string;
   /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file under `rootDir` is hashed, plus the
-   * nearest package-manager lockfile. Provide explicit globs to narrow the
-   * scope.
+   * Controls which files are content-hashed to decide whether to rebuild.
+   * Defaults to non-gitignored project files and the nearest lockfile, with
+   * imported workspaces detected from the build. See {@link ViteOptions.memo}.
    */
-  memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash (relative to `rootDir`).
-     * By default (`"auto"`), workspaces are auto-detected from the build's
-     * module graph; an explicit array pins them.
-     * @default "auto"
-     */
-    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
-  };
+  memo?: ViteOptions["memo"];
   /**
-   * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-   *
-   * Foldkit apps route on the client, so `notFoundHandling` defaults to
-   * `"single-page-application"` — unmatched paths serve `index.html` and
-   * the app's router takes over. Set `notFoundHandling` explicitly to
-   * override (e.g. `"404-page"` to serve the built `404.html`).
-   *
-   * @default { notFoundHandling: "single-page-application" }
+   * Overrides static asset routing defaults. Client-only apps use
+   * `notFoundHandling: "single-page-application"`. SSR and prerendered apps
+   * serve matching assets and send unmatched requests to Foldkit's handler.
+   * Explicit options take precedence over these defaults.
    */
   assets?: AssetsConfig;
 }
 
-// These options are inspected while constructing the Worker. Resolve them in
-// the outer props Effect; pass-through properties can remain deferred Inputs.
-type FoldkitInput<Bindings extends WorkerBindingProps> = InputProps<
-  FoldkitProps<Bindings>,
-  "assets"
->;
-
 /**
  * A Cloudflare Worker deployed from a [Foldkit](https://foldkit.dev) app.
  *
- * Foldkit apps are client-only Vite projects, so `Foldkit` drives the
- * project's own `vite build` — the Foldkit Vite plugin in the app's
- * `vite.config.ts` composes with the injected Cloudflare plugin — and
- * deploys the client output as static assets. No Wrangler configuration,
- * build command, or output directory required.
+ * Builds the project's Vite configuration and deploys its client assets
+ * and generated server handler. Configure rendering in the app's
+ * `foldkit(...)` plugin call; Alchemy derives asset routing from the
+ * plugin's completed build metadata.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
  *
- * Foldkit apps route on the client, so `assets.notFoundHandling`
- * defaults to `"single-page-application"` — deep links serve
- * `index.html` and the Foldkit router takes over.
- *
- *
  * ### Deploying a Foldkit App
- * A single call builds the project and deploys the client output as
- * static assets — no configuration required.
+ * The same declaration supports client-only, server-rendered, and
+ * prerendered apps.
  *
  * **Example:** Foldkit app
  * ```typescript
@@ -110,64 +66,96 @@ type FoldkitInput<Bindings extends WorkerBindingProps> = InputProps<
  * **Example:** Foldkit project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
- *   rootDir: "applications/web",
+ *   rootDir: "apps/web",
  * });
  * ```
  *
- * ### Single-Page Application Routing
- * Unmatched paths serve `index.html` by default so deep links boot the
- * app and the Foldkit router resolves the route. A site that ships real
- * 404 content overrides the default with `notFoundHandling: "404-page"`.
+ * ### Server Rendering and Prerendering
+ * Enable `ssr.build` to generate the Worker handler. Foldkit manages the
+ * shared hydration identity for the client and server automatically.
+ * Requires `@foldkit/vite-plugin` 0.27.0 or newer and a compatible Foldkit
+ * version (0.167.0 or newer). Import CSS from the client entry and export
+ * `renderDocument = Server.renderDocument` alongside `renderPage` in the
+ * server entry. SSR/SSG documents are generated from code; no source index.html is needed.
  *
- * **Example:** Serving a real 404 page
+ * **Example:** vite.config.ts for a server-rendered app
  * ```typescript
- * const site = yield* Cloudflare.Website.Foldkit("Website", {
- *   assets: {
- *     notFoundHandling: "404-page",
+ * import { foldkit } from "@foldkit/vite-plugin";
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   plugins: [
+ *     foldkit({
+ *       ssr: {
+ *         serverEntry: "/src/entry.server.ts",
+ *         clientEntry: "/src/entry.ts",
+ *         build: true,
+ *       },
+ *     }),
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Prerendering the server entry's `prerenderPaths`
+ * ```typescript
+ * foldkit({
+ *   ssr: {
+ *     serverEntry: "/src/entry.server.ts",
+ *     clientEntry: "/src/entry.ts",
+ *     build: { prerender: true },
  *   },
  * });
  * ```
  *
- * ### Custom Worker Entry
- * By default the deployment is assets-only. When code must run at the
- * edge — API routes, error reporting, Durable Object classes — point
- * `main` at your own module that serves the client build through the
- * `ASSETS` binding (see {@link FoldkitProps.main}). Bindings passed in
- * `env` are reachable from the entry (and from cron handlers), not from
- * browser code — a Foldkit app runs on the client, so anything it needs
- * must come from a route the Worker serves.
+ * ### Asset Routing
+ * Use `assets` to override the rendering mode's defaults (see
+ * {@link FoldkitProps.assets}).
  *
- * **Example:** Custom entry serving an API route from a KV namespace
+ * **Example:** Client-only app with a custom 404 page
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Foldkit("Website", {
+ *   assets: { notFoundHandling: "404-page" },
+ * });
+ * ```
+ *
+ * ### Custom Worker Entry
+ * For a client-only app with API routes or other Worker handlers, set
+ * `main` and route those requests through the Worker. Bindings in `env`
+ * are available to the Worker, not to browser code.
+ *
+ * **Example:** Custom Worker with a KV binding
  * ```typescript
  * const ticker = yield* Cloudflare.KV.Namespace("Ticker");
  *
  * const site = yield* Cloudflare.Website.Foldkit("Platform", {
  *   main: "src/worker.ts",
- *   env: {
- *     TICKER: ticker,
- *   },
+ *   env: { TICKER: ticker },
+ *   assets: { runWorkerFirst: ["/api/*"] },
  * });
  * ```
  *
  * ### Custom Rebuild Scope
- * By default, every non-gitignored file is hashed to decide whether a
- * rebuild is needed. Use `memo` to narrow the scope when your project
- * has large directories that don't affect the build output.
+ * Narrow the files hashed for rebuilds while retaining the Vite config
+ * and lockfile as build inputs.
  *
  * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
  *   memo: {
- *     include: ["src/**", "public/**", "package.json"],
+ *     include: [
+ *       "src/**",
+ *       "public/**",
+ *       "index.html",
+ *       "vite.config.ts",
+ *       "package.json",
+ *     ],
+ *     lockfile: true,
  *   },
  * });
  * ```
  *
  * ### Class Form
- * Calling `Foldkit` with no arguments returns a constructor you can
- * `extend` to declare the Worker as a named class. The class is both an
- * `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * Use the class form when other resources need to reference the Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -184,7 +172,9 @@ export const Foldkit: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+      propsEff?:
+        | InputProps<FoldkitProps<Bindings>>
+        | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
         [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
@@ -196,7 +186,9 @@ export const Foldkit: {
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+    propsEff?:
+      | InputProps<FoldkitProps<Bindings>>
+      | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
       [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
@@ -209,29 +201,29 @@ export const Foldkit: {
   >;
 } = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
   id?: string,
-  propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+  propsEff?:
+    | InputProps<FoldkitProps<Bindings>>
+    | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
 ) =>
   id === undefined
     ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
         id: string,
-        propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+        propsEff?:
+          | InputProps<FoldkitProps<Bindings>>
+          | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
       ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
-        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
-          ...props,
-          // Foldkit routes on the client; serve index.html for unmatched
-          // paths so deep links boot the app instead of 404ing. An
-          // explicit `assets.notFoundHandling` wins over the default.
-          assets: {
-            notFoundHandling: "single-page-application" as const,
-            ...props?.assets,
-          },
-          main: undefined!,
-          vite: {
-            main: props?.main,
-            rootDir: props?.rootDir,
-            memo: props?.memo,
-          },
-        })),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => {
+          const { main, rootDir, memo, ...workerProps } = props ?? {};
+          return {
+            ...workerProps,
+            vite: {
+              framework: "foldkit" as const,
+              main,
+              rootDir,
+              memo,
+            },
+          };
+        }),
       )) as any;

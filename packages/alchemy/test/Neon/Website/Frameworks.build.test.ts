@@ -27,7 +27,7 @@ describe.sequential(
             yield* stack.destroy();
             const path = yield* Path.Path;
             const root = yield* exampleRoot(slug);
-            const framework = slug === "foldkit" ? "vite" : slug;
+            const framework = slug;
             const target = `@alchemy.run/frontend-frameworks/${framework}/neon`;
             const build = yield* stack.deploy(
               Effect.gen(function* () {

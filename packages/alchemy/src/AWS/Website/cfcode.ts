@@ -56,37 +56,39 @@ async function routeSite(kvNamespace, metadata) {
     ? event.request.uri.replace(metadata.base, "")
     : event.request.uri;
 
-  try {
-    var u = decodeURIComponent(baselessUri);
-    var postfixes = u.endsWith("/")
-      ? ["index.html"]
-      : ["", ".html", "/index.html"];
-    var v = await Promise.any(postfixes.map(function(p) { return cf.kvs().get(kvNamespace + ":" + u + p).then(function() { return p; }); }));
-    event.request.uri = metadata.s3.dir + event.request.uri + v;
-    setS3Origin(metadata.s3.domain);
-    return;
-  } catch (e) {}
+  if (!metadata.servers || event.request.method === "GET" || event.request.method === "HEAD") {
+    try {
+      var u = decodeURIComponent(baselessUri);
+      var postfixes = u.endsWith("/")
+        ? ["index.html"]
+        : ["", ".html", "/index.html"];
+      var v = await Promise.any(postfixes.map(function(p) { return cf.kvs().get(kvNamespace + ":" + u + p).then(function() { return p; }); }));
+      event.request.uri = metadata.s3.dir + event.request.uri + v;
+      setS3Origin(metadata.s3.domain);
+      return;
+    } catch (e) {}
 
-  if (metadata.s3 && metadata.s3.routes) {
-    for (var i=0, l=metadata.s3.routes.length; i<l; i++) {
-      var route = metadata.s3.routes[i];
-      if (baselessUri.startsWith(route)) {
-        event.request.uri = metadata.s3.dir + event.request.uri;
-        if (event.request.uri.endsWith("/")) {
-          event.request.uri += "index.html";
-        } else if (!event.request.uri.split("/").pop().includes(".")) {
-          event.request.uri += "/index.html";
+    if (metadata.s3 && metadata.s3.routes) {
+      for (var i=0, l=metadata.s3.routes.length; i<l; i++) {
+        var route = metadata.s3.routes[i];
+        if (baselessUri.startsWith(route)) {
+          event.request.uri = metadata.s3.dir + event.request.uri;
+          if (event.request.uri.endsWith("/")) {
+            event.request.uri += "index.html";
+          } else if (!event.request.uri.split("/").pop().includes(".")) {
+            event.request.uri += "/index.html";
+          }
+          setS3Origin(metadata.s3.domain);
+          return;
         }
-        setS3Origin(metadata.s3.domain);
-        return;
       }
     }
-  }
 
-  if (metadata.custom404 && !metadata.errorResponseCode) {
-    event.request.uri = metadata.s3.dir + (metadata.base ? metadata.base : "") + metadata.custom404;
-    setS3Origin(metadata.s3.domain);
-    return;
+    if (metadata.custom404 && !metadata.errorResponseCode) {
+      event.request.uri = metadata.s3.dir + (metadata.base ? metadata.base : "") + metadata.custom404;
+      setS3Origin(metadata.s3.domain);
+      return;
+    }
   }
 
   if (metadata.s3 && !metadata.servers) {
