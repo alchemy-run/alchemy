@@ -416,29 +416,31 @@ export const BranchProtectionProvider = () =>
       const checks = news.requiredStatusChecks;
       const reviews = news.requiredPullRequestReviews;
       const restrictions = news.restrictions;
-      // GitHub rejects a body that contains both `contexts` and `checks`.
-      // A set `checks` array is the request; `contexts` is sent only when
-      // `checks` is omitted. Octokit's parameter type still requires
-      // `contexts`, so the checks-only body is asserted at the boundary.
       type UpdateBranchProtectionParams = NonNullable<
         Parameters<typeof octokit.rest.repos.updateBranchProtection>[0]
       >;
-      const requiredStatusChecks = (
+      type RequiredStatusChecks = UpdateBranchProtectionParams["required_status_checks"];
+      // Octokit requires `contexts` on this body. GitHub rejects a request
+      // that also includes `checks`, so a set `checks` array drops `contexts`
+      // before the request is sent.
+      const requiredStatusChecks: RequiredStatusChecks =
         checks === undefined
           ? null
-          : checks.checks === undefined
-            ? {
-                strict: checks.strict ?? false,
-                contexts: checks.contexts ?? [],
-              }
-            : {
-                strict: checks.strict ?? false,
-                checks: checks.checks.map((check) => ({
-                  context: check.context,
-                  ...(check.appId === undefined ? {} : { app_id: check.appId }),
-                })),
-              }
-      ) as UpdateBranchProtectionParams["required_status_checks"];
+          : {
+              strict: checks.strict ?? false,
+              contexts: checks.contexts ?? [],
+              ...(checks.checks === undefined
+                ? {}
+                : {
+                    checks: checks.checks.map((check) => ({
+                      context: check.context,
+                      ...(check.appId === undefined ? {} : { app_id: check.appId }),
+                    })),
+                  }),
+            };
+      if (requiredStatusChecks !== null && checks?.checks !== undefined) {
+        Reflect.deleteProperty(requiredStatusChecks, "contexts");
+      }
 
       yield* Effect.tryPromise({
         try: () =>
