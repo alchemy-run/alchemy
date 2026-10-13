@@ -1,4 +1,5 @@
 import type { Octokit as GitHubClient } from "@octokit/rest";
+import type { EndpointKeys } from "@octokit/types";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -377,30 +378,47 @@ type UpdateBranchProtectionParams = NonNullable<
   Parameters<GitHubClient["rest"]["repos"]["updateBranchProtection"]>[0]
 >;
 
-// Octokit requires `contexts` on this body. GitHub rejects a request that
-// also includes `checks`, so a set `checks` array drops `contexts` before
-// the body is returned.
+type RequiredStatusCheck = {
+  context: string;
+  app_id?: number;
+};
+
+/** The status-check body GitHub accepts: `contexts` or `checks`, never both. */
+type RequiredStatusChecks =
+  | { strict: boolean; contexts: string[] }
+  | { strict: boolean; checks: RequiredStatusCheck[] }
+  | null;
+
+type BranchProtectionUpdate = Omit<UpdateBranchProtectionParams, "required_status_checks"> & {
+  required_status_checks: RequiredStatusChecks;
+};
+
+// OpenAPI requires `contexts` on this body and lists `checks` as optional.
+// GitHub rejects a request that sends both. The route stays a `string` so
+// `request` accepts the body that is serialized. `BranchProtectionUpdate`
+// still checks every other field against the endpoint.
+const UPDATE_BRANCH_PROTECTION: string =
+  "PUT /repos/{owner}/{repo}/branches/{branch}/protection" satisfies EndpointKeys;
+
 const requiredStatusChecksOf = (
   checks: BranchProtectionProps["requiredStatusChecks"],
-): UpdateBranchProtectionParams["required_status_checks"] => {
+): RequiredStatusChecks => {
   if (checks === undefined) return null;
-  const body: UpdateBranchProtectionParams["required_status_checks"] = {
-    strict: checks.strict ?? false,
-    contexts: checks.contexts ?? [],
-    ...(checks.checks === undefined
-      ? {}
-      : {
-          checks: checks.checks.map((check) => ({
-            context: check.context,
-            ...(check.appId === undefined ? {} : { app_id: check.appId }),
-          })),
-        }),
-  };
-  if (body !== null && checks.checks !== undefined) {
-    Reflect.deleteProperty(body, "contexts");
+  const strict = checks.strict ?? false;
+  if (checks.checks === undefined) {
+    return { strict, contexts: checks.contexts ?? [] };
   }
-  return body;
+  return {
+    strict,
+    checks: checks.checks.map((check) => ({
+      context: check.context,
+      ...(check.appId === undefined ? {} : { app_id: check.appId }),
+    })),
+  };
 };
+
+const putBranchProtection = (octokit: GitHubClient, params: BranchProtectionUpdate) =>
+  octokit.request(UPDATE_BRANCH_PROTECTION, params);
 
 const attrsOf = (
   branch: string,
@@ -449,7 +467,7 @@ export const BranchProtectionProvider = () =>
 
       yield* Effect.tryPromise({
         try: () =>
-          octokit.rest.repos.updateBranchProtection({
+          putBranchProtection(octokit, {
             owner: news.owner,
             repo: news.repository,
             branch: news.branch,
