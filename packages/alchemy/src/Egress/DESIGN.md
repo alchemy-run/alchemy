@@ -9,7 +9,8 @@ laptop) has no such hook, so:
 - **The gateway is a handler you route to yourself.** `gateway.fetch` verifies
   the request's grant, runs the egress handler (rules, credentials), and
   streams upstream. It knows nothing about who owns the sandbox, so it can
-  live in its own Worker or in yours.
+  run anywhere that serves HTTP: its own Worker (the easiest), your Worker,
+  a Lambda with a function URL, a server.
 - **The Durable Object that started the sandbox keeps it supplied with grants.**
   A fresh 5-minute grant every 2 minutes, pushed to the proxy, plus a new one
   whenever the egress set changes. Revoking means pushing an empty grant and
@@ -18,7 +19,7 @@ laptop) has no such hook, so:
 ```
 ┌──── microVM ────────────────────────────┐        ┌──── Cloudflare ─────────────────────────────────────────┐
 │ git / gh / claude                       │        │                                                         │
-│   │ HTTPS_PROXY=http://127.0.0.1:3128   │ HTTPS  │  Gateway Worker: gateway.fetch   (stateless)            │
+│   │ HTTPS_PROXY=http://127.0.0.1:3128   │ HTTPS  │  Gateway: gateway.fetch   (stateless; here a Worker)    │
 │   ▼                                     │───────▶│    verify grant → egress handler, narrowed by the grant │
 │ proxy (bootstrap)                       │        │    → add the token → stream to api.github.com           │
 │   routes the grant's `hosts`            │        │                                                         │
@@ -120,6 +121,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```ts
 // src/gateway.ts — its own Worker: sandboxes' egress traffic, nothing else
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Egress from "alchemy/Egress";
 import * as Effect from "effect/Effect";
 import { Model, Repo } from "./egress.ts";
 
@@ -128,7 +130,27 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     // Yielding the egresses binds their secrets into this Worker, and the root key that verifies grants.
-    const gateway = yield* Cloudflare.EgressGateway({ egress: [Model, Repo] });
+    const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
+    return { fetch: gateway.fetch };
+  }),
+) {}
+```
+
+`Egress.Gateway` isn't tied to Workers. The same gateway on a Lambda:
+
+```ts
+// src/gateway.ts — a Lambda with a function URL
+import * as AWS from "alchemy/AWS";
+import * as Egress from "alchemy/Egress";
+import * as Effect from "effect/Effect";
+import { Model, Repo } from "./egress.ts";
+
+export default class Gateway extends AWS.Lambda.Function<Gateway>()(
+  "Gateway",
+  { main: import.meta.url, url: true },
+  Effect.gen(function* () {
+    // The same bindings, into the Lambda's environment.
+    const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
     return { fetch: gateway.fetch };
   }),
 ) {}
@@ -142,6 +164,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Egress from "alchemy/Egress";
 import { Agent } from "./Agent.ts";
 import { Model, Repo } from "./egress.ts";
 
@@ -150,7 +173,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const agents = yield* Agent;
-    const gateway = yield* Cloudflare.EgressGateway({ egress: [Model, Repo] });
+    const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
 
     return {
       fetch: Effect.gen(function* () {
@@ -196,7 +219,8 @@ export default AWS.MicroVM.Sandbox(
     image: "node:24-bookworm",
     memory: "32 GB",
     cpu: 8,
-    // The Worker the proxy sends egress traffic to. One Worker instead: `gateway: Api, gatewayPath: "/egress"`.
+    // Where the proxy sends egress traffic: anything with a `url` (a Worker, a Lambda with a
+    // function URL), or a URL string. Routed in your own Worker: `gateway: Api, gatewayPath: "/egress"`.
     gateway: Gateway,
   },
   Effect.gen(function* () {
@@ -276,7 +300,7 @@ yield* sandbox.bind`Egress(${key})`({
     ALCHEMY_EGRESS_PROXY: "1", // the bootstrap starts the proxy (non-Cloudflare sandboxes)
   },
 });
-// The real credential: a secret in the Worker that yields the declaration.
+// The real credential: a secret in whatever yields the declaration (the gateway's host).
 yield* worker.bind`Egress(${key})`({ env: { [`ALCHEMY_EGRESS_SECRET_${key}`]: token } });
 ```
 
@@ -290,16 +314,17 @@ from the grant at runtime (section 7).
 // alchemy internal: AWS/MicroVM/Sandbox.ts (when the Durable Object yields Sandbox, deploy time)
 const worker = yield* Cloudflare.Worker; // the Worker hosting the Durable Object
 
-// Signs grants here; Cloudflare.EgressGateway yields the same declaration to verify them,
-// so both Workers get one key per stage.
+// Signs grants here; Egress.Gateway yields the same declaration to verify them,
+// so the Durable Object's Worker and the gateway's host share one key per stage.
 const rootKey = yield* Egress.RootKey; // Random("EgressRootKey", { bytes: 32 })
 yield* worker.bind`EgressRootKey`({ env: { ALCHEMY_EGRESS_ROOT_KEY: rootKey.value } });
 
-// Where sandboxes send egress traffic: the Worker the user named in `gateway`.
-const gateway = yield* options.gateway;
-yield* worker.bind`EgressGateway`({
-  env: { ALCHEMY_EGRESS_GATEWAY: Output.interpolate`${gateway.url}${options.gatewayPath ?? "/"}` },
-});
+// Where sandboxes send egress traffic: a URL string as given, or the `url` of the resource given.
+const gatewayUrl =
+  typeof options.gateway === "string"
+    ? options.gateway
+    : Output.interpolate`${(yield* options.gateway).url}${options.gatewayPath ?? "/"}`;
+yield* worker.bind`EgressGateway`({ env: { ALCHEMY_EGRESS_GATEWAY: gatewayUrl } });
 
 // Starting microVMs.
 const launcher = yield* AWS.IAM.Role("SandboxLauncher", {
@@ -464,9 +489,9 @@ The proxy never asks anyone for a grant. It uses the one it was last given.
 
 ## 8. Run time: the gateway (stateless)
 
-`Cloudflare.EgressGateway({ egress })` hooks nothing. It binds the root key
-and the egresses' secrets into the Worker, and returns `fetch`, which the
-user routes to. This is that `fetch`, written plainly:
+`Egress.Gateway({ egress })` hooks nothing. It binds the root key and the
+egresses' secrets into whatever yields it (a Worker, a Lambda, a server), and
+returns `fetch`, which the user routes to. This is that `fetch`, written plainly:
 
 ```ts
 // alchemy internal: Egress/Gateway.ts — gateway.fetch
@@ -541,7 +566,7 @@ export const verify = (rootKey: string, grant: Grant): boolean => {
 
 A grant isn't a credential for GitHub or Anthropic. It lets whoever holds it
 ask the gateway to run the egresses it names, as narrowed, for up to 5
-minutes. The tokens stay in the Worker.
+minutes. The tokens stay in the gateway's host.
 
 ## 11. Cloudflare Containers stay as they are
 
@@ -566,7 +591,7 @@ AWS.MicroVM.Sandbox(Sandbox, { main, image, memory: "32 GB", cpu: 8, gateway }, 
 AWS.ECS.Sandbox(Sandbox, { main, image, cpu: 8, memory: "32 GB", gateway }, program);
 Fly.Sandbox(Sandbox, { main, image, size: "performance-8x", gateway }, program);
 
-// A process on your machine under alchemy dev: the same proxy; the gateway is the local Worker
+// A process on your machine under alchemy dev: the same proxy; the gateway runs locally
 Local.Sandbox(Sandbox, { main, gateway }, program);
 ```
 
