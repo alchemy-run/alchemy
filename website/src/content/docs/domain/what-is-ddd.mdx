@@ -284,6 +284,46 @@ Policies and aggregates both apply rules, but different kinds. An aggregate enfo
 
 When a process takes several steps across aggregates and can fail partway, like a transfer that debits one account and then credits another, a chain of policies drives it step by step, and undoes earlier steps if a later one fails. That pattern is called a **saga**. See [Policy](/domain/policy) and [Sagas and compensation](/domain/sagas).
 
+## Testing: given, when, then
+
+Designing this way makes the model easy to test, because every piece is defined by events. An aggregate's behaviour is a function of its history and a command. A view's state is a function of the events it has read. A policy's actions are a function of the event that triggered it.
+
+So a test needs no database, no mocks and no setup code. It states the history as events, sends one command, and checks the outcome as events, or as a rejection:
+
+<DAG
+  nodes={[
+    { id: "given", label: "given", type: "events so far", kind: "event", col: 0, row: 0 },
+    { id: "when", label: "when", type: "a command", kind: "command", col: 1, row: 0 },
+    { id: "then", label: "then", type: "new events", kind: "event", col: 2, row: 0 },
+    { id: "rejected", label: "or rejected", type: "a rejection", kind: "rejection", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "given", to: "when" },
+    { from: "when", to: "then" },
+    { from: "when", to: "rejected" },
+  ]}
+/>
+
+That's also how the business states its rules: "an account holding 100 refuses a withdrawal of 150". The test reads the same way:
+
+```typescript title="test/Account.test.ts"
+it.effect("refuses to withdraw more than the balance", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ owner: "sam" }),
+      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
+    ),
+    Story.when(account, new WithdrawMoney({ amount: 150 })),
+    Story.rejected(new InsufficientFunds({ balance: 100, requested: 150 })),
+  ),
+);
+```
+
+The same shape covers the rest of the model. A view is tested by giving it events and checking its state. A policy is tested by checking the commands it sends, and calls to external systems wait for the test to answer them, so every outcome of an outside call can be tried. Because the whole model runs in memory, a test of a process spanning several aggregates still runs in milliseconds.
+
+See [Stories](/domain/stories).
+
 ## Bounded contexts: one language per model
 
 Large businesses don't have a single language. To the bank, an "account" holds money. To the support team's ticketing system, an "account" is a login. One model that tries to serve both ends up serving neither.
