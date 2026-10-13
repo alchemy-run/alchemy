@@ -1,3 +1,4 @@
+import type { Octokit as GitHubClient } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -372,6 +373,35 @@ interface ProtectionPayload {
   lock_branch?: { enabled?: boolean };
 }
 
+type UpdateBranchProtectionParams = NonNullable<
+  Parameters<GitHubClient["rest"]["repos"]["updateBranchProtection"]>[0]
+>;
+
+// Octokit requires `contexts` on this body. GitHub rejects a request that
+// also includes `checks`, so a set `checks` array drops `contexts` before
+// the body is returned.
+const requiredStatusChecksOf = (
+  checks: BranchProtectionProps["requiredStatusChecks"],
+): UpdateBranchProtectionParams["required_status_checks"] => {
+  if (checks === undefined) return null;
+  const body: UpdateBranchProtectionParams["required_status_checks"] = {
+    strict: checks.strict ?? false,
+    contexts: checks.contexts ?? [],
+    ...(checks.checks === undefined
+      ? {}
+      : {
+          checks: checks.checks.map((check) => ({
+            context: check.context,
+            ...(check.appId === undefined ? {} : { app_id: check.appId }),
+          })),
+        }),
+  };
+  if (body !== null && checks.checks !== undefined) {
+    Reflect.deleteProperty(body, "contexts");
+  }
+  return body;
+};
+
 const attrsOf = (
   branch: string,
   protection: ProtectionPayload,
@@ -413,34 +443,9 @@ export const BranchProtectionProvider = () =>
       // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
       // values (or `null`) for every aspect so removed props converge back
       // to their defaults rather than being left as-is.
-      const checks = news.requiredStatusChecks;
+      const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
       const reviews = news.requiredPullRequestReviews;
       const restrictions = news.restrictions;
-      type UpdateBranchProtectionParams = NonNullable<
-        Parameters<typeof octokit.rest.repos.updateBranchProtection>[0]
-      >;
-      type RequiredStatusChecks = UpdateBranchProtectionParams["required_status_checks"];
-      // Octokit requires `contexts` on this body. GitHub rejects a request
-      // that also includes `checks`, so a set `checks` array drops `contexts`
-      // before the request is sent.
-      const requiredStatusChecks: RequiredStatusChecks =
-        checks === undefined
-          ? null
-          : {
-              strict: checks.strict ?? false,
-              contexts: checks.contexts ?? [],
-              ...(checks.checks === undefined
-                ? {}
-                : {
-                    checks: checks.checks.map((check) => ({
-                      context: check.context,
-                      ...(check.appId === undefined ? {} : { app_id: check.appId }),
-                    })),
-                  }),
-            };
-      if (requiredStatusChecks !== null && checks?.checks !== undefined) {
-        Reflect.deleteProperty(requiredStatusChecks, "contexts");
-      }
 
       yield* Effect.tryPromise({
         try: () =>
