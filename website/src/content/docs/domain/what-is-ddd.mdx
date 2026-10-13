@@ -108,21 +108,9 @@ Each aggregate is also a **consistency boundary**. It handles one command at a t
 
 That makes the size of an aggregate a design decision. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
 
-Here is the whole account: its state, how it decides each command, and how each event changes the state.
+Here is the whole account: how it decides each command, and how each event changes its state.
 
 ```typescript title="src/Account.ts"
-const State = Schema.Union([
-  Schema.TaggedStruct("Unopened", {}),
-  Schema.TaggedStruct("Open", { owner: Schema.String, balance: Schema.Int }),
-]);
-type State = typeof State.Type;
-
-// An event can only follow an open account; anything else is a bug.
-const mustBeOpen = (s: State) => {
-  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-  return s;
-};
-
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
