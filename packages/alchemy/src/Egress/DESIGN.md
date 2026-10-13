@@ -6,9 +6,10 @@ laptop) has no such hook, so:
 
 - **The sandbox runs a proxy.** Requests to egress hosts go to a gateway;
   every other host goes straight out.
-- **The gateway is a stateless route on a Worker.** It verifies the
-  request's grant, runs the egress handler (rules, credentials), and streams
-  upstream. It knows nothing about who owns the sandbox.
+- **The gateway is a handler you route to yourself.** `gateway.fetch` verifies
+  the request's grant, runs the egress handler (rules, credentials), and
+  streams upstream. It knows nothing about who owns the sandbox, so it can
+  live in its own Worker or in yours.
 - **The Durable Object that started the sandbox keeps it supplied with grants.**
   A fresh 5-minute grant every 2 minutes, pushed to the proxy, plus a new one
   whenever the egress set changes. Revoking means pushing an empty grant and
@@ -17,11 +18,11 @@ laptop) has no such hook, so:
 ```
 ┌──── microVM ────────────────────────────┐        ┌──── Cloudflare ─────────────────────────────────────────┐
 │ git / gh / claude                       │        │                                                         │
-│   │ HTTPS_PROXY=http://127.0.0.1:3128   │ HTTPS  │  Worker: /__alchemy/egress   (stateless, any edge)      │
+│   │ HTTPS_PROXY=http://127.0.0.1:3128   │ HTTPS  │  Gateway Worker: gateway.fetch   (stateless)            │
 │   ▼                                     │───────▶│    verify grant → egress handler, narrowed by the grant │
 │ proxy (bootstrap)                       │        │    → add the token → stream to api.github.com           │
 │   routes the grant's `hosts`            │        │                                                         │
-│   other hosts: tunnel straight out      │        │  Durable Object that owns the sandbox                   │
+│   other hosts: tunnel straight out      │        │  Api Worker → Durable Object that owns the sandbox      │
 │ control port :3129 ◀────────────────────┼────────┤    alarm every 2 min: push a fresh 5-min grant          │
 │   (new grant: routing follows it)       │        │    setEgress: push a new grant · revoke: push ""        │
 └─────────────────────────────────────────┘        └─────────────────────────────────────────────────────────┘
@@ -91,7 +92,52 @@ export class Agent extends Cloudflare.DurableObject<Agent>()(
 ```
 
 ```ts
-// src/worker.ts — the Worker that hosts Agent
+// src/worker.ts — hosts Agent; knows nothing about egress
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Agent } from "./Agent.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const agents = yield* Agent;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const issue = Number(new URL(request.url, "http://x").searchParams.get("issue"));
+        yield* (yield* agents.getByName(`issue-${issue}`)).work(issue);
+        return HttpServerResponse.text("started");
+      }),
+    };
+  }),
+) {}
+```
+
+```ts
+// src/gateway.ts — its own Worker: sandboxes' egress traffic, nothing else
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { Model, Repo } from "./egress.ts";
+
+export default class Gateway extends Cloudflare.Worker<Gateway>()(
+  "Gateway",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // Yielding the egresses binds their secrets into this Worker, and the root key that verifies grants.
+    const gateway = yield* Cloudflare.EgressGateway({ egress: [Model, Repo] });
+    return { fetch: gateway.fetch };
+  }),
+) {}
+```
+
+Or one Worker, routed by hand:
+
+```ts
+// src/worker.ts — hosts Agent and serves egress on /egress
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -104,14 +150,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const agents = yield* Agent;
-    // Serves /__alchemy/egress on this Worker, ahead of `fetch` below.
-    // Yielding the egresses binds their secrets here.
-    yield* Cloudflare.EgressGateway({ egress: [Model, Repo] });
+    const gateway = yield* Cloudflare.EgressGateway({ egress: [Model, Repo] });
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const issue = Number(new URL(request.url, "http://x").searchParams.get("issue"));
+        const url = new URL(request.url, "http://x");
+        if (url.pathname === "/egress") return yield* gateway.fetch;
+        const issue = Number(url.searchParams.get("issue"));
         yield* (yield* agents.getByName(`issue-${issue}`)).work(issue);
         return HttpServerResponse.text("started");
       }),
@@ -153,6 +199,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import Gateway from "./src/gateway.ts";
 import SandboxLive from "./src/Sandbox.runtime.ts";
 import Api from "./src/worker.ts";
 
@@ -167,7 +214,14 @@ export default Alchemy.Stack(
     return { api: api.url.as<string>() };
   }).pipe(
     // Cloudflare: Effect.provide(Cloudflare.Containers.Sandbox(SandboxLive, { instance: "standard-4" })),
-    Effect.provide(AWS.MicroVM.Sandbox(SandboxLive, { memory: "32 GB", cpu: 8 })),
+    Effect.provide(
+      AWS.MicroVM.Sandbox(SandboxLive, {
+        memory: "32 GB",
+        cpu: 8,
+        // Where the sandbox's proxy sends egress traffic. One Worker: `{ worker: Api, path: "/egress" }`.
+        gateway: { worker: Gateway },
+      }),
+    ),
   ),
 );
 ```
@@ -201,13 +255,15 @@ from the grant at runtime (section 7).
 // alchemy internal: AWS/MicroVM/Sandbox.ts (Layer construction, deploy time)
 const worker = yield* Cloudflare.Worker; // the Worker hosting the Durable Object
 
-// Signs grants (Durable Object) and verifies them (gateway). One per stage; a Worker secret.
-const rootKey = yield* Random("EgressRootKey", { bytes: 32 });
+// Signs grants here; Cloudflare.EgressGateway yields the same declaration to verify them,
+// so both Workers get one key per stage.
+const rootKey = yield* Egress.RootKey; // Random("EgressRootKey", { bytes: 32 })
 yield* worker.bind`EgressRootKey`({ env: { ALCHEMY_EGRESS_ROOT_KEY: rootKey.value } });
 
-// Where sandboxes send egress traffic.
+// Where sandboxes send egress traffic: the Worker the user named in `gateway`.
+const gateway = yield* options.gateway.worker;
 yield* worker.bind`EgressGateway`({
-  env: { ALCHEMY_EGRESS_GATEWAY: Output.interpolate`${worker.url}/__alchemy/egress` },
+  env: { ALCHEMY_EGRESS_GATEWAY: Output.interpolate`${gateway.url}${options.gateway.path ?? "/"}` },
 });
 
 // Starting microVMs.
@@ -373,15 +429,14 @@ The proxy never asks anyone for a grant. It uses the one it was last given.
 
 ## 8. Run time: the gateway (stateless)
 
-`Cloudflare.EgressGateway({ egress })` puts this ahead of the user's `fetch`.
-It needs the root key and the egress declarations, nothing else:
+`Cloudflare.EgressGateway({ egress })` hooks nothing. It binds the root key
+and the egresses' secrets into the Worker, and returns `fetch`, which the
+user routes to. This is that `fetch`, written plainly:
 
 ```ts
-// alchemy internal: Egress/Gateway.ts
+// alchemy internal: Egress/Gateway.ts — gateway.fetch
 export const gateway = (egress: ReadonlyArray<EgressDeclaration>) =>
-  async (request: Request, env: Env): Promise<Response | undefined> => {
-    if (new URL(request.url).pathname !== "/__alchemy/egress") return undefined; // the user's fetch
-
+  async (request: Request, env: Env): Promise<Response> => {
     const grant = Grant.decode(request.headers.get("authorization"));
     if (!Grant.verify(env.ALCHEMY_EGRESS_ROOT_KEY, grant)) return new Response("bad grant", { status: 401 });
     if (Number(Grant.caveat(grant, "expires <")) < Date.now()) {
