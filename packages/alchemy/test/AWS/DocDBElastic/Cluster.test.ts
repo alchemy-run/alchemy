@@ -79,9 +79,9 @@ const assertClusterDeleting = (arn: string) =>
   );
 
 // A DocumentDB elastic cluster takes ~8-10 minutes to provision and bills
-// per shard-vCPU-hour while it exists. The full lifecycle is gated behind
-// AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// per shard-vCPU-hour while it exists. The full lifecycle is skipped under
+// `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create elastic cluster (1 shard, capacity 2), verify, destroy",
   (stack) =>
     Effect.gen(function* () {

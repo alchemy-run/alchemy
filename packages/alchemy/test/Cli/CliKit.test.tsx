@@ -1650,6 +1650,30 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
+it.live(
+  "tab fills a text prompt's default into the empty field",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+
+      const fiber = yield* service.prompt
+        .text({ message: "Token name", defaultValue: "alchemy-superuser" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("alchemy-superuser"));
+      yield* Effect.sync(() => stdin.write("\t"));
+      // A separate chunk: the parser reads "\t-2" in one chunk as typed text.
+      yield* Effect.sleep("50 millis");
+      yield* Effect.sync(() => stdin.write("-2"));
+      yield* Effect.promise(() => stdout.waitFor("alchemy-superuser-2"));
+      yield* Effect.sync(() => stdin.write("\r"));
+
+      expect(yield* Fiber.join(fiber)).toBe("alchemy-superuser-2");
+    }),
+  { tags: ["unit", "local"] },
+);
+
 it.effect(
   "deletes a whole emoji grapheme on backspace",
   () =>

@@ -97,7 +97,7 @@ const listCommand = Command.make(
       const store = yield* AlchemistState.store(source(args));
       const items = yield* usingStore(store)(
         State.listState({
-          path: yield* normalizedPath(Option.getOrUndefined(path)),
+          path: yield* path.pipe(Option.getOrUndefined, normalizedPath),
           recursive,
         }),
       );
@@ -112,7 +112,7 @@ const readCommand = Command.make(
   instrumentCommand("state.read")(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
-      const requested = yield* normalizedPath(Option.getOrUndefined(path));
+      const requested = yield* path.pipe(Option.getOrUndefined, normalizedPath);
       const entries = yield* usingStore(store)(State.readState({ path: requested, recursive }));
       yield* Console.log(
         JSON.stringify(
@@ -141,7 +141,7 @@ const deleteCommand = Command.make(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const requested = yield* normalizedPath(path);
       if (requested === "") {
-        return yield* Effect.fail(new UserInputError({ message: "cannot delete the state root" }));
+        return yield* new UserInputError({ message: "cannot delete the state root" });
       }
       const store = yield* AlchemistState.store(source(args));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
@@ -202,10 +202,10 @@ const stateExplorer = (args: StateArgs) =>
     // Captured here so the explorer's forked fibers run with the command's
     // ambient services (tracing, terminal) rather than the default runtime.
     const services = yield* Effect.context<never>();
-    yield* cli
-      .application(cli.prompt.custom(stateExplorerScreen(explorer, services)))
-      .pipe(CliKit.Application.alternate)
-      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
+    yield* cli.application(cli.prompt.custom(stateExplorerScreen(explorer, services))).pipe(
+      CliKit.Application.alternate,
+      Effect.catchTag("TerminalCancelled", () => Effect.void),
+    );
   });
 
 const nukeCommand = Command.make(

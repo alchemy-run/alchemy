@@ -149,8 +149,10 @@ export const ServerlessClusterProvider = () =>
         return yield* kafka.getBootstrapBrokers({ ClusterArn: arn }).pipe(
           Effect.map((r) => r.BootstrapBrokerStringSaslIam),
           // Brokers are only resolvable once the cluster is ACTIVE.
-          Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)),
-          Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            BadRequestException: () => Effect.succeed(undefined),
+            ConflictException: () => Effect.succeed(undefined),
+          }),
         );
       });
 

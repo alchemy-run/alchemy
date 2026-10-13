@@ -28,14 +28,14 @@ const getSession = macie2.getMacieSession({}).pipe(
 // Macie is not already enabled — the test enables Macie itself and disables it
 // again on teardown.
 //
-// Gated behind AWS_TEST_SLOW=1: Macie's control-plane APIs are low-TPS and,
+// Skipped under `--fast`: Macie's control-plane APIs are low-TPS and,
 // under the heavy concurrent load of the resource-factory test wave, both the
 // enablement→job-creation propagation and job creation itself intermittently
 // hit `Too Many Requests` throttling. The resource, its distilled
 // `MacieNotEnabled` synthetic error, and the bounded enablement-propagation
 // retry are all fully implemented and pass in isolation; run this gated on a
-// quiet account (AWS_TEST_SLOW=1) to exercise the full lifecycle.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// quiet account to exercise the full lifecycle.
+test.provider.skipIf(!!process.env.FAST)(
   "lifecycle: create a one-time classification job, then cancel it",
   (stack) =>
     Effect.gen(function* () {

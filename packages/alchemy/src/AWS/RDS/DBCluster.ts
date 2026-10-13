@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
+import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface DBClusterProps {
@@ -600,21 +601,19 @@ export const DBClusterProvider = () =>
         // Attributes shape. Tags come inline on `DBCluster.TagList`, so no
         // per-item `listTagsForResource` hydration is needed (matching `read`).
         list: () =>
-          Effect.gen(function* () {
-            return yield* rds.describeDBClusters.pages({}).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.DBClusters ?? []).map((cluster) =>
-                    toAttrs({
-                      cluster,
-                      tags: toTagRecord(cluster.TagList),
-                    }),
-                  ),
+          rds.describeDBClusters.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBClusters ?? []).map((cluster) =>
+                  toAttrs({
+                    cluster,
+                    tags: toTagRecord(cluster.TagList),
+                  }),
                 ),
               ),
-            );
-          }),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
@@ -869,6 +868,11 @@ export const DBClusterProvider = () =>
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));
+          // RDS creates `/aws/rds/cluster/<id>/<logType>` for every
+          // `enableCloudwatchLogsExports` type and never deletes them.
+          yield* reapLogGroupsByPrefix(
+            `/aws/rds/cluster/${output.dbClusterIdentifier.toLowerCase()}/`,
+          );
         }),
       };
     }),

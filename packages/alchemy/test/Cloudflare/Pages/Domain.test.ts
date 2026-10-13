@@ -204,17 +204,7 @@ test.provider(
 // project's domains. Deploy a project + domain, then assert the attachment
 // appears in the exhaustively-paginated result with its full `read`
 // Attributes shape.
-//
-// SKIP-GATED on a distilled schema bug: `pages.listProjects` fails to decode
-// the live response with
-//   CloudflareHttpError { status: 200, statusText: "Schema decode failed" }
-// because `ListProjectsResponse.result[].canonicalDeployment` and
-// `.latestDeployment` declare `source` as a *required* `Schema.Struct`
-// (pages.ts ~1540 / ~2002), but Cloudflare omits `source` on deployment
-// objects. NEEDED PATCH: make `source` optional/nullable on both deployment
-// shapes in the `listProjects` response schema, regenerate the `pages`
-// service, then drop this gate. Re-enable with CLOUDFLARE_TEST_PAGES_LIST=1.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
+test.provider(
   "list enumerates domains across all Pages projects",
   (stack) =>
     Effect.gen(function* () {

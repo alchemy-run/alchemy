@@ -112,6 +112,7 @@ export const pollUntil = <A, E, R>(
   predicate: (value: A) => boolean,
   schedule: Schedule.Schedule<unknown, unknown, never> = defaultSchedule,
 ): Effect.Effect<A, E, R> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- NotReady only escapes once the poll schedule is exhausted
   fn.pipe(
     Effect.flatMap((value) =>
       predicate(value) ? Effect.succeed(value) : Effect.fail(new NotReady({ description })),

@@ -185,21 +185,19 @@ const toId = (id: string, shortName: string | undefined, existing?: string) =>
       : `k${generated}`.replace(/[^a-z0-9]+$/g, "").slice(0, MAX_NAME_LENGTH);
   });
 
-const toAttrs = (key: resourcemanager.TagKey) => {
-  return {
-    name: key.name ?? "",
-    shortName: key.shortName ?? "",
-    namespacedName: key.namespacedName,
-    parent: key.parent ?? "",
-    description: key.description,
-    purpose: canonicalizePurpose(key.purpose),
-    purposeData: tagRecord(key.purposeData),
-    allowedValuesRegex: canonicalizeRegex(key.allowedValuesRegex),
-    etag: key.etag,
-    createTime: key.createTime,
-    updateTime: key.updateTime,
-  };
-};
+const toAttrs = (key: resourcemanager.TagKey) => ({
+  name: key.name ?? "",
+  shortName: key.shortName ?? "",
+  namespacedName: key.namespacedName,
+  parent: key.parent ?? "",
+  description: key.description,
+  purpose: canonicalizePurpose(key.purpose),
+  purposeData: tagRecord(key.purposeData),
+  allowedValuesRegex: canonicalizeRegex(key.allowedValuesRegex),
+  etag: key.etag,
+  createTime: key.createTime,
+  updateTime: key.updateTime,
+});
 
 const getByName = (name: string) =>
   resourcemanager

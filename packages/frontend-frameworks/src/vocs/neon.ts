@@ -158,7 +158,7 @@ export const make = Effect.fn(function* (options: VocsNodeFrameworkOptions = {})
         );
         yield* Effect.tryPromise({ try: () => server.listen(), catch: fail });
         const url = server.resolvedUrls?.local[0] ?? server.resolvedUrls?.network[0];
-        if (!url) return yield* Effect.fail(fail(new Error("Vocs did not report a dev URL")));
+        if (!url) return yield* fail(new Error("Vocs did not report a dev URL"));
         return { url };
       }
       return yield* runDevChild({

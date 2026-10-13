@@ -1,4 +1,4 @@
-import type { Sprite as FlySprite } from "@distilled.cloud/fly-io/sprites";
+import type { SpriteResponse as FlySprite } from "@distilled.cloud/fly-io/sprites";
 import * as sprites from "@distilled.cloud/fly-io/sprites";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -343,7 +343,7 @@ const toAttrs = (sprite: FlySprite, name: string, codeHash: string): Sprite["Att
   url: sprite.url ?? `https://${name}.sprites.app`,
   status: toStatus(sprite.status),
   urlAuth: toUrlAuth(sprite.url_settings?.auth),
-  orgSlug: sprite.org_slug ?? sprite.organization,
+  orgSlug: sprite.organization,
   code: { hash: codeHash },
 });
 

@@ -125,7 +125,7 @@ export const GetConfigurationHttp = Layer.effect(
         // Decoding the (already-buffered) config body only fails on a
         // corrupt payload — a defect, not part of the operation's typed union.
         const fetched = response.Configuration
-          ? yield* Stream.mkString(Stream.decodeText(response.Configuration)).pipe(Effect.orDie)
+          ? yield* response.Configuration.pipe(Stream.decodeText, Stream.mkString, Effect.orDie)
           : "";
 
         // An empty body means "unchanged" — keep the last-seen content.

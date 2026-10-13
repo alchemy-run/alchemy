@@ -275,7 +275,7 @@ export const resolveDeployTarget: <T extends DeployTarget, Config>(
     candidate = (candidate as (config: Config) => T)(config);
   }
   if (!isDeployTarget(candidate)) {
-    return yield* Effect.fail(invalidTarget(specifier));
+    return yield* invalidTarget(specifier);
   }
   return candidate as T;
 });

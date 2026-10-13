@@ -182,10 +182,10 @@ test.provider(
 
 // A VECTORSEARCH collection is the vector store Bedrock Knowledge Bases require.
 // Collections have a real-money OCU floor and take ~1-5 min to provision, so the
-// full lifecycle is gated behind AWS_TEST_SLOW=1, destroys IMMEDIATELY, and
+// full lifecycle is skipped under `--fast`, destroys IMMEDIATELY, and
 // verifies the collection is gone.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-  "create VECTORSEARCH collection, verify ACTIVE, destroy, verify gone (AWS_TEST_SLOW=1)",
+test.provider.skipIf(!!process.env.FAST)(
+  "create VECTORSEARCH collection, verify ACTIVE, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight.

@@ -1,4 +1,5 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
@@ -99,7 +100,7 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Scheduling policy used by Cloudflare's containers control plane.
    * @default "default"
    */
-  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  schedulingPolicy?: "default" | "regional";
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
@@ -375,25 +376,102 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
   image: string;
 }
 
+/** SSH access to a container application's instances. */
+export interface ContainerSshConfiguration {
+  /** Whether instances accept SSH connections. */
+  enabled: boolean;
+  /** Port the SSH server listens on inside each instance. */
+  port?: number;
+}
+
 /**
- * Container application props — the image comes from exactly one of three
- * sources, declared flat on the props: `main` (bundled Effect program,
- * composing with `image` / inline `dockerfile` as its environment),
- * `context`/`dockerfile` (user Dockerfile), or `image` (pre-built remote
- * image).
+ * Application-wide settings of a Durable Object class's container application.
+ * Every Container bound to the class may declare them; declarations must agree.
+ */
+export interface DurableObjectApplicationSettings {
+  /**
+   * SSH access to every instance of the application. Removing a previously
+   * declared value disables SSH.
+   */
+  ssh?: ContainerSshConfiguration;
+  /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
+  /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
+  observability?: Containers.ContainerApplicationObservability;
+}
+
+/**
+ * One image a Durable Object starts with `ctx.container.start()`.
+ *
+ * Cloudflare allows one container application per Durable Object class. Every
+ * `durable_object` Container bound to the class adds its image to that
+ * application, under the Container's id. Bind several Containers to start
+ * different images from the same class, one at a time. One Container may be
+ * bound to several classes.
+ *
+ * An Effect-native Durable Object binds a Container with `yield*`. An async
+ * Worker attaches it to a class with
+ * `Cloudflare.DurableObject(className, { containers })`.
+ *
+ * The policy is immutable: migrating an existing fleet application requires a
+ * new application and Durable Object namespace.
+ */
+export interface DurableObjectContainerProps
+  extends DurableObjectApplicationSettings, PlatformProps {
+  /** Select images and instance sizes in `ctx.container.start()`. */
+  schedulingPolicy: "durable_object";
+  /**
+   * Registry image to copy into Cloudflare's managed registry, e.g.
+   * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
+   * Omit every image source to contribute no image: `start()` then uses the
+   * managed `cloudflare/debian-trixie` image unless given another.
+   */
+  image?: string;
+  /**
+   * Docker build context. Setting `context` or `dockerfile` builds the image;
+   * `context` defaults to the current directory.
+   */
+  context?: string;
+  /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
+  dockerfile?: string | InlineDockerfile;
+  /** Image publication and build-cache configuration. */
+  publish?: ContainerApplicationPropsBase["publish"];
+  /**
+   * Maximum wait for Cloudflare to prepare the published image, including API calls.
+   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
+   * Cancellation stops waiting; another deployment reuses the published registry image.
+   * Use an immutable source digest or change the image reference to refresh the image.
+   * @default "30 minutes"
+   */
+  imagePreparationTimeout?: Duration.Input;
+}
+
+/**
+ * Fleet-scheduled applications select a deployment image through `main`
+ * (bundled Effect program), `context`/`dockerfile`, or a pre-built `image`.
+ * A Durable Object-managed Container publishes one image that its Durable
+ * Object selects at runtime.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
   | ExternalContainerProps
-  | RemoteContainerProps;
+  | RemoteContainerProps
+  | DurableObjectContainerProps;
 
 /**
- * INTERNAL — the loose provider-side view across the three variants: every
+ * INTERNAL — the loose provider-side view across the variants: every
  * variant-specific field optional at its widest type. Each union member is
  * assignable to this shape, so provider/bundle code annotates helper params
  * with it instead of narrowing the union at every property access.
  */
-export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
+export interface AnyContainerApplicationProps extends Omit<
+  ContainerApplicationPropsBase,
+  "schedulingPolicy"
+> {
+  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  ssh?: ContainerSshConfiguration;
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
+  imagePreparationTimeout?: Duration.Input;
   main?: string;
   image?: string;
   context?: string;
@@ -725,11 +803,15 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   {
     /**
      * Cloudflare-assigned unique identifier of the container application.
+     * Empty for a Durable Object-managed Container: the application belongs
+     * to the Durable Object class that binds it.
      */
     applicationId: string;
     /**
      * The resolved application name (either the provided `name` or the
      * deterministic physical name derived from the stack, stage, and logical ID).
+     * For a Durable Object-managed Container, the name of its default image
+     * repository.
      */
     applicationName: string;
     /**
@@ -760,8 +842,18 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     /**
      * The resolved deployment configuration (image, networking, secrets, ports,
      * checks, etc.) currently applied to the application.
+     * Durable Object-managed applications configure each instance at start().
      */
-    configuration: ContainerApplication.Configuration;
+    configuration: Partial<ContainerApplication.Configuration> &
+      Containers.DurableObjectContainerConfiguration;
+    /** Application-wide logging declared by a Durable Object-managed Container. */
+    observability?: Containers.ContainerApplicationObservability;
+    /**
+     * The prepared, digest-pinned image of a Durable Object-managed Container,
+     * or its local image key in `alchemy dev`. Unset when the Container
+     * declares no image source.
+     */
+    image?: string;
     /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.

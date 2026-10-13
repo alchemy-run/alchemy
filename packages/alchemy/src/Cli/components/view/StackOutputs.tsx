@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { inspect } from "node:util";
 import { AnsiText } from "@alchemy.run/sigil";

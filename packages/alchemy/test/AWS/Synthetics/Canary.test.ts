@@ -116,9 +116,8 @@ describe.sequential(
       { timeout: 420_000 },
     );
 
-    // A live canary run takes ~1-2 minutes end to end — gated behind
-    // AWS_TEST_SLOW=1.
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    // A live canary run takes ~1-2 minutes end to end — skipped under --fast.
+    test.provider.skipIf(!!process.env.FAST)(
       "starts the canary and records a successful run",
       (stack) =>
         Effect.gen(function* () {

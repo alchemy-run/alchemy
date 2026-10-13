@@ -401,8 +401,10 @@ export const NetworkAclEntryProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag("InvalidNetworkAclEntry.NotFound", () => Effect.void),
-              Effect.catchTag("InvalidNetworkAclID.NotFound", () => Effect.void),
+              Effect.catchTags({
+                "InvalidNetworkAclEntry.NotFound": () => Effect.void,
+                "InvalidNetworkAclID.NotFound": () => Effect.void,
+              }),
             );
 
           // Delete success is only an acknowledgement. Observe the exact

@@ -19,7 +19,12 @@ const getJson = (url: string) =>
     Effect.flatMap((res) =>
       res.status === 200 ? res.json : Effect.fail(new Error(`HTTP ${res.status}`)),
     ),
-    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 20 }),
+    Effect.retry({
+      // Back off, but keep polling every 3s: a new fly.dev hostname can take
+      // a minute or more to start serving.
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+      times: 35,
+    }),
   );
 
 const stack = beforeAll(deploy(Stack), { timeout: 400_000 });

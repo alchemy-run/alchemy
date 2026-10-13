@@ -15,8 +15,9 @@ export default {
     if (query.get("mode") === "deltas") {
       const maxObjectSize = Number(query.get("max"));
       const { bases, jobs } = decodeDeltaBatch(new Uint8Array(await request.arrayBuffer()));
-      const resolved = await Effect.runPromise(
-        Effect.result(resolveDeltas(bases, jobs, { maxObjectSize })),
+      const resolved = await resolveDeltas(bases, jobs, { maxObjectSize }).pipe(
+        Effect.result,
+        Effect.runPromise,
       );
       if (resolved._tag === "Failure") {
         const failure = resolved.failure;
@@ -36,16 +37,12 @@ export default {
       return new Response("bad coordinates", { status: 400 });
     }
     const body = new Uint8Array(await request.arrayBuffer());
-    const result = await Effect.runPromise(
-      Effect.result(
-        scanPart(skip > 0 ? body.subarray(skip) : body, {
-          base,
-          remaining,
-          maxObjectSize,
-          resync: query.get("resync") === "1",
-        }),
-      ),
-    );
+    const result = await scanPart(skip > 0 ? body.subarray(skip) : body, {
+      base,
+      remaining,
+      maxObjectSize,
+      resync: query.get("resync") === "1",
+    }).pipe(Effect.result, Effect.runPromise);
     if (result._tag === "Failure") {
       const failure = result.failure;
       return new Response(`${failure._tag}: ${"reason" in failure ? failure.reason : ""}`, {

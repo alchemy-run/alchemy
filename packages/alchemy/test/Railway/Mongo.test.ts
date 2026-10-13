@@ -287,7 +287,9 @@ describe(
       providers: Railway.providers(),
     });
 
-    const fixture = beforeAll(deploy(FixtureStack), { timeout: 120_000 });
+    // Db provisioning (32–60s) then the service build+deploy (58–90s+) run
+    // serially: 91–150s measured, so 120s timed out under full-suite load.
+    const fixture = beforeAll(deploy(FixtureStack), { timeout: 240_000 });
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), { timeout: 120_000 });
 
     test(

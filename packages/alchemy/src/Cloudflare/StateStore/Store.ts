@@ -19,13 +19,13 @@ export default class Store extends DurableObject<Store>()(
     const storage = state.storage;
 
     return Effect.gen(function* () {
-      const keyHex = yield* encryptionSecret.get().pipe(Effect.map(Redacted.value), Effect.orDie);
+      const keyHex = yield* encryptionSecret.get().pipe(Effect.map(Redacted.value));
       const cryptoKey = yield* Effect.tryPromise(() =>
         crypto.subtle.importKey("raw", Buffer.from(keyHex, "hex"), { name: "AES-CTR" }, false, [
           "encrypt",
           "decrypt",
         ]),
-      ).pipe(Effect.orDie);
+      );
 
       const encryptValue = (value: unknown) =>
         Effect.tryPromise(async () => {
@@ -220,7 +220,7 @@ export default class Store extends DurableObject<Store>()(
             ),
           ),
       };
-    });
+    }).pipe(Effect.orDie);
   }).pipe(Effect.provide(Secret.ReadSecretBinding)),
 ) {
   /**

@@ -331,8 +331,10 @@ export const EgressOnlyInternetGatewayProvider = () =>
                   ? Effect.fail(new EigwDeleteFailed({ eigwId }))
                   : Effect.void,
               ),
-              Effect.catchTag("InvalidGatewayID.NotFound", () => Effect.void),
-              Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () => Effect.void),
+              Effect.catchTags({
+                "InvalidGatewayID.NotFound": () => Effect.void,
+                "InvalidEgressOnlyInternetGatewayId.NotFound": () => Effect.void,
+              }),
               // Retry on dependency violations (e.g., routes still using the EIGW)
               Effect.retry({
                 while: (e) => e._tag === "DependencyViolation" || e._tag === "EigwDeleteFailed",

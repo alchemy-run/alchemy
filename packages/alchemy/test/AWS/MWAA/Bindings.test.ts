@@ -63,16 +63,17 @@ describe(
 
 // ---------------------------------------------------------------------------
 // Full runtime fixture: a Lambda bound to all four MWAA bindings against a
-// live Airflow environment. An environment takes ~20-30 minutes to provision
-// and is billed hourly while it exists (and needs real private-subnet
-// networking supplied out of band), so this is gated behind AWS_TEST_SLOW=1
-// (same gate as the Environment lifecycle test) and always destroys what it
-// created.
+// live Airflow environment. The fixture builds its own private networking
+// (VPC + 2 private subnets in 2 AZs + IGW + one NAT gateway). An environment
+// takes ~20-30 minutes to provision and ~20-30 minutes to delete and is billed
+// hourly while it exists (~$0.49/h + ~$0.045/h NAT), so this is skipped under
+// `--fast` (same gate as the Environment lifecycle test) and always
+// destroys what it created.
 // ---------------------------------------------------------------------------
 
 const sharedStack = Core.scratchStack(testOptions, "MWAABindings");
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "token, REST API, and describe bindings against a live environment",
   () =>
     Effect.gen(function* () {
@@ -135,7 +136,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         expect(dags.statusCode).toBe(200);
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));
     }),
-  // environment create (~20-30 min) + binding checks + destroy initiation.
+  // network + environment create (~20-30 min) + binding checks +
+  // delete-until-gone (~20-30 min) + network teardown.
   {
     tags: [
       "provider:aws",
@@ -146,6 +148,6 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       "provider:aws:s3",
       "live",
     ],
-    timeout: 5_400_000,
+    timeout: 6_600_000,
   },
 );

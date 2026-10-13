@@ -31,7 +31,7 @@ export const toWireTags = (tags: Record<string, string>): b2bi.Tag[] =>
 export const readB2biTags = Effect.fn(function* (arn: string) {
   const response = yield* b2bi
     .listTagsForResource({ ResourceARN: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

@@ -8,6 +8,7 @@ import * as Planetscale from "alchemy/Planetscale";
 import * as Prisma from "alchemy/Prisma";
 import * as Railway from "alchemy/Railway";
 import * as Stripe from "alchemy/Stripe";
+import * as Turso from "alchemy/Turso";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -26,6 +27,7 @@ export default Alchemy.Stack(
       // set PRISMA_SERVICE_TOKEN (with CI=1) or configure the profile.
       Prisma.providers(),
       Stripe.providers(),
+      Turso.providers(),
     ),
     state: Cloudflare.state(),
   },

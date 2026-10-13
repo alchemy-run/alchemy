@@ -1,22 +1,50 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
+import { describe as suite, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
+import * as Drift from "@/Drift";
 import * as Kubernetes from "@/Kubernetes";
-import { parseRenderedManifests, renderHelmChart } from "@/Kubernetes/internal/helm.ts";
+import { HelmError, parseRenderedManifests, renderHelmChart } from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import {
+  destroyKindStack,
+  KindTestCluster,
+  kubectl,
+  kubectlGet,
+  type KindCluster,
+} from "./fixtures/kind.ts";
 
 const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
-const { test } = Test.make(testOptions);
+const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
 // builds) — `helm` must be installed on the machine running this suite.
 const chartDir = `${import.meta.dirname}/fixtures/chart`;
 
 const describe = layer(NodeServices.layer);
+
+const expectValuesFileGone = (secret: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const probe = yield* fs.makeTempDirectory({ prefix: "alchemy-helm-probe-" });
+    const tmp = path.dirname(probe);
+    yield* fs.remove(probe, { recursive: true });
+    const entries = yield* fs.readDirectory(tmp);
+    for (const entry of entries) {
+      if (!entry.startsWith("alchemy-helm-")) continue;
+      const valuesFile = path.join(tmp, entry, "values.json");
+      if (!(yield* fs.exists(valuesFile))) continue;
+      expect(yield* fs.readFileString(valuesFile)).not.toContain(secret);
+    }
+  });
 
 describe("renderHelmChart (local fixture)", (it) => {
   it.effect(
@@ -40,6 +68,25 @@ describe("renderHelmChart (local fixture)", (it) => {
         expect(configMap.data.message).toBe("hello-from-values");
         expect(configMap.data.release).toBe("probe");
         expect(configMap.data.namespace).toBe("demo");
+      }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+  );
+
+  it.effect(
+    "unwraps Redacted values before writing the values file",
+    () =>
+      Effect.gen(function* () {
+        const secret = "helm-values-sentinel";
+        const objects = yield* renderHelmChart({
+          chart: chartDir,
+          releaseName: "probe",
+          namespace: "demo",
+          values: { message: Redacted.make(secret) },
+        });
+        const configMap = objects[0] as unknown as { data: { message: string } };
+        expect(configMap.data.message).toBe(secret);
+        expect(configMap.data.message).not.toBe("<redacted>");
+        yield* expectValuesFileGone(secret);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -85,6 +132,30 @@ describe("renderHelmChart (local fixture)", (it) => {
         });
         expect(objects.map((object) => object.kind)).not.toContain("Job");
         expect(objects.map((object) => object.metadata.name)).toEqual(["probe-config"]);
+      }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+  );
+
+  it.effect(
+    "scrubs Redacted values from helm stderr",
+    () =>
+      Effect.gen(function* () {
+        const secret = "helm-stderr-sentinel";
+        const result = yield* Effect.result(
+          renderHelmChart({
+            chart: chartDir,
+            releaseName: "probe",
+            namespace: "demo",
+            values: { message: Redacted.make(secret), fail: true },
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("HelmError");
+          expect(result.failure.message).not.toContain(secret);
+          expect(result.failure.message).toContain("<redacted>");
+        }
+        yield* expectValuesFileGone(secret);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -211,6 +282,146 @@ Digest: sha256:0123456789abcdef
       }),
     { tags: ["unit", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
+
+  const parserTags = [
+    "unit",
+    "provider:kubernetes",
+    "provider:kubernetes:helmchart",
+    "local",
+  ] as const;
+
+  const expectScrubbedMessage = (
+    result: Result.Result<unknown, { message: string }>,
+    secret: string,
+    includes: string,
+  ) => {
+    expect(Result.isFailure(result)).toBe(true);
+    if (!Result.isFailure(result)) return;
+    expect(result.failure.message).toContain(includes);
+    expect(result.failure.message).toContain("<redacted>");
+    expect(result.failure.message).not.toContain(secret);
+  };
+
+  const expectScrubbedHelmError = (failure: unknown, secret: string) => {
+    expect(failure).toBeInstanceOf(HelmError);
+    if (!(failure instanceof HelmError)) return;
+    expect(failure.message).toContain("<redacted>");
+    expect(failure.message).not.toContain(secret);
+  };
+
+  it.effect(
+    "leaves credentials in successfully parsed objects",
+    () =>
+      Effect.gen(function* () {
+        const secret = "helm-kept-secret";
+        const objects = yield* parseRenderedManifests(
+          "example",
+          `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example
+data:
+  token: ${secret}
+`,
+          [secret],
+        );
+        const configMap = objects[0] as { data?: { token?: string } };
+        expect(configMap.data?.token).toBe(secret);
+      }),
+    { tags: parserTags },
+  );
+
+  it.effect(
+    "scrubs credentials from invalid rendered documents",
+    () =>
+      Effect.gen(function* () {
+        const secret = "helm-object-secret";
+        expectScrubbedMessage(
+          yield* Effect.result(parseRenderedManifests("example", `${secret}\n`, [secret])),
+          secret,
+          "non-object",
+        );
+        const missingVersion = yield* Effect.result(
+          parseRenderedManifests(
+            "example",
+            `kind: ConfigMap
+data:
+  token: ${secret}
+`,
+            [secret],
+          ),
+        );
+        expectScrubbedMessage(missingVersion, secret, "without apiVersion/kind");
+        if (Result.isFailure(missingVersion)) {
+          expect(missingVersion.failure.message).toContain("ConfigMap");
+        }
+        expectScrubbedMessage(
+          yield* Effect.result(
+            parseRenderedManifests(
+              "example",
+              `apiVersion: v1
+kind: ${secret}
+metadata: {}
+`,
+              [secret],
+            ),
+          ),
+          secret,
+          "without metadata.name",
+        );
+      }),
+    { tags: parserTags },
+  );
+
+  it.effect(
+    "scrubs a credential that crosses the diagnostic truncation boundary",
+    () =>
+      Effect.gen(function* () {
+        // JSON is {"token":"<secret>"}; the secret starts at index 10 and
+        // continues past the 200-character snippet, so slicing first would
+        // leave a prefix that replaceAll cannot match.
+        const secret = `boundary-secret-${"Z".repeat(240)}`;
+        const result = yield* Effect.result(
+          parseRenderedManifests("example", `token: ${secret}\n`, [secret]),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure.message).toContain("without apiVersion/kind");
+          expect(result.failure.message).toContain("<redacted>");
+          expect(result.failure.message).not.toContain(secret);
+          expect(result.failure.message).not.toContain(secret.slice(0, 40));
+          expect(result.failure.message).not.toContain(secret.slice(20, 80));
+        }
+      }),
+    { tags: parserTags },
+  );
+
+  it.effect(
+    "returns a typed error for malformed YAML without the credential",
+    () =>
+      Effect.gen(function* () {
+        const secret = "helm-yaml-secret";
+        const parsed = yield* Effect.result(
+          parseRenderedManifests("example", `token: "${secret}\n`, [secret]),
+        );
+        expect(Result.isFailure(parsed)).toBe(true);
+        if (Result.isFailure(parsed)) {
+          expectScrubbedHelmError(parsed.failure, secret);
+          expect(parsed.failure.message).toContain("Failed to parse");
+        }
+
+        const alias = "helm-alias-secret";
+        const thrown = yield* Effect.result(
+          parseRenderedManifests("example", `*${alias}\n`, [alias]),
+        );
+        expect(Result.isFailure(thrown)).toBe(true);
+        if (Result.isFailure(thrown)) {
+          expectScrubbedHelmError(thrown.failure, alias);
+          expect(thrown.failure.message).toContain("Failed to parse");
+        }
+      }),
+    { tags: parserTags },
+  );
 });
 
 // Ungated probe: chart objects live in-cluster with no cloud-side
@@ -228,4 +439,159 @@ test.provider(
       expect(all).toEqual([]);
     }),
   { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+);
+
+const kindStack = Core.scratchStack(testOptions, "KubernetesHelmChartKind");
+
+// Creates a real kind cluster (~30s); needs Docker, kind, kubectl, and helm.
+suite(
+  "Kubernetes HelmChart on kind",
+  {
+    tags: [
+      "provider:kubernetes",
+      "provider:kubernetes:helmchart",
+      "provider:kubernetes:localcluster",
+      "live",
+    ],
+  },
+  () => {
+    let cluster: KindCluster;
+    const ns = ["--namespace", "default"];
+    const readConfigMap = (name: string, namespace = "default") =>
+      kubectlGet(cluster, ["configmap", name, "--namespace", namespace]);
+
+    beforeAll(
+      Effect.gen(function* () {
+        yield* kindStack.destroy();
+        cluster = yield* kindStack.deploy(KindTestCluster("helm", 5063));
+      }),
+      { timeout: 300_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.suspend(() => destroyKindStack(kindStack, cluster)),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "Redacted values reach the cluster unwrapped and drift tracks the release's objects",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const secret = "helm-live-sentinel";
+          const chart = (id: string, values: Record<string, unknown>) =>
+            Kubernetes.HelmChart(id, {
+              cluster: cluster.connection,
+              chart: chartDir,
+              releaseName: id.toLowerCase(),
+              values,
+            });
+          yield* stack.deploy(
+            Effect.all([
+              chart("Steady", { message: Redacted.make(secret) }),
+              chart("Annotated", { message: "annotated" }),
+              chart("Edited", { message: "declared" }),
+              chart("Pruned", { message: "pruned", secondConfigMap: { enabled: true } }),
+            ]),
+          );
+
+          // The values file carried the plaintext, not the placeholder.
+          const steady = yield* readConfigMap("steady-config");
+          expect(steady.data.message).toBe(secret);
+          expect(yield* readConfigMap("pruned-second")).toBeDefined();
+
+          const detect = Drift.detect({ name: stack.name, stage: stack.stage });
+          const baseline = yield* detect;
+          for (const id of ["Steady", "Annotated", "Edited", "Pruned"]) {
+            expect({ id, action: baseline.resources[id]?.action }).toEqual({
+              id,
+              action: "unchanged",
+            });
+          }
+
+          // An undeclared annotation is not drift; a declared data edit and a
+          // deleted chart object are.
+          yield* kubectl(cluster, [
+            "annotate",
+            "configmap",
+            "annotated-config",
+            "example.com/owner=someone-else",
+            ...ns,
+          ]);
+          yield* kubectl(cluster, [
+            "patch",
+            "configmap",
+            "edited-config",
+            "--type",
+            "merge",
+            "-p",
+            JSON.stringify({ data: { message: "edited" } }),
+            ...ns,
+          ]);
+          yield* kubectl(cluster, ["delete", "configmap", "pruned-second", ...ns]);
+          const steadyVersion = steady.metadata.resourceVersion;
+
+          const after = yield* detect;
+          expect(after.resources.Steady?.action).toBe("unchanged");
+          expect(after.resources.Annotated?.action).toBe("unchanged");
+          expect(after.resources.Edited?.action).toBe("drifted");
+          expect(after.resources.Pruned?.action).toBe("drifted");
+          // Drift reads are GETs: the untouched object was not written.
+          expect((yield* readConfigMap("steady-config")).metadata.resourceVersion).toBe(
+            steadyVersion,
+          );
+
+          yield* stack.destroy();
+          for (const name of [
+            "steady-config",
+            "annotated-config",
+            "edited-config",
+            "pruned-config",
+          ]) {
+            expect(yield* readConfigMap(name)).toBe(undefined);
+          }
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "turning createNamespace off releases the Namespace and prunes dropped objects",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const namespace = "alchemy-helm-shared";
+          const release = (createNamespace: boolean, second: boolean) =>
+            Kubernetes.HelmChart("Shared", {
+              cluster: cluster.connection,
+              chart: chartDir,
+              releaseName: "shared",
+              namespace,
+              createNamespace,
+              values: { message: "shared", secondConfigMap: { enabled: second } },
+            });
+
+          const created = yield* stack.deploy(release(true, true));
+          expect(created.objects.map((object) => object.kind).sort()).toEqual([
+            "ConfigMap",
+            "ConfigMap",
+            "Namespace",
+          ]);
+          expect(yield* readConfigMap("shared-second", namespace)).toBeDefined();
+
+          const released = yield* stack.deploy(release(false, false));
+          expect(released.objects.map((object) => object.name)).toEqual(["shared-config"]);
+          // The dropped chart object is deleted; the released Namespace stays.
+          expect(yield* readConfigMap("shared-second", namespace)).toBe(undefined);
+          expect(yield* readConfigMap("shared-config", namespace)).toBeDefined();
+          expect(yield* kubectlGet(cluster, ["namespace", namespace])).toBeDefined();
+
+          yield* stack.destroy();
+          expect(yield* readConfigMap("shared-config", namespace)).toBe(undefined);
+          // No longer tracked, so destroy leaves it; clean it up out of band.
+          expect(yield* kubectlGet(cluster, ["namespace", namespace])).toBeDefined();
+          yield* kubectl(cluster, ["delete", "namespace", namespace, "--wait=false"]);
+        }),
+      { timeout: 180_000 },
+    );
+  },
 );

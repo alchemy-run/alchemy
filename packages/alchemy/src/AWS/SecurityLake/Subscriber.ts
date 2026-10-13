@@ -274,7 +274,7 @@ export const SubscriberProvider = () =>
                 Effect.catchTag("ConflictException", () => findByName(subscriberName)),
               );
             if (subscriber === undefined) {
-              return yield* Effect.fail(new SubscriberCreateFailed({ subscriberName }));
+              return yield* new SubscriberCreateFailed({ subscriberName });
             }
           } else {
             // 3. SYNC mutable settings — observed ↔ desired.

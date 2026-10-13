@@ -316,14 +316,12 @@ export const JobQueueProvider = () =>
             (q) => q === undefined || q.status === "DELETED",
           );
           if (final && final.status !== "DELETED") {
-            return yield* Effect.fail(
-              new JobQueueDeleteTimeoutError({
-                jobQueueName: name,
-                status: final.status,
-                statusReason: final.statusReason,
-                message: `Job queue ${name} was still ${final.status ?? "present"} after the delete poll budget${final.statusReason ? `: ${final.statusReason}` : ""}`,
-              }),
-            );
+            return yield* new JobQueueDeleteTimeoutError({
+              jobQueueName: name,
+              status: final.status,
+              statusReason: final.statusReason,
+              message: `Job queue ${name} was still ${final.status ?? "present"} after the delete poll budget${final.statusReason ? `: ${final.statusReason}` : ""}`,
+            });
           }
         }),
       };

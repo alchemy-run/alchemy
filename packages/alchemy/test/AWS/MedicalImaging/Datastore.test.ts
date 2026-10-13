@@ -42,10 +42,10 @@ const assertDatastoreGone = (datastoreId: string) =>
   );
 
 // A HealthImaging data store provisions asynchronously (CREATING → ACTIVE,
-// typically a few minutes) and deletes asynchronously too — the full
-// lifecycle is gated behind AWS_TEST_MEDICAL_IMAGING=1 and always destroys
-// what it created.
-test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
+// ~2 minutes observed) and deletes asynchronously too. A data store has no
+// fixed charge, so the lifecycle runs by default (skipped under --fast) and
+// always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create data store, update tags, destroy",
   (stack) =>
     Effect.gen(function* () {

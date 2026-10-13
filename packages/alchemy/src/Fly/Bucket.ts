@@ -296,7 +296,7 @@ const resolveBucketName = (id: string, name: string | undefined, existing?: stri
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   if (Redacted.isRedacted(value)) {
-    return asRecord(Redacted.value(value));
+    return value.pipe(Redacted.value, asRecord);
   }
   if (typeof value === "string") {
     try {
@@ -316,7 +316,7 @@ const asString = (value: unknown): string | undefined => {
     return value.length > 0 ? value : undefined;
   }
   if (Redacted.isRedacted(value)) {
-    return asString(Redacted.value(value));
+    return value.pipe(Redacted.value, asString);
   }
   return undefined;
 };
@@ -637,7 +637,7 @@ export const BucketProvider = () =>
         } else {
           current = yield* findByName(name);
           if (current === undefined) {
-            return yield* Effect.fail(created.failure);
+            return yield* created.failure;
           }
         }
         const createdSecrets = current;

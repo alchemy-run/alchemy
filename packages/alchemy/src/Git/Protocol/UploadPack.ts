@@ -62,7 +62,7 @@ const parseOidLine = (
     const body = text.slice(keyword.length + 1);
     const oid = body.slice(0, 40);
     if (!isOid(oid)) {
-      return Effect.fail(new ProtocolError({ reason: `malformed ${keyword} line: ${text}` }));
+      return Effect.fail(ProtocolError.make({ reason: `malformed ${keyword} line: ${text}` }));
     }
     return Effect.succeed({ oid, rest: body.slice(40).trim() });
   });
@@ -89,7 +89,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       continue;
     }
     if (pkt._tag !== "data") {
-      return yield* new ProtocolError({
+      return yield* ProtocolError.make({
         reason: `unexpected ${pkt._tag} packet in upload-pack request`,
       });
     }
@@ -109,7 +109,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       } else if (text.startsWith("deepen ")) {
         const n = Number.parseInt(text.slice(7), 10);
         if (!Number.isInteger(n) || n <= 0) {
-          return yield* new ProtocolError({
+          return yield* ProtocolError.make({
             reason: `invalid deepen depth: ${text}`,
           });
         }
@@ -119,11 +119,11 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
         text.startsWith("deepen-not ") ||
         text.startsWith("filter ")
       ) {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unsupported argument: ${text.split(" ")[0]}`,
         });
       } else {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unexpected line in want section: ${text}`,
         });
       }
@@ -134,7 +134,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
       } else if (text === "done") {
         done = true;
       } else {
-        return yield* new ProtocolError({
+        return yield* ProtocolError.make({
           reason: `unexpected line in have section: ${text}`,
         });
       }
@@ -142,7 +142,7 @@ export const parseUploadPackRequest = Effect.fn(function* (body: Uint8Array) {
   }
 
   if (wants.length === 0) {
-    return yield* new ProtocolError({
+    return yield* ProtocolError.make({
       reason: "upload-pack request has no want lines",
     });
   }
@@ -273,7 +273,7 @@ export const uploadPack = Effect.fn(function* (
   const existingWants = new Set(yield* objects.filterExisting(request.wants));
   for (const want of request.wants) {
     if (!existingWants.has(want)) {
-      return yield* new ProtocolError({ reason: `not our ref ${want}` });
+      return yield* ProtocolError.make({ reason: `not our ref ${want}` });
     }
   }
 

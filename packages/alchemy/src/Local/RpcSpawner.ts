@@ -215,7 +215,10 @@ export const make = Effect.fn(function* ({
   const HEARTBEAT = encoder.encode(`${JSON.stringify(heartbeat)}\n`);
   const heartbeats = Stream.make(HEARTBEAT).pipe(
     Stream.concat(
-      Stream.fromSchedule(Schedule.spaced(Duration.seconds(5))).pipe(Stream.map(() => HEARTBEAT)),
+      Schedule.spaced(Duration.seconds(5)).pipe(
+        Stream.fromSchedule,
+        Stream.map(() => HEARTBEAT),
+      ),
     ),
   );
 

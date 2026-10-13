@@ -54,7 +54,7 @@ export const withPgClient = <A, E, R>(
       try: async () => {
         const { Client } = await importPg();
         const client = new Client({
-          connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
+          connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
           ssl: { rejectUnauthorized: false },
         });
         await client.connect();

@@ -217,7 +217,7 @@ export const openUrl = (url: string) =>
     });
     const exitCode = yield* handle.exitCode.pipe(Effect.timeoutOption("3 seconds"));
     if (Option.isSome(exitCode) && exitCode.value !== 0) {
-      return yield* Effect.fail(new BrowserOpenFailed({ command, exitCode: exitCode.value }));
+      return yield* new BrowserOpenFailed({ command, exitCode: exitCode.value });
     }
   }).pipe(Effect.scoped);
 

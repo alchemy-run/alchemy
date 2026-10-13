@@ -24,7 +24,12 @@ import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { buildHistory, supportsRegistryExport, withBuilder } from "./fixtures/buildx.ts";
+import {
+  buildHistory,
+  supportsRegistryExport,
+  withBuilder,
+  withDockerEnv,
+} from "./fixtures/buildx.ts";
 import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts";
 import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
@@ -96,10 +101,8 @@ const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) =
     yield* state.set({ ...key, value: { ...row, attr: patch(row.attr as A) } });
   });
 
-// Every test owns a name-namespaced scratch stack, so they can run
-// concurrently. The `exclusive: true` builder tests below still take the
-// whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
-// themselves.
+// Every test owns a name-namespaced scratch stack and scopes its buildx
+// builder through `DockerEnvironment`, so they all run concurrently.
 describe.concurrent(
   "ContainerApplication",
   { tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:docker", "live"] },
@@ -424,19 +427,12 @@ describe.concurrent(
                 );
               });
             if (failure === "failed") {
-              const failed = yield* Effect.acquireUseRelease(
-                Effect.sync(() => {
-                  const previous = process.env.BUILDX_BUILDER;
-                  process.env.BUILDX_BUILDER = "alchemy-publication-missing";
-                  return previous;
-                }),
-                () => stack.deploy(program()).pipe(Effect.exit),
-                (previous) =>
-                  Effect.sync(() => {
-                    if (previous === undefined) delete process.env.BUILDX_BUILDER;
-                    else process.env.BUILDX_BUILDER = previous;
-                  }),
-              );
+              const failed = yield* stack
+                .deploy(program())
+                .pipe(
+                  withDockerEnv({ BUILDX_BUILDER: "alchemy-publication-missing" }),
+                  Effect.exit,
+                );
               assert(Exit.isFailure(failed));
               expect(Cause.pretty(failed.cause)).toContain("alchemy-publication-missing");
             } else {
@@ -510,7 +506,7 @@ describe.concurrent(
               expect(deleted).toBeUndefined();
             }
           }).pipe(withBuilder(`alchemy-publication-${failure}`), logLevel),
-        { timeout: 120_000, exclusive: true },
+        { timeout: 120_000 },
       );
     }
 
@@ -601,7 +597,7 @@ describe.concurrent(
             expect(deleted).toBeUndefined();
           }
         }).pipe(withBuilder("alchemy-publication-cache"), logLevel),
-      { timeout: 120_000, exclusive: true },
+      { timeout: 120_000 },
     );
 
     registryCacheTest.provider(
@@ -715,19 +711,9 @@ describe.concurrent(
           ).toBe(changed.app.hash?.digest);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
-          const restored = yield* Effect.acquireUseRelease(
-            Effect.sync(() => {
-              const previous = process.env.BUILDX_BUILDER;
-              process.env.BUILDX_BUILDER = "alchemy-default-cache-must-not-build";
-              return previous;
-            }),
-            () => stack.deploy(program),
-            (previous) =>
-              Effect.sync(() => {
-                if (previous === undefined) delete process.env.BUILDX_BUILDER;
-                else process.env.BUILDX_BUILDER = previous;
-              }),
-          );
+          const restored = yield* stack
+            .deploy(program)
+            .pipe(withDockerEnv({ BUILDX_BUILDER: "alchemy-default-cache-must-not-build" }));
           expect(restored.app.applicationId).toBe(first.app.applicationId);
           expect(restored.app.configuration.image).toBe(first.app.configuration.image);
           expect(yield* buildHistory).toEqual(firstHistory);
@@ -754,7 +740,7 @@ describe.concurrent(
           );
           expect(gone).toBeUndefined();
         }).pipe(withBuilder("alchemy-default-cache", { attestations: false }), logLevel),
-      { timeout: 120_000, exclusive: true },
+      { timeout: 120_000 },
     );
 
     // Publication reuse was confined to a provider instance in:
@@ -863,7 +849,7 @@ describe.concurrent(
           );
           expect(deleted).toBeUndefined();
         }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
-      { timeout: 180_000, exclusive: true },
+      { timeout: 180_000 },
     );
 
     test.provider(
@@ -902,18 +888,8 @@ describe.concurrent(
           yield* Destroy.destroy(secondStage);
           const reused = yield* Effect.gen(function* () {
             // A fresh provider and an unusable builder rule out process-local reuse.
-            const reused = yield* Effect.acquireUseRelease(
-              Effect.sync(() => {
-                const previous = process.env.BUILDX_BUILDER;
-                process.env.BUILDX_BUILDER = "alchemy-shared-cache-must-not-build";
-                return previous;
-              }),
-              () => Deploy.deploy(secondStage),
-              (previous) =>
-                Effect.sync(() => {
-                  if (previous === undefined) delete process.env.BUILDX_BUILDER;
-                  else process.env.BUILDX_BUILDER = previous;
-                }),
+            const reused = yield* Deploy.deploy(secondStage).pipe(
+              withDockerEnv({ BUILDX_BUILDER: "alchemy-shared-cache-must-not-build" }),
             );
             expect(reused.app.applicationId).not.toBe(shared.app.applicationId);
             expect(reused.app.hash?.image).toBe(shared.app.hash?.image);
@@ -961,7 +937,7 @@ describe.concurrent(
           withBuilder("alchemy-shared-registry-cache", { attestations: false }),
           logLevel,
         ),
-      { timeout: 120_000, exclusive: true },
+      { timeout: 120_000 },
     );
 
     for (const fixture of [
@@ -1146,7 +1122,6 @@ describe.concurrent(
         {
           tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"],
           timeout: 120_000,
-          exclusive: true,
         },
       );
     }
@@ -1344,6 +1319,26 @@ describe.concurrent(
 
         yield* stack.destroy();
       }).pipe(logLevel),
+    );
+
+    // Right after a Worker upload creates a Durable Object namespace, the
+    // containers API can briefly report it missing; the provider retries this
+    // typed error. A namespace that never existed returns the same response,
+    // which pins the error to its tag.
+    test.provider(
+      "attaching an application to a missing Durable Object namespace fails with DurableObjectNamespaceNotFound",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const error = yield* Containers.createDurableObjectContainerApplication({
+            accountId,
+            name: `alchemy-missing-namespace-${stack.stage}`,
+            schedulingPolicy: "durable_object",
+            durableObjects: { namespaceId: "0".repeat(32) },
+            configuration: {},
+          }).pipe(Effect.flip);
+          expect(error._tag).toBe("DurableObjectNamespaceNotFound");
+        }).pipe(logLevel),
     );
 
     // Issue #953 (2): an `image` that already references the target registry
@@ -1640,6 +1635,7 @@ describe.concurrent(
           );
           expect(deleted).toBe(true);
           assert(first.app.maxInstances !== undefined);
+          assert(first.app.configuration.image !== undefined);
           const detached = yield* Containers.createContainerApplication({
             accountId,
             name: first.app.applicationName,
@@ -1648,7 +1644,10 @@ describe.concurrent(
             schedulingPolicy: first.app.schedulingPolicy,
             constraints: first.app.constraints,
             affinities: first.app.affinities,
-            configuration: first.app.configuration,
+            configuration: {
+              ...first.app.configuration,
+              image: first.app.configuration.image,
+            },
           });
           expect(detached.id).not.toBe(first.app.applicationId);
           expect(detached.durableObjects ?? undefined).toBeUndefined();

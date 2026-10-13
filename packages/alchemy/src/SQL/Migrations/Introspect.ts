@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { SqlExecutor } from "./Format.ts";
+import type { MigrationError, SqlExecutor } from "./Format.ts";
 import { quoteIdentifier, sqlLiteral } from "./Utils.ts";
 
 export interface TableColumn {
@@ -16,7 +16,7 @@ export const tableColumns = (
   executor: SqlExecutor,
   table: string,
   schema?: string,
-): Effect.Effect<TableColumn[], never, never> => {
+): Effect.Effect<TableColumn[], MigrationError, never> => {
   switch (executor.dialect) {
     case "sqlite":
       return executor.query(`PRAGMA table_info(${quoteIdentifier(table, "sqlite")});`).pipe(
@@ -28,7 +28,7 @@ export const tableColumns = (
         ),
         // A missing table yields an empty PRAGMA result, not an error, but
         // some tunnels surface it as one — treat both as "absent".
-        Effect.catch(() => Effect.succeed([])),
+        Effect.orElseSucceed(() => []),
       );
     case "postgres":
       return executor
@@ -46,7 +46,6 @@ export const tableColumns = (
               type: String(row.type ?? "").toUpperCase(),
             })),
           ),
-          Effect.catch(() => Effect.succeed([])),
         );
     case "mysql":
       return executor
@@ -64,7 +63,7 @@ export const tableColumns = (
               type: String(row.type ?? "").toUpperCase(),
             })),
           ),
-          Effect.catch(() => Effect.succeed([])),
+          Effect.orElseSucceed(() => []),
         );
   }
 };

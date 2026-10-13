@@ -366,40 +366,34 @@ export const RegexPatternSetProvider = () =>
           const scope = output.scope;
           // A pattern set still referenced by a web ACL rule (deletion
           // propagation) surfaces WAFAssociatedItemException — retry it.
-          yield* retryAssociatedItem(
-            retryOptimisticLock(
-              Effect.gen(function* () {
-                const found = yield* withWafScope(
-                  scope,
-                  wafv2
-                    .getRegexPatternSet({
-                      Name: output.regexPatternSetName,
-                      Scope: scope,
-                      Id: output.regexPatternSetId,
-                    })
-                    .pipe(
-                      Effect.catchTag("WAFNonexistentItemException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    ),
-                );
-                if (!found?.RegexPatternSet || found.LockToken === undefined) {
-                  return;
-                }
-                yield* withWafScope(
-                  scope,
-                  wafv2
-                    .deleteRegexPatternSet({
-                      Name: output.regexPatternSetName,
-                      Scope: scope,
-                      Id: output.regexPatternSetId,
-                      LockToken: found.LockToken,
-                    })
-                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
-                );
-              }),
-            ),
-          );
+          yield* Effect.gen(function* () {
+            const found = yield* withWafScope(
+              scope,
+              wafv2
+                .getRegexPatternSet({
+                  Name: output.regexPatternSetName,
+                  Scope: scope,
+                  Id: output.regexPatternSetId,
+                })
+                .pipe(
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
+                ),
+            );
+            if (!found?.RegexPatternSet || found.LockToken === undefined) {
+              return;
+            }
+            yield* withWafScope(
+              scope,
+              wafv2
+                .deleteRegexPatternSet({
+                  Name: output.regexPatternSetName,
+                  Scope: scope,
+                  Id: output.regexPatternSetId,
+                  LockToken: found.LockToken,
+                })
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
+            );
+          }).pipe(retryOptimisticLock, retryAssociatedItem);
         }),
       };
     }),

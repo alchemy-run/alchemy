@@ -44,6 +44,4 @@ export const resolveCompatibilityOptions = (configuration?: AssetConfig) => {
 export const flagIsEnabled = (
   configuration: NormalizedAssetConfig,
   compatibilityFlag: (typeof COMPATIBILITY_FLAGS)[number],
-) => {
-  return !!configuration.compatibility_flags.find((flag) => flag === compatibilityFlag.enable);
-};
+) => !!configuration.compatibility_flags.find((flag) => flag === compatibilityFlag.enable);

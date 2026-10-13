@@ -235,28 +235,22 @@ const waitForAssetModelState = (assetModelId: string, target: "ACTIVE" | "DELETE
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new AssetModelNotReady({
-            assetModelId,
-            state: described.assetModelStatus.state,
-          }),
-        );
+        return yield* new AssetModelNotReady({
+          assetModelId,
+          state: described.assetModelStatus.state,
+        });
       }
       if (described?.assetModelStatus.state === "ACTIVE") return;
       if (described?.assetModelStatus.state === "FAILED") {
-        return yield* Effect.fail(
-          new AssetModelProvisioningFailed({
-            assetModelId,
-            message: described.assetModelStatus.error?.message,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new AssetModelNotReady({
+        return yield* new AssetModelProvisioningFailed({
           assetModelId,
-          state: described?.assetModelStatus.state,
-        }),
-      );
+          message: described.assetModelStatus.error?.message,
+        });
+      }
+      return yield* new AssetModelNotReady({
+        assetModelId,
+        state: described?.assetModelStatus.state,
+      });
     }),
   );
 

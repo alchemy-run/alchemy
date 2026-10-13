@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as pathe from "pathe";
 /**
  * Hot reload for user-supplied Dockerfile/context Cloudflare Containers
  * under `alchemy dev`.
@@ -25,6 +26,7 @@ import * as Schedule from "effect/Schedule";
  */
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
+import type { ReloadEchoObject } from "./fixtures/reload/async-worker.ts";
 import { RELOAD_CONTAINER_PORT, RELOAD_CONTEXT_DIR } from "./fixtures/reload/container.ts";
 import ReloadContainerWorker from "./fixtures/reload/worker.ts";
 
@@ -70,6 +72,36 @@ const pollText = Effect.fn(function* (options: {
     }),
   );
   expect(body.trim()).toBe(options.expected);
+});
+
+/**
+ * Async Worker hosting a container-backed DO, with a `MARKER` env var whose
+ * change restarts the Worker (a new workerd generation) WITHOUT touching the
+ * container image.
+ */
+const reloadEnvWorker = (marker: string) =>
+  Cloudflare.Worker("ReloadEnvContainerWorker", {
+    main: pathe.resolve(import.meta.dirname, "fixtures/reload/async-worker.ts"),
+    env: {
+      ECHO: Cloudflare.Container<ReloadEchoObject>("ECHO", {
+        className: "ReloadEchoObject",
+        image: "mendhak/http-https-echo:latest",
+      }),
+      MARKER: marker,
+    },
+  });
+
+/** One request into the container; fails unless the echo server answered. */
+const echo = Effect.fn(function* (url: string) {
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client.get(new URL("/hello", url));
+  const text = yield* response.text;
+  if (response.status !== 200 || !text.includes("method")) {
+    return yield* Effect.fail(
+      new Error(`container request failed: ${response.status} ${text.slice(0, 500)}`),
+    );
+  }
+  return text;
 });
 
 describe.sequential(
@@ -133,6 +165,46 @@ describe.sequential(
           yield* pollText({ url, path: "/baked.txt", expected: "baked-v2" });
           // The content file survived the Dockerfile rebuild.
           yield* pollText({ url, path: "/index.html", expected: "content-v3" });
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
+
+    // Regression: a Worker restart while its container is RUNNING. The
+    // replacement workerd generation used to start while the previous one
+    // (and its container) was still up, so the new generation "recovered"
+    // the running container — and the previous generation's teardown then
+    // removed that container (and its networking sidecar) out from under
+    // it: `Recovered running container without a running networking
+    // sidecar`, then `container <id> is not running` on the next request.
+    test.provider.skipIf(!dockerAvailable)(
+      "a running container keeps serving across Worker restarts",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const first = yield* stack.deploy(reloadEnvWorker("v1"));
+          expect(first.url).toMatch(/^http:\/\/localhost:\d+/);
+          const url = first.url!;
+
+          // First contact pulls the image and boots the container, which
+          // then stays running (`sleepAfter`).
+          yield* echo(url).pipe(
+            Effect.timeout("30 seconds"),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 60 }),
+          );
+
+          for (const marker of ["v2", "v3", "v4"]) {
+            yield* stack.deploy(reloadEnvWorker(marker));
+            yield* pollText({ url, path: "/marker", expected: marker, times: 15 });
+            // No retries: the container must answer straight away, and keep
+            // answering, from the new generation.
+            for (let i = 0; i < 3; i++) {
+              yield* echo(url).pipe(Effect.timeout("60 seconds"));
+              yield* Effect.sleep("1 second");
+            }
+          }
 
           yield* stack.destroy();
         }).pipe(logLevel),

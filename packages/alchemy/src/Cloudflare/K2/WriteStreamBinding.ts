@@ -97,7 +97,7 @@ export const sendViaBinding = (
         })),
       ),
     catch: (cause) =>
-      new k2.K2AppendOutcomeUnknown({
+      k2.K2AppendOutcomeUnknown.make({
         code: 10212,
         message: `K2 binding send rejected; the batch may have been stored: ${
           cause instanceof Error ? cause.message : String(cause)
@@ -114,18 +114,18 @@ export const toProduceError = (error: { code: number; message: string }): Produc
   const fields = { code: error.code, message: error.message };
   switch (error.code) {
     case 10200:
-      return new k2.K2StreamNotFound(fields);
+      return k2.K2StreamNotFound.make(fields);
     case 10204:
-      return new k2.K2InvalidRequest(fields);
+      return k2.K2InvalidRequest.make(fields);
     case 10206:
-      return new k2.K2RequestTooLarge(fields);
+      return k2.K2RequestTooLarge.make(fields);
     case 10207:
-      return new k2.K2RecordTooLarge(fields);
+      return k2.K2RecordTooLarge.make(fields);
     case 10211:
-      return new k2.K2Unavailable(fields);
+      return k2.K2Unavailable.make(fields);
     case 10212:
-      return new k2.K2AppendOutcomeUnknown(fields);
+      return k2.K2AppendOutcomeUnknown.make(fields);
     default:
-      return new UnknownCloudflareError(fields);
+      return UnknownCloudflareError.make(fields);
   }
 };

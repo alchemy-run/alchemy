@@ -177,6 +177,7 @@ export const makeS3Credentials = (
       // Deploy-time only; its requirements (CloudflareEnvironment, the
       // token provider) are ambient wherever a Worker is evaluated, so they
       // are erased like `Binding.Host`'s.
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- deploy-time only; requirements are ambient where the Worker is evaluated
       yield* bindS3Credentials(host, bindingName, bucket, access) as Effect.Effect<void>;
     }
     // Captured at init; read at exec phase, where it is populated.

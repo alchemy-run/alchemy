@@ -20,6 +20,7 @@ import {
   waitForOperation,
 } from "./internal.ts";
 import { listLocations } from "./names.ts";
+import { settlePendingCreates } from "./operations.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 export type MachineSpec = {
@@ -283,10 +284,29 @@ const listPools = (project: string, region: string) => {
   return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
+/**
+ * Look a pool up by name. A pool is invisible while its create operation
+ * is pending (minutes on a fresh project), so on a miss wait for any
+ * pending create of this pool id and look again — otherwise an
+ * interrupted create's recovery read / delete reports it gone and leaks it.
+ */
+const getSettled = (name: string) =>
+  Effect.gen(function* () {
+    const existing = yield* getByName(name);
+    if (existing !== undefined) return existing;
+    const parsed = parseResourceName(name, "deploymentResourcePools");
+    const settled = yield* settlePendingCreates({
+      parent: parentOf(parsed.project, parsed.location),
+      collection: "deploymentResourcePools",
+      resourceId: parsed.id,
+    });
+    return settled ? yield* getByName(name) : undefined;
+  });
+
 const findOwned = (hinted: string | undefined) =>
   Effect.gen(function* () {
     if (hinted === undefined || hinted.length === 0) return undefined;
-    return yield* getByName(hinted);
+    return yield* getSettled(hinted);
   });
 
 const waitUntilExists = (name: string) =>
@@ -368,7 +388,7 @@ export const DeploymentResourcePoolProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, poolId);
-      const existing = yield* getByName(name);
+      const existing = yield* getSettled(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       return isOwnedId(attrs.deploymentResourcePoolId) || output?.name === existing.name
@@ -462,7 +482,7 @@ export const DeploymentResourcePoolProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const existing = yield* getByName(output.name);
+      const existing = yield* getSettled(output.name);
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsDeploymentResourcePools({

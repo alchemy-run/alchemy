@@ -95,7 +95,7 @@ export const toTagRecord = (
 export const readMlTags = Effect.fn(function* (arn: string) {
   const response = yield* medialive
     .listTagsForResource({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

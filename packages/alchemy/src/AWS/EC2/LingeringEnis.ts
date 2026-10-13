@@ -60,7 +60,7 @@ const reapLingeringEnis = Effect.fn(function* (
     .describeNetworkInterfaces({
       Filters: [{ Name: scope.name, Values: [scope.value] }],
     })
-    .pipe(Effect.catch(() => Effect.succeed({ NetworkInterfaces: [] })));
+    .pipe(Effect.orElseSucceed(() => ({ NetworkInterfaces: [] })));
 
   const lingering = (described.NetworkInterfaces ?? []).filter(isReapableEni);
 
@@ -84,7 +84,7 @@ const reapLingeringEnis = Effect.fn(function* (
         Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () =>
           Effect.succeed("deleted" as const),
         ),
-        Effect.catch(() => Effect.succeed("pending" as const)),
+        Effect.orElseSucceed(() => "pending" as const),
       );
     if (outcome === "deleted") {
       yield* session.note(`Deleted detached Lambda ENI ${eni.NetworkInterfaceId}`);

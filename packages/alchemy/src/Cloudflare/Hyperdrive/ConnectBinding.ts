@@ -1,4 +1,5 @@
 import type * as runtime from "@cloudflare/workers-types";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -7,7 +8,7 @@ import { defaultProviderMode, type ProviderMode } from "../../ProviderMode.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Connection.ts";
-import { defaultPort, type DevOrigin } from "./Connection.ts";
+import { defaultPort, type DevOrigin, type Mtls, type Origin } from "./Connection.ts";
 
 export const ConnectBinding = Layer.effect(
   Connect,
@@ -63,38 +64,63 @@ export const getHyperdriveDevOriginForHost = Effect.fn(function* (
   return mode === "local" ? getHyperdriveDevOrigin(connection) : undefined;
 });
 
+/**
+ * A Hyperdrive origin that `alchemy dev` cannot reach from the local
+ * machine, bound without a `dev` override.
+ */
+export class HyperdriveDevOriginUnsupported extends Data.TaggedError(
+  "HyperdriveDevOriginUnsupported",
+)<{
+  message: string;
+  logicalId: string;
+  origin: "access" | "vpc";
+}> {}
+
 export const getHyperdriveDevOrigin = (connection: Connection) => {
-  const origin = Output.map(
-    Output.all(connection.dev, connection.origin, connection.mtls),
-    ([dev, origin, mtls]): Required<DevOrigin> => {
-      if (dev) {
-        return {
-          scheme: dev.scheme,
-          host: dev.host,
-          port: dev.port ?? defaultPort(dev.scheme),
-          user: dev.user,
-          database: dev.database,
-          password: dev.password,
-          sslmode: dev.sslmode ?? "prefer",
-        };
-      }
-      if ("accessClientId" in origin) {
-        throw new Error(
-          `Hyperdrive instance ${connection.LogicalId} has an origin that requires Cloudflare Access. This is not supported in development mode. ` +
+  const origin = Output.mapEffect(([dev, origin, mtls]: [DevOrigin | undefined, Origin, Mtls]) => {
+    if (dev) {
+      return Effect.succeed<Required<DevOrigin>>({
+        scheme: dev.scheme,
+        host: dev.host,
+        port: dev.port ?? defaultPort(dev.scheme),
+        user: dev.user,
+        database: dev.database,
+        password: dev.password,
+        sslmode: dev.sslmode ?? "prefer",
+      });
+    }
+    if ("accessClientId" in origin) {
+      return Effect.die(
+        new HyperdriveDevOriginUnsupported({
+          logicalId: connection.LogicalId,
+          origin: "access",
+          message:
+            `Hyperdrive instance ${connection.LogicalId} has an origin that requires Cloudflare Access. This is not supported in development mode. ` +
             "Select a different origin or set the `dev` property to an origin that does not require Cloudflare Access.",
-        );
-      }
-      return {
-        scheme: origin.scheme,
-        host: origin.host,
-        port: origin.port ?? defaultPort(origin.scheme),
-        user: origin.user,
-        database: origin.database,
-        password: origin.password,
-        sslmode: mtls?.sslmode ?? "require",
-      };
-    },
-  );
+        }),
+      );
+    }
+    if ("serviceId" in origin) {
+      return Effect.die(
+        new HyperdriveDevOriginUnsupported({
+          logicalId: connection.LogicalId,
+          origin: "vpc",
+          message:
+            `Hyperdrive instance ${connection.LogicalId} has an origin that is reached through a Workers VPC Service. This is not supported in development mode. ` +
+            "Set the `dev` property to an origin reachable from your machine.",
+        }),
+      );
+    }
+    return Effect.succeed<Required<DevOrigin>>({
+      scheme: origin.scheme,
+      host: origin.host,
+      port: origin.port ?? defaultPort(origin.scheme),
+      user: origin.user,
+      database: origin.database,
+      password: origin.password,
+      sslmode: mtls?.sslmode ?? "require",
+    });
+  })(Output.all(connection.dev, connection.origin, connection.mtls));
   return Output.map(
     Output.all(connection.hyperdriveId, Output.asOutput(origin)),
     ([id, origin]) => ({

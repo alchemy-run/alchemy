@@ -265,17 +265,19 @@ export const EventRuleProvider = () =>
             // Retry the transitional lock (a sibling rule still DELETING);
             // a conflict that persists past the budget means the same rule
             // already exists → re-observe by signature.
-            const created = yield* retryWhileConflict(
-              pinNotificationsRegion(
-                notifications.createEventRule({
-                  notificationConfigurationArn: news.notificationConfigurationArn,
-                  source: news.source,
-                  eventType: news.eventType,
-                  ...(desiredPattern !== "" ? { eventPattern: desiredPattern } : {}),
-                  regions: news.regions,
-                }),
-              ),
-            ).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            const created = yield* notifications
+              .createEventRule({
+                notificationConfigurationArn: news.notificationConfigurationArn,
+                source: news.source,
+                eventType: news.eventType,
+                ...(desiredPattern !== "" ? { eventPattern: desiredPattern } : {}),
+                regions: news.regions,
+              })
+              .pipe(
+                pinNotificationsRegion,
+                retryWhileConflict,
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+              );
             live = created
               ? yield* getByArn(created.arn)
               : yield* findBySignature(
@@ -289,15 +291,13 @@ export const EventRuleProvider = () =>
           // SYNC — diff observed eventPattern/regions against desired and
           // apply only the delta.
           if (live!.eventPattern !== desiredPattern || !sameRegions(live!.regions, news.regions)) {
-            yield* retryWhileConflict(
-              pinNotificationsRegion(
-                notifications.updateEventRule({
-                  arn,
-                  eventPattern: desiredPattern,
-                  regions: news.regions,
-                }),
-              ),
-            );
+            yield* notifications
+              .updateEventRule({
+                arn,
+                eventPattern: desiredPattern,
+                regions: news.regions,
+              })
+              .pipe(pinNotificationsRegion, retryWhileConflict);
           }
 
           // Wait for regional managed rules to settle (bounded, fail-open).
@@ -314,9 +314,11 @@ export const EventRuleProvider = () =>
           // Idempotent — the parent configuration's deletion cascades rules,
           // so the rule may already be gone. A ConflictException means a
           // sibling mutation is still settling — retry through it.
-          yield* retryWhileConflict(
-            pinNotificationsRegion(notifications.deleteEventRule({ arn: output.eventRuleArn })),
-          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* notifications.deleteEventRule({ arn: output.eventRuleArn }).pipe(
+            pinNotificationsRegion,
+            retryWhileConflict,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
           // Deletion is asynchronous — wait until the rule is actually gone
           // so follow-up mutations on the configuration don't hit the
           // transitional lock (bounded, fail-open).

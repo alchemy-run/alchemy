@@ -1,3 +1,4 @@
+import type * as Effect from "effect/Effect";
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
@@ -96,6 +97,16 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * with backoff between attempts. A failed replacement stops recovery.
    */
   readonly onRestart?: (exit: WorkerdExit) => void;
+  /**
+   * Runs once, after bindings are prepared and container images are built or
+   * pulled, immediately before the first `workerd` process is spawned. A
+   * caller replacing a previous instance of this worker uses it to tear that
+   * instance down first when the two cannot overlap — e.g. containers, whose
+   * deterministic names make a new process adopt ("recover") the previous
+   * process's still-running container, which that process's teardown then
+   * removes.
+   */
+  readonly beforeServe?: Effect.Effect<void>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 
@@ -153,7 +164,7 @@ export interface DurableObjectNamespace {
    * starts one per DO instance via the worker's `containerEngine` and exposes
    * it as `ctx.container`.
    */
-  container?: ContainerImage;
+  container?: ContainerImage | { images: Record<string, ContainerImage> };
 }
 
 export interface Workflow {

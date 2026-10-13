@@ -235,8 +235,10 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : datalabeling.getProjectsEvaluationJobs({ name }).pipe(
         Effect.provide(noRetryLayer),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("BadGateway", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          NotFound: () => Effect.succeed(undefined),
+          BadGateway: () => Effect.succeed(undefined),
+        }),
       );
 
 const findByOwnership = (id: string, project: string) =>
@@ -395,9 +397,9 @@ export const EvaluationJobProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreGone(
-        retryDelete(datalabeling.deleteProjectsEvaluationJobs({ name: output.name })),
-      );
+      yield* datalabeling
+        .deleteProjectsEvaluationJobs({ name: output.name })
+        .pipe(retryDelete, ignoreGone);
       yield* waitUntilGone(getByName(output.name));
     }),
   });
