@@ -141,7 +141,7 @@ test.provider(
       // Update: new env + concurrency create a revision; the endpoint
       // shifts to it and picks up the rate limit.
       const updated = yield* stack.deploy(
-        declare({ env: { GREETING: "updated" }, maxConcurrency: 32, rateLimit: 100 }),
+        declare({ env: { GREETING: "updated" }, maxConcurrencyPerEnvironment: 32, rateLimit: 100 }),
       );
       expect(updated.functionName).toBe(created.functionName);
       expect(updated.url).toBe(created.url);
@@ -164,7 +164,7 @@ test.provider(
       const iamAuth = yield* stack.deploy(
         declare({
           env: { GREETING: "updated" },
-          maxConcurrency: 32,
+          maxConcurrencyPerEnvironment: 32,
           rateLimit: 100,
           authType: "IamAuth",
         }),

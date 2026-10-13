@@ -197,15 +197,17 @@ and caps on environments and requests per second:
 ```typescript
 const api = yield* AWS.Lambda.WebFunction("Api", {
   main: "./src/server.ts",
-  maxConcurrency: 128,
+  maxConcurrencyPerEnvironment: 128,
   timeout: Duration.minutes(5),
   maxEnvironments: 10,
   rateLimit: 500,
 });
 ```
 
-Lower `maxConcurrency` for CPU-heavy servers. Requests beyond `rateLimit`
-get HTTP 429.
+`maxConcurrencyPerEnvironment` is a cap per environment, not a total: at
+most `maxEnvironments × maxConcurrencyPerEnvironment` requests are in
+flight. Lower it for CPU-heavy servers. Requests beyond `rateLimit` get
+HTTP 429.
 
 ## Serve from several Regions
 

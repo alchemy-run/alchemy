@@ -119,11 +119,15 @@ export interface WebFunctionProps extends PlatformProps {
    */
   timeout?: Duration.Duration;
   /**
-   * Maximum number of concurrent HTTP requests one execution environment
-   * serves. Valid range: 1–128. Lower it for CPU-bound servers.
+   * Upper bound on concurrent HTTP requests per execution environment.
+   * Lambda manages a dynamic per-environment limit that can be lower, but
+   * never exceeds this value. This is not a total: the endpoint's peak is
+   * `maxEnvironments × maxConcurrencyPerEnvironment`. Valid range: 1–128.
+   * Lower it for CPU- or memory-bound servers. Changing it creates a new
+   * revision.
    * @default 64
    */
-  maxConcurrency?: number;
+  maxConcurrencyPerEnvironment?: number;
   /**
    * Who may call the HTTPS endpoint. `"ApplicationManaged"` forwards every
    * request (a public endpoint; authenticate in your application).
@@ -316,7 +320,7 @@ export type WebFunctionShape = Main<WebFunctionServices>;
  * ```typescript
  * const api = yield* AWS.Lambda.WebFunction("Api", {
  *   main: "./src/server.ts",
- *   maxConcurrency: 128,
+ *   maxConcurrencyPerEnvironment: 128,
  *   timeout: Duration.minutes(5),
  *   maxEnvironments: 10,
  *   rateLimit: 500,
@@ -956,7 +960,8 @@ export const WebFunctionProvider = () =>
             serviceConfig: {
               executionRoleArn: roleArn,
               timeoutSeconds: toTimeoutSeconds(news.timeout),
-              maxConcurrencyPerEnvironment: news.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+              maxConcurrencyPerEnvironment:
+                news.maxConcurrencyPerEnvironment ?? DEFAULT_MAX_CONCURRENCY,
               environmentVariables: {
                 ...userEnv,
                 ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}),
