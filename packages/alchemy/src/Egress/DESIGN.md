@@ -196,7 +196,6 @@ because only code written for a host knows what that host offers:
 
 ```ts
 // src/Sandbox.microvm.ts — the program on an AWS microVM
-import * as AI from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
 import * as AWS from "alchemy/AWS";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -216,16 +215,14 @@ export default AWS.MicroVM.Sandbox(
     // function URL), or a URL string. Routed in your own Worker: `gateway: Api, gatewayPath: "/egress"`.
     gateway: Gateway,
   },
-  Effect.gen(function* () {
-    const claude = yield* Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" });
-    return { fetch: yield* AI.serveHarnessHttp(claude) };
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata))),
+  Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }).pipe(
+    Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata)),
+  ),
 );
 ```
 
 ```ts
 // src/Sandbox.cloudflare.ts — the same program in a Cloudflare Container
-import * as AI from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -240,10 +237,47 @@ export default Cloudflare.Containers.Sandbox(
     instance: "standard-4",
     schedulingPolicy: "durable_object",
   },
+  Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }).pipe(
+    Effect.provide(NodeServices.layer),
+  ),
+);
+```
+
+A harness server (`Anthropic.ClaudeCodeServer`, `OpenAI.CodexServer`,
+`OpenCode.Server`, `AI.AcpServer`) yields `{ fetch }`, so it can be the whole
+program, as above. With routes of your own, route to its `fetch`:
+
+```ts
+// src/Sandbox.microvm.ts — Claude Code next to your own routes
+import * as Anthropic from "alchemy/Anthropic";
+import * as AWS from "alchemy/AWS";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import Gateway from "./gateway.ts";
+import { Sandbox } from "./Sandbox.ts";
+
+export default AWS.MicroVM.Sandbox(
+  Sandbox,
+  {
+    main: import.meta.url,
+    image: "node:24-bookworm",
+    memory: "32 GB",
+    cpu: 8,
+    gateway: Gateway,
+  },
   Effect.gen(function* () {
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" });
-    return { fetch: yield* AI.serveHarnessHttp(claude) };
-  }).pipe(Effect.provide(NodeServices.layer)),
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url === "/health") return HttpServerResponse.text("ok");
+        return yield* claude.fetch;
+      }),
+    };
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata))),
 );
 ```
 
