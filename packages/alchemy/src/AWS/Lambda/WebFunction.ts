@@ -685,13 +685,12 @@ export const WebFunctionProvider = () =>
       ) =>
         effect.pipe(
           Effect.tapError((e) =>
-            e._tag === "WebFunctionRoleNotAssumable"
+            e._tag === "ExecutionRoleNotAssumable"
               ? session.note(`Waiting for execution role to propagate: ${functionName}`)
               : Effect.void,
           ),
           Effect.retry({
-            while: (e) =>
-              e._tag === "WebFunctionRoleNotAssumable" || e._tag === "ConflictException",
+            while: (e) => e._tag === "ExecutionRoleNotAssumable" || e._tag === "ConflictException",
             schedule: Schedule.spaced("3 seconds"),
             times: 20,
           }),
