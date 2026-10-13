@@ -127,9 +127,18 @@ function providerApiReferenceEntry(...providers: string[]) {
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
 /**
- * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
- * Generated reference pages are edited through their JSDoc instead, and blog
- * posts aren't editable (in-place editing breaks selecting and copying text).
+ * Dev only: in-browser copy editing (`contenteditable`) is on for the home
+ * page. Every other page (docs, reference, compare) only gets it when the dev
+ * server is launched with `ALCHEMY_DOCS_EDIT=1`. Builds never ship the editor.
+ */
+const docsEditing = process.env.ALCHEMY_DOCS_EDIT === "1";
+const copyEditablePage = (pathname: string) => docsEditing || pathname === "/";
+
+/**
+ * Dev only, with `ALCHEMY_DOCS_EDIT=1`: hand-written docs (`.md`/`.mdx`) are
+ * editable in the browser. Generated reference pages are edited through their
+ * JSDoc instead, and blog posts aren't editable (in-place editing breaks
+ * selecting and copying text).
  */
 const markdownCopy: MarkdownFilesOptions = {
   root: fileURLToPath(new URL(".", import.meta.url)),
@@ -142,7 +151,7 @@ function markdownCopyEditing(): AstroIntegration {
     name: "markdown-copy-editing",
     hooks: {
       "astro:config:setup": ({ command, config }) => {
-        if (command !== "dev") return;
+        if (command !== "dev" || !docsEditing) return;
         const processor = config.markdown.processor as
           | { name: string; options?: { mdastPlugins?: unknown[] } }
           | undefined;
@@ -1809,6 +1818,7 @@ export default defineConfig({
   vite: {
     plugins: [
       copyEditor({
+        pages: copyEditablePage,
         handlers: {
           jsdoc: jsdocCopyHandler(),
           md: markdownFiles(markdownCopy),
