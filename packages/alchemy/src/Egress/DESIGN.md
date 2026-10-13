@@ -122,17 +122,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
 // src/gateway.ts — its own Worker: sandboxes' egress traffic, nothing else
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Egress from "alchemy/Egress";
-import * as Effect from "effect/Effect";
 import { Model, Repo } from "./egress.ts";
 
+// Egress.Gateway is a Worker implementation by itself: it yields `{ fetch }`.
+// It binds the egresses' secrets into this Worker, and the root key that verifies grants.
 export default class Gateway extends Cloudflare.Worker<Gateway>()(
   "Gateway",
   { main: import.meta.url },
-  Effect.gen(function* () {
-    // Yielding the egresses binds their secrets into this Worker, and the root key that verifies grants.
-    const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
-    return { fetch: gateway.fetch };
-  }),
+  Egress.Gateway({ egress: [Model, Repo] }),
 ) {}
 ```
 
@@ -142,17 +139,13 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
 // src/gateway.ts — a Lambda with a function URL
 import * as AWS from "alchemy/AWS";
 import * as Egress from "alchemy/Egress";
-import * as Effect from "effect/Effect";
 import { Model, Repo } from "./egress.ts";
 
+// The same bindings, into the Lambda's environment.
 export default class Gateway extends AWS.Lambda.Function<Gateway>()(
   "Gateway",
   { main: import.meta.url, url: true },
-  Effect.gen(function* () {
-    // The same bindings, into the Lambda's environment.
-    const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
-    return { fetch: gateway.fetch };
-  }),
+  Egress.Gateway({ egress: [Model, Repo] }),
 ) {}
 ```
 
