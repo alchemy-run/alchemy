@@ -193,7 +193,7 @@ catalog:
   react-router: "^7.16.0"
   react-server-dom-webpack: "~19.3.0"
   remotion: "4.0.526"
-  rolldown: "1.2.5"
+  rolldown: "1.2.8"
   satteri: "^0.10.5"
   sharp: "^0.35.3"
   shiki: "^4.4.3"
@@ -271,7 +271,7 @@ overrides:
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.2
   zod: 4.5.4
-  rolldown: 1.2.5
+  rolldown: 1.2.8
 
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
