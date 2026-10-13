@@ -5,10 +5,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { TigrisCredentialsMissing } from "./Errors.ts";
 
-export interface HeadObjectRequest extends Omit<
-  S3.HeadObjectRequest,
-  "Bucket"
-> {}
+export interface HeadObjectRequest extends Omit<S3.HeadObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for Tigris `HeadObject` over the S3 API.

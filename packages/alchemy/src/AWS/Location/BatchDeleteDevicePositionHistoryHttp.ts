@@ -1,7 +1,7 @@
 import * as location from "@distilled.cloud/aws/location";
 import * as Layer from "effect/Layer";
-import { makeLocationTrackerHttpBinding } from "./BindingHttp.ts";
 import { BatchDeleteDevicePositionHistory } from "./BatchDeleteDevicePositionHistory.ts";
+import { makeLocationTrackerHttpBinding } from "./BindingHttp.ts";
 
 export const BatchDeleteDevicePositionHistoryHttp = Layer.effect(
   BatchDeleteDevicePositionHistory,

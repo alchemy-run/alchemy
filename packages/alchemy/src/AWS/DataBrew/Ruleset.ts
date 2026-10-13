@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  cleanMap,
-  databrewArn,
-  fetchObservedTags,
-  syncTags,
-} from "./internal.ts";
+import { cleanMap, databrewArn, fetchObservedTags, syncTags } from "./internal.ts";
 
 /** A single data-quality rule (a check expression + optional threshold). */
 export interface RulesetRule {
@@ -157,20 +152,13 @@ export const RulesetProvider = () =>
         id: string,
         props: { rulesetName?: string | undefined },
       ) {
-        return (
-          props.rulesetName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.rulesetName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeRuleset({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Ruleset.Provider.of({
@@ -179,29 +167,22 @@ export const RulesetProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* databrew.listRulesets
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* databrew.listRulesets.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Rulesets ?? [])
               .map((r) => ({
                 rulesetName: r.Name,
-                rulesetArn:
-                  r.ResourceArn ??
-                  databrewArn(region, accountId, "ruleset", r.Name),
+                rulesetArn: r.ResourceArn ?? databrewArn(region, accountId, "ruleset", r.Name),
                 targetArn: r.TargetArn ?? "",
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.rulesetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.rulesetName ?? (yield* createName(id, olds ?? {}));
           const ruleset = yield* observe(name);
           if (ruleset === undefined) return undefined;
-          const arn =
-            ruleset.ResourceArn ??
-            databrewArn(region, accountId, "ruleset", name);
+          const arn = ruleset.ResourceArn ?? databrewArn(region, accountId, "ruleset", name);
           const attrs = {
             rulesetName: name,
             rulesetArn: arn,
@@ -250,9 +231,7 @@ export const RulesetProvider = () =>
             });
           }
 
-          const arn =
-            ruleset?.ResourceArn ??
-            databrewArn(region, accountId, "ruleset", name);
+          const arn = ruleset?.ResourceArn ?? databrewArn(region, accountId, "ruleset", name);
 
           // 3b. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -269,9 +248,7 @@ export const RulesetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* databrew
             .deleteRuleset({ Name: output.rulesetName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

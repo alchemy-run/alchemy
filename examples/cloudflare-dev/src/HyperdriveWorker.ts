@@ -12,9 +12,9 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const parseOrigin = (raw: string | undefined) => {
   // The fallback keeps module evaluation safe inside workerd (where the env

@@ -31,6 +31,4 @@ export interface GetSafetyLever extends Binding.Service<
     ) => Effect.Effect<fis.GetSafetyLeverResponse, fis.GetSafetyLeverError>
   >
 > {}
-export const GetSafetyLever = Binding.Service<GetSafetyLever>(
-  "AWS.FIS.GetSafetyLever",
-);
+export const GetSafetyLever = Binding.Service<GetSafetyLever>("AWS.FIS.GetSafetyLever");

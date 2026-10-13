@@ -10,14 +10,9 @@ import type { Topic } from "./Topic.ts";
  * the sink assigns per API call. Callers stay in control of `Message`,
  * `Subject`, `MessageGroupId`, `MessageDeduplicationId`, attributes, etc.
  */
-export interface TopicSinkEntry extends Omit<
-  sns.PublishBatchRequestEntry,
-  "Id"
-> {}
+export interface TopicSinkEntry extends Omit<sns.PublishBatchRequestEntry, "Id"> {}
 
-export type TopicSinkError =
-  | sns.PublishBatchError
-  | BatchRetryExhaustedError<TopicSinkEntry>;
+export type TopicSinkError = sns.PublishBatchError | BatchRetryExhaustedError<TopicSinkEntry>;
 
 /**
  * A batching sink over SNS `PublishBatch` (10 entries / 256 KiB per call).
@@ -50,9 +45,7 @@ export interface TopicSink extends Binding.Service<
   "AWS.SNS.TopicSink",
   (
     topic: Topic,
-  ) => Effect.Effect<
-    Sink.Sink<void, TopicSinkEntry, readonly TopicSinkEntry[], TopicSinkError>
-  >
+  ) => Effect.Effect<Sink.Sink<void, TopicSinkEntry, readonly TopicSinkEntry[], TopicSinkError>>
 > {}
 
 export const TopicSink = Binding.Service<TopicSink>("AWS.SNS.TopicSink");

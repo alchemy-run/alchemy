@@ -2,19 +2,16 @@ import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { unwrapRpcHandlers } from "./RpcSerialization.ts";
 import type { RpcProxyApi, SessionProviderCounts } from "./RpcServer.ts";
-import {
-  encodeSessionEnvironment,
-  SESSION_ENV_PARAM,
-} from "./RpcServerEnvironment.ts";
+import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
 
 /** A test file's leases on the sessions it actually uses. */
@@ -62,10 +59,7 @@ export class RpcProviderProxy extends Context.Service<
     /** Counts only; does not connect to or start the sidecar. */
     readonly diagnostics: Effect.Effect<SessionCounts>;
     /** Inspect an existing connection only; never spawn or reconnect. */
-    readonly serverDiagnostics: Effect.Effect<
-      SessionProviderCounts | undefined,
-      unknown
-    >;
+    readonly serverDiagnostics: Effect.Effect<SessionProviderCounts | undefined, unknown>;
   }
 >()("alchemy/Local/RpcProviderProxy") {}
 
@@ -136,12 +130,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     (effect) =>
       Effect.catch(effect, (error) =>
         Effect.die(
-          new Error(
-            "Failed to create a provider RPC session with the sidecar",
-            {
-              cause: error,
-            },
-          ),
+          new Error("Failed to create a provider RPC session with the sidecar", {
+            cause: error,
+          }),
         ),
       ),
   );
@@ -151,9 +142,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     Effect.tryPromise(() => connection.pending).pipe(
       Effect.flatMap((session) =>
         (release
-          ? Effect.tryPromise(() => session.rpc.releaseSession()).pipe(
-              Effect.ignore,
-            )
+          ? Effect.tryPromise(() => session.rpc.releaseSession()).pipe(Effect.ignore)
           : Effect.void
         ).pipe(
           Effect.ensuring(
@@ -174,11 +163,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       const connections = [...entry.connections];
       entry.connections.clear();
       entry.connection = undefined;
-      return Effect.forEach(
-        connections,
-        (connection) => dispose(connection, true),
-        { discard: true },
-      );
+      return Effect.forEach(connections, (connection) => dispose(connection, true), {
+        discard: true,
+      });
     });
 
   return RpcProviderProxy.of({
@@ -199,18 +186,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       )?.connection;
       return connection === undefined
         ? Effect.succeed(undefined)
-        : Effect.tryPromise(async () =>
-            (await connection.pending).rpc.getDiagnostics(),
-          ).pipe(
+        : Effect.tryPromise(async () => (await connection.pending).rpc.getDiagnostics()).pipe(
             Effect.map(
-              ({
-                sessions,
-                testSessions,
-                contexts,
-                building,
-                artifactBags,
-                artifacts,
-              }) => ({
+              ({ sessions, testSessions, contexts, building, artifactBags, artifacts }) => ({
                 sessions,
                 testSessions,
                 contexts,
@@ -223,16 +201,14 @@ const make = Effect.fn(function* (spawnerUrl: string) {
           );
     }),
     get: Effect.fn(function* (providersUrl, providerName, owner) {
-      if (owner?.closed)
-        return yield* Effect.die("Test sidecar handle is closed");
+      if (owner?.closed) return yield* Effect.die("Test sidecar handle is closed");
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
       const environment = encodeSessionEnvironment({
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
       });
-      if (owner?.closed)
-        return yield* Effect.die("Test sidecar handle is closed");
+      if (owner?.closed) return yield* Effect.die("Test sidecar handle is closed");
       const key = `${owner === undefined ? "dev" : "test"}:${environment}`;
       let entry = sessions.get(key);
       if (entry === undefined) {
@@ -251,9 +227,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
           current,
           Effect.suspend(() => {
             current.owners.delete(owner);
-            return current.owners.size === 0
-              ? releaseEntry(key, current)
-              : Effect.void;
+            return current.owners.size === 0 ? releaseEntry(key, current) : Effect.void;
           }),
         );
       }
@@ -267,9 +241,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
           const open = getSession(environment);
           connection = {
             pending: Effect.runPromise(
-              current.testOwned
-                ? open.pipe(Effect.timeout("30 seconds"))
-                : open,
+              current.testOwned ? open.pipe(Effect.timeout("30 seconds")) : open,
             ),
           };
           current.connection = connection;
@@ -285,8 +257,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
               });
             },
             () => {
-              if (current.connection === generation)
-                current.connection = undefined;
+              if (current.connection === generation) current.connection = undefined;
               current.connections.delete(generation);
             },
           );
@@ -298,11 +269,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
         }
         return yield* Effect.tryPromise(
           () =>
-            session.rpc.getProvider(
-              providerName,
-              providersUrl,
-              current.testOwned,
-            ) as ReturnType<RpcProxyApi["getProvider"]>,
+            session.rpc.getProvider(providerName, providersUrl, current.testOwned) as ReturnType<
+              RpcProxyApi["getProvider"]
+            >,
         ).pipe(
           Effect.tapError(() =>
             Effect.sync(() => {
@@ -334,7 +303,4 @@ const make = Effect.fn(function* (spawnerUrl: string) {
 export const layer = (url: string) => Layer.effect(RpcProviderProxy, make(url));
 
 export const fromEnv = () =>
-  Layer.effect(
-    RpcProviderProxy,
-    Config.String(SPAWNER_URL_ENV_KEY).pipe(Effect.flatMap(make)),
-  );
+  Layer.effect(RpcProviderProxy, Config.String(SPAWNER_URL_ENV_KEY).pipe(Effect.flatMap(make)));

@@ -141,9 +141,7 @@ export interface AccountSettings extends Resource<
  *
  * @resource
  */
-export const AccountSettings = Resource<AccountSettings>(
-  "AWS.SES.AccountSettings",
-);
+export const AccountSettings = Resource<AccountSettings>("AWS.SES.AccountSettings");
 
 const sameReasons = (
   a: ReadonlyArray<SuppressionListReason> | undefined,
@@ -166,9 +164,7 @@ export const AccountSettingsProvider = () =>
           // SDK survives new SES reasons. Narrow to the closed union the props
           // use, dropping anything we do not model, so attributes assign back
           // into props.
-          suppressedReasons: (
-            response.SuppressionAttributes?.SuppressedReasons ?? []
-          ).filter(
+          suppressedReasons: (response.SuppressionAttributes?.SuppressedReasons ?? []).filter(
             (reason): reason is SuppressionListReason =>
               reason === "BOUNCE" || reason === "COMPLAINT",
           ),
@@ -229,10 +225,8 @@ export const AccountSettingsProvider = () =>
           if (
             news.vdm !== undefined &&
             (observed.vdmEnabled !== news.vdm.enabled ||
-              observed.dashboardEngagementMetrics !==
-                news.vdm.dashboardEngagementMetrics ||
-              observed.guardianOptimizedSharedDelivery !==
-                news.vdm.guardianOptimizedSharedDelivery)
+              observed.dashboardEngagementMetrics !== news.vdm.dashboardEngagementMetrics ||
+              observed.guardianOptimizedSharedDelivery !== news.vdm.guardianOptimizedSharedDelivery)
           ) {
             yield* sesv2.putAccountVdmAttributes({
               VdmAttributes: {
@@ -244,8 +238,7 @@ export const AccountSettingsProvider = () =>
                 GuardianAttributes:
                   news.vdm.guardianOptimizedSharedDelivery !== undefined
                     ? {
-                        OptimizedSharedDelivery:
-                          news.vdm.guardianOptimizedSharedDelivery,
+                        OptimizedSharedDelivery: news.vdm.guardianOptimizedSharedDelivery,
                       }
                     : undefined,
               },
@@ -254,9 +247,7 @@ export const AccountSettingsProvider = () =>
 
           // Re-read so the returned attributes reflect the converged state.
           observed = yield* observe;
-          yield* session.note(
-            `sending=${observed.sendingEnabled} vdm=${observed.vdmEnabled}`,
-          );
+          yield* session.note(`sending=${observed.sendingEnabled} vdm=${observed.vdmEnabled}`);
           return toAttrs(observed);
         }),
 

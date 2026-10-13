@@ -27,13 +27,6 @@ export interface DescribeWorkspace extends Binding.Service<
   "AWS.AMP.DescribeWorkspace",
   (
     workspace: Workspace,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      amp.DescribeWorkspaceResponse,
-      amp.DescribeWorkspaceError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<amp.DescribeWorkspaceResponse, amp.DescribeWorkspaceError>>
 > {}
-export const DescribeWorkspace = Binding.Service<DescribeWorkspace>(
-  "AWS.AMP.DescribeWorkspace",
-);
+export const DescribeWorkspace = Binding.Service<DescribeWorkspace>("AWS.AMP.DescribeWorkspace");

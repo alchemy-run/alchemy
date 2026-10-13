@@ -1,10 +1,21 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as finspace from "@distilled.cloud/aws/finspace";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Amazon FinSpace reached end of support on 2026-10-07
+// (https://docs.aws.amazon.com/finspace/latest/userguide/amazon-finspace-end-of-support.html).
+// The control-plane hostname finspace.<region>.amazonaws.com no longer has
+// A records in any region, so every control-plane call fails before reaching
+// AWS with:
+//   HttpClientError: Transport error (GET https://finspace.us-west-2.amazonaws.com/kx/environments)
+//   (cause: getaddrinfo ENOTFOUND finspace.us-west-2.amazonaws.com)
+// A transport failure can't be patched into a typed tag, so all control-plane
+// tests are gated behind AWS_TEST_FINSPACE=1 for accounts that still have access.
+const finspaceRetired = !process.env.AWS_TEST_FINSPACE;
 
 // FinSpace Managed kdb is closed to non-onboarded accounts, so the runtime
 // bindings (all scoped to a live KxEnvironment) cannot be exercised through a
@@ -18,7 +29,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // with ValidationException.
 const missingEnvironmentId = "zzzzzzzzzzzzzzzzzzzzzzzzzz";
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxConnectionString on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -34,7 +45,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "createKxChangeset on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -57,22 +68,19 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "listKxChangesets on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.listKxChangesets({
-          environmentId: missingEnvironmentId,
-          databaseName: "nodb",
-        }),
+        finspace.listKxChangesets({ environmentId: missingEnvironmentId, databaseName: "nodb" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "listKxClusterNodes on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -87,7 +95,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxDataview on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -103,15 +111,12 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxUser on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.getKxUser({
-          environmentId: missingEnvironmentId,
-          userName: "nouser",
-        }),
+        finspace.getKxUser({ environmentId: missingEnvironmentId, userName: "nouser" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),

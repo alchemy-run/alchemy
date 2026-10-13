@@ -1,26 +1,23 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The worker echoes the version-key header the transform rule sets, so a
 // plain fetch proves the rule rewrote the request end-to-end.
@@ -39,9 +36,7 @@ const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone;
 });
@@ -51,20 +46,13 @@ const resolveZone = Effect.gen(function* () {
  * `{ description, expression, value }` (value = the header-value
  * expression), sorted by description.
  */
-const listAffinityRules = Effect.fn(function* (
-  zoneId: string,
-  scriptName: string,
-) {
+const listAffinityRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
     .pipe(Effect.catch(() => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? [])
     .flatMap((rule) => {
-      if (
-        !(rule.description ?? "").startsWith(
-          `alchemy:worker:${scriptName}:affinity`,
-        )
-      ) {
+      if (!(rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:affinity`)) {
         return [];
       }
       const headers =
@@ -83,19 +71,14 @@ const listAffinityRules = Effect.fn(function* (
         {
           description: rule.description as string,
           expression: rule.expression ?? "",
-          value:
-            typeof header?.expression === "string"
-              ? header.expression
-              : undefined,
+          value: typeof header?.expression === "string" ? header.expression : undefined,
         },
       ];
     })
     .sort((a, b) => a.description.localeCompare(b.description));
 });
 
-class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
-  hostname: string;
-}> {}
+class DnsNotReady extends Data.TaggedError("DnsNotReady")<{ hostname: string }> {}
 
 const DnsResponse = Schema.Struct({
   Status: Schema.Number,
@@ -148,10 +131,7 @@ const domainClient = Effect.fn(function* (hostname: string) {
   );
 });
 
-class BodyMismatch extends Data.TaggedError("BodyMismatch")<{
-  url: string;
-  body: string;
-}> {
+class BodyMismatch extends Data.TaggedError("BodyMismatch")<{ url: string; body: string }> {
   override get message() {
     return `unexpected body from ${this.url}: '${this.body}'`;
   }
@@ -175,17 +155,12 @@ const expectBody = Effect.fn(function* (
         Effect.flatMap((body) =>
           response.status === 200 && check(body)
             ? Effect.void
-            : Effect.fail(
-                new BodyMismatch({ url, body: `${response.status}: ${body}` }),
-              ),
+            : Effect.fail(new BodyMismatch({ url, body: `${response.status}: ${body}` })),
         ),
       ),
     ),
     Effect.timeout("5 seconds"),
-    Effect.retry({
-      schedule: Schedule.spaced(retryDelay),
-      times: 10,
-    }),
+    Effect.retry({ schedule: Schedule.spaced(retryDelay), times: 10 }),
     Effect.timeout("60 seconds"),
   );
 });
@@ -207,9 +182,7 @@ describe
 
             yield* stack.destroy();
 
-            const deploy = (
-              affinity: Cloudflare.WorkerVersionAffinity | undefined,
-            ) =>
+            const deploy = (affinity: Cloudflare.WorkerVersionAffinity | undefined) =>
               stack.deploy(
                 Effect.gen(function* () {
                   return yield* Cloudflare.Worker("AffinityWorker", {
@@ -274,24 +247,15 @@ describe
             // Removing affinity removes the rules while the rollout continues.
             const v3 = yield* deploy(undefined);
             expect(v3.affinityZoneIds).toBeUndefined();
-            expect(yield* listAffinityRules(zone.id, v3.workerName)).toEqual(
-              [],
-            );
+            expect(yield* listAffinityRules(zone.id, v3.workerName)).toEqual([]);
 
             // Re-add, then destroy — teardown must remove the rules too.
             const v4 = yield* deploy({ cookie: "session_id" });
-            expect(
-              yield* listAffinityRules(zone.id, v4.workerName),
-            ).toHaveLength(1);
+            expect(yield* listAffinityRules(zone.id, v4.workerName)).toHaveLength(1);
             yield* stack.destroy();
-            expect(yield* listAffinityRules(zone.id, v4.workerName)).toEqual(
-              [],
-            );
+            expect(yield* listAffinityRules(zone.id, v4.workerName)).toEqual([]);
           }).pipe(logLevel),
-        {
-          tags: ["provider:cloudflare:ruleset", "provider:cloudflare:zone"],
-          timeout: 600_000,
-        },
+        { tags: ["provider:cloudflare:ruleset", "provider:cloudflare:zone"], timeout: 600_000 },
       );
 
       test.provider(
@@ -305,10 +269,7 @@ describe
                 Effect.gen(function* () {
                   return yield* Cloudflare.Worker("DevOnlyAffinity", {
                     script,
-                    version: {
-                      traffic: 50,
-                      affinity: { cookie: "session_id" },
-                    },
+                    version: { traffic: 50, affinity: { cookie: "session_id" } },
                   });
                 }),
               )
@@ -345,20 +306,13 @@ describe
                 const parent = yield* parentWorker("parent-v1");
                 const canary = yield* Cloudflare.Worker("AffinityCanary", {
                   script,
-                  version: {
-                    parent,
-                    traffic: 25,
-                    affinity: { cookie: "session_id" },
-                  },
+                  version: { parent, traffic: 25, affinity: { cookie: "session_id" } },
                 });
                 return { parent, canary };
               }),
             );
             expect(v1.canary.affinityZoneIds).toEqual([zone.id]);
-            const rules = yield* listAffinityRules(
-              zone.id,
-              v1.parent.workerName,
-            );
+            const rules = yield* listAffinityRules(zone.id, v1.parent.workerName);
             expect(rules).toHaveLength(1);
             expect(rules[0].description).toEqual(
               `alchemy:worker:${v1.parent.workerName}:affinity:key`,
@@ -375,16 +329,11 @@ describe
                 return { parent };
               }),
             );
-            expect(
-              yield* listAffinityRules(zone.id, v2.parent.workerName),
-            ).toEqual([]);
+            expect(yield* listAffinityRules(zone.id, v2.parent.workerName)).toEqual([]);
 
             yield* stack.destroy();
           }).pipe(logLevel),
-        {
-          tags: ["provider:cloudflare:ruleset", "provider:cloudflare:zone"],
-          timeout: 420_000,
-        },
+        { tags: ["provider:cloudflare:ruleset", "provider:cloudflare:zone"], timeout: 420_000 },
       );
     },
   );

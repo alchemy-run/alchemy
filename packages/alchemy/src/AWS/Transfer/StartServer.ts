@@ -37,6 +37,4 @@ export interface StartServer extends Binding.Service<
     ) => Effect.Effect<transfer.StartServerResponse, transfer.StartServerError>
   >
 > {}
-export const StartServer = Binding.Service<StartServer>(
-  "AWS.Transfer.StartServer",
-);
+export const StartServer = Binding.Service<StartServer>("AWS.Transfer.StartServer");

@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import * as Effect from "effect/Effect";
 import { exerciseSqlSurface } from "./exercise.ts";
 import Stack from "./fixtures/d1-stack.ts";
 
@@ -33,12 +33,7 @@ test(
     yield* exerciseSqlSurface(url);
   }),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: TEST_TIMEOUT,
   },
 );

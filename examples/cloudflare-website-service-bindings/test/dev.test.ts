@@ -1,11 +1,11 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { frameworks } from "../frameworks.ts";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+import { frameworks } from "../frameworks.ts";
 
 const stage = "dev-service-bindings";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

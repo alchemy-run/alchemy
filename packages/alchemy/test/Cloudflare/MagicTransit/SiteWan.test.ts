@@ -1,22 +1,20 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN sites (and their WANs) are entitlement-gated. On the standard
 // testing account every site call fails with the typed `MagicWanUnauthorized`
-// error (Cloudflare code 1025) or `Forbidden` (403) depending on token scope.
+// error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled").
 // The deploy+list lifecycle test below is gated behind an explicit opt-in env
 // flag for entitled accounts; the read-only list probe always runs and asserts
 // a well-typed array (empty on unentitled accounts).
@@ -28,12 +26,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteWan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteWan);
       const all = yield* provider.list();
 
-      // Unentitled accounts surface MagicWanUnauthorized/Forbidden, which list()
+      // Unentitled accounts surface MagicWanUnauthorized/MagicWanNotEnabled, which list()
       // maps to []. Either way the result is a well-typed array, never a throw.
       expect(Array.isArray(all)).toBe(true);
       for (const wan of all) {
@@ -82,9 +78,7 @@ test.provider.skipIf(!entitled)(
       });
       expect(live.result.some((w) => w.id === wan.wanId)).toBe(true);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteWan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteWan);
       const all = yield* provider.list();
 
       expect(all.some((w) => w.wanId === wan.wanId)).toBe(true);

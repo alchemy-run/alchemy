@@ -39,7 +39,6 @@ export interface DescribeApplicationOperation extends Binding.Service<
     >
   >
 > {}
-export const DescribeApplicationOperation =
-  Binding.Service<DescribeApplicationOperation>(
-    "AWS.KinesisAnalyticsV2.DescribeApplicationOperation",
-  );
+export const DescribeApplicationOperation = Binding.Service<DescribeApplicationOperation>(
+  "AWS.KinesisAnalyticsV2.DescribeApplicationOperation",
+);

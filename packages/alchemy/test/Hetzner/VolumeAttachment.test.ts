@@ -1,19 +1,16 @@
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import * as volumes from "@distilled.cloud/hetzner/volumes";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -76,16 +73,12 @@ test.provider.skipIf(!hasHetznerCreds)(
         id: created.volume.id,
       });
       expect(fetched.volume.server).toEqual(created.server.id);
-      expect(fetched.volume.linux_device).toEqual(
-        created.attachment.linuxDevice,
-      );
+      expect(fetched.volume.linux_device).toEqual(created.attachment.linuxDevice);
 
       const provider = yield* Provider.findProvider(Hetzner.VolumeAttachment);
       const listed = yield* provider.list();
       const found = listed.find(
-        (item) =>
-          item.volumeId === created.volume.id &&
-          item.serverId === created.server.id,
+        (item) => item.volumeId === created.volume.id && item.serverId === created.server.id,
       );
       expect(found).toBeDefined();
       expect(found?.linuxDevice).toEqual(created.attachment.linuxDevice);

@@ -185,11 +185,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBInstances?.[0];
       });
 
@@ -197,28 +193,20 @@ export const DBInstanceProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* neptune
           .listTagsForResource({ ResourceName: arn })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
         return toTagRecord(response?.TagList);
       });
 
       // Bounded readiness wait. Gate on `DBInstanceStatus === "available"` so a
       // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
-      // Budgets ~10 min (60 * 10s) for slow provisioning.
+      // Neptune instances (serverless in particular) routinely take 10-20
+      // minutes to leave `creating`; budget ~25 min (100 * 15s).
       const waitForInstance = Effect.fn(function* (instanceId: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(100)]);
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {
-              return Effect.fail(
-                new Error(`DB instance '${instanceId}' not found`),
-              );
+              return Effect.fail(new Error(`DB instance '${instanceId}' not found`));
             }
             const status = instance.DBInstanceStatus;
             if (
@@ -227,9 +215,7 @@ export const DBInstanceProvider = () =>
               status !== "incompatible-restore"
             ) {
               return Effect.fail(
-                new Error(
-                  `DB instance '${instanceId}' not available (status: ${status})`,
-                ),
+                new Error(`DB instance '${instanceId}' not available (status: ${status})`),
               );
             }
             return Effect.succeed(instance);
@@ -303,8 +289,7 @@ export const DBInstanceProvider = () =>
           return toAttrs({ instance, tags });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          const identifier = output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -330,12 +315,7 @@ export const DBInstanceProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBInstanceAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForInstance(identifier);
           } else {
@@ -399,9 +379,7 @@ export const DBInstanceProvider = () =>
               DBInstanceIdentifier: output.dbInstanceIdentifier,
               SkipFinalSnapshot: true,
             })
-            .pipe(
-              Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
           // Block until the instance is fully gone so a dependent cluster or
           // subnet group is not torn down while Neptune still references it.
           yield* Effect.repeat(
@@ -411,15 +389,10 @@ export const DBInstanceProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBInstanceNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(false)),
               ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

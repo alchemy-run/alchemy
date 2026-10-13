@@ -16,9 +16,7 @@ export const Project = Prisma.Project(
   "Project",
   Effect.gen(function* () {
     return {
-      name: yield* Config.String("PRISMA_PROJECT").pipe(
-        Effect.orElseSucceed(() => undefined),
-      ),
+      name: yield* Config.String("PRISMA_PROJECT").pipe(Effect.orElseSucceed(() => undefined)),
       createDatabase: false,
       region,
     };

@@ -51,7 +51,6 @@ export interface GetKnowledgeBaseDocuments extends Binding.Service<
     >
   >
 > {}
-export const GetKnowledgeBaseDocuments =
-  Binding.Service<GetKnowledgeBaseDocuments>(
-    "AWS.Bedrock.GetKnowledgeBaseDocuments",
-  );
+export const GetKnowledgeBaseDocuments = Binding.Service<GetKnowledgeBaseDocuments>(
+  "AWS.Bedrock.GetKnowledgeBaseDocuments",
+);

@@ -8,11 +8,7 @@ export const ListTopicsHttp = Layer.effect(
   makeKafkaClusterHttpBinding({
     tag: "AWS.Kafka.ListTopics",
     operation: kafka.listTopics,
-    actions: [
-      "kafka:ListTopics",
-      "kafka-cluster:Connect",
-      "kafka-cluster:DescribeTopic",
-    ],
+    actions: ["kafka:ListTopics", "kafka-cluster:Connect", "kafka-cluster:DescribeTopic"],
     topicScoped: true,
   }),
 );

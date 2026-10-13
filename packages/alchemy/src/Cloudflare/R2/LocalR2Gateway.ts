@@ -50,17 +50,15 @@ export const makeProxyBucketHelpers = (
    */
   ambient: Context.Context<never>,
 ): ReturnType<typeof makeHelpers> => {
-  const use = <T>(
-    fn: (raw: runtime.R2Bucket) => Promise<T>,
-  ): Effect.Effect<T, R2Error> =>
+  const use = <T>(fn: (raw: runtime.R2Bucket) => Promise<T>): Effect.Effect<T, R2Error> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining requirements are satisfied by the captured ambient context
     Effect.scoped(
       Effect.gen(function* () {
         const proxy = yield* open({
           name: gatewayName("alchemy-r2-gateway", bucketName),
           bindings: [R2Bucket.local({ binding: "R2", id: bucketName })],
         });
-        const bucket = (proxy.env as Record<string, unknown>)
-          .R2 as runtime.R2Bucket;
+        const bucket = (proxy.env as Record<string, unknown>).R2 as runtime.R2Bucket;
         return yield* tryPromise(() => fn(bucket));
       }),
     ).pipe(

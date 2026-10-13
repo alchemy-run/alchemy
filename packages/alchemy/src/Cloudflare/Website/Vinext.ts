@@ -26,9 +26,7 @@ const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
  */
 const DEFAULT_WORKER_ENTRY = "worker/index.ts";
 
-export interface VinextProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
 > {
@@ -68,10 +66,7 @@ export interface VinextProps<
    *
    * @default { entry: "rsc", children: ["ssr"] }
    */
-  viteEnvironments?: {
-    entry?: string;
-    children?: string[];
-  };
+  viteEnvironments?: { entry?: string; children?: string[] };
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to assets-first (`runWorkerFirst` unset) with
@@ -175,49 +170,42 @@ export const Vinext: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | VinextInput<Bindings>
-        | Effect.Effect<VinextInput<Bindings>, never, Req>,
+      propsEff?: VinextInput<Bindings> | Effect.Effect<VinextInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | VinextInput<Bindings>
-      | Effect.Effect<VinextInput<Bindings>, never, Req>,
+    propsEff?: VinextInput<Bindings> | Effect.Effect<VinextInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
 } = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
   id?: string,
-  propsEff?:
-    | VinextInput<Bindings>
-    | Effect.Effect<VinextInput<Bindings>, never, Req>,
+  propsEff?: VinextInput<Bindings> | Effect.Effect<VinextInput<Bindings>, never, Req>,
 ) =>
   id === undefined
     ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
         id: string,
-        propsEff?:
-          | VinextInput<Bindings>
-          | Effect.Effect<VinextInput<Bindings>, never, Req>,
+        propsEff?: VinextInput<Bindings> | Effect.Effect<VinextInput<Bindings>, never, Req>,
       ) => effectClass(Vinext(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {
-          const props =
-            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          const props = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
           // Do not bind VINEXT_KV_CACHE in user `env`.
@@ -225,24 +213,15 @@ export const Vinext: {
           const env = {
             ...props.env,
             VINEXT_KV_CACHE: cache,
-            CF_VERSION_METADATA:
-              props.env?.CF_VERSION_METADATA ?? VersionMetadata(),
+            CF_VERSION_METADATA: props.env?.CF_VERSION_METADATA ?? VersionMetadata(),
           };
           return {
             ...props,
             env,
-            cache: {
-              enabled: true,
-              ...props.cache,
-            },
+            cache: { enabled: true, ...props.cache },
             compatibility: {
               date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,
-              flags: Array.from(
-                new Set([
-                  "nodejs_compat",
-                  ...(props?.compatibility?.flags ?? []),
-                ]),
-              ),
+              flags: Array.from(new Set(["nodejs_compat", ...(props?.compatibility?.flags ?? [])])),
             },
             assets: {
               htmlHandling: "none" as const,
@@ -258,10 +237,7 @@ export const Vinext: {
                 main: props?.main ?? DEFAULT_WORKER_ENTRY,
                 rootDir: props?.rootDir,
                 memo: props?.memo,
-                viteEnvironments: props?.viteEnvironments ?? {
-                  entry: "rsc",
-                  children: ["ssr"],
-                },
+                viteEnvironments: props?.viteEnvironments ?? { entry: "rsc", children: ["ssr"] },
               },
             },
           };

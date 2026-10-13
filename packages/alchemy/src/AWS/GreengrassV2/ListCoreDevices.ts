@@ -27,12 +27,7 @@ export interface ListCoreDevices extends Binding.Service<
   () => Effect.Effect<
     (
       request?: greengrassv2.ListCoreDevicesRequest,
-    ) => Effect.Effect<
-      greengrassv2.ListCoreDevicesResponse,
-      greengrassv2.ListCoreDevicesError
-    >
+    ) => Effect.Effect<greengrassv2.ListCoreDevicesResponse, greengrassv2.ListCoreDevicesError>
   >
 > {}
-export const ListCoreDevices = Binding.Service<ListCoreDevices>(
-  "AWS.GreengrassV2.ListCoreDevices",
-);
+export const ListCoreDevices = Binding.Service<ListCoreDevices>("AWS.GreengrassV2.ListCoreDevices");

@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Redacted from "effect/Redacted";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * A sibling resource whose output is threaded into the container's `env`,
@@ -48,14 +48,15 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
     const container = yield* RemoteContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            yield* start;
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
         // The proxy pattern from #1334: forward the incoming request to the
@@ -64,15 +65,10 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
         // runtime must downgrade the scheme on the container hop.
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
+          yield* start;
           return yield* fetch(request);
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(RemoteContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

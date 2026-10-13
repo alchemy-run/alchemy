@@ -103,17 +103,11 @@ export const ExportJobProvider = () =>
           .getSearchResultExportJob({
             ExportJobIdentifier: exportJobIdentifier,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (
-        job:
-          | backupsearch.GetSearchResultExportJobOutput
-          | backupsearch.ExportJobSummary,
+        job: backupsearch.GetSearchResultExportJobOutput | backupsearch.ExportJobSummary,
       ) => ({
         exportJobIdentifier: job.ExportJobIdentifier,
         exportJobArn: job.ExportJobArn!,
@@ -127,8 +121,7 @@ export const ExportJobProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
-            (olds.searchJobIdentifier ?? undefined) !==
-              (news.searchJobIdentifier ?? undefined) ||
+            (olds.searchJobIdentifier ?? undefined) !== (news.searchJobIdentifier ?? undefined) ||
             (olds.roleArn ?? undefined) !== (news.roleArn ?? undefined) ||
             JSON.stringify(olds.exportSpecification ?? null) !==
               JSON.stringify(news.exportSpecification ?? null)
@@ -143,9 +136,7 @@ export const ExportJobProvider = () =>
           if (job === undefined) return undefined;
           const attrs = toAttrs(job);
           const tags =
-            job.ExportJobArn !== undefined
-              ? yield* readBackupSearchTags(job.ExportJobArn)
-              : {};
+            job.ExportJobArn !== undefined ? yield* readBackupSearchTags(job.ExportJobArn) : {};
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -167,11 +158,9 @@ export const ExportJobProvider = () =>
               ExportSpecification: {
                 s3ExportSpecification: {
                   DestinationBucket:
-                    news.exportSpecification.s3ExportSpecification
-                      .destinationBucket,
+                    news.exportSpecification.s3ExportSpecification.destinationBucket,
                   DestinationPrefix:
-                    news.exportSpecification.s3ExportSpecification
-                      .destinationPrefix,
+                    news.exportSpecification.s3ExportSpecification.destinationPrefix,
                 },
               },
               RoleArn: news.roleArn,

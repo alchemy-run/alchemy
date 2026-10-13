@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -71,8 +71,8 @@ test.provider(
           return {
             outcome,
             eventAction:
-              readBack.RiskConfiguration
-                ?.CompromisedCredentialsRiskConfiguration?.Actions?.EventAction,
+              readBack.RiskConfiguration?.CompromisedCredentialsRiskConfiguration?.Actions
+                ?.EventAction,
           };
         });
 

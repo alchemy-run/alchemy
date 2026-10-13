@@ -1,11 +1,18 @@
-import {
-  environmentServiceInstances,
-  waitUntilDeleted,
-  projectServices,
-  environmentVolumes,
-} from "./GraphQL.ts";
 import { randomBytes } from "node:crypto";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import {
+  Railway,
+  type Service,
+  type ServiceCreateInput,
+  type ServiceInstance,
+  type ServiceInstanceUpdateInput,
+  type TCPProxy,
+  type TCPProxyCreateInput,
+  type VolumeCreateInput,
+  type VolumeInstance,
+  type VolumeInstanceUpdateInput,
+  type VolumeState,
+} from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -15,77 +22,116 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  environmentServiceInstances,
+  waitUntilDeleted,
+  projectServices,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
-type VolumeState = railway.Scalars["VolumeState"];
+const serviceFields = <E>(service: Query<Service, E>) => ({
+  id: service.id,
+  name: service.name,
+  deletedAt: service.deletedAt,
+});
+const attributeInstanceFields = <E>(instance: Query<ServiceInstance, E>) => ({
+  source: instance.source.pipe(Query.map((source) => ({ image: source.image }))),
+  region: instance.region,
+  latestDeployment: instance.latestDeployment.pipe(
+    Query.map((deployment) => ({ id: deployment.id, status: deployment.status })),
+  ),
+});
+const instanceFields = <E>(instance: Query<ServiceInstance, E>) => ({
+  ...attributeInstanceFields(instance),
+  deletedAt: instance.deletedAt,
+  sleepApplication: instance.sleepApplication,
+  startCommand: instance.startCommand,
+});
+const volumeFields = <E>(instance: Query<VolumeInstance, E>) => ({
+  id: instance.id,
+  volumeId: instance.volumeId,
+  environmentId: instance.environmentId,
+  serviceId: instance.serviceId,
+  deletedAt: instance.deletedAt,
+  isPendingDeletion: instance.isPendingDeletion,
+  state: instance.state,
+  mountPath: instance.mountPath,
+  volume: { id: instance.volume.id, name: instance.volume.name },
+});
+const proxyFields = <E>(proxy: Query<TCPProxy, E>) => ({
+  id: proxy.id,
+  applicationPort: proxy.applicationPort,
+  deletedAt: proxy.deletedAt,
+  syncStatus: proxy.syncStatus,
+  domain: proxy.domain,
+  proxyPort: proxy.proxyPort,
+});
+type CloudService = UnwrapPlan<ReturnType<typeof serviceFields>>;
+type CloudAttributeInstance = UnwrapPlan<ReturnType<typeof attributeInstanceFields>>;
+type ServiceInstanceResponse = UnwrapPlan<ReturnType<typeof instanceFields>>;
+type CloudInstance = UnwrapPlan<ReturnType<typeof volumeFields>>;
+type CloudProxy = UnwrapPlan<ReturnType<typeof proxyFields>>;
 
-const serviceSelection = {
-  id: true,
-  name: true,
-  deletedAt: true,
-} as const satisfies railway.Selection<"Service">;
-const attributeInstanceSelection = {
-  source: { image: true },
-  region: true,
-  latestDeployment: { id: true, status: true },
-} as const satisfies railway.Selection<"ServiceInstance">;
-const instanceSelection = {
-  ...attributeInstanceSelection,
-  deletedAt: true,
-  sleepApplication: true,
-  startCommand: true,
-} as const satisfies railway.Selection<"ServiceInstance">;
-const volumeSelection = {
-  id: true,
-  volumeId: true,
-  environmentId: true,
-  serviceId: true,
-  deletedAt: true,
-  isPendingDeletion: true,
-  state: true,
-  mountPath: true,
-  volume: { id: true, name: true },
-} as const satisfies railway.Selection<"VolumeInstance">;
-const proxySelection = {
-  id: true,
-  applicationPort: true,
-  deletedAt: true,
-  syncStatus: true,
-  domain: true,
-  proxyPort: true,
-} as const satisfies railway.Selection<"TCPProxy">;
-type ServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
-type CreateServiceResponse = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type UpdateServiceResponse = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type ServiceInstanceResponse = railway.Result<
-  "ServiceInstance!",
-  typeof instanceSelection
->;
-type EnvironmentResponseVolumeInstancesEdgesItemNode = railway.Result<
-  "VolumeInstance!",
-  typeof volumeSelection
->;
-type VolumeInstanceResponse = railway.Result<
-  "VolumeInstance!",
-  typeof volumeSelection
->;
-type TcpProxiesResultItem = railway.Result<"TCPProxy!", typeof proxySelection>;
-type CreateTcpProxyResponse = railway.Result<
-  "TCPProxy!",
-  typeof proxySelection
->;
+const readService = Query.fn((id: string) => serviceFields(Railway.service({ id })));
+const readServiceInstance = Query.fn((environmentId: string, serviceId: string) =>
+  instanceFields(Railway.serviceInstance({ environmentId, serviceId })),
+);
+const readVolumeInstance = Query.fn((id: string) => volumeFields(Railway.volumeInstance({ id })));
+const readProxies = Query.fn((environmentId: string, serviceId: string) =>
+  Railway.tcpProxies({ environmentId, serviceId }).pipe(Query.map(proxyFields)),
+);
+const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  Railway.variables({ projectId, environmentId, serviceId, unrendered: true }),
+);
+const liveEnvironments = (projectId: string) =>
+  Query.items(
+    Railway.environments({ projectId, first: 50 }).pipe(
+      Query.map((env) => ({ id: env.id, deletedAt: env.deletedAt })),
+    ),
+  );
+const serviceCreate = Query.fn((args: { input: ServiceCreateInput }) =>
+  serviceFields(Railway.serviceCreate(args)),
+);
+const serviceUpdate = Query.fn((args: { id: string; input: { name: string } }) =>
+  serviceFields(Railway.serviceUpdate(args)),
+);
+const serviceInstanceUpdate = Query.fn(
+  (args: { environmentId: string; serviceId: string; input: ServiceInstanceUpdateInput }) =>
+    Railway.serviceInstanceUpdate(args),
+);
+const serviceInstanceDeployV2 = Query.fn((args: { environmentId: string; serviceId: string }) =>
+  Railway.serviceInstanceDeployV2(args),
+);
+const deploymentCancel = Query.fn((args: { id: string }) => Railway.deploymentCancel(args));
+const serviceDelete = Query.fn((args: { id: string }) => Railway.serviceDelete(args));
+const volumeCreate = Query.fn((args: { input: VolumeCreateInput }) => {
+  const volume = Railway.volumeCreate(args);
+  return { id: volume.id, name: volume.name };
+});
+const volumeUpdate = Query.fn((volumeId: string, name: string) => ({
+  id: Railway.volumeUpdate({ volumeId, input: { name } }).id,
+}));
+const volumeInstanceUpdate = Query.fn(
+  (args: { volumeId: string; environmentId: string; input: VolumeInstanceUpdateInput }) =>
+    Railway.volumeInstanceUpdate(args),
+);
+const volumeDelete = Query.fn((args: { volumeId: string }) => Railway.volumeDelete(args));
+const tcpProxyCreate = Query.fn((args: { input: TCPProxyCreateInput }) =>
+  proxyFields(Railway.tcpProxyCreate(args)),
+);
+const tcpProxyDelete = Query.fn((id: string) => Railway.tcpProxyDelete({ id }));
+const variableUpsert = Query.fn(
+  (input: {
+    projectId: string;
+    environmentId: string;
+    serviceId: string;
+    name: string;
+    value: string;
+  }) => Railway.variableUpsert({ input: { ...input, skipDeploys: true } }),
+);
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -109,9 +155,7 @@ export const DEFAULT_MYSQL_START_COMMAND =
  * `Railway.Project` (its primary environment), a `Railway.Environment`,
  * or an `{ environmentId }` stub.
  */
-export type MySQLEnvironment = {
-  readonly environmentId: string;
-};
+export type MySQLEnvironment = { readonly environmentId: string };
 
 export interface MySQLProps {
   /**
@@ -235,11 +279,7 @@ const resolveMySQLProps = (
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              MySQLEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<MySQLEnvironment, never, Providers>
           : resolved.environment;
     return { ...resolved, project, environment };
   });
@@ -282,7 +322,7 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/MySQL";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
@@ -340,10 +380,8 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * @product MySQL
  */
 export const MySQL: typeof MySQLResource = Object.assign(
-  (
-    id: string,
-    props: MySQLProps | Effect.Effect<MySQLProps, never, Providers>,
-  ) => MySQLResource(id, resolveMySQLProps(props)),
+  (id: string, props: MySQLProps | Effect.Effect<MySQLProps, never, Providers>) =>
+    MySQLResource(id, resolveMySQLProps(props)),
   MySQLResource,
 );
 
@@ -352,30 +390,22 @@ export const MySQL: typeof MySQLResource = Object.assign(
  */
 export const mysql = MySQL;
 
-export class MySQLNotCreated extends Data.TaggedError(
-  "Railway.MySQLNotCreated",
-)<{
+export class MySQLNotCreated extends Data.TaggedError("Railway.MySQLNotCreated")<{
   name: string;
   projectId: string;
 }> {}
 
-export class MySQLProjectRequired extends Data.TaggedError(
-  "Railway.MySQLProjectRequired",
-)<{
+export class MySQLProjectRequired extends Data.TaggedError("Railway.MySQLProjectRequired")<{
   message: string;
 }> {}
 
-export class MySQLDeployFailed extends Data.TaggedError(
-  "Railway.MySQLDeployFailed",
-)<{
+export class MySQLDeployFailed extends Data.TaggedError("Railway.MySQLDeployFailed")<{
   serviceId: string;
   status: string;
   deploymentId: string | undefined;
 }> {}
 
-export class MySQLVolumeNotCreated extends Data.TaggedError(
-  "Railway.MySQLVolumeNotCreated",
-)<{
+export class MySQLVolumeNotCreated extends Data.TaggedError("Railway.MySQLVolumeNotCreated")<{
   name: string;
   serviceId: string;
 }> {}
@@ -385,9 +415,7 @@ class MySQLPending extends Data.TaggedError("Railway.MySQLPending")<{
   status: string;
 }> {}
 
-class MySQLDeployPending extends Data.TaggedError(
-  "Railway.MySQLDeployPending",
-)<{
+class MySQLDeployPending extends Data.TaggedError("Railway.MySQLDeployPending")<{
   serviceId: string;
   status: string;
 }> {}
@@ -397,24 +425,10 @@ class VolumePending extends Data.TaggedError("Railway.MySQLVolumePending")<{
   state: string;
 }> {}
 
-type CloudService =
-  | ServiceResponse
-  | CreateServiceResponse
-  | UpdateServiceResponse
-  | ProjectResponseServicesEdgesItemNode;
-
-type CloudInstance =
-  | EnvironmentResponseVolumeInstancesEdgesItemNode
-  | VolumeInstanceResponse;
-
-type CloudProxy = TcpProxiesResultItem | CreateTcpProxyResponse;
-
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -455,9 +469,7 @@ const isGoneVolume = (instance: CloudInstance | undefined) =>
   goneVolumeState(instance.state);
 
 const isGoneProxy = (proxy: CloudProxy | undefined) =>
-  proxy === undefined ||
-  proxy.deletedAt != null ||
-  proxy.syncStatus === "DELETED";
+  proxy === undefined || proxy.deletedAt != null || proxy.syncStatus === "DELETED";
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
@@ -467,9 +479,7 @@ const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed === `${desired}:latest` || desired === `${observed}:latest`) {
     return true;
   }
-  return (
-    observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`)
-  );
+  return observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`);
 };
 
 const isMysqlImage = (image: string | null | undefined) =>
@@ -492,8 +502,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 
 const encodePart = (value: string) => encodeURIComponent(value);
 
-const isTemplateValue = (value: string | undefined) =>
-  value !== undefined && value.includes("${{");
+const isTemplateValue = (value: string | undefined) => value !== undefined && value.includes("${{");
 
 const privateConnectionUri = (input: {
   user: string;
@@ -539,9 +548,7 @@ const desiredVariables = (input: {
 
 const toAttrs = (input: {
   service: CloudService;
-  instance:
-    | railway.Result<"ServiceInstance!", typeof attributeInstanceSelection>
-    | undefined;
+  instance: CloudAttributeInstance | undefined;
   volume: CloudInstance | undefined;
   proxy: CloudProxy | undefined;
   projectId: string;
@@ -551,8 +558,7 @@ const toAttrs = (input: {
   database: string;
 }): MySQL["Attributes"] => {
   const name = input.service.name;
-  const domain =
-    input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
+  const domain = input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
   const proxyPort = input.proxy?.proxyPort;
   return {
     serviceId: input.service.id,
@@ -596,23 +602,21 @@ const toAttrs = (input: {
 };
 
 const getById = (serviceId: string) =>
-  railway.service({ id: serviceId }, serviceSelection).pipe(
+  readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
-  railway.serviceInstance({ environmentId, serviceId }, instanceSelection).pipe(
+  readServiceInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
-  projectServices(projectId, serviceSelection).pipe(
+  projectServices(projectId, serviceFields).pipe(
     Effect.map((services) => services.filter((node) => !isGoneService(node))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudService[])),
   );
 
 const findByName = (projectId: string, name: string) =>
@@ -621,17 +625,15 @@ const findByName = (projectId: string, name: string) =>
   );
 
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }, volumeSelection).pipe(
+  readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  environmentVolumes(environmentId, projectId, volumeSelection).pipe(
+  environmentVolumes(environmentId, projectId, volumeFields).pipe(
     Effect.map((instances) => instances.filter((node) => !isGoneVolume(node))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudInstance[])),
   );
 
 const findVolume = (
@@ -644,22 +646,14 @@ const findVolume = (
   );
 
 const listProxies = (environmentId: string, serviceId: string) =>
-  railway.tcpProxies({ environmentId, serviceId }, proxySelection).pipe(
+  readProxies(environmentId, serviceId).pipe(
     Effect.map((items) => items.filter((proxy) => !isGoneProxy(proxy))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as TcpProxiesResultItem[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudProxy[])),
   );
 
-const findProxy = (
-  environmentId: string,
-  serviceId: string,
-  applicationPort: number,
-) =>
+const findProxy = (environmentId: string, serviceId: string, applicationPort: number) =>
   listProxies(environmentId, serviceId).pipe(
-    Effect.map((items) =>
-      items.find((proxy) => proxy.applicationPort === applicationPort),
-    ),
+    Effect.map((items) => items.find((proxy) => proxy.applicationPort === applicationPort)),
   );
 
 /**
@@ -668,13 +662,13 @@ const findProxy = (
  * operation is already in progress". Already-gone proxies are a no-op.
  */
 const deleteProxy = (id: string) =>
-  railway.deleteTcpProxy({ id }).pipe(
+  tcpProxyDelete(id).pipe(
     Effect.retry({
-      while: (e) => railway.isErrorTag(e, "RailwayOperationInProgress"),
+      while: (e) => e._tag === "RailwayOperationInProgress",
       schedule: Schedule.spaced("3 seconds"),
       times: 10,
     }),
-    railway.catchTags(["RailwayNotFound"], () => Effect.void),
+    Effect.catchTag("RailwayNotFound", () => Effect.void),
     Effect.asVoid,
   );
 
@@ -691,24 +685,11 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const listVariableMap = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
+const listVariableMap = (projectId: string, environmentId: string, serviceId: string) =>
+  readVariables(projectId, environmentId, serviceId).pipe(
+    Effect.map(asVariableMap),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as Record<string, string>)),
+  );
 
 const upsertVariable = (input: {
   projectId: string;
@@ -716,17 +697,7 @@ const upsertVariable = (input: {
   serviceId: string;
   name: string;
   value: string;
-}) =>
-  railway.upsertVariable({
-    input: {
-      projectId: input.projectId,
-      environmentId: input.environmentId,
-      serviceId: input.serviceId,
-      name: input.name,
-      value: input.value,
-      skipDeploys: true,
-    },
-  });
+}) => variableUpsert(input);
 
 const syncEnv = Effect.fn(function* (input: {
   projectId: string;
@@ -734,11 +705,7 @@ const syncEnv = Effect.fn(function* (input: {
   serviceId: string;
   desired: Record<string, string>;
 }) {
-  const observed = yield* listVariableMap(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  );
+  const observed = yield* listVariableMap(input.projectId, input.environmentId, input.serviceId);
   let changed = false;
   for (const [name, value] of Object.entries(input.desired)) {
     if (observed[name] !== value) {
@@ -770,9 +737,7 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.MySQLPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.MySQLPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
@@ -783,21 +748,14 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
       if (instance !== undefined && deployReady(status)) {
         return Effect.succeed(instance);
       }
-      return Effect.fail(
-        new MySQLDeployPending({
-          serviceId,
-          status: status ?? "pending",
-        }),
-      );
+      return Effect.fail(new MySQLDeployPending({ serviceId, status: status ?? "pending" }));
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.MySQLDeployPending",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.MySQLDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.MySQLDeployPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForVolume = (
@@ -809,20 +767,11 @@ const waitForVolume = (
   const observe =
     volumeInstanceId !== undefined && volumeInstanceId.length > 0
       ? getVolumeByInstanceId(volumeInstanceId)
-      : findVolume(
-          environmentId,
-          projectId,
-          (instance) => instance.volumeId === volumeId,
-        );
+      : findVolume(environmentId, projectId, (instance) => instance.volumeId === volumeId);
   return observe.pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined || transientVolumeState(instance.state)) {
-        return Effect.fail(
-          new VolumePending({
-            volumeId,
-            state: instance?.state ?? "creating",
-          }),
-        );
+        return Effect.fail(new VolumePending({ volumeId, state: instance?.state ?? "creating" }));
       }
       return Effect.succeed(instance);
     }),
@@ -835,29 +784,15 @@ const waitForVolume = (
   );
 };
 
-const stampVolumeName = (volumeId: string, name: string) =>
-  railway.updateVolume(
-    {
-      volumeId,
-      input: { name },
-    },
-    { id: true },
-  );
+const stampVolumeName = (volumeId: string, name: string) => volumeUpdate(volumeId, name);
 
-const passwordFromVars = (
-  vars: Record<string, string>,
-  fallback?: string,
-): string | undefined => {
+const passwordFromVars = (vars: Record<string, string>, fallback?: string): string | undefined => {
   const root = vars.MYSQL_ROOT_PASSWORD;
   if (root !== undefined && root.length > 0 && !isTemplateValue(root)) {
     return root;
   }
   const userPass = vars.MYSQLPASSWORD;
-  if (
-    userPass !== undefined &&
-    userPass.length > 0 &&
-    !isTemplateValue(userPass)
-  ) {
+  if (userPass !== undefined && userPass.length > 0 && !isTemplateValue(userPass)) {
     return userPass;
   }
   return fallback !== undefined && fallback.length > 0 ? fallback : undefined;
@@ -872,13 +807,10 @@ export const MySQLProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
-      const regionChanged =
-        news.region !== undefined && news.region !== output.region;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
+      const regionChanged = news.region !== undefined && news.region !== output.region;
       if (projectChanged || environmentChanged || regionChanged) {
         return { action: "replace" as const };
       }
@@ -887,8 +819,7 @@ export const MySQLProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const environmentId =
         output?.environmentId ??
         (olds !== undefined
@@ -900,24 +831,15 @@ export const MySQLProvider = () =>
           ? yield* getById(output.serviceId)
           : undefined;
       const found =
-        byId ??
-        (projectId !== undefined
-          ? yield* findByName(projectId, name)
-          : undefined);
+        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
       if (found === undefined) return undefined;
       const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
       const resolvedEnvId =
-        environmentId ??
-        environmentIdOf(olds?.project) ??
-        output?.environmentId ??
-        "";
+        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
       const instance =
-        resolvedEnvId.length > 0
-          ? yield* getInstance(resolvedEnvId, found.id)
-          : undefined;
+        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
       const volume =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
             ? yield* findVolume(
@@ -925,8 +847,7 @@ export const MySQLProvider = () =>
                 resolvedProjectId,
                 (row) =>
                   (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined &&
-                    row.volumeId === output.volumeId),
+                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
               )
             : undefined;
       const proxy =
@@ -944,17 +865,10 @@ export const MySQLProvider = () =>
         proxy,
         projectId: resolvedProjectId,
         environmentId: resolvedEnvId,
-        user:
-          vars.MYSQLUSER ??
-          vars.MYSQL_USER ??
-          output?.user ??
-          DEFAULT_MYSQL_USER,
+        user: vars.MYSQLUSER ?? vars.MYSQL_USER ?? output?.user ?? DEFAULT_MYSQL_USER,
         password: passwordFromVars(vars) ?? "",
         database:
-          vars.MYSQLDATABASE ??
-          vars.MYSQL_DATABASE ??
-          output?.database ??
-          DEFAULT_MYSQL_DATABASE,
+          vars.MYSQLDATABASE ?? vars.MYSQL_DATABASE ?? output?.database ?? DEFAULT_MYSQL_DATABASE,
       });
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -970,27 +884,22 @@ export const MySQLProvider = () =>
               .map((service) => [service.id, service]),
           );
           if (services.size === 0) return [];
-          const envIds = yield* railway.environments
-            .items(
-              { projectId: project.projectId, first: 50 },
-              { id: true, deletedAt: true },
-            )
-            .pipe(
-              Stream.filter((env) => env.deletedAt == null),
-              Stream.map((env) => env.id),
-              Stream.runCollect,
-              railway.catchTags("RailwayNotFound", () => Effect.succeed([])),
-            );
+          const envIds = yield* liveEnvironments(project.projectId).pipe(
+            Stream.filter((env) => env.deletedAt == null),
+            Stream.map((env) => env.id),
+            Stream.runCollect,
+            Effect.catchTag("RailwayNotFound", () => Effect.succeed([])),
+          );
           const items = yield* Effect.forEach(envIds, (environmentId) =>
             Effect.gen(function* () {
               const instances = (yield* environmentServiceInstances(
                 environmentId,
                 project.projectId,
-                {
-                  ...attributeInstanceSelection,
-                  serviceId: true,
-                  deletedAt: true,
-                },
+                (instance) => ({
+                  ...attributeInstanceFields(instance),
+                  serviceId: instance.serviceId,
+                  deletedAt: instance.deletedAt,
+                }),
               )).filter(
                 (instance) =>
                   instance.deletedAt == null &&
@@ -998,10 +907,7 @@ export const MySQLProvider = () =>
                   isMysqlImage(instance.source?.image),
               );
               if (instances.length === 0) return [];
-              const volumes = yield* listVolumeInstances(
-                environmentId,
-                project.projectId,
-              );
+              const volumes = yield* listVolumeInstances(environmentId, project.projectId);
               return instances.flatMap((instance) => {
                 const service = services.get(instance.serviceId);
                 return service === undefined
@@ -1012,9 +918,7 @@ export const MySQLProvider = () =>
                         instance,
                         projectId: project.projectId,
                         environmentId,
-                        volume: volumes.find(
-                          (row) => row.serviceId === service.id,
-                        ),
+                        volume: volumes.find((row) => row.serviceId === service.id),
                         proxy: undefined,
                         user: DEFAULT_MYSQL_USER,
                         password: "",
@@ -1063,14 +967,9 @@ export const MySQLProvider = () =>
       }
 
       const existingVars =
-        current !== undefined
-          ? yield* listVariableMap(projectId, environmentId, current.id)
-          : {};
+        current !== undefined ? yield* listVariableMap(projectId, environmentId, current.id) : {};
       const user =
-        existingVars.MYSQLUSER ??
-        existingVars.MYSQL_USER ??
-        props.user ??
-        DEFAULT_MYSQL_USER;
+        existingVars.MYSQLUSER ?? existingVars.MYSQL_USER ?? props.user ?? DEFAULT_MYSQL_USER;
       const database =
         existingVars.MYSQLDATABASE ??
         existingVars.MYSQL_DATABASE ??
@@ -1078,31 +977,14 @@ export const MySQLProvider = () =>
         DEFAULT_MYSQL_DATABASE;
       const password =
         passwordFromVars(existingVars) ??
-        (props.password !== undefined
-          ? unwrapSecret(props.password)
-          : undefined) ??
+        (props.password !== undefined ? unwrapSecret(props.password) : undefined) ??
         (yield* generatePassword);
       const variables = desiredVariables({ user, password, database });
 
       if (current === undefined) {
-        const created = yield* railway
-          .createService(
-            {
-              input: {
-                projectId,
-                environmentId,
-                name,
-                source: { image: sourceImage },
-                variables,
-              },
-            },
-            serviceSelection,
-          )
-          .pipe(
-            railway.catchTags("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const created = yield* serviceCreate({
+          input: { projectId, environmentId, name, source: { image: sourceImage }, variables },
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -1111,30 +993,21 @@ export const MySQLProvider = () =>
       }
 
       if (current.name !== name) {
-        current = yield* railway.updateService(
-          {
-            id: current.id,
-            input: { name },
-          },
-          serviceSelection,
-        );
+        current = yield* serviceUpdate({ id: current.id, input: { name } });
       }
 
       let instance = yield* waitForInstance(environmentId, current.id);
       let needsDeploy = false;
 
       const observedImage = instance?.source?.image ?? undefined;
-      const imageChanged =
-        sourceImage !== undefined && !sameImage(observedImage, sourceImage);
+      const imageChanged = sourceImage !== undefined && !sameImage(observedImage, sourceImage);
       const observedRegion = instance?.region ?? undefined;
-      const regionChanged =
-        props.region !== undefined && props.region !== observedRegion;
+      const regionChanged = props.region !== undefined && props.region !== observedRegion;
       const sleepOn = instance?.sleepApplication !== false;
       const observedStart = instance?.startCommand ?? undefined;
-      const startChanged =
-        startCommand !== undefined && observedStart !== startCommand;
+      const startChanged = startCommand !== undefined && observedStart !== startCommand;
       if (imageChanged || regionChanged || sleepOn || startChanged) {
-        yield* railway.updateServiceInstance({
+        yield* serviceInstanceUpdate({
           environmentId,
           serviceId: current.id,
           input: {
@@ -1157,8 +1030,7 @@ export const MySQLProvider = () =>
       if (envChanged) needsDeploy = true;
 
       let volume: CloudInstance | undefined =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : undefined;
       if (volume === undefined && output?.volumeId !== undefined) {
@@ -1172,34 +1044,26 @@ export const MySQLProvider = () =>
         volume = yield* findVolume(
           environmentId,
           projectId,
-          (row) =>
-            (row.serviceId ?? undefined) === current!.id ||
-            row.volume.name === volumeName,
+          (row) => (row.serviceId ?? undefined) === current!.id || row.volume.name === volumeName,
         );
       }
       if (volume === undefined) {
-        const created = yield* railway.createVolume(
-          {
-            input: {
-              projectId,
-              environmentId,
-              mountPath: MYSQL_MOUNT_PATH,
-              serviceId: current.id,
-              ...(props.region !== undefined ? { region: props.region } : {}),
-            },
+        const created = yield* volumeCreate({
+          input: {
+            projectId,
+            environmentId,
+            mountPath: MYSQL_MOUNT_PATH,
+            serviceId: current.id,
+            ...(props.region !== undefined ? { region: props.region } : {}),
           },
-          { id: true, name: true },
-        );
+        });
         if (created.name !== volumeName) {
           yield* stampVolumeName(created.id, volumeName);
         }
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new MySQLVolumeNotCreated({
-          name: volumeName,
-          serviceId: current.id,
-        });
+        return yield* new MySQLVolumeNotCreated({ name: volumeName, serviceId: current.id });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1209,7 +1073,7 @@ export const MySQLProvider = () =>
       const mountChanged = observedMount !== MYSQL_MOUNT_PATH;
       const attached = observedServiceId === current.id;
       if (mountChanged || !attached) {
-        yield* railway.updateVolumeInstance({
+        yield* volumeInstanceUpdate({
           volumeId: volume.volumeId,
           environmentId,
           input: {
@@ -1217,30 +1081,15 @@ export const MySQLProvider = () =>
             ...(!attached ? { serviceId: current.id } : {}),
           },
         });
-        volume =
-          (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ??
-          volume;
+        volume = (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ?? volume;
         needsDeploy = true;
       }
 
       let proxy = yield* findProxy(environmentId, current.id, MYSQL_PORT);
       if (wantPublic && proxy === undefined) {
-        const created = yield* railway
-          .createTcpProxy(
-            {
-              input: {
-                applicationPort: MYSQL_PORT,
-                environmentId,
-                serviceId: current.id,
-              },
-            },
-            proxySelection,
-          )
-          .pipe(
-            railway.catchTags("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const created = yield* tcpProxyCreate({
+          input: { applicationPort: MYSQL_PORT, environmentId, serviceId: current.id },
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created
@@ -1252,16 +1101,12 @@ export const MySQLProvider = () =>
       }
 
       if (needsDeploy || instance?.latestDeployment == null) {
-        yield* railway
-          .serviceInstanceDeployV2({
-            environmentId,
-            serviceId: current.id,
-          })
-          .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
+        yield* serviceInstanceDeployV2({ environmentId, serviceId: current.id }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.void),
+        );
       }
 
-      instance =
-        (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+      instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
       let finalStatus = instance?.latestDeployment?.status;
       // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
       // container may serve, but Railway keeps its per-environment operation
@@ -1270,15 +1115,14 @@ export const MySQLProvider = () =>
       if (!deployFailed(finalStatus) && !deployReady(finalStatus)) {
         const wedged = instance?.latestDeployment?.id;
         if (wedged != null && wedged.length > 0) {
-          yield* railway
-            .cancelDeployment({ id: wedged })
-            .pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+          yield* deploymentCancel({ id: wedged }).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.void),
+          );
         }
-        yield* railway
-          .serviceInstanceDeployV2({ environmentId, serviceId: current.id })
-          .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
-        instance =
-          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+        yield* serviceInstanceDeployV2({ environmentId, serviceId: current.id }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.void),
+        );
+        instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
         finalStatus = instance?.latestDeployment?.status;
       }
       if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
@@ -1318,22 +1162,20 @@ export const MySQLProvider = () =>
           !deployReady(latest.status) &&
           !deployFailed(latest.status)
         ) {
-          yield* railway
-            .cancelDeployment({ id: latest.id })
-            .pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+          yield* deploymentCancel({ id: latest.id }).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.void),
+          );
         }
       }
       // Delete the SERVICE next — its teardown cascades onto the proxies.
       if (serviceId.length > 0) {
-        yield* railway
-          .deleteService({ id: serviceId })
-          .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+        yield* serviceDelete({ id: serviceId }).pipe(
+          Effect.catchTag("RailwayNotFound", () => Effect.void),
+        );
         yield* waitUntilDeleted(
           "Service",
           serviceId,
-          getById(serviceId).pipe(
-            Effect.map((service) => service === undefined),
-          ),
+          getById(serviceId).pipe(Effect.map((service) => service === undefined)),
         );
       }
       // Proxies usually disappear with the service; wait for the cascade
@@ -1347,26 +1189,19 @@ export const MySQLProvider = () =>
             times: 10,
           }),
         );
-        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), {
-          concurrency: 4,
-        });
+        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), { concurrency: 4 });
         yield* waitUntilDeleted(
           "TcpProxy",
           serviceId,
-          listProxies(environmentId, serviceId).pipe(
-            Effect.map((proxies) => proxies.length === 0),
-          ),
+          listProxies(environmentId, serviceId).pipe(Effect.map((proxies) => proxies.length === 0)),
         );
-      } else if (
-        output.tcpProxyId !== undefined &&
-        output.tcpProxyId.length > 0
-      ) {
+      } else if (output.tcpProxyId !== undefined && output.tcpProxyId.length > 0) {
         yield* deleteProxy(output.tcpProxyId);
       }
       if (output.volumeId.length > 0) {
-        yield* railway
-          .deleteVolume({ volumeId: output.volumeId })
-          .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+        yield* volumeDelete({ volumeId: output.volumeId }).pipe(
+          Effect.catchTag("RailwayNotFound", () => Effect.void),
+        );
         const check =
           output.volumeInstanceId.length > 0
             ? getVolumeByInstanceId(output.volumeInstanceId).pipe(

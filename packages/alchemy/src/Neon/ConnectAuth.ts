@@ -3,11 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Auth } from "./Auth.ts";
-import {
-  backendEnvKey,
-  backendString,
-  bindBackendEnvironment,
-} from "./BackendConnection.ts";
+import { backendEnvKey, backendString, bindBackendEnvironment } from "./BackendConnection.ts";
 
 export interface ConnectAuthClient {
   /** Public managed Better Auth URL for the standard Neon auth client. */

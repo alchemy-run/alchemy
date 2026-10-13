@@ -36,7 +36,6 @@ export interface DescribeComplianceByResource extends Binding.Service<
   >
 > {}
 
-export const DescribeComplianceByResource =
-  Binding.Service<DescribeComplianceByResource>(
-    "AWS.Config.DescribeComplianceByResource",
-  );
+export const DescribeComplianceByResource = Binding.Service<DescribeComplianceByResource>(
+  "AWS.Config.DescribeComplianceByResource",
+);

@@ -1,20 +1,18 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { projectGroups } from "@/Railway/GraphQL.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { projectGroups } from "@/Railway/GraphQL.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -29,35 +27,42 @@ const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
     if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
     const rec = row as { name?: unknown; isDeleted?: unknown };
     if (rec.isDeleted === true) continue;
-    out[groupId] = {
-      name: typeof rec.name === "string" ? rec.name : undefined,
-    };
+    out[groupId] = { name: typeof rec.name === "string" ? rec.name : undefined };
   }
   return out;
 };
 
+const readEnvironmentConfig = Query.fn((id: string, projectId: string) => ({
+  config: RailwayApi.environment({ id, projectId }).config,
+}));
+
+const readServiceGroup = Query.fn((id: string) => {
+  const service = RailwayApi.service({ id });
+  return { id: service.id, groupId: service.groupId };
+});
+
 const readConfigGroups = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }, { config: true }).pipe(
+  readEnvironmentConfig(environmentId, projectId).pipe(
     Effect.map((env) => asGroupMap(env.config)),
-    railway.catchTags(["RailwayNotFound"], () =>
+    Effect.catchTag("RailwayNotFound", () =>
       Effect.succeed({} as Record<string, { name?: string }>),
     ),
   );
 
 const readProjectGroups = (projectId: string) =>
-  projectGroups(projectId, { id: true, groupId: true, name: true }).pipe(
-    Effect.map((groups) =>
-      groups.filter((group) => group.name != null && group.name.length > 0),
-    ),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed([])),
+  projectGroups(projectId, (group) => ({
+    id: group.id,
+    groupId: group.groupId,
+    name: group.name,
+  })).pipe(
+    Effect.map((groups) => groups.filter((group) => group.name != null && group.name.length > 0)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([])),
   );
 
 const readService = (serviceId: string) =>
-  railway
-    .service({ id: serviceId }, { id: true, groupId: true })
-    .pipe(
-      railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-    );
+  readServiceGroup(serviceId).pipe(
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+  );
 
 const waitUntilGroupGone = (
   projectId: string,
@@ -69,13 +74,9 @@ const waitUntilGroupGone = (
     const config = yield* readConfigGroups(environmentId, projectId);
     const listed = yield* readProjectGroups(projectId);
     const inConfig =
-      Object.hasOwn(config, groupId) ||
-      Object.values(config).some((row) => row.name === name);
+      Object.hasOwn(config, groupId) || Object.values(config).some((row) => row.name === name);
     const inProject = listed.some(
-      (group) =>
-        group.id === groupId ||
-        group.groupId === groupId ||
-        group.name === name,
+      (group) => group.id === groupId || group.groupId === groupId || group.name === name,
     );
     return inConfig || inProject ? ("found" as const) : ("gone" as const);
   }).pipe(
@@ -113,9 +114,7 @@ test.provider(
       expect(created.backend.groupId).toEqual(expect.any(String));
       expect(created.backend.groupId.length).toBeGreaterThan(0);
       expect(created.backend.projectId).toEqual(created.project.projectId);
-      expect(created.backend.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.backend.environmentId).toEqual(created.environment.environmentId);
       expect(created.backend.name).toEqual(expect.any(String));
       expect(created.backend.name.length).toBeGreaterThan(0);
       expect(created.backend.serviceIds).toEqual([created.api.serviceId]);
@@ -177,13 +176,9 @@ test.provider(
 
       expect(updated.backend.groupId).toEqual(created.backend.groupId);
       expect(updated.backend.projectId).toEqual(created.backend.projectId);
-      expect(updated.backend.environmentId).toEqual(
-        created.backend.environmentId,
-      );
+      expect(updated.backend.environmentId).toEqual(created.backend.environmentId);
       expect(updated.backend.name).toEqual(created.backend.name);
-      expect(updated.backend.serviceIds.sort()).toEqual(
-        created.backend.serviceIds.sort(),
-      );
+      expect(updated.backend.serviceIds.sort()).toEqual(created.backend.serviceIds.sort());
 
       yield* stack.destroy();
 

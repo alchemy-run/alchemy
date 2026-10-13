@@ -181,14 +181,11 @@ export const PrimaryIp = Resource<PrimaryIp>("Hetzner.PrimaryIp");
 
 export class PrimaryIpPlacementRequired extends Data.TaggedError(
   "Hetzner.PrimaryIpPlacementRequired",
-)<{
-  message: string;
-}> {}
+)<{ message: string }> {}
 
 type CloudPrimaryIp = GetPrimaryIpResponsePrimaryIp;
 
-const asType = (type: string): PrimaryIpType =>
-  type === "ipv6" ? "ipv6" : "ipv4";
+const asType = (type: string): PrimaryIpType => (type === "ipv6" ? "ipv6" : "ipv4");
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -198,9 +195,7 @@ const userLabels = (
  * Hetzner datacenter names are `{location}-dc{n}` (e.g. `nbg1-dc3`).
  * Numeric ids are passed through — Locations use a different id space.
  */
-export const locationFromDatacenter = (
-  datacenter: string | number,
-): string | number => {
+export const locationFromDatacenter = (datacenter: string | number): string | number => {
   if (typeof datacenter === "number") return datacenter;
   const match = /^([a-z0-9]+)-dc\d+$/i.exec(datacenter);
   return match ? match[1]!.toLowerCase() : datacenter;
@@ -239,8 +234,7 @@ const toAttrs = (
   ip: ip.ip,
   location: ip.location.name,
   locationId: ip.location.id,
-  datacenter:
-    extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
+  datacenter: extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
   blocked: ip.blocked,
   autoDelete: ip.auto_delete,
   assigneeId: ip.assignee_id,
@@ -250,15 +244,9 @@ const toAttrs = (
   deleteProtection: ip.protection.delete,
 });
 
-const createPrimaryIpName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createPrimaryIpName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }));
   });
 
 const getById = (id: number) =>
@@ -338,35 +326,22 @@ export const PrimaryIpProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const found = yield* observe({
-        id,
-        name: olds?.name ?? output?.name,
-        outputId: output?.id,
-      });
+      const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
-      const attrs = toAttrs(found, {
-        datacenter: olds?.datacenter ?? output?.datacenter,
-      });
+      const attrs = toAttrs(found, { datacenter: olds?.datacenter ?? output?.datacenter });
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* createPrimaryIpName(id, news.name, output?.name);
       const internalLabels = yield* createInternalLabels(id);
-      const desiredLabels = {
-        ...toLabels(news.labels),
-        ...internalLabels,
-      };
+      const desiredLabels = { ...toLabels(news.labels), ...internalLabels };
       const desiredAutoDelete = news.autoDelete ?? false;
       const desiredProtection = news.deleteProtection ?? false;
 
       // Observe — cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
-      let current = yield* observe({
-        id,
-        name,
-        outputId: output?.id,
-      });
+      let current = yield* observe({ id, name, outputId: output?.id });
 
       // Ensure — create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
@@ -374,8 +349,7 @@ export const PrimaryIpProvider = () =>
         const placement = resolvePlacement(news);
         if (placement === undefined) {
           return yield* new PrimaryIpPlacementRequired({
-            message:
-              "PrimaryIp requires `location` or `datacenter` when creating",
+            message: "PrimaryIp requires `location` or `datacenter` when creating",
           });
         }
         const location = yield* findLocation(placement);
@@ -430,17 +404,14 @@ export const PrimaryIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } =
-          yield* Hetzner.primaryIpActions.changePrimaryIpProtection({
-            id: current.id,
-            delete: desiredProtection,
-          });
+        const { action } = yield* Hetzner.primaryIpActions.changePrimaryIpProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
         yield* waitForAction(action);
       }
 
-      return toAttrs(yield* refresh(current.id), {
-        datacenter: news.datacenter,
-      });
+      return toAttrs(yield* refresh(current.id), { datacenter: news.datacenter });
     }),
     delete: Effect.fn(function* ({ output }) {
       const current = yield* getById(output.id);
@@ -449,9 +420,7 @@ export const PrimaryIpProvider = () =>
         yield* disableProtection(current.id);
       }
       if (current.assignee_id !== null) {
-        const { action } = yield* Hetzner.primaryIpActions.unassignPrimaryIp({
-          id: current.id,
-        });
+        const { action } = yield* Hetzner.primaryIpActions.unassignPrimaryIp({ id: current.id });
         yield* waitForAction(action);
       }
       yield* Hetzner.primaryIps

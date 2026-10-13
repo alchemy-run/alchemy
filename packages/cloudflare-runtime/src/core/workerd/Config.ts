@@ -61,6 +61,16 @@ export interface ServiceDesignator {
   props?: { json: string };
 }
 
+/** Engine and bindings for Workflow classes exposed through ctx.exports. */
+export interface WorkflowsEngine {
+  actorClass?: ServiceDesignator;
+  workflows?: Array<{
+    className?: string;
+    name?: string;
+    bindingService?: ServiceDesignator;
+  }>;
+}
+
 export type Worker_DockerConfiguration = {
   socketPath: string;
   /**
@@ -91,6 +101,7 @@ export type Worker = (
   tails?: Array<ServiceDesignator>;
   streamingTails?: Array<ServiceDesignator>;
   containerEngine?: Worker_ContainerEngine;
+  workflowsEngine?: WorkflowsEngine;
   accessBlobHeader?: string;
   accessBindingService?: ServiceDesignator;
 };
@@ -161,6 +172,12 @@ export type Worker_Binding_Type =
 export type Worker_Binding_DurableObjectNamespaceDesignator = {
   className?: string;
   serviceName?: string;
+  retryPolicy?: {
+    /** Retries after the initial attempt. Defaults to 4; zero disables retries. */
+    maxAttempts?: number;
+    /** Retry deadline in milliseconds (500–60,000). Defaults to 10,000. */
+    timeoutMs?: number;
+  };
 };
 
 export type Worker_Binding_CryptoKey = (
@@ -182,9 +199,7 @@ export interface Worker_Binding_WrappedBinding {
   innerBindings?: Array<Worker_Binding>;
 }
 
-export type Worker_Binding_CryptoKey_Algorithm =
-  | { name?: string }
-  | { json?: string };
+export type Worker_Binding_CryptoKey_Algorithm = { name?: string } | { json?: string };
 
 export interface Worker_Binding_Hyperdrive {
   designator?: ServiceDesignator;

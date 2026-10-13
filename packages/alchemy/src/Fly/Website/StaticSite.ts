@@ -1,10 +1,4 @@
-import {
-  NODE_SERVE_ENTRY_FILE_NAME,
-  relativeClientDirExpression,
-  writeNodeServeEntry,
-} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -14,6 +8,7 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { App } from "../App.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
@@ -27,8 +22,7 @@ import {
 
 const DEFAULT_PORT = 3000;
 
-const resolveRef = <T>(ref: Ref<T>) =>
-  Effect.isEffect(ref) ? ref : Effect.succeed(ref);
+const resolveRef = <T>(ref: Ref<T>) => (Effect.isEffect(ref) ? ref : Effect.succeed(ref));
 
 export interface StaticSiteProps {
   /** Deployment strategy forwarded to the hosted Fly Service. */
@@ -203,10 +197,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           ? ("spa" as const)
           : ("none" as const);
 
-    const servePath = path.join(
-      path.dirname(outdir),
-      NODE_SERVE_ENTRY_FILE_NAME,
-    );
+    const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
+      yield* loadFrontendCore;
+    const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
     const serveOutput = {
       clientDirectory: outdir,
       serverModules: [],
@@ -234,10 +227,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           ALCHEMY_BUILD_HASH: build.hash.output as unknown as string,
         },
       }).pipe(Namespace.push(id));
-      return {
-        ...empty(),
-        url: Output.map(dev.url, (value) => value),
-      };
+      return { ...empty(), url: Output.map(dev.url, (value) => value) };
     }
 
     const main = servePath;
@@ -247,10 +237,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         ? yield* resolveRef(props.app)
         : yield* App("App").pipe(Namespace.push(id));
 
-    const ip = yield* IpAssignment("Shared", {
-      app,
-      type: "shared_v4",
-    }).pipe(Namespace.push(id));
+    const ip = yield* IpAssignment("Shared", { app, type: "shared_v4" }).pipe(Namespace.push(id));
 
     // Serve the built tree from the Machine. Fly Tigris `statics` on
     // `urlPrefix: "/"` do not rewrite HTML routes and hang GET `/`.
@@ -269,9 +256,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       extraFiles: [
         {
           // Keep the build dependency so planning cannot hash the previous artifact.
-          source: Output.map(build.outdir, (dir) =>
-            path.resolve(initialCwd, dir),
-          ),
+          source: Output.map(build.outdir, (dir) => path.resolve(initialCwd, dir)),
           dest: path.basename(outdir),
         },
       ],
@@ -279,15 +264,12 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
 
     const certificate =
       props.domain !== undefined
-        ? yield* Certificate("Certificate", {
-            app,
-            hostname: props.domain,
-            kind: "acme",
-          }).pipe(Namespace.push(id))
+        ? yield* Certificate("Certificate", { app, hostname: props.domain, kind: "acme" }).pipe(
+            Namespace.push(id),
+          )
         : undefined;
 
-    const url =
-      props.domain !== undefined ? `https://${props.domain}` : app.url;
+    const url = props.domain !== undefined ? `https://${props.domain}` : app.url;
 
     return { url, app, service, ip, certificate };
   }).pipe(Effect.orDie);

@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readForecastTags,
-  syncForecastTags,
-  toForecastName,
-} from "./internal.ts";
+import { readForecastTags, syncForecastTags, toForecastName } from "./internal.ts";
 
 export interface DatasetGroupProps {
   /**
@@ -92,24 +88,16 @@ export const DatasetGroupProvider = () =>
   Provider.effect(
     DatasetGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: DatasetGroupProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: DatasetGroupProps) {
         return (
-          props.datasetGroupName ??
-          toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
+          props.datasetGroupName ?? toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
         );
       });
 
       const describe = Effect.fn(function* (datasetGroupArn: string) {
         return yield* forecast
           .describeDatasetGroup({ DatasetGroupArn: datasetGroupArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (group: forecast.DescribeDatasetGroupResponse) => ({
@@ -126,10 +114,7 @@ export const DatasetGroupProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          if (
-            oldName !== newName ||
-            (olds.domain ?? undefined) !== (news.domain ?? undefined)
-          ) {
+          if (oldName !== newName || (olds.domain ?? undefined) !== (news.domain ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -186,26 +171,19 @@ export const DatasetGroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* forecast
-            .deleteDatasetGroup({ DatasetGroupArn: output.datasetGroupArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* forecast.deleteDatasetGroup({ DatasetGroupArn: output.datasetGroupArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         list: () =>
           forecast.listDatasetGroups.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.DatasetGroups ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.DatasetGroups ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

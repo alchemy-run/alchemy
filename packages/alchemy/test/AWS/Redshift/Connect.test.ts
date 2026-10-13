@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as redshift from "@distilled.cloud/aws/redshift";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import RedshiftConnectFunctionLive, {
-  RedshiftConnectFunction,
-} from "./fixtures/connect-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import RedshiftConnectFunctionLive, { RedshiftConnectFunction } from "./fixtures/connect-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -53,14 +51,13 @@ const getInfo = (path: string) =>
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
-        : Effect.fail(new Error(`${path} returned ${res.status}`)),
+        : Effect.flatMap(res.text, (body) =>
+            Effect.fail(new Error(`${path} returned ${res.status}: ${body}`)),
+          ),
     ),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    // Bounded (~1 min) — covers function-URL warm-up and IAM propagation
+    // without masking a deterministic failure behind the test timeout.
+    Effect.retry({ schedule: Schedule.exponential("1 second"), times: 6 }),
     Effect.flatMap((res) => res.json),
     Effect.map(
       (body) =>
@@ -83,20 +80,11 @@ const getInfo = (path: string) =>
 // afterAll.
 describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
   "Redshift.Connect",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:redshift",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:redshift", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Redshift.Connect setup: destroying previous run",
-        );
+        yield* Effect.logInfo("Redshift.Connect setup: destroying previous run");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Redshift.Connect setup: deploying fixture");
@@ -108,9 +96,7 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
 
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
-        yield* Effect.logInfo(
-          `Redshift.Connect setup: function URL ready (${functionUrl})`,
-        );
+        yield* Effect.logInfo(`Redshift.Connect setup: function URL ready (${functionUrl})`);
       }),
       // cluster create (~5-10 min) + Lambda deploy.
       { timeout: 1_200_000 },

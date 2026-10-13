@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Policy } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,24 +19,14 @@ test.provider(
           return yield* Policy("IamPolicy", {
             policyDocument: {
               Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Action: ["s3:ListBucket"],
-                  Resource: ["*"],
-                },
-              ],
+              Statement: [{ Effect: "Allow", Action: ["s3:ListBucket"], Resource: ["*"] }],
             },
-            tags: {
-              env: "test",
-            },
+            tags: { env: "test" },
           });
         }),
       );
 
-      const created = yield* IAM.getPolicy({
-        PolicyArn: policy.policyArn,
-      });
+      const created = yield* IAM.getPolicy({ PolicyArn: policy.policyArn });
       expect(created.Policy?.PolicyName).toBe(policy.policyName);
 
       yield* stack.deploy(
@@ -44,37 +34,21 @@ test.provider(
           return yield* Policy("IamPolicy", {
             policyDocument: {
               Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Action: ["s3:GetObject"],
-                  Resource: ["*"],
-                },
-              ],
+              Statement: [{ Effect: "Allow", Action: ["s3:GetObject"], Resource: ["*"] }],
             },
-            tags: {
-              env: "prod",
-            },
+            tags: { env: "prod" },
           });
         }),
       );
 
-      const updatedTags = yield* IAM.listPolicyTags({
-        PolicyArn: policy.policyArn,
-      });
+      const updatedTags = yield* IAM.listPolicyTags({ PolicyArn: policy.policyArn });
       expect(
-        Object.fromEntries(
-          (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-        ),
-      ).toMatchObject({
-        env: "prod",
-      });
+        Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+      ).toMatchObject({ env: "prod" });
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getPolicy({
-        PolicyArn: policy.policyArn,
-      }).pipe(Effect.option);
+      const deleted = yield* IAM.getPolicy({ PolicyArn: policy.policyArn }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
@@ -92,13 +66,7 @@ test.provider(
             return yield* Policy("VersionCapPolicy", {
               policyDocument: {
                 Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Action: actions,
-                    Resource: ["*"],
-                  },
-                ],
+                Statement: [{ Effect: "Allow", Action: actions, Resource: ["*"] }],
               },
             });
           }),
@@ -121,30 +89,24 @@ test.provider(
         policy = yield* deployWith(actions);
       }
 
-      const versions = yield* IAM.listPolicyVersions({
-        PolicyArn: policy!.policyArn,
-      });
+      const versions = yield* IAM.listPolicyVersions({ PolicyArn: policy!.policyArn });
       expect(versions.Versions?.length ?? 0).toBeLessThanOrEqual(5);
 
       // The default version must carry the last document.
-      const defaultVersion = versions.Versions?.find(
-        (version) => version.IsDefaultVersion,
-      );
+      const defaultVersion = versions.Versions?.find((version) => version.IsDefaultVersion);
       expect(defaultVersion?.VersionId).toBeDefined();
       const document = yield* IAM.getPolicyVersion({
         PolicyArn: policy!.policyArn,
         VersionId: defaultVersion!.VersionId!,
       });
-      const decoded = JSON.parse(
-        decodeURIComponent(document.PolicyVersion?.Document ?? ""),
-      ) as { Statement: [{ Action: string[] }] };
+      const decoded = JSON.parse(decodeURIComponent(document.PolicyVersion?.Document ?? "")) as {
+        Statement: [{ Action: string[] }];
+      };
       expect(decoded.Statement[0].Action).toEqual(["s3:GetBucketLocation"]);
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getPolicy({
-        PolicyArn: policy!.policyArn,
-      }).pipe(Effect.option);
+      const deleted = yield* IAM.getPolicy({ PolicyArn: policy!.policyArn }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"], timeout: 120_000 },
@@ -161,13 +123,7 @@ test.provider(
           return yield* Policy("ListPolicy", {
             policyDocument: {
               Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Action: ["s3:ListBucket"],
-                  Resource: ["*"],
-                },
-              ],
+              Statement: [{ Effect: "Allow", Action: ["s3:ListBucket"], Resource: ["*"] }],
             },
           });
         }),

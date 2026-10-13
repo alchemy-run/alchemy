@@ -10,9 +10,7 @@ export const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -22,7 +20,7 @@ export const toTagRecord = (
 export const readBackupSearchTags = Effect.fn(function* (arn: string) {
   const response = yield* backupsearch
     .listTagsForResource({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

@@ -33,12 +33,7 @@ export interface GetLifecyclePolicy extends Binding.Service<
   (
     policy: LifecyclePolicy,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dlm.GetLifecyclePolicyResponse,
-      dlm.GetLifecyclePolicyError
-    >
+    () => Effect.Effect<dlm.GetLifecyclePolicyResponse, dlm.GetLifecyclePolicyError>
   >
 > {}
-export const GetLifecyclePolicy = Binding.Service<GetLifecyclePolicy>(
-  "AWS.DLM.GetLifecyclePolicy",
-);
+export const GetLifecyclePolicy = Binding.Service<GetLifecyclePolicy>("AWS.DLM.GetLifecyclePolicy");

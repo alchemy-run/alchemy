@@ -5,12 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface KxDatabaseProps {
@@ -83,10 +78,7 @@ export interface KxDatabase extends Resource<
  */
 export const KxDatabase = Resource<KxDatabase>("AWS.FinSpace.KxDatabase");
 
-const createDatabaseName = (
-  id: string,
-  props: { databaseName?: string | undefined },
-) =>
+const createDatabaseName = (id: string, props: { databaseName?: string | undefined }) =>
   props.databaseName
     ? Effect.succeed(props.databaseName)
     : createPhysicalName({ id, maxLength: 63 });
@@ -95,9 +87,8 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(
-        ["ResourceNotFoundException", "InvalidRequestException"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
+        Effect.succeed(undefined),
       ),
     );
   return Object.fromEntries(
@@ -107,17 +98,10 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
   );
 });
 
-const readDatabase = Effect.fn(function* (
-  environmentId: string,
-  databaseName: string,
-) {
+const readDatabase = Effect.fn(function* (environmentId: string, databaseName: string) {
   const response = yield* finspace
     .getKxDatabase({ environmentId, databaseName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!response) return undefined;
   const databaseArn = response.databaseArn ?? "";
   const attrs: KxDatabase["Attributes"] = {
@@ -142,35 +126,26 @@ export const KxDatabaseProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;
-          const databaseName =
-            output?.databaseName ?? (yield* createDatabaseName(id, olds ?? {}));
+          const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, olds ?? {}));
           const attrs = yield* readDatabase(environmentId, databaseName);
           if (!attrs) return undefined;
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           if (olds === undefined) return;
           const oldName = yield* createDatabaseName(id, olds);
           const newName = yield* createDatabaseName(id, news);
-          if (
-            olds.environmentId !== news.environmentId ||
-            oldName !== newName
-          ) {
+          if (olds.environmentId !== news.environmentId || oldName !== newName) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("FinSpace KxDatabase requires props"),
-            );
+            return yield* Effect.fail(new Error("FinSpace KxDatabase requires props"));
           }
           const environmentId = news.environmentId;
-          const databaseName =
-            output?.databaseName ?? (yield* createDatabaseName(id, news));
+          const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // One idempotency token per reconcile, reused across create+update.
@@ -190,26 +165,19 @@ export const KxDatabaseProvider = () =>
                 clientToken,
               })
               .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
               );
             yield* session.note(`Created kdb database ${databaseName}`);
             attrs = yield* readDatabase(environmentId, databaseName);
             if (attrs === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `failed to read created kdb database ${databaseName}`,
-                ),
+                new Error(`failed to read created kdb database ${databaseName}`),
               );
             }
           }
 
           // Sync description — only call UpdateKxDatabase on drift.
-          if (
-            news.description !== undefined &&
-            news.description !== attrs.description
-          ) {
+          if (news.description !== undefined && news.description !== attrs.description) {
             yield* finspace.updateKxDatabase({
               environmentId,
               databaseName,
@@ -231,9 +199,7 @@ export const KxDatabaseProvider = () =>
             if (upsert.length > 0) {
               yield* finspace.tagResource({
                 resourceArn: attrs.databaseArn,
-                tags: Object.fromEntries(
-                  upsert.map(({ Key, Value }) => [Key, Value]),
-                ),
+                tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
               });
             }
           }
@@ -243,9 +209,7 @@ export const KxDatabaseProvider = () =>
           const final = yield* readDatabase(environmentId, databaseName);
           if (!final) {
             return yield* Effect.fail(
-              new Error(
-                `failed to read reconciled kdb database ${databaseName}`,
-              ),
+              new Error(`failed to read reconciled kdb database ${databaseName}`),
             );
           }
           return final;
@@ -258,9 +222,7 @@ export const KxDatabaseProvider = () =>
               databaseName: output.databaseName,
               clientToken,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

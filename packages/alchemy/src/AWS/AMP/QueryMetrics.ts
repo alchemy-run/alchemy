@@ -90,6 +90,4 @@ export interface QueryMetrics extends Binding.Service<
   "AWS.AMP.QueryMetrics",
   (workspace: Workspace) => Effect.Effect<QueryMetricsClient>
 > {}
-export const QueryMetrics = Binding.Service<QueryMetrics>(
-  "AWS.AMP.QueryMetrics",
-);
+export const QueryMetrics = Binding.Service<QueryMetrics>("AWS.AMP.QueryMetrics");

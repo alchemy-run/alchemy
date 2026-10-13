@@ -174,9 +174,7 @@ const renewalDue = (
   notAfter: string,
   renewBefore: Duration.Input | undefined,
   now: number,
-): boolean =>
-  Date.parse(notAfter) - now <
-  Duration.toMillis(renewBefore ?? DEFAULT_RENEW_BEFORE);
+): boolean => Date.parse(notAfter) - now < Duration.toMillis(renewBefore ?? DEFAULT_RENEW_BEFORE);
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {

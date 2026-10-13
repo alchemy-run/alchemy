@@ -22,11 +22,7 @@ const resolveCatalogSpecifiers = Effect.fn(function* (dir: string) {
   }
   // Fixture.ts lives at packages/alchemy/test/Cloudflare/Utils/ — the
   // workspace root (and its pnpm-workspace.yaml) is five levels up.
-  const workspaceYaml = path.join(
-    import.meta.dirname,
-    "../../../../..",
-    "pnpm-workspace.yaml",
-  );
+  const workspaceYaml = path.join(import.meta.dirname, "../../../../..", "pnpm-workspace.yaml");
   const workspace = YAML.parse(yield* fs.readFileString(workspaceYaml)) as {
     catalog?: Record<string, string>;
     catalogs?: Record<string, Record<string, string>>;
@@ -47,9 +43,7 @@ const resolveCatalogSpecifiers = Effect.fn(function* (dir: string) {
       if (!spec.startsWith("catalog:")) continue;
       const catalogName = spec.slice("catalog:".length);
       const version =
-        catalogName === ""
-          ? workspace.catalog?.[name]
-          : workspace.catalogs?.[catalogName]?.[name];
+        catalogName === "" ? workspace.catalog?.[name] : workspace.catalogs?.[catalogName]?.[name];
       if (version === undefined) {
         return yield* Effect.fail(
           new Error(
@@ -62,10 +56,7 @@ const resolveCatalogSpecifiers = Effect.fn(function* (dir: string) {
     }
   }
   if (changed) {
-    yield* fs.writeFileString(
-      manifestPath,
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
+    yield* fs.writeFileString(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
 });
 

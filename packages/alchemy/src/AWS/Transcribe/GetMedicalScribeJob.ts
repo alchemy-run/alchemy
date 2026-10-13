@@ -28,10 +28,7 @@ export interface GetMedicalScribeJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetMedicalScribeJobRequest,
-    ) => Effect.Effect<
-      transcribe.GetMedicalScribeJobResponse,
-      transcribe.GetMedicalScribeJobError
-    >
+    ) => Effect.Effect<transcribe.GetMedicalScribeJobResponse, transcribe.GetMedicalScribeJobError>
   >
 > {}
 export const GetMedicalScribeJob = Binding.Service<GetMedicalScribeJob>(

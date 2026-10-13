@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface GetMemoryRecordRequest extends Omit<
-  agentcore.GetMemoryRecordInput,
-  "memoryId"
-> {}
+export interface GetMemoryRecordRequest extends Omit<agentcore.GetMemoryRecordInput, "memoryId"> {}
 
 /**
  * Fetches a single extracted long-term memory record.
@@ -40,10 +37,7 @@ export interface GetMemoryRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMemoryRecordRequest,
-    ) => Effect.Effect<
-      agentcore.GetMemoryRecordOutput,
-      agentcore.GetMemoryRecordError
-    >
+    ) => Effect.Effect<agentcore.GetMemoryRecordOutput, agentcore.GetMemoryRecordError>
   >
 > {}
 export const GetMemoryRecord = Binding.Service<GetMemoryRecord>(

@@ -36,10 +36,7 @@ export interface UpdateTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.UpdateTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.UpdateTaskExecutionResponse,
-      datasync.UpdateTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.UpdateTaskExecutionResponse, datasync.UpdateTaskExecutionError>
   >
 > {}
 export const UpdateTaskExecution = Binding.Service<UpdateTaskExecution>(

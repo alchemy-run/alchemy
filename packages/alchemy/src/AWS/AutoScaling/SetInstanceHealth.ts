@@ -8,8 +8,7 @@ import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
  * Scaling resolves the instance's owning group for authorization, which the
  * binding grants on the bound {@link AutoScalingGroup}'s ARN.
  */
-export interface SetInstanceHealthRequest
-  extends autoscaling.SetInstanceHealthQuery {}
+export interface SetInstanceHealthRequest extends autoscaling.SetInstanceHealthQuery {}
 
 /**
  * Runtime binding for the `SetInstanceHealth` operation (IAM action
@@ -42,10 +41,7 @@ export interface SetInstanceHealth extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetInstanceHealthRequest,
-    ) => Effect.Effect<
-      autoscaling.SetInstanceHealthResponse,
-      autoscaling.SetInstanceHealthError
-    >
+    ) => Effect.Effect<autoscaling.SetInstanceHealthResponse, autoscaling.SetInstanceHealthError>
   >
 > {}
 

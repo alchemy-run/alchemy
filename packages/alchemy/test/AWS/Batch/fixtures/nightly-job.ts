@@ -1,5 +1,5 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
 
 /**
  * Marker printed by the job body; the e2e test asserts it appears in the

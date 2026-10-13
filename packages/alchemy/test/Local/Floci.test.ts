@@ -37,9 +37,7 @@ for (const mode of ["config", "environment"] as const) {
           cloudfrontEdgePorts: [],
         }).pipe(Effect.flip);
         expect(error._tag).toBe("FlociError");
-        expect(error.message).toBe(
-          "external floci server unavailable at http://localhost:0",
-        );
+        expect(error.message).toBe("external floci server unavailable at http://localhost:0");
       }),
     { exclusive: true, timeout: 15_000 },
   );

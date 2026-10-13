@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryWhileConflict,
-  retryWhileThrottled,
-  syncIvsTags,
-  toTagRecord,
-} from "./internal.ts";
+import { retryWhileConflict, retryWhileThrottled, syncIvsTags, toTagRecord } from "./internal.ts";
 
 export interface ChannelProps {
   /**
@@ -155,9 +150,9 @@ export const Channel = Resource<Channel>("AWS.IVS.Channel");
  * Raised when the IVS API returns a channel that is missing its ARN, name,
  * ingest endpoint, or playback URL.
  */
-export class IvsChannelIncomplete extends Data.TaggedError(
-  "IvsChannelIncomplete",
-)<{ message: string }> {}
+export class IvsChannelIncomplete extends Data.TaggedError("IvsChannelIncomplete")<{
+  message: string;
+}> {}
 
 export const ChannelProvider = () =>
   Provider.effect(
@@ -175,12 +170,9 @@ export const ChannelProvider = () =>
           channel.ingestEndpoint === undefined ||
           channel.playbackUrl === undefined
         ) {
-          return yield* Effect.fail(
-            new IvsChannelIncomplete({
-              message:
-                "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
-            }),
-          );
+          return yield* new IvsChannelIncomplete({
+            message: "IVS channel is missing its ARN, name, ingest endpoint, or playback URL",
+          });
         }
         return {
           channelName: channel.name,
@@ -196,9 +188,7 @@ export const ChannelProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getChannel({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.channel;
       });
@@ -209,15 +199,11 @@ export const ChannelProvider = () =>
        * output ARN cache is unavailable (state-persistence failure).
        */
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* ivs.listChannels
-          .pages({ filterByName: name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.channels),
-            ),
-            retryWhileThrottled,
-          );
+        const summaries = yield* ivs.listChannels.pages({ filterByName: name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.channels)),
+          retryWhileThrottled,
+        );
         const match = summaries.find((s) => s.name === name && s.arn);
         return match?.arn ? yield* getByArn(match.arn) : undefined;
       });
@@ -231,9 +217,7 @@ export const ChannelProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (channel === undefined) return undefined;
           const attrs = yield* toAttrs(channel);
-          return (yield* hasAlchemyTags(id, toTagRecord(channel.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(channel.tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -268,11 +252,9 @@ export const ChannelProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsChannelIncomplete({
-                message: "IVS CreateChannel returned no channel ARN",
-              }),
-            );
+            return yield* new IvsChannelIncomplete({
+              message: "IVS CreateChannel returned no channel ARN",
+            });
           }
 
           // 3. Sync — diff observed against desired for each prop the user
@@ -280,25 +262,18 @@ export const ChannelProvider = () =>
           // (including the name) are mutable via UpdateChannel.
           const patch: Partial<ivs.UpdateChannelRequest> = {};
           if (observed.name !== name) patch.name = name;
-          if (
-            news.latencyMode !== undefined &&
-            observed.latencyMode !== news.latencyMode
-          ) {
+          if (news.latencyMode !== undefined && observed.latencyMode !== news.latencyMode) {
             patch.latencyMode = news.latencyMode;
           }
           if (news.type !== undefined && observed.type !== news.type) {
             patch.type = news.type;
           }
-          if (
-            news.authorized !== undefined &&
-            observed.authorized !== news.authorized
-          ) {
+          if (news.authorized !== undefined && observed.authorized !== news.authorized) {
             patch.authorized = news.authorized;
           }
           if (
             news.recordingConfigurationArn !== undefined &&
-            observed.recordingConfigurationArn !==
-              news.recordingConfigurationArn
+            observed.recordingConfigurationArn !== news.recordingConfigurationArn
           ) {
             patch.recordingConfigurationArn = news.recordingConfigurationArn;
           }
@@ -313,11 +288,9 @@ export const ChannelProvider = () =>
           }
           if (
             news.playbackRestrictionPolicyArn !== undefined &&
-            observed.playbackRestrictionPolicyArn !==
-              news.playbackRestrictionPolicyArn
+            observed.playbackRestrictionPolicyArn !== news.playbackRestrictionPolicyArn
           ) {
-            patch.playbackRestrictionPolicyArn =
-              news.playbackRestrictionPolicyArn;
+            patch.playbackRestrictionPolicyArn = news.playbackRestrictionPolicyArn;
           }
           if (Object.keys(patch).length > 0) {
             yield* ivs
@@ -332,11 +305,9 @@ export const ChannelProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsChannelIncomplete({
-                message: `IVS channel '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsChannelIncomplete({
+              message: `IVS channel '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);
@@ -355,9 +326,7 @@ export const ChannelProvider = () =>
         list: () =>
           ivs.listChannels.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.channels),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.channels)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>
@@ -365,9 +334,7 @@ export const ChannelProvider = () =>
                     ? Effect.succeed(undefined)
                     : getByArn(summary.arn).pipe(
                         Effect.flatMap((channel) =>
-                          channel === undefined
-                            ? Effect.succeed(undefined)
-                            : toAttrs(channel),
+                          channel === undefined ? Effect.succeed(undefined) : toAttrs(channel),
                         ),
                       ),
                 { concurrency: 5 },

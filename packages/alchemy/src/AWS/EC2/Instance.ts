@@ -7,20 +7,16 @@ import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import {
-  createAlchemyTagFilters,
-  createInternalTags,
-  diffTags,
-} from "../../Tags.ts";
+import { createAlchemyTagFilters, createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -43,14 +39,11 @@ export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
 export type InstanceArn<ID extends InstanceId = InstanceId> =
   `arn:aws:ec2:${RegionID}:${AccountID}:instance/${ID}`;
 
-export const isInstance = (value: any): value is Instance => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "Type" in value &&
-    value.Type === "AWS.EC2.Instance"
-  );
-};
+export const isInstance = (value: any): value is Instance =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "AWS.EC2.Instance";
 
 export interface InstanceProps extends PlatformProps {
   /**
@@ -80,6 +73,8 @@ export interface InstanceProps extends PlatformProps {
   instanceProfileName?: string;
   /**
    * User data script to provide at launch time.
+   * Changes force replacement — EC2 does not re-run user data on an
+   * in-place update.
    */
   userData?: string;
   /**
@@ -193,6 +188,19 @@ export interface Instance extends Resource<
      */
     publicDnsName?: string;
     /**
+     * HTTP URL of the hosted process
+     * (`http://{publicDnsName|publicIpAddress}:{port}`).
+     *
+     * Set when the instance is hosted (`main` / `port`). Under
+     * `alchemy dev` the emulator's public address is
+     * `{instanceId}.localhost.floci.io`, which resolves to 127.0.0.1
+     * and is served by a per-port host-routing mux — reading `url`
+     * instead of interpolating `publicIpAddress` is what makes the
+     * instance reachable from the host. On AWS this is the public
+     * IP/DNS and the process port.
+     */
+    url?: string;
+    /**
      * The key pair name used for SSH access.
      */
     keyName?: string;
@@ -260,11 +268,7 @@ export interface Instance extends Resource<
   Providers
 > {}
 
-export type InstanceServices =
-  | ServerHost
-  | Credentials
-  | Region
-  | AWSEnvironment;
+export type InstanceServices = ServerHost | Credentials | Region | AWSEnvironment;
 
 export type InstanceShape = Main<InstanceServices>;
 
@@ -333,14 +337,10 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *
  * @resource
  */
-export const Instance: Platform<
-  Instance,
-  InstanceServices,
-  InstanceShape,
-  InstanceRuntimeContext
-> = Platform("AWS.EC2.Instance", {
-  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
-});
+export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> =
+  Platform("AWS.EC2.Instance", {
+    createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+  });
 
 export const InstanceProvider = () =>
   Provider.effect(
@@ -369,10 +369,7 @@ export const InstanceProvider = () =>
 
       const isPendingInstanceProfileError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
-        if (
-          tag === "InvalidIAMInstanceProfile.NotFound" ||
-          tag === "InvalidParameterValue"
-        ) {
+        if (tag === "InvalidIAMInstanceProfile.NotFound" || tag === "InvalidParameterValue") {
           return true;
         }
         if (tag !== "UnknownAwsError") {
@@ -387,10 +384,7 @@ export const InstanceProvider = () =>
           };
         };
         const message =
-          unknown.message ??
-          unknown.errorData?.message ??
-          unknown.errorData?.Message ??
-          "";
+          unknown.message ?? unknown.errorData?.message ?? unknown.errorData?.Message ?? "";
         return (
           unknown.errorTag === "InvalidParameterValue" &&
           message.includes("iamInstanceProfile.name") &&
@@ -400,10 +394,7 @@ export const InstanceProvider = () =>
 
       const isPendingInstanceLookupError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
-        return (
-          error instanceof InstanceNotFound ||
-          tag === "InvalidInstanceID.NotFound"
-        );
+        return error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound";
       };
 
       const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
@@ -415,7 +406,29 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = Effect.fn(function* (instance: ec2.Instance) {
+      const publicHost = (instance: ec2.Instance) =>
+        instance.PublicDnsName || instance.PublicIpAddress;
+
+      const hostedListenPort = (props: { main?: unknown; port?: number }) =>
+        props.main !== undefined || props.port !== undefined ? (props.port ?? 3000) : undefined;
+
+      const instanceUrl = (instance: ec2.Instance, port?: number) => {
+        const host = publicHost(instance);
+        if (!host || port === undefined) return undefined;
+        return `http://${host}:${port}`;
+      };
+
+      const portFromUrl = (url?: string) => {
+        if (!url) return undefined;
+        try {
+          const parsed = new URL(url);
+          return parsed.port ? Number(parsed.port) : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const toAttributes = Effect.fn(function* (instance: ec2.Instance, port?: number) {
         return {
           instanceId: instance.InstanceId as InstanceId,
           instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),
@@ -432,6 +445,7 @@ export const InstanceProvider = () =>
           publicIpAddress: instance.PublicIpAddress,
           privateDnsName: instance.PrivateDnsName,
           publicDnsName: instance.PublicDnsName,
+          url: instanceUrl(instance, port),
           keyName: instance.KeyName,
           instanceProfileArn: instance.IamInstanceProfile?.Arn,
           instanceProfileId: instance.IamInstanceProfile?.Id,
@@ -471,10 +485,7 @@ export const InstanceProvider = () =>
       // replacement's create phase runs under a freshly minted generation id
       // and can never re-adopt the old generation's live instance that the
       // cleanup phase is about to terminate.
-      const findInstanceByTags = Effect.fn(function* (
-        id: string,
-        generation: string,
-      ) {
+      const findInstanceByTags = Effect.fn(function* (id: string, generation: string) {
         const filters = [
           ...(yield* createAlchemyTagFilters(id)),
           { Name: "tag:alchemy::instance", Values: [generation] },
@@ -484,9 +495,7 @@ export const InstanceProvider = () =>
             Filters: filters,
           })
           .pipe(
-            Stream.flatMap((reservation) =>
-              Stream.fromArray(reservation.Instances ?? []),
-            ),
+            Stream.flatMap((reservation) => Stream.fromArray(reservation.Instances ?? [])),
             Stream.filter((instance) => {
               const state = instance.State?.Name;
               return (
@@ -540,12 +549,8 @@ export const InstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) =>
-              error instanceof InstanceStateMismatch ||
-              isPendingInstanceLookupError(error),
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+              error instanceof InstanceStateMismatch || isPendingInstanceLookupError(error),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
           }),
         );
       });
@@ -572,19 +577,17 @@ export const InstanceProvider = () =>
             while: (error) => error instanceof InstanceStillExists,
             // Termination (shutting-down -> terminated) can take a couple of
             // minutes; the prior ~64s budget timed out intermittently.
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(48),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(48)]),
           }),
-          Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-          Effect.catchTag("InstanceNotFound", () => Effect.void),
+          Effect.catchTags({
+            "InvalidInstanceID.NotFound": () => Effect.void,
+            InstanceNotFound: () => Effect.void,
+          }),
         );
       });
 
-      const resolvedSecurityGroups = (
-        groups?: InstanceProps["securityGroupIds"],
-      ) => hosted.normalizeSecurityGroups(groups as string[] | undefined);
+      const resolvedSecurityGroups = (groups?: InstanceProps["securityGroupIds"]) =>
+        hosted.normalizeSecurityGroups(groups as string[] | undefined);
 
       const buildRunInstancesRequest = (
         news: InstanceProps,
@@ -593,26 +596,24 @@ export const InstanceProvider = () =>
           instanceProfileName?: string;
         },
         tags: Record<string, string>,
-      ): ec2.RunInstancesRequest => {
-        return {
-          ...hosted.buildLaunchTemplateData(
-            {
-              imageId: news.imageId,
-              instanceType: news.instanceType,
-              keyName: news.keyName as string | undefined,
-              subnetId: news.subnetId as string | undefined,
-              securityGroupIds: news.securityGroupIds as string[] | undefined,
-              associatePublicIpAddress: news.associatePublicIpAddress,
-              privateIpAddress: news.privateIpAddress,
-              availabilityZone: news.availabilityZone,
-              tags,
-            },
-            runtime,
-          ),
-          MinCount: 1,
-          MaxCount: 1,
-        };
-      };
+      ): ec2.RunInstancesRequest => ({
+        ...hosted.buildLaunchTemplateData(
+          {
+            imageId: news.imageId,
+            instanceType: news.instanceType,
+            keyName: news.keyName as string | undefined,
+            subnetId: news.subnetId as string | undefined,
+            securityGroupIds: news.securityGroupIds as string[] | undefined,
+            associatePublicIpAddress: news.associatePublicIpAddress,
+            privateIpAddress: news.privateIpAddress,
+            availabilityZone: news.availabilityZone,
+            tags,
+          },
+          runtime,
+        ),
+        MinCount: 1,
+        MaxCount: 1,
+      });
 
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
@@ -625,20 +626,49 @@ export const InstanceProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Reservations ?? []).flatMap(
-                    (reservation) => reservation.Instances ?? [],
-                  ),
+                  (page.Reservations ?? []).flatMap((reservation) => reservation.Instances ?? []),
                 ),
               ),
             );
             return yield* Effect.forEach(
-              instances.filter(
-                (instance) => instance.State?.Name !== "terminated",
-              ),
+              instances.filter((instance) => instance.State?.Name !== "terminated"),
               (instance) => toAttributes(instance),
             );
           }),
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          const raw = news as unknown as Record<string, unknown>;
+          // Launch-time properties cannot be mutated in place. Check them
+          // even when OTHER props are still unresolved Outputs (e.g.
+          // `userData` interpolating an ECR Image URI that's being rebuilt):
+          // bailing on `isResolved(news)` lets the engine default the change
+          // to `update`, which keeps the same instance ID and never re-runs
+          // user data. An unresolved replace-trigger is itself a replacement
+          // — the upstream's new value is unknown at plan time, so we can't
+          // prove the launch config didn't change.
+          const launchConfigChanged = (next: unknown, prev: unknown) =>
+            !isResolved(next) || prev !== next;
+          const hostModeChanged = Boolean(olds.main) !== Boolean(raw.main);
+          if (
+            hostModeChanged ||
+            launchConfigChanged(raw.imageId, olds.imageId) ||
+            launchConfigChanged(raw.subnetId, olds.subnetId) ||
+            launchConfigChanged(raw.keyName, olds.keyName) ||
+            launchConfigChanged(raw.instanceProfileName, olds.instanceProfileName) ||
+            launchConfigChanged(raw.userData, olds.userData) ||
+            launchConfigChanged(raw.associatePublicIpAddress, olds.associatePublicIpAddress) ||
+            launchConfigChanged(raw.privateIpAddress, olds.privateIpAddress) ||
+            launchConfigChanged(raw.availabilityZone, olds.availabilityZone)
+          ) {
+            // A primary private IP cannot belong to two instances in the
+            // same subnet. An omitted subnet may still resolve to that subnet.
+            const reusesFixedPrivateIp =
+              raw.privateIpAddress !== undefined &&
+              (output?.privateIpAddress ?? olds.privateIpAddress) === raw.privateIpAddress &&
+              (raw.subnetId === undefined || (output?.subnetId ?? olds.subnetId) === raw.subnetId);
+            return reusesFixedPrivateIp
+              ? ({ action: "replace", deleteFirst: true } as const)
+              : ({ action: "replace" } as const);
+          }
           // The hosted bundle hash must participate in planning even while
           // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
           // subnet reference): a content-only edit changes no prop at all,
@@ -646,7 +676,6 @@ export const InstanceProvider = () =>
           // content inputs are plain — gate on THEM, not on the whole bag
           // (the same isResolved-defeats-content-diff bug the MicroVM image
           // diff had).
-          const raw = news as unknown as Record<string, unknown>;
           const contentInputs = {
             main: raw.main,
             handler: raw.handler,
@@ -658,11 +687,7 @@ export const InstanceProvider = () =>
             // with MISSING_EXPORT when the source has no default export.
             isExternal: raw.isExternal,
           };
-          if (
-            isResolved(contentInputs) &&
-            contentInputs.main !== undefined &&
-            output?.code?.hash
-          ) {
+          if (isResolved(contentInputs) && contentInputs.main !== undefined && output?.code?.hash) {
             const { hash } = yield* hosted.bundleProgram(
               id,
               contentInputs as unknown as Ec2HostedProps,
@@ -675,31 +700,6 @@ export const InstanceProvider = () =>
             }
           }
           if (!isResolved(news)) return;
-          const reusesFixedPrivateIp =
-            news.privateIpAddress !== undefined &&
-            (output?.privateIpAddress ?? olds.privateIpAddress) ===
-              news.privateIpAddress &&
-            (news.subnetId === undefined ||
-              (output?.subnetId ?? olds.subnetId) === news.subnetId);
-
-          const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
-          if (
-            hostModeChanged ||
-            olds.imageId !== news.imageId ||
-            olds.subnetId !== news.subnetId ||
-            olds.keyName !== news.keyName ||
-            olds.instanceProfileName !== news.instanceProfileName ||
-            olds.userData !== news.userData ||
-            olds.associatePublicIpAddress !== news.associatePublicIpAddress ||
-            olds.privateIpAddress !== news.privateIpAddress ||
-            olds.availabilityZone !== news.availabilityZone
-          ) {
-            // A primary private IP cannot belong to two instances in the
-            // same subnet. An omitted subnet may still resolve to that subnet.
-            return reusesFixedPrivateIp
-              ? ({ action: "replace", deleteFirst: true } as const)
-              : ({ action: "replace" } as const);
-          }
 
           if (
             olds.instanceType !== news.instanceType ||
@@ -709,10 +709,7 @@ export const InstanceProvider = () =>
             olds.port !== news.port ||
             !deepEqual(olds.env ?? {}, news.env ?? {}) ||
             !deepEqual(olds.build ?? {}, news.build ?? {}) ||
-            !deepEqual(
-              olds.roleManagedPolicyArns ?? [],
-              news.roleManagedPolicyArns ?? [],
-            ) ||
+            !deepEqual(olds.roleManagedPolicyArns ?? [], news.roleManagedPolicyArns ?? []) ||
             !deepEqual(
               resolvedSecurityGroups(olds.securityGroupIds),
               resolvedSecurityGroups(news.securityGroupIds),
@@ -731,17 +728,15 @@ export const InstanceProvider = () =>
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTags({
+                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
+                  InstanceNotFound: () => Effect.succeed(undefined),
+                }),
               )
             : yield* findInstanceByTags(id, instanceId);
           return instance
             ? {
-                ...(yield* toAttributes(instance)),
+                ...(yield* toAttributes(instance, portFromUrl(output?.url))),
                 instanceProfileName: output?.instanceProfileName,
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
@@ -780,12 +775,10 @@ export const InstanceProvider = () =>
           // record before deciding whether to launch a new one.
           let instance: ec2.Instance | undefined = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTags({
+                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
+                  InstanceNotFound: () => Effect.succeed(undefined),
+                }),
               )
             : yield* findInstanceByTags(id, generation);
 
@@ -800,21 +793,14 @@ export const InstanceProvider = () =>
           // doesn't accept it.
           if (instance === undefined) {
             const created = yield* ec2
-              .runInstances(
-                buildRunInstancesRequest(news, runtime, desiredTags),
-              )
+              .runInstances(buildRunInstancesRequest(news, runtime, desiredTags))
               .pipe(
                 Effect.retry({
                   while: isPendingInstanceProfileError,
-                  schedule: Schedule.max([
-                    Schedule.exponential("500 millis"),
-                    Schedule.recurs(8),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
                 }),
               );
-            const newInstanceId = created.Instances?.[0]?.InstanceId as
-              | InstanceId
-              | undefined;
+            const newInstanceId = created.Instances?.[0]?.InstanceId as InstanceId | undefined;
             if (!newInstanceId) {
               return yield* Effect.fail(
                 new Error(`RunInstances returned no instance ID for '${id}'`),
@@ -841,9 +827,7 @@ export const InstanceProvider = () =>
           const observedSecurityGroups = (instance.SecurityGroups ?? [])
             .map((g) => g.GroupId)
             .filter((g): g is string => Boolean(g));
-          const desiredSecurityGroups = resolvedSecurityGroups(
-            news.securityGroupIds,
-          );
+          const desiredSecurityGroups = resolvedSecurityGroups(news.securityGroupIds);
           if (
             desiredSecurityGroups &&
             desiredSecurityGroups.length > 0 &&
@@ -867,10 +851,7 @@ export const InstanceProvider = () =>
 
           // Sync instance type — observed type vs desired. Type changes need
           // the instance stopped, then we restart it if it was running.
-          if (
-            news.instanceType &&
-            String(instance.InstanceType ?? "") !== news.instanceType
-          ) {
+          if (news.instanceType && String(instance.InstanceType ?? "") !== news.instanceType) {
             const wasRunning = instance.State?.Name === "running";
             if (wasRunning) {
               yield* ec2.stopInstances({ InstanceIds: [instanceId] });
@@ -934,9 +915,8 @@ export const InstanceProvider = () =>
           // Re-read final state so attributes reflect the post-sync cloud.
           const final = yield* describeInstance(instanceId);
           return {
-            ...(yield* toAttributes(final)),
-            instanceProfileName:
-              runtime.instanceProfileName ?? output?.instanceProfileName,
+            ...(yield* toAttributes(final, hostedListenPort(news))),
+            instanceProfileName: runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn ?? output?.roleArn,
             roleName: runtime.roleName ?? output?.roleName,
             policyName: runtime.policyName ?? output?.policyName,
@@ -951,9 +931,7 @@ export const InstanceProvider = () =>
             .terminateInstances({
               InstanceIds: [output.instanceId],
             })
-            .pipe(
-              Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void));
           yield* waitForDeleted({
             instanceId: output.instanceId,
             session,

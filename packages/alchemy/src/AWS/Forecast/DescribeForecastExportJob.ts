@@ -39,7 +39,6 @@ export interface DescribeForecastExportJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeForecastExportJob =
-  Binding.Service<DescribeForecastExportJob>(
-    "AWS.Forecast.DescribeForecastExportJob",
-  );
+export const DescribeForecastExportJob = Binding.Service<DescribeForecastExportJob>(
+  "AWS.Forecast.DescribeForecastExportJob",
+);

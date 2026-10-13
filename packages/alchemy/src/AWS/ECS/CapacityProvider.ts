@@ -129,9 +129,7 @@ export interface CapacityProvider extends Resource<
  *
  * @resource
  */
-export const CapacityProvider = Resource<CapacityProvider>(
-  "AWS.ECS.CapacityProvider",
-);
+export const CapacityProvider = Resource<CapacityProvider>("AWS.ECS.CapacityProvider");
 
 export const CapacityProviderProvider = () =>
   Provider.effect(
@@ -140,9 +138,7 @@ export const CapacityProviderProvider = () =>
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
-      const fromEcsTags = (
-        tags: ecs.Tag[] | undefined,
-      ): Record<string, string> =>
+      const fromEcsTags = (tags: ecs.Tag[] | undefined): Record<string, string> =>
         Object.fromEntries(
           (tags ?? [])
             .filter(
@@ -158,9 +154,7 @@ export const CapacityProviderProvider = () =>
           : createPhysicalName({ id, maxLength: 252, lowercase: true }).pipe(
               // AWS rejects generated names that start with a reserved prefix
               // (e.g. a stack named "AWS-...").
-              Effect.map((name) =>
-                /^(aws|ecs|fargate)/.test(name) ? `cp-${name}` : name,
-              ),
+              Effect.map((name) => (/^(aws|ecs|fargate)/.test(name) ? `cp-${name}` : name)),
             );
 
       const describe = (name: string) =>
@@ -170,8 +164,10 @@ export const CapacityProviderProvider = () =>
             include: ["TAGS"],
           })
           .pipe(
+            // A deleted provider stays describable as INACTIVE for a while
+            // and can no longer be updated, so treat it as missing.
             Effect.map((res) =>
-              res.capacityProviders?.find((p) => p.name === name),
+              res.capacityProviders?.find((p) => p.name === name && p.status !== "INACTIVE"),
             ),
           );
 
@@ -202,13 +198,11 @@ export const CapacityProviderProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const existingTags = fromEcsTags(found.tags);
           const attrs = {
-            capacityProviderArn:
-              found.capacityProviderArn as CapacityProviderArn,
+            capacityProviderArn: found.capacityProviderArn as CapacityProviderArn,
             name: found.name,
             status: (found.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
             updateStatus: found.updateStatus,
-            autoScalingGroupArn:
-              found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
+            autoScalingGroupArn: found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
             managedScaling: found.autoScalingGroupProvider?.managedScaling,
             managedTerminationProtection:
               found.autoScalingGroupProvider?.managedTerminationProtection,
@@ -238,8 +232,7 @@ export const CapacityProviderProvider = () =>
                 autoScalingGroupProvider: {
                   autoScalingGroupArn,
                   managedScaling: news.managedScaling,
-                  managedTerminationProtection:
-                    news.managedTerminationProtection,
+                  managedTerminationProtection: news.managedTerminationProtection,
                   managedDraining: news.managedDraining,
                 },
                 tags: toEcsTags(desiredTags),
@@ -294,17 +287,13 @@ export const CapacityProviderProvider = () =>
             status: (found?.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
             updateStatus: found?.updateStatus,
             autoScalingGroupArn:
-              found?.autoScalingGroupProvider?.autoScalingGroupArn ??
-              autoScalingGroupArn,
-            managedScaling:
-              found?.autoScalingGroupProvider?.managedScaling ??
-              news.managedScaling,
+              found?.autoScalingGroupProvider?.autoScalingGroupArn ?? autoScalingGroupArn,
+            managedScaling: found?.autoScalingGroupProvider?.managedScaling ?? news.managedScaling,
             managedTerminationProtection:
               found?.autoScalingGroupProvider?.managedTerminationProtection ??
               news.managedTerminationProtection,
             managedDraining:
-              found?.autoScalingGroupProvider?.managedDraining ??
-              news.managedDraining,
+              found?.autoScalingGroupProvider?.managedDraining ?? news.managedDraining,
             tags: desiredTags,
           };
         }),
@@ -315,25 +304,21 @@ export const CapacityProviderProvider = () =>
             // `describeCapacityProviders` with no filter returns all providers
             // and paginates via `nextToken`; it is a plain operation (no
             // `.pages`), so drive the pagination with `Stream.paginate`.
-            const all = yield* Stream.paginate(
-              undefined as string | undefined,
-              (token) =>
-                ecs
-                  .describeCapacityProviders({
-                    include: ["TAGS"],
-                    ...(token ? { nextToken: token } : {}),
-                  })
-                  .pipe(
-                    Effect.map(
-                      (res) =>
-                        [
-                          res.capacityProviders ?? [],
-                          res.nextToken
-                            ? Option.some(res.nextToken)
-                            : Option.none<string>(),
-                        ] as const,
-                    ),
+            const all = yield* Stream.paginate(undefined as string | undefined, (token) =>
+              ecs
+                .describeCapacityProviders({
+                  include: ["TAGS"],
+                  ...(token ? { nextToken: token } : {}),
+                })
+                .pipe(
+                  Effect.map(
+                    (res) =>
+                      [
+                        res.capacityProviders ?? [],
+                        res.nextToken ? Option.some(res.nextToken) : Option.none<string>(),
+                      ] as const,
                   ),
+                ),
             ).pipe(
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
@@ -355,13 +340,11 @@ export const CapacityProviderProvider = () =>
                   p.name !== "FARGATE_SPOT",
               )
               .map((p) => ({
-                capacityProviderArn:
-                  p.capacityProviderArn as CapacityProviderArn,
+                capacityProviderArn: p.capacityProviderArn as CapacityProviderArn,
                 name: p.name,
                 status: (p.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
                 updateStatus: p.updateStatus,
-                autoScalingGroupArn:
-                  p.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
+                autoScalingGroupArn: p.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
                 managedScaling: p.autoScalingGroupProvider?.managedScaling,
                 managedTerminationProtection:
                   p.autoScalingGroupProvider?.managedTerminationProtection,
@@ -371,13 +354,13 @@ export const CapacityProviderProvider = () =>
           }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* ecs
-            .deleteCapacityProvider({ capacityProvider: output.name })
-            .pipe(
-              // Already gone — treat as success.
-              Effect.catchTag("InvalidParameterException", () => Effect.void),
-              Effect.catchTag("ClientException", () => Effect.void),
-            );
+          yield* ecs.deleteCapacityProvider({ capacityProvider: output.name }).pipe(
+            // Already gone — treat as success.
+            Effect.catchTags({
+              InvalidParameterException: () => Effect.void,
+              ClientException: () => Effect.void,
+            }),
+          );
         }),
       };
     }),

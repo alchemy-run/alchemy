@@ -1,8 +1,5 @@
 import type { Contract } from "@prisma/orm-postgres/contract/types";
-import type {
-  ExtractCodecTypes,
-  SqlStorage,
-} from "@prisma/orm-postgres/family-contract/types";
+import type { ExtractCodecTypes, SqlStorage } from "@prisma/orm-postgres/family-contract/types";
 import type {
   BindSiteParams,
   Declaration,
@@ -21,22 +18,15 @@ import * as Stream from "effect/Stream";
 import { type ClientError, wrapPrismaError } from "./Errors.ts";
 import type { QueryResult } from "./OrmClient.ts";
 
-type QueryOptions<Params, Row> = Parameters<
-  PreparedStatement<Params, Row>["query"]
->[2];
-type ExecutionOptions<Params> = Parameters<
-  PreparedExecution<Params>["execute"]
->[2];
+type QueryOptions<Params, Row> = Parameters<PreparedStatement<Params, Row>["query"]>[2];
+type ExecutionOptions<Params> = Parameters<PreparedExecution<Params>["execute"]>[2];
 
 /** A reusable native statement with Effect and Stream consumption. */
 export interface PreparedQuery<Params, Row, E = never, R = never> extends Omit<
   PreparedStatement<Params, Row>,
   "query"
 > {
-  query(
-    params: Params,
-    options?: QueryOptions<Params, Row>,
-  ): QueryResult<Row, E, R>;
+  query(params: Params, options?: QueryOptions<Params, Row>): QueryResult<Row, E, R>;
 }
 
 /** A prepared mutation that reports statistics rather than rows. */
@@ -47,11 +37,7 @@ export interface PreparedMutation<Params, E = never, R = never> extends Omit<
   execute(
     params: Params,
     options?: ExecutionOptions<Params>,
-  ): Effect.Effect<
-    Awaited<ReturnType<PreparedExecution<Params>["execute"]>>,
-    E,
-    R
-  >;
+  ): Effect.Effect<Awaited<ReturnType<PreparedExecution<Params>["execute"]>>, E, R>;
 }
 
 export type Prepared<Params, Row, E = never, R = never> =
@@ -60,16 +46,9 @@ export type Prepared<Params, Row, E = never, R = never> =
     : PreparedMutation<Params, E, R>;
 
 export interface Prepare<C extends Contract<SqlStorage>, E = never, R = never> {
-  <
-    D extends Declaration<CT>,
-    Row,
-    CT extends CodecTypesBase = ExtractCodecTypes<C>,
-  >(
+  <D extends Declaration<CT>, Row, CT extends CodecTypesBase = ExtractCodecTypes<C>>(
     declaration: D,
-    build: (
-      sql: PostgresStaticContext<C>["sql"],
-      params: BindSiteParams<D>,
-    ) => SqlQueryPlan<Row>,
+    build: (sql: PostgresStaticContext<C>["sql"], params: BindSiteParams<D>) => SqlQueryPlan<Row>,
   ): Effect.Effect<
     Prepared<ParamsFromDeclaration<D, CT>, Row, ClientError | E, R>,
     ClientError | E,
@@ -83,24 +62,14 @@ export const makePrepare =
     sql: PostgresStaticContext<C>["sql"],
     queryTarget: Effect.Effect<RuntimeQueryable, E, R> = runtime,
   ): Prepare<C, E, R> =>
-  <
-    D extends Declaration<CT>,
-    Row,
-    CT extends CodecTypesBase = ExtractCodecTypes<C>,
-  >(
+  <D extends Declaration<CT>, Row, CT extends CodecTypesBase = ExtractCodecTypes<C>>(
     declaration: D,
-    build: (
-      sql: PostgresStaticContext<C>["sql"],
-      params: BindSiteParams<D>,
-    ) => SqlQueryPlan<Row>,
+    build: (sql: PostgresStaticContext<C>["sql"], params: BindSiteParams<D>) => SqlQueryPlan<Row>,
   ) =>
     Effect.gen(function* () {
       const target = yield* runtime;
       const statement = yield* Effect.tryPromise({
-        try: () =>
-          target.prepare<D, Row, CT>(declaration, (params) =>
-            build(sql, params),
-          ),
+        try: () => target.prepare<D, Row, CT>(declaration, (params) => build(sql, params)),
         catch: wrapPrismaError,
       });
       type Params = ParamsFromDeclaration<D, CT>;
@@ -119,9 +88,7 @@ export const makePrepare =
                   Effect.flatMap(queryTarget, (current) =>
                     Effect.tryPromise({
                       try: (signal) =>
-                        statement
-                          .query(current, params, { ...options, signal })
-                          .toArray(),
+                        statement.query(current, params, { ...options, signal }).toArray(),
                       catch: wrapPrismaError,
                     }),
                   ),

@@ -1,13 +1,14 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import UpgradeWorker from "./fixtures/sql-migrations-upgrade/worker.ts";
 
 type State = { id: string; count: number; rows: { value: string }[] };
@@ -20,9 +21,7 @@ for (const dev of [true, false]) {
       const { test } = Test.make({
         providers: Cloudflare.providers(),
         dev,
-        stage: dev
-          ? "sql-migrations-upgrade-local"
-          : "sql-migrations-upgrade-live",
+        stage: dev ? "sql-migrations-upgrade-local" : "sql-migrations-upgrade-live",
       });
       test.provider(
         "SQL-only changes update existing objects without replay or replacement",
@@ -50,47 +49,68 @@ for (const dev of [true, false]) {
                   };
                 }),
               )
-              .pipe(
-                Effect.provideService(ConfigProvider.ConfigProvider, config),
-              );
+              .pipe(Effect.provideService(ConfigProvider.ConfigProvider, config));
             const first = yield* deploy;
-            const client = yield* HttpClient.HttpClient;
+            // Fresh and updated workers.dev hosts can answer Cloudflare's 404
+            // placeholder before the script reaches them; requestWorker retries
+            // only that pre-invocation placeholder.
             const read = (url: string) =>
-              client.get(url).pipe(
-                Effect.flatMap(HttpClientResponse.filterStatusOk),
-                Effect.flatMap((response) => response.json),
+              requestWorker(HttpClientRequest.get(url)).pipe(
+                Effect.flatMap((response) =>
+                  Effect.gen(function* () {
+                    if (response.status !== 200)
+                      return yield* Effect.fail(
+                        new Error(`GET ${url}: ${response.status}: ${yield* response.text}`),
+                      );
+                    return yield* response.json;
+                  }),
+                ),
                 Effect.map((value) => value as State),
+                Effect.timeout("5 seconds"),
               );
+            // A redeploy reaches a busy live Durable Object only once it goes
+            // idle: Worker `exports` deploys carry no migration, so Cloudflare
+            // keeps an activation that receives a request every few seconds on
+            // the previous version indefinitely. Leave an idle gap between
+            // probes so the object restarts on the new code.
+            const probe = {
+              schedule: Schedule.spaced(dev ? "3 seconds" : "15 seconds"),
+              times: dev ? 10 : 5,
+            };
             const ready = (url: string, count: number) =>
               read(url).pipe(
                 Effect.filterOrFail(
                   (state) => state.count === count,
                   () => new Error("Migration version not ready"),
                 ),
-                Effect.retry({
-                  schedule: Schedule.spaced("1 second"),
-                  times: 10,
-                }),
+                Effect.retry(probe),
+                Effect.timeout("90 seconds"),
               );
             const original = yield* ready(first.url, 1);
             expect(original.rows).toEqual([{ value: "seed" }]);
-            yield* client
-              .post(first.url)
-              .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+            yield* requestWorker(HttpClientRequest.post(first.url)).pipe(
+              Effect.flatMap(HttpClientResponse.filterStatusOk),
+            );
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('must-rollback'); INSERT INTO missing_table VALUES (1);",
             );
             const broken = yield* deploy;
-            const failed = yield* client.get(broken.url).pipe(
-              Effect.map((response) => response.status),
+            const failed = yield* requestWorker(HttpClientRequest.get(broken.url)).pipe(
+              Effect.flatMap((response) =>
+                response.text.pipe(Effect.map((body) => ({ status: response.status, body }))),
+              ),
+              Effect.timeout("5 seconds"),
               Effect.repeat({
-                until: (status) => status === 500,
-                schedule: Schedule.spaced("1 second"),
-                times: 10,
+                until: (response) =>
+                  response.status === 500 &&
+                  response.body.includes("Failed to apply SQL migration"),
+                ...probe,
               }),
+              Effect.timeout("90 seconds"),
             );
-            expect(failed).toBe(500);
+            expect(failed.status).toBe(500);
+            expect(failed.body).toContain("Failed to apply SQL migration");
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('migration-two');",
@@ -105,10 +125,11 @@ for (const dev of [true, false]) {
               { value: "migration-two" },
             ]);
             const third = yield* deploy;
-            expect(yield* read(third.url)).toEqual(upgraded);
+            // Worker and Durable Object versions can propagate independently.
+            expect(yield* ready(third.url, 2)).toEqual(upgraded);
             yield* stack.destroy();
           }),
-        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 240_000 },
       );
     },
   );

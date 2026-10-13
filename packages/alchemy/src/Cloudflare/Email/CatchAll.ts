@@ -139,13 +139,7 @@ export const isCatchAll = (value: unknown): value is CatchAll =>
 export const CatchAllProvider = () =>
   Provider.succeed(CatchAll, {
     nuke: { singleton: true },
-    stables: [
-      "ruleId",
-      "zoneId",
-      "initialName",
-      "initialEnabled",
-      "initialActions",
-    ],
+    stables: ["ruleId", "zoneId", "initialName", "initialEnabled", "initialActions"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -157,9 +151,7 @@ export const CatchAllProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           emailRouting.getRuleCatchAll({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observedInitial(observed)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observedInitial(observed))),
             // Zones without Email Routing enabled (or that the token can no
             // longer see) reject the route; skip them.
             Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
@@ -184,8 +176,7 @@ export const CatchAllProvider = () =>
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
         // before upstream Outputs resolved — report "not found" then.
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* emailRouting.getRuleCatchAll({ zoneId }).pipe(
         // Zone deleted out-of-band (or the token can no longer see it) —
@@ -228,9 +219,7 @@ export const CatchAllProvider = () =>
           zoneId,
           matchers: [{ type: "all" }],
           actions: news.actions.map((a) =>
-            a.type === "drop"
-              ? { type: a.type }
-              : { type: a.type, value: a.value },
+            a.type === "drop" ? { type: a.type } : { type: a.type, value: a.value },
           ),
           enabled: desiredEnabled,
           name: desiredName,
@@ -260,9 +249,7 @@ export const CatchAllProvider = () =>
           zoneId,
           matchers: [{ type: "all" }],
           actions: initialActions.map((a) =>
-            a.type === "drop"
-              ? { type: a.type }
-              : { type: a.type, value: a.value },
+            a.type === "drop" ? { type: a.type } : { type: a.type, value: a.value },
           ),
           enabled: initialEnabled,
           name: initialName,
@@ -275,26 +262,22 @@ export const CatchAllProvider = () =>
           // script. Neither is retryable and neither should strand the
           // destroy, so fall back to the Cloudflare default (disabled,
           // drop) instead of failing.
-          Effect.catchTag(
-            ["DestinationNotVerified", "WorkerScriptNotFound"],
-            () =>
-              emailRouting
-                .putRuleCatchAll({
-                  zoneId,
-                  matchers: [{ type: "all" }],
-                  actions: [{ type: "drop" }],
-                  enabled: false,
-                  name: initialName,
-                })
-                .pipe(Effect.catchTag("Forbidden", () => Effect.void)),
+          Effect.catchTag(["DestinationNotVerified", "WorkerScriptNotFound"], () =>
+            emailRouting
+              .putRuleCatchAll({
+                zoneId,
+                matchers: [{ type: "all" }],
+                actions: [{ type: "drop" }],
+                enabled: false,
+                name: initialName,
+              })
+              .pipe(Effect.catchTag("Forbidden", () => Effect.void)),
           ),
         );
     }),
   });
 
-type ObservedCatchAll =
-  | emailRouting.GetRuleCatchAllResponse
-  | emailRouting.PutRuleCatchAllResponse;
+type ObservedCatchAll = emailRouting.GetRuleCatchAllResponse | emailRouting.PutRuleCatchAllResponse;
 
 const normalizeActions = (actions: ObservedCatchAll["actions"]): Action[] =>
   (actions ?? []).map((a): Action =>

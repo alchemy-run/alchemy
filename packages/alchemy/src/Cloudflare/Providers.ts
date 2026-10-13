@@ -17,6 +17,7 @@ import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
 import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
 import * as McpPortal from "./Access/McpPortal.ts";
+import * as McpServer from "./Access/McpServer.ts";
 import * as AccessOrg from "./Access/Organization.ts";
 import * as AccessPol from "./Access/Policy.ts";
 import * as AccessSvcToken from "./Access/ServiceToken.ts";
@@ -30,6 +31,7 @@ import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as Basin from "./Basin/index.ts";
 import * as BotManagement from "./BotManagement/index.ts";
 import * as Cache from "./Cache/index.ts";
 import * as Calls from "./Calls/index.ts";
@@ -69,6 +71,7 @@ import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Iam from "./Iam/index.ts";
 import * as Images from "./Images/index.ts";
 import * as Intel from "./Intel/index.ts";
+import * as K2 from "./K2/index.ts";
 import * as KeylessCertificate from "./KeylessCertificate/index.ts";
 import * as KV from "./KV/index.ts";
 import * as LeakedCredentialCheck from "./LeakedCredentialCheck/index.ts";
@@ -125,9 +128,7 @@ import * as Zone from "./Zone/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Cloudflare",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Cloudflare") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -177,6 +178,7 @@ export const providers = () =>
       ApiToken.UserApiToken,
       Argo.SmartRouting,
       Argo.TieredCaching,
+      Basin.Table,
       Bookmark.Bookmark,
       BotManagement.BotManagement,
       Cache.OriginCloudRegion,
@@ -194,6 +196,7 @@ export const providers = () =>
       Configuration.Configuration,
       Connectivity.DirectoryService,
       Containers.ContainerPlatform,
+      Containers.DurableObjectApplication,
       ContentScanning.ContentScanning,
       ContentScanning.Expression,
       CustomCertificates.CustomCertificate,
@@ -256,9 +259,12 @@ export const providers = () =>
       Images.Variant,
       Intel.IndicatorFeed,
       Intel.IndicatorFeedPermission,
+      K2.Stream,
+      K2.Subscription,
       KeylessCertificate.KeylessCertificate,
       KeyPair,
       KV.Namespace,
+      KV.InstantNamespace,
       LeakedCredentialCheck.LeakedCredentialCheck,
       LeakedCredentialCheck.LeakedCredentialDetection,
       List.List,
@@ -286,6 +292,7 @@ export const providers = () =>
       MagicTransit.MagicStaticRoute,
       ManagedTransforms.ManagedTransforms,
       McpPortal.McpPortal,
+      McpServer.McpServer,
       MtlsCertificate.MtlsCertificate,
       NetworkInterconnects.NetworkInterconnectSettings,
       Organization.Organization,
@@ -342,6 +349,7 @@ export const providers = () =>
       Spectrum.Application,
       Speed.TestSchedule,
       Ssl.CertificatePack,
+      Ssl.CertificateTransparencyAlerting,
       Ssl.UniversalSsl,
       Stream.LiveInput,
       Stream.LiveInputOutput,
@@ -443,6 +451,7 @@ export const providers = () =>
         Configuration.ConfigurationProvider(),
         Connectivity.DirectoryServiceProvider(),
         Containers.ContainerProvider(),
+        Containers.DurableObjectApplicationProvider(),
         ContentScanning.ContentScanningProvider(),
         ContentScanning.ExpressionProvider(),
         CustomCertificates.CustomCertificateProvider(),
@@ -510,8 +519,11 @@ export const providers = () =>
           Images.VariantProvider(),
           Intel.IndicatorFeedPermissionProvider(),
           Intel.IndicatorFeedProvider(),
+          K2.StreamProvider(),
+          K2.SubscriptionProvider(),
           KeylessCertificate.KeylessCertificateProvider(),
           KV.NamespaceProvider(),
+          KV.InstantNamespaceProvider(),
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
           LeakedCredentialCheck.LeakedCredentialDetectionProvider(),
           List.ListProvider(),
@@ -537,6 +549,7 @@ export const providers = () =>
           MagicTransit.MagicStaticRouteProvider(),
           ManagedTransforms.ManagedTransformsProvider(),
           McpPortal.McpPortalProvider(),
+          McpServer.McpServerProvider(),
           MtlsCertificate.MtlsCertificateProvider(),
           NetworkInterconnects.NetworkInterconnectSettingsProvider(),
           Organization.OrganizationProvider(),
@@ -592,6 +605,7 @@ export const providers = () =>
           Spectrum.ApplicationProvider(),
           Speed.TestScheduleProvider(),
           Ssl.CertificatePackProvider(),
+          Ssl.CertificateTransparencyAlertingProvider(),
           Ssl.UniversalSslProvider(),
           Stream.LiveInputOutputProvider(),
           Stream.LiveInputProvider(),
@@ -611,6 +625,7 @@ export const providers = () =>
           Tunnel.WarpConnectorProvider(),
         ),
         Layer.mergeAll(
+          Basin.TableProvider(),
           Turnstile.WidgetProvider(),
           UrlNorm.UrlNormalizationProvider(),
           Vectorize.IndexProvider(),

@@ -10,9 +10,7 @@ export const makeSubscriptionCleanup = () => {
       deadline ??= now + 20_000;
       const remaining = deadline - now;
       if (remaining <= 0) {
-        return yield* Effect.die(
-          new Error("Subscription cleanup deadline exceeded"),
-        );
+        return yield* Effect.die(new Error("Subscription cleanup deadline exceeded"));
       }
       return yield* effect.pipe(Effect.timeout(Math.min(5_000, remaining)));
     }).pipe(Effect.orDie, Effect.interruptible);
@@ -57,9 +55,7 @@ export const hasReadySubscriptionEvent = (
   probes.some(
     ({ identity, createdAt }) =>
       createdAt >= expected.readyAfter &&
-      events.some((event) =>
-        matchesSubscriptionEvent(event, { ...expected, identity }),
-      ),
+      events.some((event) => matchesSubscriptionEvent(event, { ...expected, identity })),
   );
 
 export const matchesSubscriptionEvent = (
@@ -70,6 +66,5 @@ export const matchesSubscriptionEvent = (
   event.source.type === expected.source &&
   event.metadata.accountId === expected.accountId &&
   event.metadata.eventSubscriptionId === expected.subscriptionId &&
-  event.payload[
-    expected.source === "kv" || expected.source === "images" ? "id" : "name"
-  ] === expected.identity;
+  event.payload[expected.source === "kv" || expected.source === "images" ? "id" : "name"] ===
+    expected.identity;

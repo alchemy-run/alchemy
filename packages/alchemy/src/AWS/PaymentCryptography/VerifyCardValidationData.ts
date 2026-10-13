@@ -52,7 +52,6 @@ export interface VerifyCardValidationData extends Binding.Service<
   >
 > {}
 
-export const VerifyCardValidationData =
-  Binding.Service<VerifyCardValidationData>(
-    "AWS.PaymentCryptography.VerifyCardValidationData",
-  );
+export const VerifyCardValidationData = Binding.Service<VerifyCardValidationData>(
+  "AWS.PaymentCryptography.VerifyCardValidationData",
+);

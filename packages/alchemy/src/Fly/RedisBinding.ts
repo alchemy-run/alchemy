@@ -22,9 +22,7 @@ import { REDIS_URL_ENV, RedisUrlMissing, type Redis } from "./Redis.ts";
  * NOT exported from `index.ts`.
  */
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isFlyHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||
@@ -32,7 +30,7 @@ const isFlyHost = (
 
 const asPlain = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.length > 0) return value;
-  if (Redacted.isRedacted(value)) return asPlain(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, asPlain);
   return undefined;
 };
 
@@ -40,9 +38,7 @@ const redisUrlFromEnv = Config.Redacted(REDIS_URL_ENV).pipe(
   Effect.map((value) => Redacted.value(value)),
 );
 
-export const makeRedisBinding = <Client>(options: {
-  makeClient: (url: Url) => Client;
-}) =>
+export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Client }) =>
   Effect.succeed(
     Effect.fn(function* (redis: Redis) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {

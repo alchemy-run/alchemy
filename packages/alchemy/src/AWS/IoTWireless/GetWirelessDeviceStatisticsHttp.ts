@@ -12,10 +12,7 @@ export const GetWirelessDeviceStatisticsHttp = Layer.effect(
     capability: "GetWirelessDeviceStatistics",
     iamActions: ["iotwireless:GetWirelessDeviceStatistics"],
     operation: iotw.getWirelessDeviceStatistics,
-    prepare: (
-      request: GetWirelessDeviceStatisticsRequest | undefined,
-      wirelessDeviceId,
-    ) => ({
+    prepare: (request: GetWirelessDeviceStatisticsRequest | undefined, wirelessDeviceId) => ({
       ...request,
       WirelessDeviceId: wirelessDeviceId,
     }),

@@ -1,11 +1,6 @@
+import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 /** @jsxImportSource react */
 import type { ReactNode } from "react";
-import {
-  HeadContent,
-  Outlet,
-  Scripts,
-  createRootRoute,
-} from "@tanstack/react-router";
 
 export const Route = createRootRoute({
   head: () => ({

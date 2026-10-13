@@ -30,10 +30,7 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: docdb.CopyDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      docdb.CopyDBClusterSnapshotResult,
-      docdb.CopyDBClusterSnapshotError
-    >
+    ) => Effect.Effect<docdb.CopyDBClusterSnapshotResult, docdb.CopyDBClusterSnapshotError>
   >
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(

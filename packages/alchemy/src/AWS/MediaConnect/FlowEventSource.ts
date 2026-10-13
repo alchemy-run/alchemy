@@ -119,12 +119,8 @@ export const consumeFlowEvents = <StreamReq = never, Req = never>(
     props.id ?? "MediaConnectFlowEvents",
     {
       source: ["aws.mediaconnect"],
-      "detail-type": (props.kinds ?? (["alert"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.flowArns !== undefined
-        ? { resources: [...props.flowArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["alert"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.flowArns !== undefined ? { resources: [...props.flowArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

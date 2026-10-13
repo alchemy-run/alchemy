@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 
 export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObject>()(
   "LegacyAlarmObject",
@@ -38,10 +38,7 @@ export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObjec
         alarm: Effect.fn(
           function* () {
             const events = yield* Cloudflare.processScheduledEvents;
-            const fired =
-              (yield* state.storage.get<Cloudflare.ScheduledEvent[]>(
-                "legacy",
-              )) ?? [];
+            const fired = (yield* state.storage.get<Cloudflare.ScheduledEvent[]>("legacy")) ?? [];
             yield* state.storage.put("legacy", [...fired, ...events]);
           },
           Effect.provideService(Cloudflare.DurableObjectState, state),
@@ -49,12 +46,8 @@ export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObjec
         snapshot: Effect.fn(
           function* () {
             return {
-              registered:
-                (yield* state.storage.get<string>("registered")) ?? null,
-              legacy:
-                (yield* state.storage.get<Cloudflare.ScheduledEvent[]>(
-                  "legacy",
-                )) ?? [],
+              registered: (yield* state.storage.get<string>("registered")) ?? null,
+              legacy: (yield* state.storage.get<Cloudflare.ScheduledEvent[]>("legacy")) ?? [],
               pending: yield* Cloudflare.listEvents,
               alarm: yield* state.storage.getAlarm(),
             };

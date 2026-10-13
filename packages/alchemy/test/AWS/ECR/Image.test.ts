@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { Image, type ImageProps } from "@/AWS/ECR/Image.ts";
-import { Repository } from "@/AWS/ECR/Repository.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +5,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Image, type ImageProps } from "@/AWS/ECR/Image.ts";
+import { Repository } from "@/AWS/ECR/Repository.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,9 +77,7 @@ test.provider(
         repositoryName: moved.repositoryName,
         imageIds: [{ imageTag: moved.imageTag }],
       });
-      expect(movedDescription.imageDetails?.[0]?.imageDigest).toBe(
-        first.digest,
-      );
+      expect(movedDescription.imageDetails?.[0]?.imageDigest).toBe(first.digest);
       expect(movedDescription.imageDetails?.[0]?.imagePushedAt).toEqual(
         described.imageDetails?.[0]?.imagePushedAt,
       );
@@ -90,21 +88,14 @@ test.provider(
       });
       expect(deleted.failures ?? []).toEqual([]);
       yield* assertImageDeleted(moved.repositoryName, moved.imageTag);
-      expect(
-        (yield* stack.plan(program(relocated))).resources.Image?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(program(relocated))).resources.Image?.action).toBe("update");
       const repaired = yield* stack.deploy(program(relocated));
       expect(repaired.imageTag).toBe(first.imageTag);
       expect(repaired.digest).toBe(first.digest);
-      expect(
-        (yield* stack.plan(program(relocated))).resources.Image?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(relocated))).resources.Image?.action).toBe("noop");
 
       // Changed bytes at the relocated path must still schedule a rebuild.
-      yield* fs.writeFileString(
-        path.join(relocated, "hello.txt"),
-        "hello again from alchemy\n",
-      );
+      yield* fs.writeFileString(path.join(relocated, "hello.txt"), "hello again from alchemy\n");
       const changedPlan = yield* stack.plan(program(relocated));
       expect(changedPlan.resources["Image"]).toMatchObject({
         action: "update",
@@ -166,9 +157,7 @@ test.provider(
       });
       yield* assertRepositoryDeleted(image.repositoryName);
       const original = Image("OwnedImage", { context: fixtureDir });
-      expect((yield* stack.plan(original)).resources.OwnedImage?.action).toBe(
-        "update",
-      );
+      expect((yield* stack.plan(original)).resources.OwnedImage?.action).toBe("update");
       const restored = yield* stack.deploy(original);
       expect(restored.repositoryUri).toBe(image.repositoryUri);
       expect(restored.imageTag).toBe(image.imageTag);
@@ -203,9 +192,7 @@ test.provider(
           const secondary = yield* Repository("Secondary", {});
           return yield* Image("ConfiguredImage", {
             context: fixtureDir,
-            repositoryUri: alternate
-              ? secondary.repositoryUri
-              : primary.repositoryUri,
+            repositoryUri: alternate ? secondary.repositoryUri : primary.repositoryUri,
             ...options,
           });
         });
@@ -222,27 +209,24 @@ test.provider(
       ).toBe("noop");
 
       const secondOptions = { buildArgs: { BUILD_LABEL: "second" } };
-      expect(
-        (yield* stack.plan(program(secondOptions))).resources.ConfiguredImage
-          ?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(program(secondOptions))).resources.ConfiguredImage?.action).toBe(
+        "update",
+      );
       const second = yield* stack.deploy(program(secondOptions));
       expect(second.imageTag).not.toBe(first.imageTag);
       expect(second.digest).not.toBe(first.digest);
 
       const armOptions = { ...secondOptions, platform: "linux/arm64" };
-      expect(
-        (yield* stack.plan(program(armOptions))).resources.ConfiguredImage
-          ?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(program(armOptions))).resources.ConfiguredImage?.action).toBe(
+        "update",
+      );
       const arm = yield* stack.deploy(program(armOptions));
       expect(arm.imageTag).not.toBe(second.imageTag);
       expect(arm.digest).not.toBe(second.digest);
 
-      expect(
-        (yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage
-          ?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage?.action).toBe(
+        "update",
+      );
       const moved = yield* stack.deploy(program(armOptions, true));
       expect(moved.repositoryUri).not.toBe(arm.repositoryUri);
       expect(moved.imageTag).toBe(arm.imageTag);
@@ -253,10 +237,9 @@ test.provider(
           imageIds: [{ imageTag: moved.imageTag }],
         })).imageDetails?.[0]?.imageDigest,
       ).toBe(moved.digest);
-      expect(
-        (yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage
-          ?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage?.action).toBe(
+        "noop",
+      );
 
       yield* stack.destroy();
       yield* assertRepositoryDeleted(first.repositoryName);
@@ -267,10 +250,7 @@ test.provider(
 
 class ImageStillExists extends Data.TaggedError("ImageStillExists") {}
 
-const assertImageDeleted = Effect.fn(function* (
-  repositoryName: string,
-  imageTag: string,
-) {
+const assertImageDeleted = Effect.fn(function* (repositoryName: string, imageTag: string) {
   yield* ecr.describeImages({ repositoryName, imageIds: [{ imageTag }] }).pipe(
     Effect.flatMap(() => Effect.fail(new ImageStillExists())),
     Effect.retry({

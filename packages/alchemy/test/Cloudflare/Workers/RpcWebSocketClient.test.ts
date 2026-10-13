@@ -9,8 +9,7 @@ const subpath = "./Cloudflare/RpcWebSocketClient";
 const sourceEntry = "src/Cloudflare/Workers/RpcWebSocketClient.ts";
 const compiledEntry = "lib/Cloudflare/Workers/RpcWebSocketClient.js";
 const declarationEntry = "lib/Cloudflare/Workers/RpcWebSocketClient.d.ts";
-const fixtureDirectory =
-  "test/Cloudflare/Workers/fixtures/rpc-websocket-client";
+const fixtureDirectory = "test/Cloudflare/Workers/fixtures/rpc-websocket-client";
 
 const packageInfo = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -43,10 +42,7 @@ const bundleBrowser = Effect.fn(function* (
             name: "browser-dependency-graph",
             moduleParsed(info) {
               modules.add(info.id);
-              for (const id of [
-                ...info.importedIds,
-                ...info.dynamicallyImportedIds,
-              ]) {
+              for (const id of [...info.importedIds, ...info.dynamicallyImportedIds]) {
                 modules.add(id);
               }
             },
@@ -56,9 +52,7 @@ const bundleBrowser = Effect.fn(function* (
     ),
     (bundle) =>
       Effect.gen(function* () {
-        const { output } = yield* Effect.promise(() =>
-          bundle.generate({ format: "esm" }),
-        );
+        const { output } = yield* Effect.promise(() => bundle.generate({ format: "esm" }));
         const chunks = output.filter((item) => item.type === "chunk");
         const entryChunk = chunks.find((chunk) => chunk.isEntry)!;
         expect(entryChunk.exports).toEqual(
@@ -68,9 +62,7 @@ const bundleBrowser = Effect.fn(function* (
         const emitted = new Set(chunks.map((chunk) => chunk.fileName));
         expect(
           chunks.flatMap((chunk) =>
-            [...chunk.imports, ...chunk.dynamicImports].filter(
-              (id) => !emitted.has(id),
-            ),
+            [...chunk.imports, ...chunk.dynamicImports].filter((id) => !emitted.has(id)),
           ),
         ).toEqual([]);
         return [...modules].map((id) => id.replaceAll("\\", "/"));
@@ -90,9 +82,7 @@ const assertBrowserGraph = Effect.fn(function* (
   const alchemyModules = modules.filter(
     (id) => id.startsWith(sourceRoot) || id.startsWith(libRoot),
   );
-  expect(alchemyModules).toEqual([
-    path.join(root, expectedEntry).replaceAll("\\", "/"),
-  ]);
+  expect(alchemyModules).toEqual([path.join(root, expectedEntry).replaceAll("\\", "/")]);
   expect(modules.some((id) => id.includes("/effect/"))).toBe(true);
   expect(
     modules.filter(
@@ -111,9 +101,7 @@ const stagePublishedPackage = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const { root, manifest } = yield* packageInfo;
-  const directory = yield* fs.makeTempDirectoryScoped({
-    prefix: "alchemy-rpc-websocket-client-",
-  });
+  const directory = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-rpc-websocket-client-" });
   const packageDirectory = path.join(directory, "node_modules/alchemy");
   yield* fs.makeDirectory(packageDirectory, { recursive: true });
   yield* fs.writeFileString(
@@ -127,20 +115,14 @@ const stagePublishedPackage = Effect.gen(function* () {
     }),
   );
   for (const entry of ["src", "lib"]) {
-    yield* fs.symlink(
-      path.join(root, entry),
-      path.join(packageDirectory, entry),
-    );
+    yield* fs.symlink(path.join(root, entry), path.join(packageDirectory, entry));
   }
   yield* fs.symlink(
     path.join(root, "node_modules/effect"),
     path.join(directory, "node_modules/effect"),
   );
   for (const file of ["browser.ts", "rpcs.ts"]) {
-    yield* fs.copyFile(
-      path.join(root, fixtureDirectory, file),
-      path.join(directory, file),
-    );
+    yield* fs.copyFile(path.join(root, fixtureDirectory, file), path.join(directory, file));
   }
   return { root, directory, entry: path.join(directory, "browser.ts") };
 });
@@ -159,14 +141,7 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         });
         expect(manifest.files).toEqual(expect.arrayContaining(["src", "lib"]));
       }),
-    {
-      tags: [
-        "unit",
-        "provider:cloudflare",
-        "provider:cloudflare:worker",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
   it.effect(
@@ -175,20 +150,10 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const { root } = yield* packageInfo;
-        const modules = yield* bundleBrowser(
-          root,
-          path.join(root, fixtureDirectory, "browser.ts"),
-        );
+        const modules = yield* bundleBrowser(root, path.join(root, fixtureDirectory, "browser.ts"));
         yield* assertBrowserGraph(root, modules, sourceEntry);
       }),
-    {
-      tags: [
-        "unit",
-        "provider:cloudflare",
-        "provider:cloudflare:worker",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
   it.effect(
@@ -204,14 +169,7 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         ]);
         yield* assertBrowserGraph(root, modules, sourceEntry);
       }),
-    {
-      tags: [
-        "unit",
-        "provider:cloudflare",
-        "provider:cloudflare:worker",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
   // Compiled packaging checks require a prior workspace build.
@@ -225,20 +183,13 @@ layer(NodeServices.layer)("alchemy/Cloudflare/RpcWebSocketClient", (it) => {
         const source = yield* fs.stat(path.join(root, sourceEntry));
         for (const file of [compiledEntry, declarationEntry]) {
           const info = yield* fs.stat(path.join(root, file));
-          expect(
-            Option.getOrThrow(info.mtime).getTime(),
-          ).toBeGreaterThanOrEqual(Option.getOrThrow(source.mtime).getTime());
+          expect(Option.getOrThrow(info.mtime).getTime()).toBeGreaterThanOrEqual(
+            Option.getOrThrow(source.mtime).getTime(),
+          );
         }
         const modules = yield* bundleBrowser(directory, entry);
         yield* assertBrowserGraph(root, modules, compiledEntry);
       }),
-    {
-      tags: [
-        "unit",
-        "provider:cloudflare",
-        "provider:cloudflare:worker",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 });

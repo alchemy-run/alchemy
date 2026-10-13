@@ -39,12 +39,7 @@ export interface SearchNearby extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoPlaces.SearchNearbyRequest,
-    ) => Effect.Effect<
-      geoPlaces.SearchNearbyResponse,
-      geoPlaces.SearchNearbyError
-    >
+    ) => Effect.Effect<geoPlaces.SearchNearbyResponse, geoPlaces.SearchNearbyError>
   >
 > {}
-export const SearchNearby = Binding.Service<SearchNearby>(
-  "AWS.GeoPlaces.SearchNearby",
-);
+export const SearchNearby = Binding.Service<SearchNearby>("AWS.GeoPlaces.SearchNearby");

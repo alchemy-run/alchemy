@@ -95,9 +95,7 @@ export interface AnomalyMonitor extends Resource<
  *
  * @resource
  */
-export const AnomalyMonitor = Resource<AnomalyMonitor>(
-  "AWS.CostExplorer.AnomalyMonitor",
-);
+export const AnomalyMonitor = Resource<AnomalyMonitor>("AWS.CostExplorer.AnomalyMonitor");
 
 export const AnomalyMonitorProvider = () =>
   Provider.effect(
@@ -107,19 +105,14 @@ export const AnomalyMonitorProvider = () =>
         id: string,
         props: { monitorName?: string | undefined },
       ) {
-        return (
-          props.monitorName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.monitorName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       // Observe by ARN — the typed miss tag is UnknownMonitorException.
       const getByArn = (monitorArn: string) =>
         pinCe(ce.getAnomalyMonitors({ MonitorArnList: [monitorArn] })).pipe(
           Effect.map((r) => r.AnomalyMonitors[0]),
-          Effect.catchTag("UnknownMonitorException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("UnknownMonitorException", () => Effect.succeed(undefined)),
         );
 
       // Fallback observation when no ARN is cached: scan all monitors for the
@@ -162,9 +155,7 @@ export const AnomalyMonitorProvider = () =>
             : yield* findByName(yield* createName(id, olds ?? {}));
           if (live?.MonitorArn === undefined) return undefined;
           const attrs = yield* toAttrs(live);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -175,8 +166,7 @@ export const AnomalyMonitorProvider = () =>
           if (
             prior.monitorType !== news.monitorType ||
             prior.monitorDimension !== news.monitorDimension ||
-            JSON.stringify(prior.monitorSpecification) !==
-              JSON.stringify(news.monitorSpecification)
+            JSON.stringify(prior.monitorSpecification) !== JSON.stringify(news.monitorSpecification)
           ) {
             return { action: "replace" } as const;
           }
@@ -200,9 +190,7 @@ export const AnomalyMonitorProvider = () =>
           const live = output?.monitorArn
             ? yield* getByArn(output.monitorArn)
             : yield* findByName(name).pipe(
-                Effect.map((m) =>
-                  m !== undefined && matchesDesired(m) ? m : undefined,
-                ),
+                Effect.map((m) => (m !== undefined && matchesDesired(m) ? m : undefined)),
               );
 
           let monitorArn = live?.MonitorArn;
@@ -256,9 +244,9 @@ export const AnomalyMonitorProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* pinCe(
-            ce.deleteAnomalyMonitor({ MonitorArn: output.monitorArn }),
-          ).pipe(Effect.catchTag("UnknownMonitorException", () => Effect.void));
+          yield* pinCe(ce.deleteAnomalyMonitor({ MonitorArn: output.monitorArn })).pipe(
+            Effect.catchTag("UnknownMonitorException", () => Effect.void),
+          );
         }),
       });
     }),

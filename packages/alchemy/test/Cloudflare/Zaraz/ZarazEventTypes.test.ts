@@ -1,3 +1,4 @@
+import { expect, test } from "alchemy-test";
 import {
   Config,
   type InferZarazEcommerceEvents,
@@ -6,7 +7,6 @@ import {
   type Track,
   type WebApi,
 } from "@/Cloudflare/Zaraz";
-import { expect, test } from "alchemy-test";
 
 const checkZarazEventTypes = () => {
   const zaraz = Config.events<{
@@ -70,10 +70,7 @@ const checkZarazEventTypes = () => {
   track("Button Clicked", {});
 
   const browser = undefined as unknown as WebApi<Events, EcommerceEvents>;
-  const browserWithoutEcommerce = undefined as unknown as WebApi<
-    Events,
-    DisabledEcommerceEvents
-  >;
+  const browserWithoutEcommerce = undefined as unknown as WebApi<Events, DisabledEcommerceEvents>;
 
   browser.track("Login", { method: "email-link" });
   browser.ecommerce("Product Viewed", { product_id: "product-1", price: 12 });

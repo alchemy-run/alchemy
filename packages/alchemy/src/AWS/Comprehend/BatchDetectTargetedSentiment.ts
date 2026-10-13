@@ -38,7 +38,6 @@ export interface BatchDetectTargetedSentiment extends Binding.Service<
     >
   >
 > {}
-export const BatchDetectTargetedSentiment =
-  Binding.Service<BatchDetectTargetedSentiment>(
-    "AWS.Comprehend.BatchDetectTargetedSentiment",
-  );
+export const BatchDetectTargetedSentiment = Binding.Service<BatchDetectTargetedSentiment>(
+  "AWS.Comprehend.BatchDetectTargetedSentiment",
+);

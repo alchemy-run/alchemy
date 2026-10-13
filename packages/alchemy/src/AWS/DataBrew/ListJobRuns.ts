@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface ListJobRunsRequest extends Omit<
-  SVC.ListJobRunsRequest,
-  "Name"
-> {}
+export interface ListJobRunsRequest extends Omit<SVC.ListJobRunsRequest, "Name"> {}
 
 /**
  * Runtime binding for `databrew:ListJobRuns` — lists the previous runs of
@@ -27,11 +24,7 @@ export interface ListJobRuns extends Binding.Service<
   <J extends Job>(
     job: J,
   ) => Effect.Effect<
-    (
-      request?: ListJobRunsRequest,
-    ) => Effect.Effect<SVC.ListJobRunsResponse, SVC.ListJobRunsError>
+    (request?: ListJobRunsRequest) => Effect.Effect<SVC.ListJobRunsResponse, SVC.ListJobRunsError>
   >
 > {}
-export const ListJobRuns = Binding.Service<ListJobRuns>(
-  "AWS.DataBrew.ListJobRuns",
-);
+export const ListJobRuns = Binding.Service<ListJobRuns>("AWS.DataBrew.ListJobRuns");

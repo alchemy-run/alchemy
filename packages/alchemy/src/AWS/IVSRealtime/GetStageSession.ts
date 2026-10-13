@@ -35,12 +35,7 @@ export interface GetStageSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetStageSessionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.GetStageSessionResponse,
-      ivsrealtime.GetStageSessionError
-    >
+    ) => Effect.Effect<ivsrealtime.GetStageSessionResponse, ivsrealtime.GetStageSessionError>
   >
 > {}
-export const GetStageSession = Binding.Service<GetStageSession>(
-  "AWS.IVSRealtime.GetStageSession",
-);
+export const GetStageSession = Binding.Service<GetStageSession>("AWS.IVSRealtime.GetStageSession");

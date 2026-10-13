@@ -2,10 +2,7 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type {
-  PrometheusApiError,
-  PrometheusMetricMetadata,
-} from "./PrometheusTypes.ts";
+import type { PrometheusApiError, PrometheusMetricMetadata } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
 export interface GetMetricMetadataRequest {
@@ -45,6 +42,4 @@ export interface GetMetricMetadata extends Binding.Service<
     >
   >
 > {}
-export const GetMetricMetadata = Binding.Service<GetMetricMetadata>(
-  "AWS.AMP.GetMetricMetadata",
-);
+export const GetMetricMetadata = Binding.Service<GetMetricMetadata>("AWS.AMP.GetMetricMetadata");

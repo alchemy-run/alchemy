@@ -1,58 +1,14 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as AWS from "@/AWS";
 import * as Output from "@/Output";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { getDefaultVpc } from "../DefaultVpc.ts";
+import { MwaaNetwork } from "./network.ts";
 
 export class MWAATestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "MWAATestFunction",
 ) {}
-
-/**
- * Resolve two default-for-AZ subnets (distinct AZs) plus the default security
- * group from the account's default VPC. Runtime-guarded: the Lambda runtime
- * re-executes this props effect on cold start with no ec2:Describe*
- * permission, so return empty values there (network config is deploy-time
- * only). NOTE: a REAL MWAA environment requires PRIVATE subnets with outbound
- * egress — an entitled/patient runner supplies that out of band, which is why
- * the fixture is only deployed behind the AWS_TEST_SLOW gate.
- */
-const resolveNetwork = Effect.gen(function* () {
-  if (globalThis.__ALCHEMY_RUNTIME__) {
-    return { subnetIds: [] as string[], securityGroupIds: [] as string[] };
-  }
-  const vpc = yield* getDefaultVpc;
-  const subnets = yield* EC2.describeSubnets({
-    Filters: [
-      { Name: "vpc-id", Values: [vpc.vpcId] },
-      { Name: "default-for-az", Values: ["true"] },
-    ],
-  });
-  const byAz = new Map<string, string>();
-  for (const s of subnets.Subnets ?? []) {
-    if (s.AvailabilityZone && s.SubnetId && !byAz.has(s.AvailabilityZone)) {
-      byAz.set(s.AvailabilityZone, s.SubnetId);
-    }
-  }
-  const sgs = yield* EC2.describeSecurityGroups({
-    Filters: [
-      { Name: "vpc-id", Values: [vpc.vpcId] },
-      { Name: "group-name", Values: ["default"] },
-    ],
-  });
-  const securityGroupId = sgs.SecurityGroups?.[0]?.GroupId;
-  return {
-    subnetIds: [...byAz.values()].slice(0, 2),
-    securityGroupIds: securityGroupId ? [securityGroupId] : [],
-  };
-}).pipe(
-  // Deploy-time lookup only; a failure here is a fixture defect, not a typed
-  // error the Function impl contract can carry.
-  Effect.orDie,
-);
 
 /**
  * Every route answers `{ …fields }` on success or `{ errorTag }` when the
@@ -72,14 +28,18 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 
 /**
  * Environment-scoped binding fixture: deploys a real MWAA environment
- * (~20-30 minutes to provision, billed hourly while it exists — gated behind
- * AWS_TEST_SLOW) plus its supporting cast (versioned DAGs bucket, execution
- * role) and a Lambda bound to all four MWAA bindings.
+ * (~20-30 minutes to provision, billed hourly while it exists — skipped under
+ * `--fast`) plus its supporting cast (private VPC networking with a NAT
+ * gateway, versioned DAGs bucket, execution role) and a Lambda bound to all
+ * four MWAA bindings.
  */
 export default MWAATestFunction.make(
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
-    const { subnetIds, securityGroupIds } = yield* resolveNetwork;
+    const { subnetIds, securityGroupIds } = yield* MwaaNetwork(
+      "MWAABindingsNetwork",
+      "10.87.0.0/16",
+    );
 
     const bucket = yield* AWS.S3.Bucket("MWAABindingsDags", {
       versioning: "Enabled",
@@ -114,10 +74,7 @@ export default MWAATestFunction.make(
             {
               Effect: "Allow",
               Action: ["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-              Resource: [
-                bucket.bucketArn,
-                Output.interpolate`${bucket.bucketArn}/*`,
-              ],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
             },
             {
               Effect: "Allow",
@@ -160,8 +117,7 @@ export default MWAATestFunction.make(
       sourceBucketArn: bucket.bucketArn,
       dagS3Path: "dags",
       subnetIds,
-      securityGroupIds:
-        securityGroupIds.length > 0 ? securityGroupIds : undefined,
+      securityGroupIds,
       environmentClass: "mw1.small",
       maxWorkers: 2,
       minWorkers: 1,
@@ -171,8 +127,7 @@ export default MWAATestFunction.make(
 
     const getEnvironment = yield* AWS.MWAA.GetEnvironment(environment);
     const createCliToken = yield* AWS.MWAA.CreateCliToken(environment);
-    const createWebLoginToken =
-      yield* AWS.MWAA.CreateWebLoginToken(environment);
+    const createWebLoginToken = yield* AWS.MWAA.CreateWebLoginToken(environment);
     const invokeRestApi = yield* AWS.MWAA.InvokeRestApi(environment);
 
     const bound = {
@@ -231,27 +186,19 @@ export default MWAATestFunction.make(
         }
 
         if (pathname === "/dags") {
-          const result = yield* errorTagged(
-            invokeRestApi({ Method: "GET", Path: "/dags" }),
-          );
+          const result = yield* errorTagged(invokeRestApi({ Method: "GET", Path: "/dags" }));
           return yield* HttpServerResponse.json(
             "errorTag" in result
               ? result
               : {
                   statusCode: result.RestApiStatusCode,
-                  totalEntries: (
-                    result.RestApiResponse as
-                      | { total_entries?: number }
-                      | undefined
-                  )?.total_entries,
+                  totalEntries: (result.RestApiResponse as { total_entries?: number } | undefined)
+                    ?.total_entries,
                 },
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

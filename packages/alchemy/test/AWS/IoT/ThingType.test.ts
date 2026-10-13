@@ -1,27 +1,22 @@
+import * as iot from "@distilled.cloud/aws/iot";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { DestroyError } from "@/Apply";
 import * as AWS from "@/AWS";
 import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
 import * as Test from "@/Test/Alchemy";
-import * as iot from "@distilled.cloud/aws/iot";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertThingGone = (thingName: string) =>
   iot.describeThing({ thingName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`thing ${thingName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`thing ${thingName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -38,9 +33,7 @@ describe.sequential(
     test.provider("typed not-found probe", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          iot.describeThingType({
-            thingTypeName: "alchemy-nonexistent-thing-type-probe",
-          }),
+          iot.describeThingType({ thingTypeName: "alchemy-nonexistent-thing-type-probe" }),
         );
         expect(error._tag).toBe("ResourceNotFoundException");
       }),
@@ -49,8 +42,8 @@ describe.sequential(
     // AWS requires a thing type to remain deprecated for at least five minutes
     // before deletion. The provider fully waits for observable absence, so this
     // lifecycle is intentionally outside the default fast sweep; enable it for
-    // the slow lane with AWS_TEST_SLOW=1.
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    // the slow lane (skipped under `--fast`).
+    test.provider.skipIf(!!process.env.FAST)(
       "creates a thing type, associates a thing, and deletes it",
       (stack) =>
         Effect.gen(function* () {
@@ -91,46 +84,30 @@ describe.sequential(
           // Verify out-of-band: the type exists, is active (a previous run's
           // destroy leaves it deprecated — reconcile must un-deprecate), and the
           // thing is associated with it.
-          const observed = yield* iot.describeThingType({
-            thingTypeName: created.thingTypeName,
-          });
+          const observed = yield* iot.describeThingType({ thingTypeName: created.thingTypeName });
           expect(observed.thingTypeArn).toEqual(created.thingTypeArn);
           expect(observed.thingTypeProperties?.thingTypeDescription).toEqual(
             "Alchemy IoT test sensors",
           );
-          expect(observed.thingTypeProperties?.searchableAttributes).toEqual([
-            "location",
-          ]);
+          expect(observed.thingTypeProperties?.searchableAttributes).toEqual(["location"]);
           expect(observed.thingTypeMetadata?.deprecated ?? false).toBe(false);
 
-          const thing = yield* iot.describeThing({
-            thingName: created.thingName,
-          });
+          const thing = yield* iot.describeThing({ thingName: created.thingName });
           expect(thing.thingTypeName).toEqual(created.thingTypeName);
 
           // First destroy removes the Thing and deprecates its type, then exits
           // on the provider's bounded nonterminal error instead of blocking for
           // AWS's mandatory five-minute window. State remains for re-entry.
-          // Destroy aggregates delete failures into a DestroyError.
+          // The engine aggregates delete failures into a DestroyError; the
+          // thing type's cause is the provider's typed timeout.
           const pending = yield* Effect.flip(stack.destroy());
-          expect(pending).toBeInstanceOf(DestroyError);
-          const timedOut =
-            pending instanceof DestroyError
-              ? pending.failures.map((failure) =>
-                  Cause.findErrorOption(failure.cause),
-                )
-              : [];
-          expect(timedOut).toHaveLength(1);
-          const cause = timedOut[0];
-          expect(cause?._tag).toBe("Some");
-          if (cause?._tag === "Some") {
-            expect(cause.value).toBeInstanceOf(ThingTypeDeletionTimedOut);
-          }
+          assert(pending instanceof DestroyError);
+          const failures = pending.failures;
+          expect(failures.map((f) => f.logicalId)).toEqual(["SensorType"]);
+          expect(Cause.squash(failures[0]!.cause)).toBeInstanceOf(ThingTypeDeletionTimedOut);
           yield* assertThingGone(created.thingName);
 
-          const deprecated = yield* iot.describeThingType({
-            thingTypeName: created.thingTypeName,
-          });
+          const deprecated = yield* iot.describeThingType({ thingTypeName: created.thingTypeName });
           expect(deprecated.thingTypeMetadata?.deprecated).toBe(true);
 
           // The first bounded delete already consumed ~45s. Wait out the rest

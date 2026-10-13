@@ -2,7 +2,6 @@ import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -97,6 +96,10 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
+ *
+ * `VpcService` creates HTTP services. For a TCP service — e.g. a private
+ * database that Hyperdrive connects to — use
+ * `Cloudflare.Connectivity.DirectoryService` with `type: "tcp"`.
  * ### Creating a VPC Service
  * **Example:** Hostname through a tunnel
  * ```typescript
@@ -121,10 +124,9 @@ export type VpcService = Resource<
  * @product Workers VPC
  * @category Network
  */
-export const VpcService = Resource<VpcService>(
-  "Cloudflare.VpcService.VpcService",
-  { aliases: ["Cloudflare.VpcService"] },
-);
+export const VpcService = Resource<VpcService>("Cloudflare.VpcService.VpcService", {
+  aliases: ["Cloudflare.VpcService"],
+});
 
 export const isVpcService = (value: unknown): value is VpcService =>
   isResourceOfType(value, "Cloudflare.VpcService.VpcService");
@@ -153,24 +155,19 @@ export const VpcServiceProvider = () =>
     stables: ["serviceId", "accountId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* connectivity.listDirectoryServices
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (s): s is typeof s & { serviceId: string } =>
-                    s.serviceId != null,
-                )
-                .map((s) => formatVpcService(s, accountId)),
-            ),
+      return yield* connectivity.listDirectoryServices.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((s): s is typeof s & { serviceId: string } => s.serviceId != null)
+              .map((s) => formatVpcService(s, accountId)),
           ),
-          // VPC/Workers connectivity is plan-gated; an un-entitled
-          // account rejects the list route. Treat as nothing to enumerate.
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        // VPC/Workers connectivity is plan-gated; an un-entitled
+        // account rejects the list route. Treat as nothing to enumerate.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -178,8 +175,7 @@ export const VpcServiceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.serviceName ?? (yield* createServiceName(id, olds?.name));
+      const oldName = output?.serviceName ?? (yield* createServiceName(id, olds?.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
@@ -193,10 +189,7 @@ export const VpcServiceProvider = () =>
       // Prefer the deployed name: regenerating would rename the deployed
       // service if the generator's output for this id ever drifts. An
       // explicit user-provided name still wins (renames apply in place).
-      const name =
-        news.name ??
-        output?.serviceName ??
-        (yield* createServiceName(id, news.name));
+      const name = news.name ?? output?.serviceName ?? (yield* createServiceName(id, news.name));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached service; fall back to a name
@@ -209,13 +202,11 @@ export const VpcServiceProvider = () =>
             accountId: acct,
             serviceId: output.serviceId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
       }
       if (!observed) {
         const match = yield* findServiceByName(name);
-        observed = match as
-          | connectivity.GetDirectoryServiceResponse
-          | undefined;
+        observed = match as connectivity.GetDirectoryServiceResponse | undefined;
       }
 
       // Ensure — create if missing. Cloudflare rejects a duplicate
@@ -287,7 +278,7 @@ export const VpcServiceProvider = () =>
           })
           .pipe(
             Effect.map((s) => formatVpcService(s, output.accountId)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
       const name = yield* createServiceName(id, olds?.name);
@@ -346,11 +337,7 @@ export const formatVpcService = (
     httpsPort: service.httpsPort ?? undefined,
     host,
     accountId,
-    createdAt: service.createdAt
-      ? new Date(service.createdAt).getTime()
-      : undefined,
-    updatedAt: service.updatedAt
-      ? new Date(service.updatedAt).getTime()
-      : undefined,
+    createdAt: service.createdAt ? new Date(service.createdAt).getTime() : undefined,
+    updatedAt: service.updatedAt ? new Date(service.updatedAt).getTime() : undefined,
   };
 };

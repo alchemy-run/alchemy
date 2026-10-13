@@ -32,7 +32,6 @@ export interface GetSupportedResourceTypes extends Binding.Service<
     >
   >
 > {}
-export const GetSupportedResourceTypes =
-  Binding.Service<GetSupportedResourceTypes>(
-    "AWS.Backup.GetSupportedResourceTypes",
-  );
+export const GetSupportedResourceTypes = Binding.Service<GetSupportedResourceTypes>(
+  "AWS.Backup.GetSupportedResourceTypes",
+);

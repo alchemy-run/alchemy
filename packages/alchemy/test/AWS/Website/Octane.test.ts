@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -41,14 +41,7 @@ const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
 describe.skipIf(!runLive || runEmulated)(
   "AWS.Website.Octane",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:cloudfront",
-      "provider:aws:website",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {
     test.provider(
       "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
@@ -84,20 +77,14 @@ describe.skipIf(!runLive || runEmulated)(
           const url = deployed.site.url! as string;
           expect(url).toMatch(/^https:\/\//);
           expect(deployed.site.serverUrl).toBeDefined();
-          yield* Effect.log(
-            `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-          );
+          yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
           // The Lambda Function URL serves the SSR page directly — isolates
           // server-function health from the CloudFront edge routing.
-          yield* expectUrlContains(
-            `${deployed.site.serverUrl!}`,
-            "OCTANE_AWS_PAGE_MARKER",
-            {
-              timeout: "120 seconds",
-              label: "SSR direct from Lambda URL",
-            },
-          );
+          yield* expectUrlContains(`${deployed.site.serverUrl!}`, "OCTANE_AWS_PAGE_MARKER", {
+            timeout: "120 seconds",
+            label: "SSR direct from Lambda URL",
+          });
 
           // SSR page rendered by the Lambda through CloudFront.
           yield* expectUrlContains(`${url}/`, "OCTANE_AWS_PAGE_MARKER", {
@@ -105,24 +92,16 @@ describe.skipIf(!runLive || runEmulated)(
             label: "SSR home page",
           });
           // Server API route through the streaming Function URL origin.
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=roundtrip`,
-            "OCTANE_AWS_API_MARKER",
-            { label: "API route" },
-          );
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=roundtrip`,
-            "roundtrip",
-            { label: "API route query echo" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "OCTANE_AWS_API_MARKER", {
+            label: "API route",
+          });
+          yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+            label: "API route query echo",
+          });
           // Public file served from S3 via the KV file manifest.
-          yield* expectUrlContains(
-            `${url}/robots.txt`,
-            "octane-aws-robots-marker",
-            {
-              label: "public asset from S3",
-            },
-          );
+          yield* expectUrlContains(`${url}/robots.txt`, "octane-aws-robots-marker", {
+            label: "public asset from S3",
+          });
 
           const distributionId = deployed.site.distribution!.distributionId;
 
@@ -143,9 +122,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

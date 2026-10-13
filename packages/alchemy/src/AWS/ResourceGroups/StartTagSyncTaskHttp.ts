@@ -5,10 +5,7 @@ import * as Binding from "../../Binding.ts";
 import type { Role } from "../IAM/Role.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Group } from "./Group.ts";
-import {
-  StartTagSyncTask,
-  type StartTagSyncTaskRequest,
-} from "./StartTagSyncTask.ts";
+import { StartTagSyncTask, type StartTagSyncTaskRequest } from "./StartTagSyncTask.ts";
 
 // Bespoke (not on the shared scaffold): the only Resource Groups binding
 // that passes an IAM role to the service, so it needs the second
@@ -58,9 +55,9 @@ export const StartTagSyncTaskHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(
-        `AWS.ResourceGroups.StartTagSyncTask(${group.LogicalId})`,
-      )(function* (request: StartTagSyncTaskRequest) {
+      return Effect.fn(`AWS.ResourceGroups.StartTagSyncTask(${group.LogicalId})`)(function* (
+        request: StartTagSyncTaskRequest,
+      ) {
         return yield* startTagSyncTask({
           ...request,
           Group: yield* GroupName,

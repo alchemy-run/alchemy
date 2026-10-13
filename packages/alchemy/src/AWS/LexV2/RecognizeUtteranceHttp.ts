@@ -1,10 +1,7 @@
 import * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
 import * as Layer from "effect/Layer";
 import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
-import {
-  RecognizeUtterance,
-  type RecognizeUtteranceRequest,
-} from "./RecognizeUtterance.ts";
+import { RecognizeUtterance, type RecognizeUtteranceRequest } from "./RecognizeUtterance.ts";
 
 /**
  * HTTP implementation of {@link RecognizeUtterance} — calls the

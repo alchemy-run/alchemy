@@ -100,8 +100,7 @@ export const DelegatedAdministratorProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const accountId = output?.accountId ?? olds?.accountId;
-          const servicePrincipal =
-            output?.servicePrincipal ?? olds?.servicePrincipal;
+          const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (accountId === undefined || servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // (they deserialize as `undefined`) — report "not found" so the
@@ -120,8 +119,7 @@ export const DelegatedAdministratorProvider = () =>
             // Organizations enumeration isn't available here — return [].
             const admins = yield* retryOrganizations(
               collectPages(
-                (NextToken) =>
-                  organizations.listDelegatedAdministrators({ NextToken }),
+                (NextToken) => organizations.listDelegatedAdministrators({ NextToken }),
                 (page) => page.DelegatedAdministrators,
               ),
             ).pipe(
@@ -183,8 +181,7 @@ export const DelegatedAdministratorProvider = () =>
                             accountEmail: unredact(admin.Email),
                             servicePrincipal: service.ServicePrincipal,
                             delegationEnabledDate:
-                              service.DelegationEnabledDate ??
-                              admin.DelegationEnabledDate,
+                              service.DelegationEnabledDate ?? admin.DelegationEnabledDate,
                           }) satisfies DelegatedAdministrator["Attributes"],
                       ),
                   ),
@@ -210,12 +207,7 @@ export const DelegatedAdministratorProvider = () =>
                   AccountId: news.accountId,
                   ServicePrincipal: news.servicePrincipal,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "AccountAlreadyRegisteredException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("AccountAlreadyRegisteredException", () => Effect.void)),
             );
             state = yield* readDelegatedAdministrator(news);
             if (!state) {
@@ -266,9 +258,8 @@ const readDelegatedAdministrator = Effect.fn(function* ({
         (page) => page.DelegatedServices,
       ),
     ).pipe(
-      Effect.catchTag(
-        ["AccountNotFoundException", "AccountNotRegisteredException"],
-        () => Effect.succeed<organizations.DelegatedService[]>([]),
+      Effect.catchTag(["AccountNotFoundException", "AccountNotRegisteredException"], () =>
+        Effect.succeed<organizations.DelegatedService[]>([]),
       ),
     ),
     retryOrganizations(
@@ -286,9 +277,7 @@ const readDelegatedAdministrator = Effect.fn(function* ({
   const service = delegatedServices.find(
     (candidate) => candidate.ServicePrincipal === servicePrincipal,
   );
-  const account = delegatedAdmins.find(
-    (candidate) => candidate.Id === accountId,
-  );
+  const account = delegatedAdmins.find((candidate) => candidate.Id === accountId);
 
   return service && account
     ? ({
@@ -297,8 +286,7 @@ const readDelegatedAdministrator = Effect.fn(function* ({
         accountName: unredact(account.Name),
         accountEmail: unredact(account.Email),
         servicePrincipal,
-        delegationEnabledDate:
-          service.DelegationEnabledDate ?? account.DelegationEnabledDate,
+        delegationEnabledDate: service.DelegationEnabledDate ?? account.DelegationEnabledDate,
       } satisfies DelegatedAdministrator["Attributes"])
     : undefined;
 });

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Connection } from "@/AWS/Glue";
-import * as Test from "@/Test/Alchemy";
 import * as glue from "@distilled.cloud/aws/glue";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { Connection } from "@/AWS/Glue";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,8 +26,7 @@ test.provider(
             connectionType: "JDBC",
             description: "warehouse jdbc",
             connectionProperties: {
-              JDBC_CONNECTION_URL:
-                "jdbc:postgresql://db.example.com:5432/warehouse",
+              JDBC_CONNECTION_URL: "jdbc:postgresql://db.example.com:5432/warehouse",
               USERNAME: "glue",
               PASSWORD: Redacted.make("secret"),
             },
@@ -38,9 +37,7 @@ test.provider(
 
       expect(created.connectionName).toBeDefined();
       expect(created.connectionType).toEqual("JDBC");
-      expect(created.connectionArn).toContain(
-        `:connection/${created.connectionName}`,
-      );
+      expect(created.connectionArn).toContain(`:connection/${created.connectionName}`);
 
       const observed = yield* getConnection(created.connectionName);
       expect(observed?.Name).toEqual(created.connectionName);
@@ -60,8 +57,7 @@ test.provider(
             connectionType: "JDBC",
             description: "warehouse jdbc v2",
             connectionProperties: {
-              JDBC_CONNECTION_URL:
-                "jdbc:postgresql://db2.example.com:5432/warehouse",
+              JDBC_CONNECTION_URL: "jdbc:postgresql://db2.example.com:5432/warehouse",
               USERNAME: "glue",
               PASSWORD: Redacted.make("secret"),
             },

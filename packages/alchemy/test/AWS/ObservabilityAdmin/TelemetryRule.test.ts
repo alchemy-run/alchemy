@@ -1,16 +1,14 @@
-import * as AWS from "@/AWS";
-import { TelemetryRule } from "@/AWS/ObservabilityAdmin";
-import * as Test from "@/Test/Alchemy";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import { describe, expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { TelemetryRule } from "@/AWS/ObservabilityAdmin";
+import * as Test from "@/Test/Alchemy";
 import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 
-const { test, beforeAll, afterAll } = Test.make({
-  providers: AWS.providers(),
-});
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
 const testLease = makeObservabilityAdminTestLease();
 
 beforeAll(testLease.acquire, { timeout: 3_600_000 });
@@ -28,8 +26,7 @@ const awaitSettled = readStatus.pipe(
   }),
 );
 
-const isOn = (status: string): boolean =>
-  status === "RUNNING" || status === "STARTING";
+const isOn = (status: string): boolean => status === "RUNNING" || status === "STARTING";
 
 /** Restore the account's telemetry config onboarding to its pre-test state. */
 const restoreTo = (prior: string) =>
@@ -98,34 +95,22 @@ describe.sequential(
             expect(created.ruleArn).toContain("telemetry-rule");
             expect(created.telemetryType).toBe("Logs");
             expect(created.resourceType).toBe("AWS::EC2::VPC");
-            const got = yield* obs.getTelemetryRule({
-              RuleIdentifier: created.ruleName,
-            });
-            expect(
-              got.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
-            ).toBe(30);
+            const got = yield* obs.getTelemetryRule({ RuleIdentifier: created.ruleName });
+            expect(got.TelemetryRule?.DestinationConfiguration?.RetentionInDays).toBe(30);
 
             // Update in place — the Duration prop lands as whole wire days and
             // the ARN is stable (no replacement).
             const updated = yield* deployRule("60 days");
             expect(updated.ruleArn).toBe(created.ruleArn);
-            const got2 = yield* obs.getTelemetryRule({
-              RuleIdentifier: created.ruleName,
-            });
-            expect(
-              got2.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
-            ).toBe(60);
+            const got2 = yield* obs.getTelemetryRule({ RuleIdentifier: created.ruleName });
+            expect(got2.TelemetryRule?.DestinationConfiguration?.RetentionInDays).toBe(60);
 
             // Destroy — the rule is gone (typed check, not a catch-all).
             yield* stack.destroy();
-            const gone = yield* obs
-              .getTelemetryRule({ RuleIdentifier: created.ruleName })
-              .pipe(
-                Effect.map(() => false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
-              );
+            const gone = yield* obs.getTelemetryRule({ RuleIdentifier: created.ruleName }).pipe(
+              Effect.map(() => false),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+            );
             expect(gone).toBe(true);
           }).pipe(
             // Always restore the account's onboarding state, even on failure.

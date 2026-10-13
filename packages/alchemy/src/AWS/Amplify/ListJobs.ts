@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface ListJobsRequest extends Omit<
-  amplify.ListJobsRequest,
-  "appId"
-> {}
+export interface ListJobsRequest extends Omit<amplify.ListJobsRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:ListJobs`.
@@ -36,9 +33,7 @@ export interface ListJobs extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: ListJobsRequest,
-    ) => Effect.Effect<amplify.ListJobsResult, amplify.ListJobsError>
+    (request: ListJobsRequest) => Effect.Effect<amplify.ListJobsResult, amplify.ListJobsError>
   >
 > {}
 

@@ -37,13 +37,9 @@ export interface DeleteApplicationSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteApplicationSnapshotRequest,
-    ) => Effect.Effect<
-      SVC.DeleteApplicationSnapshotResponse,
-      SVC.DeleteApplicationSnapshotError
-    >
+    ) => Effect.Effect<SVC.DeleteApplicationSnapshotResponse, SVC.DeleteApplicationSnapshotError>
   >
 > {}
-export const DeleteApplicationSnapshot =
-  Binding.Service<DeleteApplicationSnapshot>(
-    "AWS.KinesisAnalyticsV2.DeleteApplicationSnapshot",
-  );
+export const DeleteApplicationSnapshot = Binding.Service<DeleteApplicationSnapshot>(
+  "AWS.KinesisAnalyticsV2.DeleteApplicationSnapshot",
+);

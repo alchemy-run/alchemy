@@ -1,7 +1,6 @@
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -44,13 +43,7 @@ export type CmbConfigAttributes = {
   allowOutOfRegionAccess: boolean | undefined;
 };
 
-export type CmbConfig = Resource<
-  TypeId,
-  CmbConfigProps,
-  CmbConfigAttributes,
-  never,
-  Providers
->;
+export type CmbConfig = Resource<TypeId, CmbConfigProps, CmbConfigAttributes, never, Providers>;
 
 /**
  * The account-level Customer Metadata Boundary (CMB) configuration for
@@ -118,8 +111,7 @@ export const CmbConfigProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId: envAccountId } = yield* yield* CloudflareEnvironment;
       const accountId =
-        output?.accountId ??
-        (typeof olds?.accountId === "string" ? olds.accountId : envAccountId);
+        output?.accountId ?? (typeof olds?.accountId === "string" ? olds.accountId : envAccountId);
       const observed = yield* getCmbConfig(accountId);
       // Unconfigured account — the singleton does not currently exist.
       if (observed === undefined) return undefined;
@@ -153,8 +145,7 @@ export const CmbConfigProvider = () =>
         observed !== undefined &&
         (observed.regions ?? undefined) === news.regions &&
         (desiredAllowOutOfRegionAccess === undefined ||
-          (observed.allowOutOfRegionAccess ?? false) ===
-            desiredAllowOutOfRegionAccess);
+          (observed.allowOutOfRegionAccess ?? false) === desiredAllowOutOfRegionAccess);
       if (inSync) {
         return toAttributes(accountId, observed);
       }
@@ -177,12 +168,7 @@ export const CmbConfigProvider = () =>
       if (observed === undefined) return;
       yield* logs
         .deleteControlCmbConfig({ accountId: output.accountId })
-        .pipe(
-          Effect.catchTag(
-            ["CmbConfigNotFound", "InvalidRoute"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["CmbConfigNotFound", "InvalidRoute"], () => Effect.void));
     }),
   });
 
@@ -194,9 +180,7 @@ export const CmbConfigProvider = () =>
 const getCmbConfig = (accountId: string) =>
   logs.getControlCmbConfig({ accountId }).pipe(
     Effect.map((config) =>
-      config.regions === undefined || config.regions === null
-        ? undefined
-        : config,
+      config.regions === undefined || config.regions === null ? undefined : config,
     ),
     // Accounts without the Compliance/CMB entitlement get
     // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
@@ -207,9 +191,7 @@ const getCmbConfig = (accountId: string) =>
 
 const toAttributes = (
   accountId: string,
-  config:
-    | logs.GetControlCmbConfigResponse
-    | logs.CreateControlCmbConfigResponse,
+  config: logs.GetControlCmbConfigResponse | logs.CreateControlCmbConfigResponse,
 ): CmbConfigAttributes => ({
   accountId,
   regions: config.regions ?? undefined,

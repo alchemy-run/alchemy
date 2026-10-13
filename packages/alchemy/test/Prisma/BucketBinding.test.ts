@@ -1,31 +1,27 @@
-import { bucketAccessKeyLogicalId } from "@/Prisma/BucketBinding";
-import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
-import type { ReadBucketClient } from "@/Prisma/ReadBucket";
-import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
-import type { WriteBucketClient } from "@/Prisma/WriteBucket";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Prisma from "@/Prisma";
+import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
+import { bucketAccessKeyLogicalId } from "@/Prisma/BucketBinding";
+import type { ReadBucketClient } from "@/Prisma/ReadBucket";
+import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
+import type { WriteBucketClient } from "@/Prisma/WriteBucket";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
 // The access-level split is a type-level contract first: a Read client must
 // not offer a way to write, and a Write client must not offer a way to read.
-type _ReadHasNoWrites = Expect<
-  Equal<Extract<keyof ReadBucketClient, "put" | "delete">, never>
->;
+type _ReadHasNoWrites = Expect<Equal<Extract<keyof ReadBucketClient, "put" | "delete">, never>>;
 type _WriteHasNoReads = Expect<
   Equal<Extract<keyof WriteBucketClient, "get" | "head" | "list">, never>
 >;
@@ -33,26 +29,16 @@ type _ReadWriteHasBoth = Expect<
   Equal<Extract<keyof ReadWriteBucketClient, "get" | "put">, "get" | "put">
 >;
 
-const bucket = {
-  Type: "Prisma.Bucket",
-  LogicalId: "Uploads",
-  FQN: "Api/Uploads",
-} as PrismaBucket;
+const bucket = { Type: "Prisma.Bucket", LogicalId: "Uploads", FQN: "Api/Uploads" } as PrismaBucket;
 
 describe(
   "Prisma bucket binding identity",
   { tags: ["unit", "provider:prisma", "provider:prisma:bucket", "local"] },
   () => {
     it("derives a stable bucket key logical id per bucket and access level", () => {
-      expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
-        "UploadsReadBucketAccessKey",
-      );
-      expect(bucketAccessKeyLogicalId(bucket, "Write")).toBe(
-        "UploadsWriteBucketAccessKey",
-      );
-      expect(bucketAccessKeyLogicalId(bucket, "ReadWrite")).toBe(
-        "UploadsReadWriteBucketAccessKey",
-      );
+      expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe("UploadsReadBucketAccessKey");
+      expect(bucketAccessKeyLogicalId(bucket, "Write")).toBe("UploadsWriteBucketAccessKey");
+      expect(bucketAccessKeyLogicalId(bucket, "ReadWrite")).toBe("UploadsReadWriteBucketAccessKey");
       // Stable across calls: the deployed bundle has to derive the same id.
       expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
         bucketAccessKeyLogicalId({ LogicalId: "Uploads" }, "Read"),
@@ -61,16 +47,7 @@ describe(
   },
 );
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Prisma.providers(),
-});
-
-const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials =
-  !!process.env.PRISMA_SERVICE_TOKEN?.trim() ||
-  !!process.env.PRISMA_API_TOKEN?.trim() ||
-  process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
-const runLive = wantsLive && hasLiveCredentials;
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers: Prisma.providers() });
 
 // One Prisma Compute deploy alone can take the full 600s Compute.live.test.ts
 // budgets for it; this stack deploys three of them plus a project, a bucket
@@ -78,31 +55,9 @@ const runLive = wantsLive && hasLiveCredentials;
 const HOOK_TIMEOUT = 1_200_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-if (wantsLive && !hasLiveCredentials) {
-  test(
-    "requires Prisma credentials for the live bucket binding suite",
-    Effect.fail(
-      new Error(
-        [
-          "Live Prisma bucket binding suite requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy profile` and add Prisma with `Service Token`,",
-          "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
-        ].join(" "),
-      ),
-    ),
-    { tags: ["provider:prisma", "provider:prisma:bucket", "live"] },
-  );
-}
-
-class AppNotReady extends Data.TaggedError("AppNotReady")<{
-  status: number;
-  body: string;
-}> {}
+class AppNotReady extends Data.TaggedError("AppNotReady")<{ status: number; body: string }> {}
 
 // Bounded spaced schedule — caps total wait so a genuine failure surfaces
 // fast instead of an uncapped exponential blowing past the test timeout
@@ -110,23 +65,16 @@ class AppNotReady extends Data.TaggedError("AppNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 /** Retry an HTTP call until it returns 200 (rides out the app endpoint's deploy propagation). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new AppNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new AppNotReady({ status: res.status, body }))),
           ),
     ),
-    Effect.retry({
-      while: (e): e is AppNotReady => e instanceof AppNotReady,
-      schedule: ready,
-    }),
+    Effect.retry({ while: (e): e is AppNotReady => e instanceof AppNotReady, schedule: ready }),
   );
 
 // Reads assert directly with no retry-until-match: Prisma Object Store is
@@ -171,9 +119,7 @@ const put = (base: string, key: string, value: string, options?: PutQuery) => {
   }
   return untilOk(
     HttpClient.execute(
-      HttpClientRequest.put(`${base}/put?${params}`).pipe(
-        HttpClientRequest.bodyText(value),
-      ),
+      HttpClientRequest.put(`${base}/put?${params}`).pipe(HttpClientRequest.bodyText(value)),
     ),
   );
 };
@@ -181,9 +127,7 @@ const put = (base: string, key: string, value: string, options?: PutQuery) => {
 const del = (base: string, key: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.make("DELETE")(
-        `${base}/del?key=${encodeURIComponent(key)}`,
-      ),
+      HttpClientRequest.make("DELETE")(`${base}/del?key=${encodeURIComponent(key)}`),
     ),
   );
 
@@ -199,12 +143,7 @@ const delMany = (base: string, keys: string[]) =>
 /** One page of `/list`, with the paging fields the client reports. */
 const listPage = (
   base: string,
-  query: {
-    prefix: string;
-    delimiter?: string;
-    limit?: number;
-    cursor?: string;
-  },
+  query: { prefix: string; delimiter?: string; limit?: number; cursor?: string },
 ) => {
   const params = new URLSearchParams({ prefix: query.prefix });
   if (query.delimiter) params.set("delimiter", query.delimiter);
@@ -302,10 +241,7 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     expect(first.keys.length).toBe(2);
     expect(first.truncated).toBe(true);
     expect(typeof first.cursor).toBe("string");
-    const second = yield* listPage(readBase, {
-      prefix: page,
-      cursor: first.cursor ?? undefined,
-    });
+    const second = yield* listPage(readBase, { prefix: page, cursor: first.cursor ?? undefined });
     expect([...first.keys, ...second.keys]).toContain(`${page}c`);
 
     const rolled = yield* listPage(readBase, { prefix, delimiter: "/" });
@@ -318,9 +254,7 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     const payload = `${label}-presigned-payload`;
     const putUrl = yield* presign(writeBase, "presign-put", pk, "text/plain");
     const uploaded = yield* HttpClient.execute(
-      HttpClientRequest.put(putUrl).pipe(
-        HttpClientRequest.bodyText(payload, "text/plain"),
-      ),
+      HttpClientRequest.put(putUrl).pipe(HttpClientRequest.bodyText(payload, "text/plain")),
     );
     expect(uploaded.status).toBe(200);
 
@@ -342,7 +276,7 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
  * The stack lives in `fixtures/stack.ts` so it can also be inspected
  * directly, e.g. `alchemy logs --tail --stage test --config ./test/Prisma/fixtures/stack.ts`.
  */
-describe.skipIf(!runLive)(
+describe(
   "Prisma bucket binding over deployed hosts",
   {
     tags: [
@@ -355,9 +289,7 @@ describe.skipIf(!runLive)(
   },
   () => {
     const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
-    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-      timeout: HOOK_TIMEOUT,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: HOOK_TIMEOUT });
 
     test(
       "write + read across separate compute apps",

@@ -4,8 +4,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { ChildProcess } from "effect/unstable/process";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { ChildProcess } from "effect/process";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import { exec } from "../../Util/exec.ts";
 
 /**
@@ -38,18 +38,11 @@ export const isTransientDbError = (error: CliError): boolean => {
   const meta = error.meta ?? {};
   // The CLI reports the driver's errno under `sqlState` for connection
   // failures (`ECONNREFUSED`, ...) and a real SQLSTATE for statement ones.
-  const errno = [meta.sqlState, meta.code].find(
-    (value) => typeof value === "string",
-  );
+  const errno = [meta.sqlState, meta.code].find((value) => typeof value === "string");
   return (
-    [
-      "ECONNREFUSED",
-      "ECONNRESET",
-      "ENOTFOUND",
-      "ETIMEDOUT",
-      "EAI_AGAIN",
-    ].includes(errno as string) ||
-    /connection|timeout|reachable/i.test(error.message)
+    ["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN"].includes(
+      errno as string,
+    ) || /connection|timeout|reachable/i.test(error.message)
   );
 };
 
@@ -91,8 +84,7 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
   const manifest = yield* fs.readFileString(manifestPath).pipe(
     Effect.flatMap((text) =>
       Effect.try({
-        try: () =>
-          JSON.parse(text) as { bin?: Record<string, string> | string },
+        try: () => JSON.parse(text) as { bin?: Record<string, string> | string },
         catch: (cause) =>
           new CliError({
             message: `Failed to parse ${manifestPath}: ${cause}`,
@@ -105,14 +97,11 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
         : new CliError({ message: `Failed to read ${manifestPath}: ${cause}` }),
     ),
   );
-  const bin =
-    typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
+  const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
   if (bin === undefined) {
-    return yield* Effect.fail(
-      new CliError({
-        message: `The installed "prisma" package declares no \`prisma\` bin (${manifestPath}).`,
-      }),
-    );
+    return yield* new CliError({
+      message: `The installed "prisma" package declares no \`prisma\` bin (${manifestPath}).`,
+    });
   }
   return path.resolve(path.dirname(manifestPath), bin);
 });
@@ -174,24 +163,16 @@ const parseEnvelope = (stdout: string): CliEnvelope | undefined => {
 export const runPrismaCli = <T>(
   args: readonly string[],
   options: { readonly cwd: string },
-): Effect.Effect<
-  T,
-  CliError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-> =>
+): Effect.Effect<T, CliError, FileSystem.FileSystem | Path.Path | ChildProcessSpawner> =>
   Effect.gen(function* () {
     const bin = yield* resolvePrismaCliBin;
     const nodeExecPath = yield* Effect.sync(() => process.execPath);
     const result = yield* exec(
-      ChildProcess.make(
-        nodeExecPath,
-        [bin, ...args, "--json", "--no-interactive"],
-        {
-          cwd: options.cwd,
-          env: { PRISMA_DISABLE_TELEMETRY: "1", DO_NOT_TRACK: "1" },
-          extendEnv: true,
-        },
-      ),
+      ChildProcess.make(nodeExecPath, [bin, ...args, "--json", "--no-interactive"], {
+        cwd: options.cwd,
+        env: { PRISMA_DISABLE_TELEMETRY: "1", DO_NOT_TRACK: "1" },
+        extendEnv: true,
+      }),
     ).pipe(
       // exec fully drains stdout/stderr and the exit code before returning,
       // so the process handle's scope can close right here.
@@ -214,20 +195,16 @@ export const runPrismaCli = <T>(
       const fix = (error.nextActions ?? envelope.nextActions ?? []).find(
         (action) => typeof action.label === "string",
       )?.label;
-      return yield* Effect.fail(
-        new CliError({
-          code: error.code,
-          message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
-          fix,
-          meta: error.meta,
-        }),
-      );
+      return yield* new CliError({
+        code: error.code,
+        message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
+        fix,
+        meta: error.meta,
+      });
     }
-    return yield* Effect.fail(
-      new CliError({
-        message: `prisma ${args.slice(0, 2).join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
-      }),
-    );
+    return yield* new CliError({
+      message: `prisma ${args.slice(0, 2).join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
+    });
   });
 
 /** `prisma contract emit --json` result. */
@@ -317,18 +294,14 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
       rewritten = rewritten.replaceAll(internal, publicPrefix);
     }
     if (rewritten.includes("@internal/")) {
-      const leftover = rewritten
-        .split("\n")
-        .find((line) => line.includes("@internal/"));
-      return yield* Effect.fail(
-        new CliError({
-          message: [
-            `Emitted ${dtsPath} references an unpublished @internal/* module this`,
-            `integration does not know how to map yet: ${leftover?.trim()}`,
-            "Please report this — the emitted types will not resolve until it is mapped.",
-          ].join("\n"),
-        }),
-      );
+      const leftover = rewritten.split("\n").find((line) => line.includes("@internal/"));
+      return yield* new CliError({
+        message: [
+          `Emitted ${dtsPath} references an unpublished @internal/* module this`,
+          `integration does not know how to map yet: ${leftover?.trim()}`,
+          "Please report this — the emitted types will not resolve until it is mapped.",
+        ].join("\n"),
+      });
     }
     yield* fs.writeFileString(dtsPath, rewritten);
   });
@@ -404,9 +377,7 @@ export const readMigrationPackages = (migrationsDirAbs: string) =>
 export const resolveGraphHead = (
   packages: readonly MigrationPackage[],
 ): MigrationPackage | undefined => {
-  const froms = new Set(
-    packages.flatMap((pkg) => (pkg.from === null ? [] : [pkg.from])),
-  );
+  const froms = new Set(packages.flatMap((pkg) => (pkg.from === null ? [] : [pkg.from])));
   const heads = packages.filter((pkg) => !froms.has(pkg.to));
   return heads.at(-1);
 };

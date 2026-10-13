@@ -7,17 +7,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readIotWirelessTags,
-  sameShape,
-  syncIotWirelessTags,
-} from "./internal.ts";
+import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
 
 /**
  * LoRaWAN OTAA v1.1 activation keys. The root keys (`AppKey`, `NwkKey`) are
@@ -223,9 +215,7 @@ export interface WirelessDevice extends Resource<
  *
  * @resource
  */
-export const WirelessDevice = Resource<WirelessDevice>(
-  "AWS.IoTWireless.WirelessDevice",
-);
+export const WirelessDevice = Resource<WirelessDevice>("AWS.IoTWireless.WirelessDevice");
 
 const unwrap = (value: Redacted.Redacted<string> | undefined) =>
   value === undefined ? undefined : Redacted.value(value);
@@ -234,9 +224,7 @@ const unwrap = (value: Redacted.Redacted<string> | undefined) =>
  * Convert the Redacted-keyed LoRaWAN prop shape to the plain wire shape the
  * IoT Wireless API expects.
  */
-const toWireLoRaWAN = (
-  loRaWAN: LoRaWANDeviceProps | undefined,
-): iotw.LoRaWANDevice | undefined =>
+const toWireLoRaWAN = (loRaWAN: LoRaWANDeviceProps | undefined): iotw.LoRaWANDevice | undefined =>
   loRaWAN === undefined
     ? undefined
     : {
@@ -270,15 +258,9 @@ const toWireLoRaWAN = (
                   loRaWAN.AbpV1_1.SessionKeys === undefined
                     ? undefined
                     : {
-                        FNwkSIntKey: unwrap(
-                          loRaWAN.AbpV1_1.SessionKeys.FNwkSIntKey,
-                        ),
-                        SNwkSIntKey: unwrap(
-                          loRaWAN.AbpV1_1.SessionKeys.SNwkSIntKey,
-                        ),
-                        NwkSEncKey: unwrap(
-                          loRaWAN.AbpV1_1.SessionKeys.NwkSEncKey,
-                        ),
+                        FNwkSIntKey: unwrap(loRaWAN.AbpV1_1.SessionKeys.FNwkSIntKey),
+                        SNwkSIntKey: unwrap(loRaWAN.AbpV1_1.SessionKeys.SNwkSIntKey),
+                        NwkSEncKey: unwrap(loRaWAN.AbpV1_1.SessionKeys.NwkSEncKey),
                         AppSKey: unwrap(loRaWAN.AbpV1_1.SessionKeys.AppSKey),
                       },
               },
@@ -312,33 +294,21 @@ export const WirelessDeviceProvider = () =>
   Provider.effect(
     WirelessDevice,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getBy = (identifier: string, type: iotw.WirelessDeviceIdType) =>
         iotw
           .getWirelessDevice({ Identifier: identifier, IdentifierType: type })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const observe = Effect.fn(function* (
         output: WirelessDevice["Attributes"] | undefined,
         props: WirelessDeviceProps,
       ) {
         if (output?.wirelessDeviceId !== undefined) {
-          const found = yield* getBy(
-            output.wirelessDeviceId,
-            "WirelessDeviceId",
-          );
+          const found = yield* getBy(output.wirelessDeviceId, "WirelessDeviceId");
           if (found !== undefined) return found;
         }
         // Recover identity by the device's radio identifier when state was
@@ -347,18 +317,12 @@ export const WirelessDeviceProvider = () =>
           return yield* getBy(props.loRaWAN.DevEui, "DevEui");
         }
         if (props.sidewalk?.SidewalkManufacturingSn !== undefined) {
-          return yield* getBy(
-            props.sidewalk.SidewalkManufacturingSn,
-            "SidewalkManufacturingSn",
-          );
+          return yield* getBy(props.sidewalk.SidewalkManufacturingSn, "SidewalkManufacturingSn");
         }
         return undefined;
       });
 
-      const toAttrs = Effect.fn(function* (
-        device: iotw.GetWirelessDeviceResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (device: iotw.GetWirelessDeviceResponse, name: string) {
         if (device.Id === undefined || device.Arn === undefined) {
           return yield* Effect.fail(
             new Error(`IoT Wireless device '${name}' returned without Id/Arn`),
@@ -400,8 +364,7 @@ export const WirelessDeviceProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = olds ?? { type: "LoRaWAN", destinationName: "" };
-          const name =
-            output?.wirelessDeviceName ?? (yield* createName(id, props));
+          const name = output?.wirelessDeviceName ?? (yield* createName(id, props));
           const device = yield* observe(output, props);
           if (device === undefined) return undefined;
           const attrs = yield* toAttrs(device, name);
@@ -425,17 +388,13 @@ export const WirelessDeviceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            olds?.sidewalk?.SidewalkManufacturingSn !==
-            news.sidewalk?.SidewalkManufacturingSn
-          ) {
+          if (olds?.sidewalk?.SidewalkManufacturingSn !== news.sidewalk?.SidewalkManufacturingSn) {
             return { action: "replace" } as const;
           }
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.wirelessDeviceName ?? (yield* createName(id, news));
+          const name = output?.wirelessDeviceName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -457,11 +416,7 @@ export const WirelessDeviceProvider = () =>
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             device =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessDeviceId")
@@ -477,18 +432,14 @@ export const WirelessDeviceProvider = () =>
           // 3. SYNC — apply the mutable-aspect delta from OBSERVED state.
           const nameDelta = device.Name !== name;
           const descriptionDelta =
-            news.description !== undefined &&
-            device.Description !== news.description;
-          const destinationDelta =
-            device.DestinationName !== news.destinationName;
+            news.description !== undefined && device.Description !== news.description;
+          const destinationDelta = device.DestinationName !== news.destinationName;
           const positioningDelta =
-            news.positioning !== undefined &&
-            device.Positioning !== news.positioning;
+            news.positioning !== undefined && device.Positioning !== news.positioning;
           const profileDelta =
             news.loRaWAN !== undefined &&
             (device.LoRaWAN?.DeviceProfileId !== news.loRaWAN.DeviceProfileId ||
-              device.LoRaWAN?.ServiceProfileId !==
-                news.loRaWAN.ServiceProfileId ||
+              device.LoRaWAN?.ServiceProfileId !== news.loRaWAN.ServiceProfileId ||
               !sameShape(device.LoRaWAN?.FPorts, news.loRaWAN.FPorts));
           if (
             nameDelta ||
@@ -518,10 +469,7 @@ export const WirelessDeviceProvider = () =>
           yield* syncIotWirelessTags(attrs.wirelessDeviceArn, desiredTags);
 
           // 4. RETURN fresh attributes.
-          const final = yield* getBy(
-            attrs.wirelessDeviceId,
-            "WirelessDeviceId",
-          );
+          const final = yield* getBy(attrs.wirelessDeviceId, "WirelessDeviceId");
           if (final === undefined) {
             return yield* Effect.fail(
               new Error(`IoT Wireless device '${name}' vanished during update`),
@@ -532,12 +480,10 @@ export const WirelessDeviceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* iotw
-            .deleteWirelessDevice({ Id: output.wirelessDeviceId })
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* iotw.deleteWirelessDevice({ Id: output.wirelessDeviceId }).pipe(
+            Effect.asVoid,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

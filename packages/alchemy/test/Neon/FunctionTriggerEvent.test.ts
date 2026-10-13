@@ -1,6 +1,6 @@
-import { decodeFunctionTriggerEvent } from "@/Neon/FunctionTriggerEvent";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { decodeFunctionTriggerEvent } from "@/Neon/FunctionTriggerEvent";
 
 const payload = {
   version: 1,
@@ -10,23 +10,15 @@ const payload = {
 };
 const request = (
   body: unknown,
-  headers: Record<string, string> = {
-    "x-neon-trigger-invocation-id": "occurrence",
-  },
+  headers: Record<string, string> = { "x-neon-trigger-invocation-id": "occurrence" },
 ) =>
-  new Request("https://example.test/jobs", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  new Request("https://example.test/jobs", { method: "POST", headers, body: JSON.stringify(body) });
 
 test.effect(
   "validates the versioned schedule envelope and attested header",
   () =>
     Effect.gen(function* () {
-      const event = yield* decodeFunctionTriggerEvent(
-        yield* Effect.sync(() => request(payload)),
-      );
+      const event = yield* decodeFunctionTriggerEvent(yield* Effect.sync(() => request(payload)));
       expect(event).toEqual(payload);
     }),
   { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
@@ -34,12 +26,7 @@ test.effect(
 
 for (const [name, body, headers, status] of [
   ["missing attestation", payload, {}, 403],
-  [
-    "mismatched attestation",
-    payload,
-    { "x-neon-trigger-invocation-id": "other" },
-    403,
-  ],
+  ["mismatched attestation", payload, { "x-neon-trigger-invocation-id": "other" }, 403],
   [
     "future version",
     { ...payload, version: 2 },
@@ -61,9 +48,7 @@ for (const [name, body, headers, status] of [
           yield* Effect.sync(() => request(body, headers)),
         ).pipe(
           Effect.as(200),
-          Effect.catchTag("FunctionTriggerEventError", (error) =>
-            Effect.succeed(error.status),
-          ),
+          Effect.catchTag("FunctionTriggerEventError", (error) => Effect.succeed(error.status)),
         );
         expect(result).toBe(status);
       }),

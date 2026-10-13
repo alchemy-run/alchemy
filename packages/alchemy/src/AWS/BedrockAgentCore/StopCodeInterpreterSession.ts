@@ -42,7 +42,6 @@ export interface StopCodeInterpreterSession extends Binding.Service<
     >
   >
 > {}
-export const StopCodeInterpreterSession =
-  Binding.Service<StopCodeInterpreterSession>(
-    "AWS.BedrockAgentCore.StopCodeInterpreterSession",
-  );
+export const StopCodeInterpreterSession = Binding.Service<StopCodeInterpreterSession>(
+  "AWS.BedrockAgentCore.StopCodeInterpreterSession",
+);

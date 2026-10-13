@@ -28,9 +28,7 @@ export interface GetLFTag extends Binding.Service<
   GetLFTag,
   "AWS.LakeFormation.GetLFTag",
   () => Effect.Effect<
-    (
-      request: GetLFTagRequest,
-    ) => Effect.Effect<lf.GetLFTagResponse, lf.GetLFTagError>
+    (request: GetLFTagRequest) => Effect.Effect<lf.GetLFTagResponse, lf.GetLFTagError>
   >
 > {}
 

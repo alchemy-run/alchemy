@@ -2,6 +2,11 @@
   "name": "neon-website-nuxt",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/neon-website-nuxt"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -19,15 +24,10 @@
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
+    "@vercel/nft": "catalog:",
     "nitropack": "catalog:",
     "nuxt": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:",
-    "@vercel/nft": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/neon-website-nuxt"
+    "typescript": "catalog:"
   }
 }

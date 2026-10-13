@@ -1,8 +1,8 @@
-import { retryWorkerScriptNotFound } from "@/Cloudflare/Email/retry";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
+import { retryWorkerScriptNotFound } from "@/Cloudflare/Email/retry";
 
 // Cloudflare rejects a rule whose `worker` action names a script it cannot see
 // yet with code 2016 / `WorkerScriptNotFound`. Distilled surfaces that as a
@@ -37,35 +37,27 @@ const flaky = <E>(failures: number, error: E) => {
 // Advance virtual time to exercise the production backoff without wall-clock waits.
 describe(
   "retryWorkerScriptNotFound",
-  {
-    tags: ["unit", "provider:cloudflare", "provider:cloudflare:email", "local"],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:email", "local"] },
   () => {
-    it.effect(
-      "retries while the script is not yet visible, then succeeds",
-      () =>
-        Effect.gen(function* () {
-          const target = flaky(2, new WorkerScriptNotFound());
+    it.effect("retries while the script is not yet visible, then succeeds", () =>
+      Effect.gen(function* () {
+        const target = flaky(2, new WorkerScriptNotFound());
 
-          const fiber = yield* retryWorkerScriptNotFound(target.effect).pipe(
-            Effect.forkChild,
-          );
-          yield* TestClock.adjust("1 second");
-          const result = yield* Fiber.join(fiber);
+        const fiber = yield* retryWorkerScriptNotFound(target.effect).pipe(Effect.forkChild);
+        yield* TestClock.adjust("1 second");
+        const result = yield* Fiber.join(fiber);
 
-          expect(result).toBe("ok");
-          // Two not-visible-yet failures plus the success.
-          expect(target.attempts()).toBe(3);
-        }),
+        expect(result).toBe("ok");
+        // Two not-visible-yet failures plus the success.
+        expect(target.attempts()).toBe(3);
+      }),
     );
 
     it.effect("does not retry an unrelated failure", () =>
       Effect.gen(function* () {
         const target = flaky(99, new SomethingElse());
 
-        const outcome = yield* Effect.result(
-          retryWorkerScriptNotFound(target.effect),
-        );
+        const outcome = yield* Effect.result(retryWorkerScriptNotFound(target.effect));
 
         expect(outcome._tag).toBe("Failure");
         // Attempted once and given up — no backoff burned on a permanent error.
@@ -82,9 +74,9 @@ describe(
           // rather than hanging.
           const target = flaky(Number.MAX_SAFE_INTEGER, error);
 
-          const fiber = yield* Effect.result(
-            retryWorkerScriptNotFound(target.effect),
-          ).pipe(Effect.forkChild);
+          const fiber = yield* Effect.result(retryWorkerScriptNotFound(target.effect)).pipe(
+            Effect.forkChild,
+          );
           yield* TestClock.adjust("30 seconds");
           const outcome = yield* Fiber.join(fiber);
 

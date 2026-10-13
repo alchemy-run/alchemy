@@ -1,15 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
+import * as athena from "@distilled.cloud/aws/athena";
+import * as glue from "@distilled.cloud/aws/glue";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as athena from "@distilled.cloud/aws/athena";
-import * as glue from "@distilled.cloud/aws/glue";
-
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AthenaTestFunctionLive, { AthenaTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -42,9 +41,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -55,10 +52,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       // persistent 500 surfaces its body instead of an opaque timeout.
       // 31s was not enough under a loaded full-suite run (`--concurrency 64`),
       // where the emulator's Lambda invokes queue behind everything else.
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
@@ -78,9 +72,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Athena Query setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Athena Query setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo(
@@ -100,15 +92,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 404
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -128,26 +115,17 @@ describe(
         // `Core.withProviders` to supply AWS credentials.
         yield* Core.withProviders(
           Effect.gen(function* () {
-            const db = yield* glue
-              .getDatabase({ Name: "alchemy_athena_e2e" })
-              .pipe(
-                Effect.map((res) => res.Database),
-                Effect.catchTag("EntityNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            const db = yield* glue.getDatabase({ Name: "alchemy_athena_e2e" }).pipe(
+              Effect.map((res) => res.Database),
+              Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+            );
             expect(db).toBeUndefined();
 
             const catalog = yield* athena
-              .getDataCatalog({
-                Name: "alchemy_athena_e2e_catalog",
-                WorkGroup: "primary",
-              })
+              .getDataCatalog({ Name: "alchemy_athena_e2e_catalog", WorkGroup: "primary" })
               .pipe(
                 Effect.map((res) => res.DataCatalog),
-                Effect.catchTag("DataCatalogNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
               );
             expect(catalog).toBeUndefined();
           }),
@@ -162,9 +140,7 @@ describe(
       "runs SELECT 1 through the binding (execute + poll + results)",
       () =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/select-one`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/select-one`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as {
             state: string;
@@ -186,9 +162,7 @@ describe(
           const seeded = yield* send(HttpClientRequest.post(`${baseUrl}/seed`));
           expect(seeded.status).toBe(200);
 
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/count`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/count`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as {
             state: string;
@@ -207,9 +181,7 @@ describe(
     let execId: string | undefined;
     const ensureExecId = Effect.gen(function* () {
       if (execId) return execId;
-      const response = yield* send(
-        HttpClientRequest.get(`${baseUrl}/exec/run`),
-      );
+      const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/run`));
       expect(response.status).toBe(200);
       const body = (yield* response.json) as { id: string };
       execId = body.id;
@@ -222,14 +194,9 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`));
             expect(response.status).toBe(200);
-            const body = (yield* response.json) as {
-              state: string;
-              workGroup: string;
-            };
+            const body = (yield* response.json) as { state: string; workGroup: string };
             expect(body.state).toBe("SUCCEEDED");
             expect(body.workGroup).toBeTruthy();
           }),
@@ -243,14 +210,9 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/results?id=${id}`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/results?id=${id}`));
             expect(response.status).toBe(200);
-            const body = (yield* response.json) as {
-              rows: number;
-              columns: string[];
-            };
+            const body = (yield* response.json) as { rows: number; columns: string[] };
             // SELECT 1 → header row + value row.
             expect(body.rows).toBe(2);
             expect(body.columns.length).toBe(1);
@@ -265,9 +227,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/stats?id=${id}`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/stats?id=${id}`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { totalMillis: number };
             expect(body.totalMillis).toBeGreaterThan(0);
@@ -282,9 +242,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/batch?id=${id}`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/batch?id=${id}`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { states: string[] };
             expect(body.states).toEqual(["SUCCEEDED"]);
@@ -299,9 +257,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/list`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/list`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { ids: string[] };
             expect(body.ids).toContain(id);
@@ -316,14 +272,10 @@ describe(
         () =>
           Effect.gen(function* () {
             const id = yield* ensureExecId;
-            const stopped = yield* send(
-              HttpClientRequest.post(`${baseUrl}/exec/stop?id=${id}`),
-            );
+            const stopped = yield* send(HttpClientRequest.post(`${baseUrl}/exec/stop?id=${id}`));
             expect(stopped.status).toBe(200);
             // Still SUCCEEDED — stop did not flip a terminal state.
-            const after = yield* send(
-              HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`),
-            );
+            const after = yield* send(HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`));
             const body = (yield* after.json) as { state: string };
             expect(body.state).toBe("SUCCEEDED");
           }),
@@ -336,9 +288,7 @@ describe(
         "lists the workgroup's saved queries (workgroup injected)",
         () =>
           Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/named/list`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/named/list`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { ids: string[] };
             // The fixture saves exactly one named query in the (fresh) workgroup.
@@ -353,9 +303,7 @@ describe(
         "lists the workgroup's prepared statements (workgroup injected)",
         () =>
           Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/prepared/list`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/prepared/list`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { names: string[] };
             expect(body.names).toContain("alchemy_athena_e2e_stmt");
@@ -369,9 +317,7 @@ describe(
         "lists databases through the GLUE-backed catalog",
         () =>
           Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/catalog/databases`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/catalog/databases`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { names: string[] };
             expect(body.names).toContain("alchemy_athena_e2e");
@@ -386,9 +332,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const response = yield* send(
-              HttpClientRequest.get(
-                `${baseUrl}/catalog/database?name=alchemy_athena_e2e`,
-              ),
+              HttpClientRequest.get(`${baseUrl}/catalog/database?name=alchemy_athena_e2e`),
             );
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { name: string };
@@ -404,9 +348,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const response = yield* send(
-              HttpClientRequest.get(
-                `${baseUrl}/catalog/tables?db=alchemy_athena_e2e`,
-              ),
+              HttpClientRequest.get(`${baseUrl}/catalog/tables?db=alchemy_athena_e2e`),
             );
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { names: string[] };
@@ -422,9 +364,7 @@ describe(
         () =>
           Effect.gen(function* () {
             const response = yield* send(
-              HttpClientRequest.get(
-                `${baseUrl}/catalog/table?db=alchemy_athena_e2e&name=people`,
-              ),
+              HttpClientRequest.get(`${baseUrl}/catalog/table?db=alchemy_athena_e2e&name=people`),
             );
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { columns: string[] };
@@ -443,14 +383,9 @@ describe(
             // handler writes; retry the whole probe a few times to ride out
             // fresh-rule propagation on the default bus.
             const seen = yield* Effect.gen(function* () {
-              const response = yield* send(
-                HttpClientRequest.get(`${baseUrl}/events/probe`),
-              );
+              const response = yield* send(HttpClientRequest.get(`${baseUrl}/events/probe`));
               expect(response.status).toBe(200);
-              const body = (yield* response.json) as {
-                seen: boolean;
-                id: string;
-              };
+              const body = (yield* response.json) as { seen: boolean; id: string };
               return body.seen;
             }).pipe(
               Effect.repeat({

@@ -27,12 +27,7 @@ export interface ListCisScans extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListCisScansRequest,
-    ) => Effect.Effect<
-      inspector2.ListCisScansResponse,
-      inspector2.ListCisScansError
-    >
+    ) => Effect.Effect<inspector2.ListCisScansResponse, inspector2.ListCisScansError>
   >
 > {}
-export const ListCisScans = Binding.Service<ListCisScans>(
-  "AWS.Inspector2.ListCisScans",
-);
+export const ListCisScans = Binding.Service<ListCisScans>("AWS.Inspector2.ListCisScans");

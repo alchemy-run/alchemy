@@ -2,20 +2,12 @@ import type { Contract } from "@prisma/orm-postgres/contract/types";
 import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { effectGeneratorKey, type EffectGeneratorOptions } from "./generator.ts";
+import { CliError, rewriteEmittedTypes, runPrismaCli, type EmitResult } from "./internal.ts";
 import { emitSchemas, SchemaError } from "./Schema.ts";
-import {
-  effectGeneratorKey,
-  type EffectGeneratorOptions,
-} from "./generator.ts";
-import {
-  CliError,
-  rewriteEmittedTypes,
-  runPrismaCli,
-  type EmitResult,
-} from "./internal.ts";
 
 interface GeneratorConfig {
   readonly orm?: {
@@ -34,17 +26,14 @@ export const loadGeneratorConfig = Effect.fn(function* (configFile: string) {
   const url = yield* path.toFileUrl(absolute);
   const module = yield* Effect.tryPromise({
     try: () => import(url.href),
-    catch: (cause) =>
-      new CliError({ message: `Cannot load ${absolute}: ${String(cause)}` }),
+    catch: (cause) => new CliError({ message: `Cannot load ${absolute}: ${String(cause)}` }),
   });
   const config = module.default as GeneratorConfig | undefined;
   const options = config?.orm?.[effectGeneratorKey];
   if (!options || !config?.orm?.contract?.output) {
-    return yield* Effect.fail(
-      new CliError({
-        message: `Wrap the orm configuration in ${absolute} with withEffect(ormConfig(...), options) and specify output.`,
-      }),
-    );
+    return yield* new CliError({
+      message: `Wrap the orm configuration in ${absolute} with withEffect(ormConfig(...), options) and specify output.`,
+    });
   }
   const directory = path.dirname(absolute);
   return {
@@ -54,9 +43,7 @@ export const loadGeneratorConfig = Effect.fn(function* (configFile: string) {
     output: path.resolve(directory, config.orm.contract.output),
     inputs: [
       absolute,
-      ...(config.orm.contract.source?.inputs ?? []).map((input) =>
-        path.resolve(directory, input),
-      ),
+      ...(config.orm.contract.source?.inputs ?? []).map((input) => path.resolve(directory, input)),
     ],
   };
 });
@@ -94,9 +81,7 @@ export const generate = Effect.fn(function* (configFile: string) {
               ...error,
               message: [
                 error.message,
-                ...diagnostics.value.diagnostics.map(
-                  (diagnostic) => diagnostic.message,
-                ),
+                ...diagnostics.value.diagnostics.map((diagnostic) => diagnostic.message),
               ].join("\n"),
             })
           : error,
@@ -109,8 +94,7 @@ export const generate = Effect.fn(function* (configFile: string) {
   const text = yield* fs.readFileString(json);
   const contract = yield* Effect.try({
     try: () => JSON.parse(text) as Contract<SqlStorage>,
-    catch: (cause) =>
-      new CliError({ message: `Invalid emitted contract: ${String(cause)}` }),
+    catch: (cause) => new CliError({ message: `Invalid emitted contract: ${String(cause)}` }),
   });
   const directory = path.dirname(config.output);
   const jsonName = `./${path.basename(json)}`;
@@ -134,12 +118,8 @@ export const generate = Effect.fn(function* (configFile: string) {
   files["index.ts"] =
     header +
     [
-      ...(config.options.client !== false
-        ? ['export { makeDatabase } from "./client.ts";']
-        : []),
-      ...(config.options.schemas !== false
-        ? ['export { schemas } from "./schemas.ts";']
-        : []),
+      ...(config.options.client !== false ? ['export { makeDatabase } from "./client.ts";'] : []),
+      ...(config.options.schemas !== false ? ['export { schemas } from "./schemas.ts";'] : []),
     ].join("\n") +
     "\n";
   const owned = ["runtime.ts", "client.ts", "schemas.ts", "index.ts"];
@@ -148,11 +128,9 @@ export const generate = Effect.fn(function* (configFile: string) {
     if (yield* fs.exists(target)) {
       const previous = yield* fs.readFileString(target);
       if (!previous.startsWith(header)) {
-        return yield* Effect.fail(
-          new CliError({
-            message: `Refusing to overwrite non-generated file ${target}`,
-          }),
-        );
+        return yield* new CliError({
+          message: `Refusing to overwrite non-generated file ${target}`,
+        });
       }
     }
   }

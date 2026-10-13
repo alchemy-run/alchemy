@@ -1,20 +1,16 @@
-import * as AWS from "@/AWS";
-import { Recipe } from "@/AWS/DataBrew";
-import * as Test from "@/Test/Alchemy";
 import * as databrew from "@distilled.cloud/aws/databrew";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Recipe } from "@/AWS/DataBrew";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getWorkingRecipe = (name: string) =>
   databrew
     .describeRecipe({ Name: name, RecipeVersion: "LATEST_WORKING" })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, publish, update, delete DataBrew recipe",
@@ -42,9 +38,7 @@ test.provider(
       );
 
       expect(created.recipe.recipeName).toBeDefined();
-      expect(created.recipe.recipeArn).toContain(
-        `:recipe/${created.recipe.recipeName}`,
-      );
+      expect(created.recipe.recipeArn).toContain(`:recipe/${created.recipe.recipeName}`);
       // publish: true snapshots version 1.0 on create
       expect(created.recipe.recipeVersion).toEqual("1.0");
 
@@ -94,9 +88,7 @@ test.provider(
                   operation: "REMOVE_VALUES",
                   parameters: { sourceColumn: "email" },
                 },
-                conditionExpressions: [
-                  { condition: "IS_MISSING", targetColumn: "email" },
-                ],
+                conditionExpressions: [{ condition: "IS_MISSING", targetColumn: "email" }],
               },
             ],
             tags: { Environment: "test" },
@@ -109,9 +101,7 @@ test.provider(
       const reobserved = yield* getWorkingRecipe(created.recipe.recipeName);
       expect(reobserved?.Steps?.length).toEqual(2);
       expect(reobserved?.Steps?.[1]?.Action.Operation).toEqual("REMOVE_VALUES");
-      expect(
-        reobserved?.Steps?.[1]?.ConditionExpressions?.[0]?.Condition,
-      ).toEqual("IS_MISSING");
+      expect(reobserved?.Steps?.[1]?.ConditionExpressions?.[0]?.Condition).toEqual("IS_MISSING");
 
       // destroy deletes every version (published + working)
       yield* stack.destroy();

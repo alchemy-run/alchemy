@@ -29,12 +29,7 @@ export interface SearchProducts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: servicecatalog.SearchProductsInput,
-    ) => Effect.Effect<
-      servicecatalog.SearchProductsOutput,
-      servicecatalog.SearchProductsError
-    >
+    ) => Effect.Effect<servicecatalog.SearchProductsOutput, servicecatalog.SearchProductsError>
   >
 > {}
-export const SearchProducts = Binding.Service<SearchProducts>(
-  "AWS.ServiceCatalog.SearchProducts",
-);
+export const SearchProducts = Binding.Service<SearchProducts>("AWS.ServiceCatalog.SearchProducts");

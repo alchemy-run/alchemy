@@ -40,7 +40,6 @@ export interface GetAccountAuthorizationDetails extends Binding.Service<
     >
   >
 > {}
-export const GetAccountAuthorizationDetails =
-  Binding.Service<GetAccountAuthorizationDetails>(
-    "AWS.IAM.GetAccountAuthorizationDetails",
-  );
+export const GetAccountAuthorizationDetails = Binding.Service<GetAccountAuthorizationDetails>(
+  "AWS.IAM.GetAccountAuthorizationDetails",
+);

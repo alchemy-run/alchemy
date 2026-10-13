@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { DeliveryStream } from "@/AWS/Firehose";
-import * as Test from "@/Test/Alchemy";
 import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
@@ -8,14 +5,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DeliveryStream } from "@/AWS/Firehose";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 describe.skipIf(!!process.env.FAST)(
   "AWS.Firehose.DeliveryStream",
-  {
-    tags: ["provider:aws", "provider:aws:firehose", "provider:aws:s3", "live"],
-  },
+  { tags: ["provider:aws", "provider:aws:firehose", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "create DirectPut stream to S3, update destination settings, destroy",
@@ -26,13 +24,9 @@ describe.skipIf(!!process.env.FAST)(
 
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", { forceDestroy: true });
               const stream = yield* DeliveryStream("TestDeliveryStream", {
-                destination: {
-                  bucketArn: bucket.bucketArn,
-                },
+                destination: { bucketArn: bucket.bucketArn },
                 tags: { Environment: "test" },
               });
               return { bucket, stream };
@@ -51,9 +45,7 @@ describe.skipIf(!!process.env.FAST)(
           expect(initial.stream.compressionFormat).toEqual("UNCOMPRESSED");
           // No SSE configured — a never-encrypted stream reports DISABLED (or
           // no encryption configuration at all).
-          expect(initial.stream.encryptionStatus ?? "DISABLED").toEqual(
-            "DISABLED",
-          );
+          expect(initial.stream.encryptionStatus ?? "DISABLED").toEqual("DISABLED");
 
           // Out-of-band verification via distilled.
           const described = yield* Firehose.describeDeliveryStream({
@@ -62,10 +54,9 @@ describe.skipIf(!!process.env.FAST)(
           const description = described.DeliveryStreamDescription;
           expect(description.DeliveryStreamStatus).toEqual("ACTIVE");
           expect(description.DeliveryStreamType).toEqual("DirectPut");
-          expect(
-            description.Destinations[0]?.ExtendedS3DestinationDescription
-              ?.BucketARN,
-          ).toEqual(initial.bucket.bucketArn);
+          expect(description.Destinations[0]?.ExtendedS3DestinationDescription?.BucketARN).toEqual(
+            initial.bucket.bucketArn,
+          );
 
           // Ownership + user tags.
           const tags = yield* Firehose.listTagsForDeliveryStream({
@@ -75,18 +66,13 @@ describe.skipIf(!!process.env.FAST)(
           expect(tagKeys).toContain("alchemy::stack");
           expect(tagKeys).toContain("alchemy::stage");
           expect(tagKeys).toContain("alchemy::id");
-          expect(tags.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "test",
-          });
+          expect(tags.Tags).toContainEqual({ Key: "Environment", Value: "test" });
 
           // Update destination settings in place (UpdateDestination path) and
           // enable SSE (StartDeliveryStreamEncryption path) in the same step.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", { forceDestroy: true });
               const stream = yield* DeliveryStream("TestDeliveryStream", {
                 destination: {
                   bucketArn: bucket.bucketArn,
@@ -104,9 +90,7 @@ describe.skipIf(!!process.env.FAST)(
           );
 
           // Same physical stream — updated in place, not replaced.
-          expect(updated.stream.deliveryStreamName).toEqual(
-            initial.stream.deliveryStreamName,
-          );
+          expect(updated.stream.deliveryStreamName).toEqual(initial.stream.deliveryStreamName);
           expect(updated.stream.prefix).toEqual("events/");
           expect(updated.stream.errorOutputPrefix).toEqual("errors/");
           expect(updated.stream.bufferingIntervalInSeconds).toEqual(60);
@@ -131,27 +115,19 @@ describe.skipIf(!!process.env.FAST)(
           const updatedTags = yield* Firehose.listTagsForDeliveryStream({
             DeliveryStreamName: initial.stream.deliveryStreamName,
           });
-          expect(updatedTags.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "production",
-          });
-          expect(updatedTags.Tags).toContainEqual({
-            Key: "Team",
-            Value: "platform",
-          });
+          expect(updatedTags.Tags).toContainEqual({ Key: "Environment", Value: "production" });
+          expect(updatedTags.Tags).toContainEqual({ Key: "Team", Value: "platform" });
 
           // Out-of-band SSE verification via distilled.
           expect(
-            updatedDescription.DeliveryStreamDescription
-              .DeliveryStreamEncryptionConfiguration?.Status,
+            updatedDescription.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration
+              ?.Status,
           ).toEqual("ENABLED");
 
           // Remove encryption — the StopDeliveryStreamEncryption path.
           const decrypted = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", { forceDestroy: true });
               const stream = yield* DeliveryStream("TestDeliveryStream", {
                 destination: {
                   bucketArn: bucket.bucketArn,
@@ -167,12 +143,8 @@ describe.skipIf(!!process.env.FAST)(
             }),
           );
           // Same physical stream — SSE disabled in place.
-          expect(decrypted.stream.deliveryStreamName).toEqual(
-            initial.stream.deliveryStreamName,
-          );
-          expect(decrypted.stream.encryptionStatus ?? "DISABLED").toEqual(
-            "DISABLED",
-          );
+          expect(decrypted.stream.deliveryStreamName).toEqual(initial.stream.deliveryStreamName);
+          expect(decrypted.stream.encryptionStatus ?? "DISABLED").toEqual("DISABLED");
           expect(decrypted.stream.encryptionKeyType).toBeUndefined();
 
           yield* stack.destroy();
@@ -200,9 +172,7 @@ describe.skipIf(!!process.env.FAST)(
           // deadlocks the engine.
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FirehoseSourceBucket", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("FirehoseSourceBucket", { forceDestroy: true });
               const source = yield* AWS.Kinesis.Stream("FirehoseSourceStream");
               const stream = yield* DeliveryStream("SourcedDeliveryStream", {
                 destination: { bucketArn: bucket.bucketArn },
@@ -215,9 +185,7 @@ describe.skipIf(!!process.env.FAST)(
 
           const replaced = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FirehoseSourceBucket", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("FirehoseSourceBucket", { forceDestroy: true });
               const source = yield* AWS.Kinesis.Stream("FirehoseSourceStream");
               const stream = yield* DeliveryStream("SourcedDeliveryStream", {
                 source: { kinesisStreamArn: source.streamArn },
@@ -228,22 +196,16 @@ describe.skipIf(!!process.env.FAST)(
           );
 
           // Source change is a replacement — new physical stream.
-          expect(replaced.stream.deliveryStreamName).not.toEqual(
-            initial.stream.deliveryStreamName,
-          );
-          expect(replaced.stream.deliveryStreamType).toEqual(
-            "KinesisStreamAsSource",
-          );
-          expect(replaced.stream.kinesisStreamArn).toEqual(
-            replaced.source.streamArn,
-          );
+          expect(replaced.stream.deliveryStreamName).not.toEqual(initial.stream.deliveryStreamName);
+          expect(replaced.stream.deliveryStreamType).toEqual("KinesisStreamAsSource");
+          expect(replaced.stream.kinesisStreamArn).toEqual(replaced.source.streamArn);
 
           const described = yield* Firehose.describeDeliveryStream({
             DeliveryStreamName: replaced.stream.deliveryStreamName,
           });
           expect(
-            described.DeliveryStreamDescription.Source
-              ?.KinesisStreamSourceDescription?.KinesisStreamARN,
+            described.DeliveryStreamDescription.Source?.KinesisStreamSourceDescription
+              ?.KinesisStreamARN,
           ).toEqual(replaced.source.streamArn);
 
           // The replaced (old) stream is deleted by the engine.
@@ -251,31 +213,19 @@ describe.skipIf(!!process.env.FAST)(
 
           yield* stack.destroy();
 
-          yield* assertDeliveryStreamDeleted(
-            replaced.stream.deliveryStreamName,
-          );
+          yield* assertDeliveryStreamDeleted(replaced.stream.deliveryStreamName);
         }),
       { tags: ["provider:aws:kinesis"], timeout: 420_000 },
     );
 
-    class DeliveryStreamStillExists extends Data.TaggedError(
-      "DeliveryStreamStillExists",
-    ) {}
+    class DeliveryStreamStillExists extends Data.TaggedError("DeliveryStreamStillExists") {}
 
-    const assertDeliveryStreamDeleted = Effect.fn(function* (
-      deliveryStreamName: string,
-    ) {
-      yield* Firehose.describeDeliveryStream({
-        DeliveryStreamName: deliveryStreamName,
-      }).pipe(
+    const assertDeliveryStreamDeleted = Effect.fn(function* (deliveryStreamName: string) {
+      yield* Firehose.describeDeliveryStream({ DeliveryStreamName: deliveryStreamName }).pipe(
         Effect.flatMap(() => Effect.fail(new DeliveryStreamStillExists())),
         Effect.retry({
-          while: (e: { _tag: string }) =>
-            e._tag === "DeliveryStreamStillExists",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(40),
-          ]),
+          while: (e: { _tag: string }) => e._tag === "DeliveryStreamStillExists",
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
         }),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       );

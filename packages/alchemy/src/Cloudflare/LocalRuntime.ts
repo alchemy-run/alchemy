@@ -7,10 +7,11 @@ import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
-import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
-import type { Queue } from "./Queues/Queue.ts";
-import type { Consumer } from "./Queues/Consumer.ts";
 import { moduleExtension } from "../Util/Node.ts";
+import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
+import type { Consumer } from "./Queues/Consumer.ts";
+import type { Queue } from "./Queues/Queue.ts";
+import { LocalEdgeLive } from "./Workers/LocalEdge.ts";
 
 /**
  * The Cloudflare provider group module ([Local.ts](./Local.ts)) every
@@ -51,10 +52,7 @@ export class LocalRuntimeState extends Context.Service<
      * updating state so the running instance is reconfigured; the hook is
      * a no-op until the worker has served at least once.
      */
-    readonly workerRestarts: MutableHashMap.MutableHashMap<
-      string,
-      Effect.Effect<void>
-    >;
+    readonly workerRestarts: MutableHashMap.MutableHashMap<string, Effect.Effect<void>>;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}
 
@@ -84,25 +82,27 @@ const makeLocalRuntimeServices = () =>
       const getEnv = yield* CloudflareEnvironment;
       return Layer.merge(
         LocalRuntimeStateLive,
-        layerRuntime({
-          api: {
-            accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
-          },
-          storage: {
-            directory: yield* localStorageDirectory,
-          },
-        }),
+        LocalEdgeLive.pipe(
+          Layer.provideMerge(
+            layerRuntime({
+              api: {
+                accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
+              },
+              storage: {
+                directory: yield* localStorageDirectory,
+              },
+            }),
+          ),
+        ),
       );
     }),
   );
 
-let _localRuntimeServices:
-  | ReturnType<typeof makeLocalRuntimeServices>
-  | undefined;
+let _localRuntimeServices: ReturnType<typeof makeLocalRuntimeServices> | undefined;
 
 /**
  * The shared local-runtime dependency layer (workerd `Runtime`,
- * `WorkerProxy`, {@link LocalRuntimeState}) used by every Cloudflare local
+ * `WorkerProxy`, {@link LocalRuntimeState}, the zone-routing `LocalEdge`) used by every Cloudflare local
  * provider.
  *
  * Returns a **module-memoized layer reference**: local providers register
@@ -113,12 +113,10 @@ let _localRuntimeServices:
  * per stack build (a fresh build gets a fresh instance via its own memo
  * map; the layer blueprint itself is immutable).
  */
-export const localRuntimeServices = () =>
-  (_localRuntimeServices ??= makeLocalRuntimeServices());
+export const localRuntimeServices = () => (_localRuntimeServices ??= makeLocalRuntimeServices());
 
 export const isLocalId = (id: string | undefined): id is string =>
   typeof id === "string" && id.startsWith(LOCAL_ID_PREFIX);
 export const isLiveId = (id: string | undefined): id is string =>
   typeof id === "string" && !id.startsWith(LOCAL_ID_PREFIX);
-export const generateLocalId = (): string =>
-  `${LOCAL_ID_PREFIX}${crypto.randomUUID()}`;
+export const generateLocalId = (): string => `${LOCAL_ID_PREFIX}${crypto.randomUUID()}`;

@@ -1,11 +1,11 @@
 import type * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
-import type * as Rpc from "effect/unstable/rpc/Rpc";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as Socket from "effect/unstable/socket/Socket";
+import type * as Rpc from "effect/rpc/Rpc";
+import * as RpcClient from "effect/rpc/RpcClient";
+import type { RpcClientError } from "effect/rpc/RpcClientError";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Socket from "effect/socket/Socket";
 
 export interface LayerOptions {
   /** Options passed to Effect's WebSocket transport. */
@@ -13,10 +13,7 @@ export interface LayerOptions {
   /** Options passed to Effect's socket RPC protocol. */
   readonly protocol?: Parameters<typeof RpcClient.layerProtocolSocket>[0];
   /** Options passed to the grouped Effect RPC client. */
-  readonly client?: Omit<
-    NonNullable<Parameters<typeof RpcClient.make>[1]>,
-    "flatten"
-  >;
+  readonly client?: Omit<NonNullable<Parameters<typeof RpcClient.make>[1]>, "flatten">;
   /**
    * Serialization matching the server. Alchemy's RpcDurableObject uses JSON.
    * @default RpcSerialization.json
@@ -43,9 +40,9 @@ export interface LayerOptions {
  * ```typescript
  * import * as RpcWebSocketClient from "alchemy/Cloudflare/RpcWebSocketClient";
  * import { Context, Effect, Layer } from "effect";
- * import type * as RpcClient from "effect/unstable/rpc/RpcClient";
- * import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
- * import * as Socket from "effect/unstable/socket/Socket";
+ * import type * as RpcClient from "effect/rpc/RpcClient";
+ * import type { RpcClientError } from "effect/rpc/RpcClientError";
+ * import * as Socket from "effect/socket/Socket";
  * import { CounterRpcs } from "./rpcs.ts";
  *
  * class CounterClient extends Context.Service<
@@ -75,11 +72,7 @@ export const layer = <I, Rpcs extends Rpc.Any>(
   group: RpcGroup.RpcGroup<Rpcs>,
   url: Parameters<typeof Socket.layerWebSocket>[0],
   options: LayerOptions = {},
-): Layer.Layer<
-  I,
-  never,
-  Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>
-> =>
+): Layer.Layer<I, never, Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>> =>
   Layer.effect(service, RpcClient.make(group, options.client)).pipe(
     Layer.provide(
       RpcClient.layerProtocolSocket(options.protocol).pipe(

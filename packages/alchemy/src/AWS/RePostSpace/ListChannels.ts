@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface ListChannelsRequest extends Omit<
-  repostspace.ListChannelsInput,
-  "spaceId"
-> {}
+export interface ListChannelsRequest extends Omit<repostspace.ListChannelsInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `ListChannels` operation (IAM action
@@ -34,12 +31,7 @@ export interface ListChannels extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListChannelsRequest,
-    ) => Effect.Effect<
-      repostspace.ListChannelsOutput,
-      repostspace.ListChannelsError
-    >
+    ) => Effect.Effect<repostspace.ListChannelsOutput, repostspace.ListChannelsError>
   >
 > {}
-export const ListChannels = Binding.Service<ListChannels>(
-  "AWS.RePostSpace.ListChannels",
-);
+export const ListChannels = Binding.Service<ListChannels>("AWS.RePostSpace.ListChannels");

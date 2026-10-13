@@ -28,12 +28,7 @@ export interface PutFeedback extends Binding.Service<
   () => Effect.Effect<
     (
       request?: devopsguru.PutFeedbackRequest,
-    ) => Effect.Effect<
-      devopsguru.PutFeedbackResponse,
-      devopsguru.PutFeedbackError
-    >
+    ) => Effect.Effect<devopsguru.PutFeedbackResponse, devopsguru.PutFeedbackError>
   >
 > {}
-export const PutFeedback = Binding.Service<PutFeedback>(
-  "AWS.DevOpsGuru.PutFeedback",
-);
+export const PutFeedback = Binding.Service<PutFeedback>("AWS.DevOpsGuru.PutFeedback");

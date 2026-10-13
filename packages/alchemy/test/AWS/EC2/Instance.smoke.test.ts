@@ -1,20 +1,21 @@
-import * as AWS from "@/AWS";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
 import TestInstance, { keyPair } from "./fixtures/instance.ts";
 import { assertInstanceTerminated } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Full end-to-end: bundle the hosted program, launch a real EC2 instance into a
-// public subnet, and prove over HTTP (directly against the instance's public
-// IP) that (a) the `{ fetch }` handler is served by the instance's Bun HTTP
-// server and (b) the `ServerHost.run` background loop is executing on the
-// instance (`/ticks` keeps climbing).
+// public subnet, and prove over HTTP (against `instance.url`) that (a) the
+// `{ fetch }` handler is served by the instance's Bun HTTP server and (b) the
+// `ServerHost.run` background loop is executing on the instance (`/ticks`
+// keeps climbing). `url` is also what `alchemy dev` prints — the emulator's
+// host-routed DNS, not a fake public IP.
 //
 // Heavy (instance boot + bun install + S3 sync + systemd), so skipped under
 // `FAST=1`.
@@ -24,7 +25,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { instanceId, publicIpAddress, privateKey } = yield* stack.deploy(
+      const { instanceId, url, privateKey } = yield* stack.deploy(
         Effect.gen(function* () {
           const instance = yield* TestInstance;
           // Resolve the same key-pair resource the instance uses and return its
@@ -32,18 +33,18 @@ test.provider.skipIf(!!process.env.FAST)(
           const key = yield* keyPair;
           return {
             instanceId: instance.instanceId,
-            publicIpAddress: instance.publicIpAddress,
+            url: instance.url,
             privateKey: key.privateKey,
           };
         }),
       );
 
-      expect(publicIpAddress).toBeTruthy();
+      expect(url).toBeTruthy();
       // Unredact only to prove the returned value is usable key material. Do
       // not log the ephemeral private key into the test artifact.
       const pem = privateKey ? Redacted.value(privateKey) : undefined;
       expect(pem).toContain("PRIVATE KEY");
-      const base = `http://${publicIpAddress}:3000`;
+      const base = url!;
 
       // Poll until the instance boots, installs bun, syncs the bundle from S3,
       // and the systemd unit serves 200 on :3000. Connection errors before the
@@ -65,9 +66,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(
-                  new Error(`${path} temporarily returned ${res.status}`),
-                ),
+              : Effect.fail(new Error(`${path} temporarily returned ${res.status}`)),
           ),
           // cloud-init/systemd can briefly restart the hosted process just
           // after the first successful health probe, especially while a full

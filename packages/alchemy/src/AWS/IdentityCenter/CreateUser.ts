@@ -35,12 +35,7 @@ export interface CreateUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.CreateUserRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.CreateUserResponse,
-      identitystore.CreateUserError
-    >
+    ) => Effect.Effect<identitystore.CreateUserResponse, identitystore.CreateUserError>
   >
 > {}
-export const CreateUser = Binding.Service<CreateUser>(
-  "AWS.IdentityCenter.CreateUser",
-);
+export const CreateUser = Binding.Service<CreateUser>("AWS.IdentityCenter.CreateUser");

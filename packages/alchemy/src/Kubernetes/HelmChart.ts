@@ -1,33 +1,30 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { isResolved } from "../Diff.ts";
 import { hashDirectory } from "../Command/Memo.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { collectRedactedSecrets } from "../Util/Redaction.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
+  ifClusterExists,
+  readObject,
   reconcileObjects,
   resolveKindSpec,
 } from "./internal/client.ts";
+import { hashDriftSelection } from "./internal/declared.ts";
 import { renderHelmChart } from "./internal/helm.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
-} from "./internal/objects.ts";
 import {
-  connectionIdentity,
-  connectionOfOutput,
-  tryConnectionOf,
-} from "./internal/workload.ts";
+  kubernetesObjectKey,
+  type KubernetesObjectDefinition,
+  type KubernetesObjectRef,
+} from "./internal/objects.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface HelmChartProps {
@@ -80,8 +77,8 @@ export interface HelmChartProps {
    */
   includeCrds?: boolean;
   /**
-   * Create (and own) the target Namespace object alongside the chart's
-   * objects.
+   * Create the target Namespace and track it while this flag stays on.
+   * Turning it off leaves the Namespace in the cluster.
    * @default false
    */
   createNamespace?: boolean;
@@ -107,6 +104,12 @@ export interface HelmChart extends Resource<
     code: {
       hash: string;
     };
+    /**
+     * Set by `read` when an applied object is missing or its fingerprint
+     * changed. Reconcile does not persist it; the extra field is what
+     * `alchemy drift` compares.
+     */
+    observedHash?: string;
   },
   {},
   Providers
@@ -119,11 +122,12 @@ export interface HelmChart extends Resource<
  * The chart is rendered locally with the `helm` CLI (`helm template` —
  * install helm on the deploying machine, like Docker for image builds);
  * the rendered objects then flow through the same apply machinery as
- * `Kubernetes.Manifest`: Alchemy owns the object lifecycle, corrects drift
- * on every deploy, prunes objects that drop out of the render, and deletes
- * everything on destroy. There is no in-cluster Helm release record; the
- * target `cluster` can be a managed cluster resource (e.g.
- * `AWS.EKS.Cluster`) or any cluster your kubeconfig can reach.
+ * `Kubernetes.Manifest`: Alchemy owns the object lifecycle, re-applies the
+ * full render whenever the chart's inputs change, prunes objects that drop
+ * out of the render, and deletes everything on destroy. There is no
+ * in-cluster Helm release record; the target `cluster` can be a managed
+ * cluster resource (e.g. `AWS.EKS.Cluster`) or any cluster your kubeconfig
+ * can reach.
  *
  * Helm lifecycle hooks (`helm.sh/hook`-annotated objects: install/upgrade/
  * delete hooks, tests) are neither executed nor applied — the chart is
@@ -177,13 +181,9 @@ export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
  * content hash when `chart` is a local path (so editing a local chart is
  * visible to `diff` even though no prop changed).
  */
-const computeChartHash = Effect.fn(function* (
-  news: HelmChartProps,
-  releaseName: string,
-) {
+const computeChartHash = Effect.fn(function* (news: HelmChartProps, releaseName: string) {
   const fs = yield* FileSystem.FileSystem;
-  const isLocalDir =
-    !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
+  const isLocalDir = !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
   return yield* sha256Object({
     chart: news.chart,
     repo: news.repo,
@@ -193,9 +193,7 @@ const computeChartHash = Effect.fn(function* (
     values: news.values,
     includeCrds: news.includeCrds ?? true,
     createNamespace: news.createNamespace ?? false,
-    localChart: isLocalDir
-      ? yield* hashDirectory({ cwd: news.chart })
-      : undefined,
+    localChart: isLocalDir ? yield* hashDirectory({ cwd: news.chart }) : undefined,
   });
 });
 
@@ -207,7 +205,8 @@ const resolveReleaseName = (
   Effect.suspend(() => {
     if (news.releaseName) return Effect.succeed(news.releaseName);
     if (output?.releaseName) return Effect.succeed(output.releaseName);
-    return createPhysicalName({ id, lowercase: true });
+    // Helm rejects release names longer than 53 characters.
+    return createPhysicalName({ id, maxLength: 53, lowercase: true });
   });
 
 /**
@@ -234,6 +233,37 @@ const injectNamespace = Effect.fn(function* (
   );
 });
 
+const chartObjects = Effect.fn(function* (
+  transport: ClusterTransport,
+  props: HelmChartProps,
+  releaseName: string,
+) {
+  const namespace = props.namespace ?? "default";
+  const redactions = props.values === undefined ? [] : collectRedactedSecrets(props.values);
+  const rendered = yield* renderHelmChart({
+    chart: props.chart,
+    repo: props.repo,
+    version: props.version,
+    releaseName,
+    namespace,
+    values: props.values,
+    includeCrds: props.includeCrds,
+  });
+  const placed = yield* injectNamespace(transport, rendered, namespace);
+  const objects =
+    props.createNamespace && namespace !== "default"
+      ? [
+          {
+            apiVersion: "v1",
+            kind: "Namespace",
+            metadata: { name: namespace },
+          } satisfies KubernetesObjectDefinition,
+          ...placed,
+        ]
+      : placed;
+  return { objects, redactions };
+});
+
 export const HelmChartProvider = () =>
   Provider.effect(
     HelmChart,
@@ -252,9 +282,7 @@ export const HelmChartProvider = () =>
           // moving any of it means a different set of objects.
           if (
             output &&
-            ((oldCluster !== undefined &&
-              newCluster !== undefined &&
-              oldCluster !== newCluster) ||
+            ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||
               output.releaseName !== releaseName ||
               output.namespace !== (news.namespace ?? "default"))
           ) {
@@ -267,7 +295,7 @@ export const HelmChartProvider = () =>
             }
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           const releaseName = yield* resolveReleaseName(id, news, output);
           const namespace = news.namespace ?? "default";
           const connection = toConnection(news.cluster);
@@ -277,35 +305,30 @@ export const HelmChartProvider = () =>
           yield* session.note(
             `Rendering Helm chart ${news.chart}${news.version ? `@${news.version}` : ""}...`,
           );
-          const rendered = yield* renderHelmChart({
-            chart: news.chart,
-            repo: news.repo,
-            version: news.version,
+          const { objects: desiredObjects, redactions } = yield* chartObjects(
+            transport,
+            news,
             releaseName,
-            namespace,
-            values: news.values,
-            includeCrds: news.includeCrds,
-          });
-          const placed = yield* injectNamespace(transport, rendered, namespace);
-          const desiredObjects: Array<KubernetesObjectDefinition> =
-            news.createNamespace && namespace !== "default"
-              ? [
-                  {
-                    apiVersion: "v1",
-                    kind: "Namespace",
-                    metadata: { name: namespace },
-                  },
-                  ...placed,
-                ]
-              : [...placed];
+          );
 
           yield* session.note(
             `Applying ${String(desiredObjects.length)} objects from ${news.chart}...`,
           );
+          // Turning createNamespace off releases the Namespace. It stays in the cluster.
+          const previousObjects = (output?.objects ?? []).filter(
+            (object) =>
+              !(
+                olds?.createNamespace === true &&
+                news.createNamespace !== true &&
+                object.kind === "Namespace" &&
+                object.name === namespace
+              ),
+          );
           const objects = yield* reconcileObjects({
             transport,
-            previousObjects: output?.objects ?? [],
+            previousObjects,
             desiredObjects,
+            redactions,
           });
 
           return {
@@ -322,25 +345,41 @@ export const HelmChartProvider = () =>
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
-          // The objects live in-cluster; if the cluster itself is gone, so
-          // are they.
-          const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+          // ClusterNotFound fails the drift row. undefined means an object is gone.
+          // GETs only: a dry-run PATCH needs `patch`, and re-rendering a chart
+          // rerolls randAlphaNum into a false drift.
+          const transport = yield* connectCluster(connection);
+          const notes = yield* Effect.forEach(
+            output.objects,
+            (object) =>
+              Effect.gen(function* () {
+                const key = kubernetesObjectKey(object);
+                const observed = yield* readObject({ transport, object }).pipe(
+                  Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)),
+                );
+                if (!observed) return `missing:${key}`;
+                // Older rows stored no selection. Re-rendering the chart is
+                // not a read, so only a missing object is drift until apply
+                // writes a mask.
+                if (object.driftMask === undefined || object.baselineHash === undefined) {
+                  return undefined;
+                }
+                const liveHash = yield* hashDriftSelection(object.driftMask, observed);
+                return liveHash === object.baselineHash ? undefined : liveHash;
+              }),
+            { concurrency: 8 },
           );
-          if (!transport) return undefined;
-          return output;
+          const drifted = notes.filter((note): note is string => note !== undefined);
+          if (drifted.length === 0) return output;
+          return {
+            ...output,
+            observedHash: yield* sha256Object({ notes: drifted }),
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           const connection = connectionOfOutput(output);
           if (!connection) return;
-          const transport = yield* connectCluster(connection).pipe(
-            // Cluster already destroyed — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          const transport = yield* ifClusterExists(connectCluster(connection));
           if (!transport) return;
           yield* deleteObjects({ transport, objects: output.objects });
         }),

@@ -3,12 +3,12 @@ import * as PsCredentialsModule from "@distilled.cloud/planetscale/Credentials";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   AuthError,
   AuthProviderLayer,
@@ -18,19 +18,11 @@ import {
   NeedsReauth,
   type ProviderDetails,
 } from "../Auth/AuthProvider.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
-import { displayRedacted } from "../Auth/Credentials.ts";
-import { withProfileCredentialsLock } from "../Auth/Lock.ts";
-import {
-  getEnvRedactedRequired,
-  getEnvRequired,
-  mapPromptCancellation,
-} from "../Auth/Env.ts";
 import { browserOAuth } from "../Auth/BrowserOAuth.ts";
+import { displayRedacted } from "../Auth/Credentials.ts";
+import { getEnvRedactedRequired, getEnvRequired, mapPromptCancellation } from "../Auth/Env.ts";
+import { withProfileCredentialsLock } from "../Auth/Lock.ts";
+import { storedSecret, storedValueText, validateFieldValues } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 
@@ -51,17 +43,13 @@ export const PLANETSCALE_AUTH_PROVIDER_NAME = "Planetscale";
  */
 const withOAuthCredentials = <A, E, R>(
   accessToken: string,
-  effect: Effect.Effect<
-    A,
-    E,
-    R | PsCredentialsModule.Credentials | HttpClient.HttpClient
-  >,
+  effect: Effect.Effect<A, E, R | PsCredentialsModule.Credentials | HttpClient.HttpClient>,
 ): Effect.Effect<A, E, R> =>
   Effect.provide(
     effect,
     Layer.mergeAll(
       PsCredentialsModule.fromOAuth({
-        accessToken,
+        accessToken: Redacted.make(accessToken),
         organization: "",
       }),
       FetchHttpClient.layer,
@@ -80,20 +68,18 @@ const selectOrganization = (accessToken: string) =>
     const response = yield* list({});
     const orgs = response.data;
     if (orgs.length === 0) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: "Planetscale: no organizations found for this credential.",
       });
     }
     if (orgs.length === 1) {
       const org = orgs[0];
       if (org === undefined) {
-        return yield* new AuthError({
+        return yield* AuthError.make({
           message: "Planetscale: organization response was unexpectedly empty.",
         });
       }
-      yield* interaction.output.info(
-        `Planetscale: using organization: ${org.name} (${org.id})`,
-      );
+      yield* interaction.output.info(`Planetscale: using organization: ${org.name} (${org.id})`);
       return org.name;
     }
     return yield* interaction.prompt
@@ -116,14 +102,12 @@ const options: Array<{
   {
     value: "oauth",
     label: "OAuth",
-    description:
-      "recommended — browser-based login with automatic token refresh",
+    description: "recommended — browser-based login with automatic token refresh",
   },
   {
     value: "stored",
     label: "Service Token",
-    description:
-      "enter a service token and store it inline in the provider file",
+    description: "enter a service token and store it inline in the provider file",
   },
 ];
 
@@ -147,7 +131,7 @@ export const PlanetscaleAuthConfigSchema = Schema.Union([
     access: Schema.String,
     refresh: Schema.String,
     expires: Schema.Number,
-    scopes: Schema.mutable(Schema.Array(Schema.String)),
+    scopes: Schema.String.pipe(Schema.Array, Schema.mutable),
   }),
 ]);
 export type PlanetscaleAuthConfig = typeof PlanetscaleAuthConfigSchema.Type;
@@ -203,12 +187,9 @@ export const PlanetscaleAuth = AuthProviderLayer<
           provider: "Planetscale",
           url: authorization.url,
           callback: OAuthClient.callback(authorization),
-          exchange: (input) =>
-            OAuthClient.exchangeCallbackInput(input, authorization),
+          exchange: (input) => OAuthClient.exchangeCallbackInput(input, authorization),
         });
-        yield* interaction.output.success(
-          "Planetscale: OAuth credentials saved.",
-        );
+        yield* interaction.output.success("Planetscale: OAuth credentials saved.");
         return credentials;
       });
 
@@ -220,9 +201,9 @@ export const PlanetscaleAuth = AuthProviderLayer<
       // `user:read_organizations` scope. If the call fails for any
       // reason — missing scope, network, off-spec response — fall back
       // to a manual prompt so login still completes.
-      const organization = yield* selectOrganization(
-        Redacted.value(oauthCreds.access),
-      ).pipe(
+      const organization = yield* oauthCreds.access.pipe(
+        Redacted.value,
+        selectOrganization,
         Effect.catch((e) =>
           Effect.gen(function* () {
             yield* interaction.output.warning(
@@ -293,12 +274,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
 
     const configureCredentials = (profileName: string) =>
       configureInteractive(profileName).pipe(
-        Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: "failed to configure credentials",
-              cause: e,
-            }),
+        Effect.mapError((e) =>
+          AuthError.make({
+            message: "failed to configure credentials",
+            cause: e,
+          }),
         ),
       );
 
@@ -324,11 +304,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
         readonly method: string;
         readonly values: Record<string, string>;
       },
-    ): Effect.Effect<
-      PlanetscaleAuthConfig,
-      AuthError,
-      Interaction.Interaction
-    > =>
+    ): Effect.Effect<PlanetscaleAuthConfig, AuthError, Interaction.Interaction> =>
       input.method === "stored"
         ? validateFieldValues(
             PLANETSCALE_AUTH_PROVIDER_NAME,
@@ -337,20 +313,14 @@ export const PlanetscaleAuth = AuthProviderLayer<
           ).pipe(
             Effect.map((values) => ({
               method: "stored" as const,
-              tokenId: Redacted.value(
-                storedSecret(values.tokenId) ?? Redacted.make(""),
-              ),
-              token: Redacted.value(
-                storedSecret(values.token) ?? Redacted.make(""),
-              ),
+              tokenId: Redacted.value(storedSecret(values.tokenId) ?? Redacted.make("")),
+              token: Redacted.value(storedSecret(values.token) ?? Redacted.make("")),
               organization: storedValueText(values.organization) ?? "",
             })),
-            Effect.tap(() =>
-              interaction.output.success("Planetscale: credentials saved."),
-            ),
+            Effect.tap(() => interaction.output.success("Planetscale: credentials saved.")),
           )
         : Effect.fail(
-            new AuthError({
+            AuthError.make({
               message: `Planetscale: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
             }),
           );
@@ -358,9 +328,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
     const resolveCredentials = (
       profileName: string,
       config: PlanetscaleAuthConfig,
-      updateConfig?: (
-        config: PlanetscaleAuthConfig,
-      ) => Effect.Effect<void, AuthError>,
+      updateConfig?: (config: PlanetscaleAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
       Effect.gen(function* () {
         const reauth = refreshHint(PLANETSCALE_AUTH_PROVIDER_NAME, profileName);
@@ -385,13 +353,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 scopes: cfg.scopes,
               };
               if (!OAuthClient.usesCurrentClient(creds)) {
-                return yield* Effect.fail(
-                  new NeedsReauth({
-                    provider: PLANETSCALE_AUTH_PROVIDER_NAME,
-                    profile: profileName,
-                    message: `Planetscale OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
-                  }),
-                );
+                return yield* NeedsReauth.make({
+                  provider: PLANETSCALE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `Planetscale OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
+                });
               }
               // Refresh proactively if the token has expired (or is within
               // 10s of expiring). Persist the refreshed creds so subsequent
@@ -404,14 +370,13 @@ export const PlanetscaleAuth = AuthProviderLayer<
                       // Only the refresh round-trip maps to NeedsReauth — a
                       // failed persist afterwards is a local I/O AuthError and
                       // passes through untouched.
-                      Effect.mapError(
-                        (e) =>
-                          new NeedsReauth({
-                            provider: PLANETSCALE_AUTH_PROVIDER_NAME,
-                            profile: profileName,
-                            message: `Planetscale OAuth refresh failed. ${reauth}`,
-                            cause: e,
-                          }),
+                      Effect.mapError((e) =>
+                        NeedsReauth.make({
+                          provider: PLANETSCALE_AUTH_PROVIDER_NAME,
+                          profile: profileName,
+                          message: `Planetscale OAuth refresh failed. ${reauth}`,
+                          cause: e,
+                        }),
                       ),
                     );
               if (fresh !== creds) {
@@ -450,73 +415,54 @@ export const PlanetscaleAuth = AuthProviderLayer<
     const login = (
       profileName: string,
       config: PlanetscaleAuthConfig,
-      updateConfig?: (
-        config: PlanetscaleAuthConfig,
-      ) => Effect.Effect<void, AuthError>,
+      updateConfig?: (config: PlanetscaleAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "stored" }, (stored) => Effect.succeed(stored)),
-          Match.when({ method: "oauth" }, (oauth) =>
-            Effect.gen(function* () {
-              const credentials: OAuthClient.OAuthCredentials = {
-                type: "oauth",
-                clientId: oauth.clientId,
-                access: Redacted.make(oauth.access),
-                refresh: Redacted.make(oauth.refresh),
-                expires: oauth.expires,
-                scopes: oauth.scopes,
-              };
-              if (!OAuthClient.usesCurrentClient(credentials)) {
-                return yield* configureOAuth(profileName);
-              }
-              const refreshed = yield* withProfileCredentialsLock(
-                profileName,
-                interaction.output
-                  .info("Planetscale: refreshing OAuth credentials...")
-                  .pipe(
-                    Effect.andThen(OAuthClient.refresh(credentials)),
-                    Effect.flatMap((credentials) => {
-                      const config = {
-                        ...oauth,
-                        clientId: credentials.clientId,
-                        access: Redacted.value(credentials.access),
-                        refresh: Redacted.value(credentials.refresh),
-                        expires: credentials.expires,
-                        scopes: credentials.scopes,
-                      };
-                      return (updateConfig?.(config) ?? Effect.void).pipe(
-                        Effect.as(config),
-                      );
-                    }),
-                    Effect.tap(() =>
-                      interaction.output.success(
-                        "Planetscale: OAuth credentials refreshed.",
-                      ),
-                    ),
-                  ),
-              ).pipe(
-                Effect.catchTag("OAuthError", () =>
-                  configureOAuth(profileName),
+      Match.value(config).pipe(
+        Match.when({ method: "stored" }, (stored) => Effect.succeed(stored)),
+        Match.when({ method: "oauth" }, (oauth) =>
+          Effect.gen(function* () {
+            const credentials: OAuthClient.OAuthCredentials = {
+              type: "oauth",
+              clientId: oauth.clientId,
+              access: Redacted.make(oauth.access),
+              refresh: Redacted.make(oauth.refresh),
+              expires: oauth.expires,
+              scopes: oauth.scopes,
+            };
+            if (!OAuthClient.usesCurrentClient(credentials)) {
+              return yield* configureOAuth(profileName);
+            }
+            const refreshed = yield* withProfileCredentialsLock(
+              profileName,
+              interaction.output.info("Planetscale: refreshing OAuth credentials...").pipe(
+                Effect.andThen(OAuthClient.refresh(credentials)),
+                Effect.flatMap((credentials) => {
+                  const config = {
+                    ...oauth,
+                    clientId: credentials.clientId,
+                    access: Redacted.value(credentials.access),
+                    refresh: Redacted.value(credentials.refresh),
+                    expires: credentials.expires,
+                    scopes: credentials.scopes,
+                  };
+                  return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
+                }),
+                Effect.tap(() =>
+                  interaction.output.success("Planetscale: OAuth credentials refreshed."),
                 ),
-              );
-              return refreshed;
-            }),
-          ),
-          Match.exhaustive,
-        )
-        .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: "login failed", cause: e }),
-          ),
-        );
+              ),
+            ).pipe(Effect.catchTag("OAuthError", () => configureOAuth(profileName)));
+            return refreshed;
+          }),
+        ),
+        Match.exhaustive,
+        Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+      );
 
     const details = (
       profileName: string,
       config: PlanetscaleAuthConfig,
-      updateConfig?: (
-        config: PlanetscaleAuthConfig,
-      ) => Effect.Effect<void, AuthError>,
+      updateConfig?: (config: PlanetscaleAuthConfig) => Effect.Effect<void, AuthError>,
     ) =>
       Effect.all([
         resolveCredentials(profileName, config, updateConfig),

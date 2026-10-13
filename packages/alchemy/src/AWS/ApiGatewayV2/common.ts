@@ -26,12 +26,8 @@ export const vpcLinkArn = (region: string, vpcLinkId: string) =>
  * `execute-api:Invoke`/`ManageConnections` statements) use to scope access
  * to an API. Wildcards match across path segments.
  */
-export const executeApiArn = (
-  region: string,
-  accountId: string,
-  apiId: string,
-  suffix = "/*",
-) => `arn:aws:execute-api:${region}:${accountId}:${apiId}${suffix}`;
+export const executeApiArn = (region: string, accountId: string, apiId: string, suffix = "/*") =>
+  `arn:aws:execute-api:${region}:${accountId}:${apiId}${suffix}`;
 
 /**
  * `Create/Update/Delete` operations across API Gateway v2 share an
@@ -49,8 +45,7 @@ export const retryOnTooManyRequests = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
     while: (error: E) =>
-      error._tag === "TooManyRequestsException" ||
-      error._tag === "ConflictException",
+      error._tag === "TooManyRequestsException" || error._tag === "ConflictException",
     schedule: Schedule.max([
       pipe(
         Schedule.exponential(Duration.seconds(1), 2),
@@ -73,9 +68,7 @@ export const tagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -93,8 +86,7 @@ export const collectAllPages = Effect.fn(function* <A, E, R>(
   const items: A[] = [];
   let nextToken: string | undefined = undefined;
   for (let page = 0; page < 100; page++) {
-    const result: { Items?: readonly A[] | A[]; NextToken?: string } =
-      yield* fetchPage(nextToken);
+    const result: { Items?: readonly A[] | A[]; NextToken?: string } = yield* fetchPage(nextToken);
     items.push(...(result.Items ?? []));
     nextToken = result.NextToken;
     if (!nextToken) break;

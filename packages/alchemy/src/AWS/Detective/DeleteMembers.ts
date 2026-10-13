@@ -31,12 +31,7 @@ export interface DeleteMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.DeleteMembersRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.DeleteMembersResponse,
-      detective.DeleteMembersError
-    >
+    ) => Effect.Effect<detective.DeleteMembersResponse, detective.DeleteMembersError>
   >
 > {}
-export const DeleteMembers = Binding.Service<DeleteMembers>(
-  "AWS.Detective.DeleteMembers",
-);
+export const DeleteMembers = Binding.Service<DeleteMembers>("AWS.Detective.DeleteMembers");

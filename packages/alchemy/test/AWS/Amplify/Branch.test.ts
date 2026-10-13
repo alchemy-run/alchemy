@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { App, Branch } from "@/AWS/Amplify";
-import * as Test from "@/Test/Alchemy";
 import * as amplify from "@distilled.cloud/aws/amplify";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { App, Branch } from "@/AWS/Amplify";
+import * as Test from "@/Test/Alchemy";
 import { makeAmplifyTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -31,16 +31,11 @@ class BranchStillExists extends Data.TaggedError("BranchStillExists")<{
 const assertBranchDeleted = (appId: string, branchName: string) =>
   findBranch(appId, branchName).pipe(
     Effect.flatMap((branch) =>
-      branch === undefined
-        ? Effect.void
-        : Effect.fail(new BranchStillExists({ branchName })),
+      branch === undefined ? Effect.void : Effect.fail(new BranchStillExists({ branchName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "BranchStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

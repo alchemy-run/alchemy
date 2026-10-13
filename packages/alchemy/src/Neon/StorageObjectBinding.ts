@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { CurrentRuntimeContext } from "../RuntimeContext.ts";
 import { isResource } from "../Resource.ts";
-import type { Bucket } from "./Bucket.ts";
+import { CurrentRuntimeContext } from "../RuntimeContext.ts";
 import { bindBackendEnvironment } from "./BackendConnection.ts";
+import type { Bucket } from "./Bucket.ts";
 import {
   ObjectDecodeError,
   serializeObjectValue,
@@ -12,12 +12,12 @@ import {
   type Object,
 } from "./Object.ts";
 import type { ReadObjectClient, ObjectValue } from "./ReadObject.ts";
-import type { WriteObjectClient } from "./WriteObject.ts";
 import {
   makeStorageBinding,
   StorageBindingError,
   type StorageBindingOptions,
 } from "./StorageBinding.ts";
+import type { WriteObjectClient } from "./WriteObject.ts";
 
 const isBucket = (value: unknown): value is Bucket =>
   isResource(value) && value.Type === "Neon.Bucket";
@@ -32,10 +32,7 @@ export const makeReadObjectHttp = () =>
           message: "Object bindings require a Platform host",
         }),
       );
-    return Effect.fn(function* <T>(
-      object: Object<T>,
-      options?: StorageBindingOptions,
-    ) {
+    return Effect.fn(function* <T>(object: Object<T>, options?: StorageBindingOptions) {
       const target = object.Props.bucket;
       if (!isBucket(target))
         return yield* Effect.die(
@@ -78,9 +75,7 @@ export const makeReadObjectHttp = () =>
             }),
         });
         if (!object.Props.schema) return parsed as ObjectValue<T>;
-        return (yield* Schema.decodeUnknownEffect(object.Props.schema)(
-          parsed,
-        ).pipe(
+        return (yield* Schema.decodeUnknownEffect(object.Props.schema)(parsed).pipe(
           Effect.mapError(
             () =>
               new ObjectDecodeError({
@@ -106,10 +101,7 @@ export const makeWriteObjectHttp = () =>
           message: "Object bindings require a Platform host",
         }),
       );
-    return Effect.fn(function* <T>(
-      object: Object<T>,
-      options?: StorageBindingOptions,
-    ) {
+    return Effect.fn(function* <T>(object: Object<T>, options?: StorageBindingOptions) {
       const target = object.Props.bucket;
       if (!isBucket(target))
         return yield* Effect.die(
@@ -125,9 +117,7 @@ export const makeWriteObjectHttp = () =>
       yield* bindBackendEnvironment(`${object.FQN}:WriteObject`, {
         [name]: object.key,
       });
-      const put = Effect.fn(function* (
-        value: [T] extends [never] ? string | Uint8Array : T,
-      ) {
+      const put = Effect.fn(function* (value: [T] extends [never] ? string | Uint8Array : T) {
         const key = yield* runtime.get<string>(name);
         if (key === undefined)
           return yield* new StorageBindingError({
@@ -149,8 +139,7 @@ export const makeWriteObjectHttp = () =>
               Effect.mapError(
                 () =>
                   new ObjectDecodeError({
-                    message:
-                      "Written JSON does not satisfy the object's schema",
+                    message: "Written JSON does not satisfy the object's schema",
                   }),
               ),
             )

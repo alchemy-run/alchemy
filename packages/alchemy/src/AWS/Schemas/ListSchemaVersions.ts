@@ -33,10 +33,7 @@ export interface ListSchemaVersions extends Binding.Service<
       Limit?: number;
       /** The pagination token from a previous response. */
       NextToken?: string;
-    }) => Effect.Effect<
-      schemas.ListSchemaVersionsResponse,
-      schemas.ListSchemaVersionsError
-    >
+    }) => Effect.Effect<schemas.ListSchemaVersionsResponse, schemas.ListSchemaVersionsError>
   >
 > {}
 export const ListSchemaVersions = Binding.Service<ListSchemaVersions>(

@@ -58,9 +58,7 @@ export const makeIvsChatRoomHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${room.LogicalId})`)(function* (
-        request: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${room.LogicalId})`)(function* (request: Req) {
         const roomIdentifier = yield* RoomArn;
         const wire = options.prepare
           ? options.prepare(request)

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
 import TestUbuntuInstance from "./fixtures/ubuntu-instance.ts";
 import { assertInstanceTerminated } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,18 +23,18 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { instanceId, publicIpAddress } = yield* stack.deploy(
+      const { instanceId, url } = yield* stack.deploy(
         Effect.gen(function* () {
           const instance = yield* TestUbuntuInstance;
           return {
             instanceId: instance.instanceId,
-            publicIpAddress: instance.publicIpAddress,
+            url: instance.url,
           };
         }),
       );
 
-      expect(publicIpAddress).toBeTruthy();
-      const base = `http://${publicIpAddress}:3000`;
+      expect(url).toBeTruthy();
+      const base = url!;
 
       // Poll until the instance boots, apt-get installs unzip, the AWS CLI
       // installs, bun installs, the bundle syncs from S3, and the systemd
@@ -56,9 +56,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(
-                  new Error(`${path} temporarily returned ${res.status}`),
-                ),
+              : Effect.fail(new Error(`${path} temporarily returned ${res.status}`)),
           ),
           Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
         );

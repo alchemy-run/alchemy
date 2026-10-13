@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { registerApiGatewayBinding } from "./BindingHttp.ts";
-import {
-  DeleteUsagePlanKey,
-  type DeleteUsagePlanKeyRequest,
-} from "./DeleteUsagePlanKey.ts";
+import { DeleteUsagePlanKey, type DeleteUsagePlanKeyRequest } from "./DeleteUsagePlanKey.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
 /**
@@ -28,9 +25,9 @@ export const DeleteUsagePlanKeyHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/usageplans/${usagePlan.id}/keys/*`,
         ],
       });
-      return Effect.fn(
-        `AWS.ApiGateway.DeleteUsagePlanKey(${usagePlan.LogicalId})`,
-      )(function* (request: DeleteUsagePlanKeyRequest) {
+      return Effect.fn(`AWS.ApiGateway.DeleteUsagePlanKey(${usagePlan.LogicalId})`)(function* (
+        request: DeleteUsagePlanKeyRequest,
+      ) {
         return yield* deleteUsagePlanKey({
           ...request,
           usagePlanId: yield* UsagePlanId,

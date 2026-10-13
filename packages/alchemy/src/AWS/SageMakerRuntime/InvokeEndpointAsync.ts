@@ -59,10 +59,7 @@ export interface InvokeEndpointAsync extends Binding.Service<
   ) => Effect.Effect<
     (
       request: InvokeEndpointAsyncRequest,
-    ) => Effect.Effect<
-      sagemaker.InvokeEndpointAsyncOutput,
-      sagemaker.InvokeEndpointAsyncError
-    >
+    ) => Effect.Effect<sagemaker.InvokeEndpointAsyncOutput, sagemaker.InvokeEndpointAsyncError>
   >
 > {}
 export const InvokeEndpointAsync = Binding.Service<InvokeEndpointAsync>(

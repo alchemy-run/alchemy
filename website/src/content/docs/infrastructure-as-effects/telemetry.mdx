@@ -73,7 +73,8 @@ Alchemy.Telemetry.layerOtlp({
 
 Vendor layers wrap this. [`Axiom.Telemetry`](/axiom) takes an ingest
 `ApiToken` and a `Dataset` per signal, and composes the endpoints and
-`Authorization`/`X-Axiom-Dataset` headers for you — see
+`Authorization` and dataset (`X-Axiom-Dataset`, or `X-Axiom-Metrics-Dataset`
+for metrics) headers for you — see
 [Tutorial Part 6](/cloudflare/tutorial/part-6) for the end-to-end
 walkthrough.
 
@@ -137,7 +138,12 @@ flushed when that scope closes:
 - On Cloudflare, the flush is registered with `ctx.waitUntil`, so it
   happens after the response is sent and never adds latency.
 - On Lambda, the flush settles inline before the invocation returns —
-  the response isn't released until the invoke completes anyway.
+  the response isn't released until the invoke completes anyway. An
+  invocation still running 500 ms before its timeout (`timeoutMargin`
+  on the Function) gets an early flush: the root span is ended with a
+  timeout error and the exporters drained, so the trace arrives
+  instead of dying with the killed invocation. The handler itself is
+  left alone.
 
 This per-event lifecycle is what makes export work on workerd, where
 timers and fetches are pinned to the request that created them: a
@@ -169,7 +175,7 @@ const object = yield* bucket
 
 `Alchemy.Telemetry.layer` installs any Layer that provides a
 `Tracer`, loggers, or metric exporters — Effect's
-`effect/unstable/observability` modules (`OtlpTracer`, `OtlpLogger`,
+`effect/observability` modules (`OtlpTracer`, `OtlpLogger`,
 `OtlpMetrics`, protobuf serialization) compose here directly. The
 Layer is built per event into the event's request scope, so a custom
 exporter gets the same flush-on-close behavior as the built-in one.

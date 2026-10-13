@@ -27,10 +27,7 @@ export interface UpdateResourceProfile extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.UpdateResourceProfileRequest,
-    ) => Effect.Effect<
-      macie2.UpdateResourceProfileResponse,
-      macie2.UpdateResourceProfileError
-    >
+    ) => Effect.Effect<macie2.UpdateResourceProfileResponse, macie2.UpdateResourceProfileError>
   >
 > {}
 export const UpdateResourceProfile = Binding.Service<UpdateResourceProfile>(

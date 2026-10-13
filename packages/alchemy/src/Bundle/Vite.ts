@@ -65,17 +65,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   let clientDirectory: string | undefined;
   let base: string | undefined;
   let serverEntry: string | undefined;
-  const serverChunks = new Map<
-    string,
-    Effect.Effect<BundleFile, BundleError>
-  >();
+  const serverChunks = new Map<string, Effect.Effect<BundleFile, BundleError>>();
   const maybeExternalWorkspaces = new Set<string>();
 
   const findUp = yield* cachedFunction(
-    (
-      dir: string,
-      filenames: Array<string>,
-    ): Effect.Effect<string | undefined, PlatformError> =>
+    (dir: string, filenames: Array<string>): Effect.Effect<string | undefined, PlatformError> =>
       Effect.filter(
         filenames.map((filename) => path.join(dir, filename)),
         fs.exists,
@@ -93,17 +87,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
         }),
       ),
   );
-  const collectExternalWorkspaces = (): Effect.Effect<
-    Set<string>,
-    PlatformError
-  > =>
+  const collectExternalWorkspaces = (): Effect.Effect<Set<string>, PlatformError> =>
     Effect.forEach(maybeExternalWorkspaces, (directory) =>
       findUp(directory, ["package.json"]),
     ).pipe(
-      Effect.map(
-        (paths) =>
-          new Set(paths.filter((file) => file !== undefined).map(path.dirname)),
-      ),
+      Effect.map((paths) => new Set(paths.filter((file) => file !== undefined).map(path.dirname))),
     );
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
@@ -119,32 +107,21 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     async writeBundle(_, bundle) {
       const root = path.resolve(this.environment.config.root);
       for (const id of this.getModuleIds()) {
-        if (
-          !path.isAbsolute(id) ||
-          id.includes("node_modules") ||
-          id.startsWith(root)
-        ) {
+        if (!path.isAbsolute(id) || id.includes("node_modules") || id.startsWith(root)) {
           continue;
         }
         maybeExternalWorkspaces.add(path.dirname(id));
       }
       if (this.environment.name === "client") {
-        clientDirectory = path.resolve(
-          root,
-          this.environment.config.build.outDir,
-        );
+        clientDirectory = path.resolve(root, this.environment.config.build.outDir);
         base = this.environment.config.base;
         return;
       }
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
-        const entryChunk = files.find(
-          (file) => file.type === "chunk" && file.isEntry,
-        );
+        const entryChunk = files.find((file) => file.type === "chunk" && file.isEntry);
         if (!entryChunk) {
-          throw new Error(
-            `Entry chunk not found for environment "${this.environment.name}"`,
-          );
+          throw new Error(`Entry chunk not found for environment "${this.environment.name}"`);
         }
         serverEntry = fileName(entryChunk.fileName, this.environment);
       }
@@ -152,10 +129,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
         files.map(async (file) => {
           if (file.type === "chunk") {
             file.imports
-              .filter(
-                (self): self is keyof typeof RSC_MANIFEST =>
-                  self in RSC_MANIFEST,
-              )
+              .filter((self): self is keyof typeof RSC_MANIFEST => self in RSC_MANIFEST)
               .forEach((id) => {
                 // Key by the environment-prefixed path, NOT the bare manifest
                 // filename. `@vitejs/plugin-rsc` emits a copy of the same-named
@@ -178,9 +152,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           const content = file.type === "chunk" ? file.code : file.source;
           serverChunks.set(
             name,
-            sha256(content).pipe(
-              Effect.map((hash) => ({ path: name, content, hash })),
-            ),
+            sha256(content).pipe(Effect.map((hash) => ({ path: name, content, hash }))),
           );
         }),
       );
@@ -209,19 +181,10 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   // Manually read the RSC manifest chunk from the file system.
   // This is only safe to run *after* the build has completed.
-  const readRscManifestChunk = (
-    id: RscManifestId,
-    environment: EnvironmentLike,
-  ) => {
+  const readRscManifestChunk = (id: RscManifestId, environment: EnvironmentLike) => {
     const name = RSC_MANIFEST[id];
     return fs
-      .readFile(
-        path.resolve(
-          environment.config.root,
-          environment.config.build.outDir,
-          name,
-        ),
-      )
+      .readFile(path.resolve(environment.config.root, environment.config.build.outDir, name))
       .pipe(
         Effect.flatMap((content) =>
           sha256(content).pipe(
@@ -238,14 +201,9 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   const makeServerBundle = () => {
     if (!serverEntry && !serverChunks.size) return Effect.undefined;
-    if (!serverEntry)
-      return Effect.die(new Cause.NoSuchElementError("Missing server entry"));
-    const filePaths = Array.from(serverChunks.keys()).sort((a, b) =>
-      a.localeCompare(b),
-    );
-    const server: NonEmptyArray<Effect.Effect<BundleFile, BundleError>> = [
-      getChunk(serverEntry),
-    ];
+    if (!serverEntry) return Effect.die(new Cause.NoSuchElementError("Missing server entry"));
+    const filePaths = Array.from(serverChunks.keys()).sort((a, b) => a.localeCompare(b));
+    const server: NonEmptyArray<Effect.Effect<BundleFile, BundleError>> = [getChunk(serverEntry)];
     for (const filePath of filePaths) {
       if (filePath === serverEntry) continue;
       server.push(getChunk(filePath));
@@ -258,9 +216,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const getChunk = (path: string) => {
     const chunk = serverChunks.get(path);
     if (!chunk) {
-      return Effect.die(
-        new Cause.NoSuchElementError(`Chunk ${path} not found`),
-      );
+      return Effect.die(new Cause.NoSuchElementError(`Chunk ${path} not found`));
     }
     return chunk;
   };

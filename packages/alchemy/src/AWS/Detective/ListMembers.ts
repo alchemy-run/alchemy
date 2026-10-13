@@ -31,12 +31,7 @@ export interface ListMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<detective.ListMembersRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.ListMembersResponse,
-      detective.ListMembersError
-    >
+    ) => Effect.Effect<detective.ListMembersResponse, detective.ListMembersError>
   >
 > {}
-export const ListMembers = Binding.Service<ListMembers>(
-  "AWS.Detective.ListMembers",
-);
+export const ListMembers = Binding.Service<ListMembers>("AWS.Detective.ListMembers");

@@ -16,45 +16,36 @@ export const WriteDnsHttp = Layer.effect(
 );
 
 /** Build the write client over an injectable auth and zone id. */
-export const dnsWriteClient = (
-  auth: DnsAuth,
-  zoneId: Effect.Effect<number>,
-): WriteDnsClient => {
+export const dnsWriteClient = (auth: DnsAuth, zoneId: Effect.Effect<number>): WriteDnsClient => {
   const authorize = auth.authorize;
   return {
-    createRecordSet: Effect.fn("Hetzner.DNS.createRecordSet")(
-      function* (request) {
-        return yield* authorize(
-          zoneRrsets.createZoneRrset({
-            id_or_name: String(yield* zoneId),
-            ...request,
-          }),
-        );
-      },
-    ),
-    updateRecordSet: Effect.fn("Hetzner.DNS.updateRecordSet")(
-      function* (name, type, request) {
-        return yield* authorize(
-          zoneRrsets.updateZoneRrset({
-            id_or_name: String(yield* zoneId),
-            rr_name: name,
-            rr_type: type,
-            ...request,
-          }),
-        );
-      },
-    ),
-    deleteRecordSet: Effect.fn("Hetzner.DNS.deleteRecordSet")(
-      function* (name, type) {
-        return yield* authorize(
-          zoneRrsets.deleteZoneRrset({
-            id_or_name: String(yield* zoneId),
-            rr_name: name,
-            rr_type: type,
-          }),
-        );
-      },
-    ),
+    createRecordSet: Effect.fn("Hetzner.DNS.createRecordSet")(function* (request) {
+      return yield* authorize(
+        zoneRrsets.createZoneRrset({
+          id_or_name: String(yield* zoneId),
+          ...request,
+        }),
+      );
+    }),
+    updateRecordSet: Effect.fn("Hetzner.DNS.updateRecordSet")(function* (name, type, request) {
+      return yield* authorize(
+        zoneRrsets.updateZoneRrset({
+          id_or_name: String(yield* zoneId),
+          rr_name: name,
+          rr_type: type,
+          ...request,
+        }),
+      );
+    }),
+    deleteRecordSet: Effect.fn("Hetzner.DNS.deleteRecordSet")(function* (name, type) {
+      return yield* authorize(
+        zoneRrsets.deleteZoneRrset({
+          id_or_name: String(yield* zoneId),
+          rr_name: name,
+          rr_type: type,
+        }),
+      );
+    }),
     addRecordSetRecords: Effect.fn("Hetzner.DNS.addRecordSetRecords")(
       function* (name, type, request) {
         return yield* authorize(
@@ -103,29 +94,27 @@ export const dnsWriteClient = (
         );
       },
     ),
-    changeRecordSetTtl: Effect.fn("Hetzner.DNS.changeRecordSetTtl")(
-      function* (name, type, ttl) {
+    changeRecordSetTtl: Effect.fn("Hetzner.DNS.changeRecordSetTtl")(function* (name, type, ttl) {
+      return yield* authorize(
+        zoneRrsetActions.changeZoneRrsetTtl({
+          id_or_name: String(yield* zoneId),
+          rr_name: name,
+          rr_type: type,
+          ttl,
+        }),
+      );
+    }),
+    changeRecordSetProtection: Effect.fn("Hetzner.DNS.changeRecordSetProtection")(
+      function* (name, type, change) {
         return yield* authorize(
-          zoneRrsetActions.changeZoneRrsetTtl({
+          zoneRrsetActions.changeZoneRrsetProtection({
             id_or_name: String(yield* zoneId),
             rr_name: name,
             rr_type: type,
-            ttl,
+            change,
           }),
         );
       },
     ),
-    changeRecordSetProtection: Effect.fn(
-      "Hetzner.DNS.changeRecordSetProtection",
-    )(function* (name, type, change) {
-      return yield* authorize(
-        zoneRrsetActions.changeZoneRrsetProtection({
-          id_or_name: String(yield* zoneId),
-          rr_name: name,
-          rr_type: type,
-          change,
-        }),
-      );
-    }),
   };
 };

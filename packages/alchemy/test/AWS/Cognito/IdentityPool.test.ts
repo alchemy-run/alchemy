@@ -1,30 +1,23 @@
-import * as AWS from "@/AWS";
-import {
-  IdentityPool,
-  IdentityPoolRoleAttachment,
-  UserPool,
-  UserPoolClient,
-} from "@/AWS/Cognito";
-import { Role } from "@/AWS/IAM";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as ci from "@distilled.cloud/aws/cognito-identity";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { IdentityPool, IdentityPoolRoleAttachment, UserPool, UserPoolClient } from "@/AWS/Cognito";
+import { Role } from "@/AWS/IAM";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-class IdentityPoolStillExists extends Data.TaggedError(
-  "IdentityPoolStillExists",
-)<{ readonly identityPoolId: string }> {}
+class IdentityPoolStillExists extends Data.TaggedError("IdentityPoolStillExists")<{
+  readonly identityPoolId: string;
+}> {}
 
 const assertIdentityPoolDeleted = (identityPoolId: string) =>
   ci.describeIdentityPool({ IdentityPoolId: identityPoolId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new IdentityPoolStillExists({ identityPoolId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new IdentityPoolStillExists({ identityPoolId }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "IdentityPoolStillExists",
@@ -55,9 +48,7 @@ test.provider(
       const created = yield* ci.describeIdentityPool({
         IdentityPoolId: outputs.identities.identityPoolId,
       });
-      expect(created.IdentityPoolName).toBe(
-        outputs.identities.identityPoolName,
-      );
+      expect(created.IdentityPoolName).toBe(outputs.identities.identityPoolName);
       expect(created.AllowUnauthenticatedIdentities).toBe(false);
       const tags = yield* ci.listTagsForResource({
         ResourceArn: outputs.identities.identityPoolArn,
@@ -85,9 +76,7 @@ test.provider(
           return { pool, client, identities };
         }),
       );
-      expect(updated.identities.identityPoolId).toBe(
-        outputs.identities.identityPoolId,
-      );
+      expect(updated.identities.identityPoolId).toBe(outputs.identities.identityPoolId);
 
       const afterUpdate = yield* ci.describeIdentityPool({
         IdentityPoolId: outputs.identities.identityPoolId,
@@ -122,8 +111,7 @@ test.provider(
                   Action: ["sts:AssumeRoleWithWebIdentity"],
                   Condition: {
                     StringEquals: {
-                      "cognito-identity.amazonaws.com:aud":
-                        identities.identityPoolId,
+                      "cognito-identity.amazonaws.com:aud": identities.identityPoolId,
                     },
                   },
                 },

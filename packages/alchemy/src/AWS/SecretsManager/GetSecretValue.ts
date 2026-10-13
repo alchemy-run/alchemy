@@ -55,13 +55,8 @@ export interface GetSecretValue extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetSecretValueRequest,
-    ) => Effect.Effect<
-      secretsmanager.GetSecretValueResponse,
-      secretsmanager.GetSecretValueError
-    >
+    ) => Effect.Effect<secretsmanager.GetSecretValueResponse, secretsmanager.GetSecretValueError>
   >
 > {}
 
-export const GetSecretValue = Binding.Service<GetSecretValue>(
-  "AWS.SecretsManager.GetSecretValue",
-);
+export const GetSecretValue = Binding.Service<GetSecretValue>("AWS.SecretsManager.GetSecretValue");

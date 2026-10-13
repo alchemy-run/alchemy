@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ACMPCATestFunctionLive, { ACMPCATestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "ACMPCABindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let caArn: string;
@@ -32,9 +29,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`Fixture answered ${response.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`Fixture answered ${response.status}: ${body}`)),
             ),
           ),
     ),
@@ -54,13 +49,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
   "ACMPCA Bindings",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:acmpca",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:acmpca", "provider:aws:lambda", "provider:aws:s3", "live"],
   },
   () => {
     beforeAll(
@@ -82,9 +71,7 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -95,13 +82,8 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
         // Activate the CA: self-sign its CSR with the root template and
         // install the result (GetCertificateAuthorityCsr + IssueCertificate +
         // GetCertificate + ImportCertificateAuthorityCertificate).
-        const activated = (yield* send(
-          HttpClientRequest.post(`${baseUrl}/activate`),
-        ).pipe(
-          Effect.retry({
-            schedule: Schedule.spaced("3 seconds"),
-            times: 3,
-          }),
+        const activated = (yield* send(HttpClientRequest.post(`${baseUrl}/activate`)).pipe(
+          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 3 }),
         )) as { certificateArn: string };
         caCertificateArn = activated.certificateArn;
       }),
@@ -143,9 +125,9 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
         "returns the installed CA certificate",
         () =>
           Effect.gen(function* () {
-            const body = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/ca-certificate`),
-            )) as { certificate: string };
+            const body = (yield* send(HttpClientRequest.get(`${baseUrl}/ca-certificate`))) as {
+              certificate: string;
+            };
             expect(body.certificate).toContain("BEGIN CERTIFICATE");
           }),
         { timeout: 60_000 },
@@ -157,17 +139,17 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
         "issues a short-lived end-entity certificate, then revokes it by serial",
         () =>
           Effect.gen(function* () {
-            const issued = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/issue`),
-            )) as { certificateArn: string; certificate: string };
+            const issued = (yield* send(HttpClientRequest.post(`${baseUrl}/issue`))) as {
+              certificateArn: string;
+              certificate: string;
+            };
             expect(issued.certificateArn).toContain("/certificate/");
             expect(issued.certificate).toContain("BEGIN CERTIFICATE");
 
             const revoked = (yield* send(
-              HttpClientRequest.bodyJsonUnsafe(
-                HttpClientRequest.post(`${baseUrl}/revoke`),
-                { certificateArn: issued.certificateArn },
-              ),
+              HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/revoke`), {
+                certificateArn: issued.certificateArn,
+              }),
             )) as { revoked: boolean; serial: string };
             expect(revoked.revoked).toBe(true);
             expect(revoked.serial).toBeTruthy();
@@ -181,9 +163,11 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)(
         "generates an audit report into S3 and polls it",
         () =>
           Effect.gen(function* () {
-            const body = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/audit`),
-            )) as { auditReportId: string; s3Key: string; status: string };
+            const body = (yield* send(HttpClientRequest.post(`${baseUrl}/audit`))) as {
+              auditReportId: string;
+              s3Key: string;
+              status: string;
+            };
             expect(body.auditReportId).toBeTruthy();
             expect(body.status).toBe("SUCCESS");
           }),

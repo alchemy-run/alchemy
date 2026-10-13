@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -42,13 +41,7 @@ export interface ExpressionAttributes {
   payload: string;
 }
 
-export type Expression = Resource<
-  TypeId,
-  ExpressionProps,
-  ExpressionAttributes,
-  never,
-  Providers
->;
+export type Expression = Resource<TypeId, ExpressionProps, ExpressionAttributes, never, Providers>;
 
 /**
  * A custom scan expression ("payload") for WAF Content Scanning — tells the
@@ -104,9 +97,7 @@ export const isExpression = (value: unknown): value is Expression =>
  * Cloudflare accepted the create call but the expression did not appear in
  * the returned list — an API anomaly that should never happen in practice.
  */
-export class ExpressionCreateAnomaly extends Data.TaggedError(
-  "ExpressionCreateAnomaly",
-)<{
+export class ExpressionCreateAnomaly extends Data.TaggedError("ExpressionCreateAnomaly")<{
   readonly zoneId: string;
   readonly payload: string;
 }> {}
@@ -131,16 +122,14 @@ export const ExpressionProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((expression) =>
-                  toAttributes(zone.id, expression),
-                ),
+                (page.result ?? []).map((expression) => toAttributes(zone.id, expression)),
               ),
             ),
-            Effect.catchTag("ContentScanningNotEnabled", () =>
-              Effect.succeed([]),
-            ),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            Effect.catchTags({
+              ContentScanningNotEnabled: () => Effect.succeed([]),
+              Forbidden: () => Effect.succeed([]),
+              InvalidRoute: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -207,10 +196,7 @@ export const ExpressionProvider = () =>
       //    `Unowned` and the engine gates takeover behind the adopt policy
       //    before reconcile ever runs.
       if (!observed) {
-        observed = yield* findExpression(
-          zoneId,
-          (e) => e.payload === news.payload,
-        );
+        observed = yield* findExpression(zoneId, (e) => e.payload === news.payload);
       }
 
       // 3. Ensure — create when missing. The create call returns the full
@@ -222,12 +208,10 @@ export const ExpressionProvider = () =>
         });
         observed = created.result.find((e) => e.payload === news.payload);
         if (!observed) {
-          return yield* Effect.fail(
-            new ExpressionCreateAnomaly({
-              zoneId,
-              payload: news.payload,
-            }),
-          );
+          return yield* new ExpressionCreateAnomaly({
+            zoneId,
+            payload: news.payload,
+          });
         }
       }
 
@@ -244,8 +228,10 @@ export const ExpressionProvider = () =>
       if (!expressions.some((e) => e.id === expressionId)) return;
       yield* contentScanning.deletePayload({ zoneId, expressionId }).pipe(
         // A concurrent disable between observe and delete is "gone".
-        Effect.catchTag("ContentScanningNotEnabled", () => Effect.void),
-        Effect.catchTag("InvalidRoute", () => Effect.void),
+        Effect.catchTags({
+          ContentScanningNotEnabled: () => Effect.void,
+          InvalidRoute: () => Effect.void,
+        }),
       );
     }),
   });
@@ -257,17 +243,10 @@ type ObservedExpression = { id?: string | null; payload?: string | null };
  * pagination as soon as a match is seen. Unlike {@link listExpressions},
  * "not observable" errors propagate (reconcile requires scanning enabled).
  */
-const findExpression = (
-  zoneId: string,
-  predicate: (e: ObservedExpression) => boolean,
-) =>
+const findExpression = (zoneId: string, predicate: (e: ObservedExpression) => boolean) =>
   contentScanning.listPayloads
     .items({ zoneId })
-    .pipe(
-      Stream.filter(predicate),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+    .pipe(Stream.filter(predicate), Stream.runHead, Effect.map(Option.getOrUndefined));
 
 /**
  * List the zone's custom scan expressions, mapping "not observable"
@@ -276,19 +255,14 @@ const findExpression = (
 const listExpressions = (zoneId: string) =>
   contentScanning.listPayloads.items({ zoneId }).pipe(
     Stream.runCollect,
-    Effect.map((chunk): readonly ObservedExpression[] | undefined =>
-      Array.from(chunk),
-    ),
-    Effect.catchTag("ContentScanningNotEnabled", () =>
-      Effect.succeed(undefined),
-    ),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.map((chunk): readonly ObservedExpression[] | undefined => Array.from(chunk)),
+    Effect.catchTags({
+      ContentScanningNotEnabled: () => Effect.succeed(undefined),
+      InvalidRoute: () => Effect.succeed(undefined),
+    }),
   );
 
-const toAttributes = (
-  zoneId: string,
-  expression: ObservedExpression,
-): ExpressionAttributes => ({
+const toAttributes = (zoneId: string, expression: ObservedExpression): ExpressionAttributes => ({
   // Cloudflare always echoes both fields for a persisted expression.
   expressionId: expression.id ?? "",
   zoneId,

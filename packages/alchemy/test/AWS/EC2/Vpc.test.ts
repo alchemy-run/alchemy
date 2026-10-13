@@ -1,20 +1,17 @@
-import * as AWS from "@/AWS";
-import { Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update, delete vpc",
@@ -118,8 +115,8 @@ const expectVpcAttribute = Effect.fn(function* (props: {
   }).pipe(
     Effect.tap(Effect.logDebug),
     Effect.flatMap((result: any) =>
-      result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]
-        ?.Value === props.Value
+      result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]?.Value ===
+      props.Value
         ? Effect.succeed(result)
         : Effect.fail(new VpcAttributeStale()),
     ),

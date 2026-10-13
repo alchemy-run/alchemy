@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ComponentVersion } from "@/AWS/GreengrassV2";
-import * as Test from "@/Test/Alchemy";
 import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ComponentVersion } from "@/AWS/GreengrassV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,12 +34,7 @@ const recipe = (version: string) =>
     ComponentVersion: version,
     ComponentDescription: "Alchemy GreengrassV2 test component",
     ComponentPublisher: "Alchemy",
-    Manifests: [
-      {
-        Platform: { os: "linux" },
-        Lifecycle: { run: "echo hello from alchemy" },
-      },
-    ],
+    Manifests: [{ Platform: { os: "linux" }, Lifecycle: { run: "echo hello from alchemy" } }],
   });
 
 const componentExists = (arn: string) =>
@@ -76,14 +71,10 @@ test.provider(
       );
       expect(component.componentName).toBe("com.alchemy.test.GgHello");
       expect(component.componentVersion).toBe("1.0.0");
-      expect(component.arn).toContain(
-        ":components:com.alchemy.test.GgHello:versions:1.0.0",
-      );
+      expect(component.arn).toContain(":components:com.alchemy.test.GgHello:versions:1.0.0");
 
       // Out-of-band verification via distilled: DEPLOYABLE + branded tags.
-      const described = yield* greengrassv2.describeComponent({
-        arn: component.arn,
-      });
+      const described = yield* greengrassv2.describeComponent({ arn: component.arn });
       expect(described.status?.componentState).toBe("DEPLOYABLE");
       expect(described.tags?.fixture).toBe("greengrass-component");
       expect(described.tags?.["alchemy::id"]).toBe("Hello");
@@ -99,9 +90,7 @@ test.provider(
         }),
       );
       expect(retagged.arn).toBe(component.arn);
-      const retaggedTags = yield* greengrassv2.listTagsForResource({
-        resourceArn: component.arn,
-      });
+      const retaggedTags = yield* greengrassv2.listTagsForResource({ resourceArn: component.arn });
       expect(retaggedTags.tags?.team).toBe("edge");
 
       // 3. REPLACE — bumping the recipe version registers a new component
@@ -123,8 +112,5 @@ test.provider(
       yield* stack.destroy();
       yield* waitUntilComponentGone(bumped.arn);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:greengrassv2", "live"],
-    timeout: 300_000,
-  },
+  { tags: ["provider:aws", "provider:aws:greengrassv2", "live"], timeout: 300_000 },
 );

@@ -29,12 +29,7 @@ export interface StopCluster extends Binding.Service<
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      docdbelastic.StopClusterOutput,
-      docdbelastic.StopClusterError
-    >
+    () => Effect.Effect<docdbelastic.StopClusterOutput, docdbelastic.StopClusterError>
   >
 > {}
-export const StopCluster = Binding.Service<StopCluster>(
-  "AWS.DocDBElastic.StopCluster",
-);
+export const StopCluster = Binding.Service<StopCluster>("AWS.DocDBElastic.StopCluster");

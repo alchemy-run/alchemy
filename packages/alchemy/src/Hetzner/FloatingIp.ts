@@ -167,8 +167,7 @@ export const FloatingIp = Resource<FloatingIp>("Hetzner.FloatingIp");
 
 type CloudFloatingIp = GetFloatingIpResponseFloatingIp;
 
-const asType = (type: string): FloatingIpType =>
-  type === "ipv6" ? "ipv6" : "ipv4";
+const asType = (type: string): FloatingIpType => (type === "ipv6" ? "ipv6" : "ipv4");
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -189,15 +188,9 @@ const toAttrs = (ip: CloudFloatingIp): FloatingIp["Attributes"] => ({
   serverId: ip.server,
 });
 
-const createFloatingIpName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createFloatingIpName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }));
   });
 
 const getById = (id: number) =>
@@ -213,10 +206,7 @@ const getByName = (name: string) =>
 
 const getByLabels = (labels: Record<string, string>) =>
   Hetzner.floatingIps
-    .listFloatingIps({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
+    .listFloatingIps({ label_selector: labelSelector(labels), per_page: 50 })
     .pipe(Effect.map(({ floating_ips }) => floating_ips[0]));
 
 const observe = Effect.fn(function* ({
@@ -277,9 +267,7 @@ const disableProtection = (id: number) =>
     .changeFloatingIpProtection({ id, delete: false })
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
-export class FloatingIpNotCreated extends Data.TaggedError(
-  "Hetzner.FloatingIpNotCreated",
-)<{
+export class FloatingIpNotCreated extends Data.TaggedError("Hetzner.FloatingIpNotCreated")<{
   name: string;
 }> {}
 
@@ -309,11 +297,7 @@ export const FloatingIpProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const found = yield* observe({
-        id,
-        name: olds?.name ?? output?.name,
-        outputId: output?.id,
-      });
+      const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
@@ -323,20 +307,13 @@ export const FloatingIpProvider = () =>
       const location = yield* findLocation(news.homeLocation);
       const name = yield* createFloatingIpName(id, news.name, output?.name);
       const internalLabels = yield* createInternalLabels(id);
-      const desiredLabels = {
-        ...toLabels(news.labels),
-        ...internalLabels,
-      };
+      const desiredLabels = { ...toLabels(news.labels), ...internalLabels };
       const desiredDescription = news.description ?? null;
       const desiredProtection = news.deleteProtection ?? false;
 
       // Observe — cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
-      let current: CloudFloatingIp | undefined = yield* observe({
-        id,
-        name,
-        outputId: output?.id,
-      });
+      let current: CloudFloatingIp | undefined = yield* observe({ id, name, outputId: output?.id });
       // A previous generation found via ownership labels (same logical id,
       // different type/location) is the resource being replaced — do not
       // take it over; create a new Floating IP instead.
@@ -397,11 +374,10 @@ export const FloatingIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } =
-          yield* Hetzner.floatingIpActions.changeFloatingIpProtection({
-            id: current.id,
-            delete: desiredProtection,
-          });
+        const { action } = yield* Hetzner.floatingIpActions.changeFloatingIpProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
         yield* waitForAction(action);
       }
 
@@ -414,9 +390,7 @@ export const FloatingIpProvider = () =>
         yield* disableProtection(current.id);
       }
       if (current.server !== null) {
-        const { action } = yield* Hetzner.floatingIpActions.unassignFloatingIp({
-          id: current.id,
-        });
+        const { action } = yield* Hetzner.floatingIpActions.unassignFloatingIp({ id: current.id });
         yield* waitForAction(action);
       }
       yield* Hetzner.floatingIps

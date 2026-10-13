@@ -47,7 +47,6 @@ export interface DescribeBudgetActionsForBudget extends Binding.Service<
   >
 > {}
 
-export const DescribeBudgetActionsForBudget =
-  Binding.Service<DescribeBudgetActionsForBudget>(
-    "AWS.Budgets.DescribeBudgetActionsForBudget",
-  );
+export const DescribeBudgetActionsForBudget = Binding.Service<DescribeBudgetActionsForBudget>(
+  "AWS.Budgets.DescribeBudgetActionsForBudget",
+);

@@ -34,10 +34,7 @@ export interface DetectCustomLabels extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DetectCustomLabelsRequest,
-    ) => Effect.Effect<
-      rekognition.DetectCustomLabelsResponse,
-      rekognition.DetectCustomLabelsError
-    >
+    ) => Effect.Effect<rekognition.DetectCustomLabelsResponse, rekognition.DetectCustomLabelsError>
   >
 > {}
 export const DetectCustomLabels = Binding.Service<DetectCustomLabels>(

@@ -1,26 +1,21 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetProduct } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (id: string) =>
   GetProduct({ id }).pipe(
     Effect.as("found" as const),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -61,12 +56,8 @@ test.provider(
       expect(fetched.active).toEqual(true);
       expect(fetched.images).toEqual(["https://example.com/product.png"]);
       expect(fetched.metadata?.tier).toEqual("pro");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -85,9 +76,7 @@ test.provider(
       expect(updated.name).toEqual("Alchemy Catalog Product Updated");
       expect(updated.description).toEqual("Updated description");
       expect(updated.active).toEqual(false);
-      expect(updated.images).toEqual([
-        "https://example.com/product-updated.png",
-      ]);
+      expect(updated.images).toEqual(["https://example.com/product-updated.png"]);
       expect(updated.metadata).toEqual({ tier: "enterprise", sku: "ent-1" });
 
       const refetched = yield* GetProduct({ id: updated.id });
@@ -172,14 +161,18 @@ test.provider(
       const archived = yield* GetProduct({ id: created.product.id });
       expect(archived.id).toEqual(created.product.id);
       expect(archived.active).toEqual(false);
+
+      // Archived products (and their archived prices) are effectively
+      // deleted and must not re-enter nuke.
+      const products = yield* (yield* Provider.findProvider(Stripe.Product)).list();
+      expect(products.find((product) => product.id === created.product.id)).toBeUndefined();
+      const prices = yield* (yield* Provider.findProvider(Stripe.Price)).list();
+      expect(prices.find((price) => price.id === created.price.id)).toBeUndefined();
+      const plans = yield* (yield* Provider.findProvider(Stripe.Plan)).list();
+      expect(plans.find((plan) => plan.id === created.price.id)).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:price",
-      "provider:stripe:product",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:price", "provider:stripe:product", "live"],
     timeout: 120_000,
   },
 );

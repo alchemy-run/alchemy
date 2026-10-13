@@ -95,19 +95,12 @@ export const TargetAccountConfigurationProvider = () =>
       // ResourceNotFoundException — either way the configuration does not
       // exist.
       const observe = (experimentTemplateId: string, accountId: string) =>
-        fis
-          .getTargetAccountConfiguration({ experimentTemplateId, accountId })
-          .pipe(
-            Effect.map((r) => r.targetAccountConfiguration),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        fis.getTargetAccountConfiguration({ experimentTemplateId, accountId }).pipe(
+          Effect.map((r) => r.targetAccountConfiguration),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
 
-      const toAttrs = (
-        experimentTemplateId: string,
-        config: fis.TargetAccountConfiguration,
-      ) => ({
+      const toAttrs = (experimentTemplateId: string, config: fis.TargetAccountConfiguration) => ({
         experimentTemplateId,
         accountId: config.accountId!,
         roleArn: config.roleArn!,
@@ -131,8 +124,7 @@ export const TargetAccountConfigurationProvider = () =>
         }),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const experimentTemplateId =
-            output?.experimentTemplateId ?? olds?.experimentTemplateId;
+          const experimentTemplateId = output?.experimentTemplateId ?? olds?.experimentTemplateId;
           const accountId = output?.accountId ?? olds?.accountId;
           if (experimentTemplateId === undefined || accountId === undefined) {
             return undefined;
@@ -147,10 +139,7 @@ export const TargetAccountConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           // 1. Observe — the (template, account) pair is the deterministic
           // identity; cloud state is authoritative.
-          let observed = yield* observe(
-            news.experimentTemplateId,
-            news.accountId,
-          );
+          let observed = yield* observe(news.experimentTemplateId, news.accountId);
 
           if (observed === undefined) {
             // 2. Ensure — create when missing; a concurrent create race
@@ -173,8 +162,7 @@ export const TargetAccountConfigurationProvider = () =>
             // update on any delta. `description` is settable-but-not-removable,
             // so it only participates while declared.
             observed.roleArn !== news.roleArn ||
-            (news.description !== undefined &&
-              observed.description !== news.description)
+            (news.description !== undefined && observed.description !== news.description)
           ) {
             observed = yield* fis
               .updateTargetAccountConfiguration({
@@ -196,9 +184,7 @@ export const TargetAccountConfigurationProvider = () =>
               experimentTemplateId: output.experimentTemplateId,
               accountId: output.accountId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Enumerate every template's target account configurations.
@@ -218,15 +204,10 @@ export const TargetAccountConfigurationProvider = () =>
                   Stream.runCollect,
                   Effect.map((chunk) => Array.from(chunk)),
                   // A template can vanish between enumeration and listing.
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 );
               for (const config of configs) {
-                if (
-                  config.accountId === undefined ||
-                  config.roleArn === undefined
-                ) {
+                if (config.accountId === undefined || config.roleArn === undefined) {
                   continue;
                 }
                 results.push({

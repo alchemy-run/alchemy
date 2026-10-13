@@ -13,16 +13,11 @@ export interface GetIdRequest extends Omit<ci.GetIdInput, "IdentityPoolId"> {}
 export interface IdentityPoolAuthClient {
   /** Mint (or look up) an identity ID for a set of logins — or for a guest
    * when the pool allows unauthenticated identities. */
-  getId: (
-    request?: GetIdRequest,
-  ) => Effect.Effect<ci.GetIdResponse, ci.GetIdError>;
+  getId: (request?: GetIdRequest) => Effect.Effect<ci.GetIdResponse, ci.GetIdError>;
   /** Exchange an identity ID (+ logins) for temporary AWS credentials. */
   getCredentialsForIdentity: (
     request: ci.GetCredentialsForIdentityInput,
-  ) => Effect.Effect<
-    ci.GetCredentialsForIdentityResponse,
-    ci.GetCredentialsForIdentityError
-  >;
+  ) => Effect.Effect<ci.GetCredentialsForIdentityResponse, ci.GetCredentialsForIdentityError>;
   /** Exchange an identity ID (+ logins) for an OpenID Connect token
    * (basic/classic flow — requires `allowClassicFlow`). */
   getOpenIdToken: (
@@ -73,6 +68,4 @@ export interface IdentityPoolAuth extends Binding.Service<
   "AWS.Cognito.IdentityPoolAuth",
   <P extends IdentityPool>(pool: P) => Effect.Effect<IdentityPoolAuthClient>
 > {}
-export const IdentityPoolAuth = Binding.Service<IdentityPoolAuth>(
-  "AWS.Cognito.IdentityPoolAuth",
-);
+export const IdentityPoolAuth = Binding.Service<IdentityPoolAuth>("AWS.Cognito.IdentityPoolAuth");

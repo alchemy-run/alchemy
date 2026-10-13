@@ -1,7 +1,3 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Planetscale from "@/Planetscale";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
@@ -9,13 +5,14 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import { adopt } from "@/AdoptPolicy";
+import * as Planetscale from "@/Planetscale";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
@@ -44,16 +41,8 @@ describe
               }),
             );
 
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              "main",
-            );
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
             yield* ps.createBranch({
               organization: database.organization,
@@ -61,32 +50,22 @@ describe
               name: branchName,
               parent_branch: "main",
             });
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, branchName);
 
             const { branch } = yield* stack
               .deploy(
                 Effect.gen(function* () {
-                  const database = yield* Planetscale.MySQLDatabase(
-                    "Database",
-                    {
-                      name: dbName,
-                      region: { slug: "us-east" },
-                      clusterSize: "PS_10",
-                    },
-                  );
-                  const branch = yield* Planetscale.MySQLBranch(
-                    "AdoptedBranch",
-                    {
-                      name: branchName,
-                      database,
-                      parentBranch: "main",
-                      isProduction: false,
-                    },
-                  );
+                  const database = yield* Planetscale.MySQLDatabase("Database", {
+                    name: dbName,
+                    region: { slug: "us-east" },
+                    clusterSize: "PS_10",
+                  });
+                  const branch = yield* Planetscale.MySQLBranch("AdoptedBranch", {
+                    name: branchName,
+                    database,
+                    parentBranch: "main",
+                    isProduction: false,
+                  });
 
                   return { database, branch };
                 }),
@@ -132,16 +111,8 @@ describe
               }),
             );
 
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              "main",
-            );
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
             yield* ps.createBranch({
               organization: database.organization,
@@ -149,43 +120,29 @@ describe
               name: branchName,
               parent_branch: "main",
             });
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, branchName);
 
             const exit = yield* stack
               .deploy(
                 Effect.gen(function* () {
-                  const database = yield* Planetscale.MySQLDatabase(
-                    "Database",
-                    {
-                      name: dbName,
-                      region: { slug: "us-east" },
-                      clusterSize: "PS_10",
-                    },
-                  );
-                  const branch = yield* Planetscale.MySQLBranch(
-                    "ExistingBranch",
-                    {
-                      name: branchName,
-                      database,
-                      parentBranch: "main",
-                      isProduction: false,
-                    },
-                  );
+                  const database = yield* Planetscale.MySQLDatabase("Database", {
+                    name: dbName,
+                    region: { slug: "us-east" },
+                    clusterSize: "PS_10",
+                  });
+                  const branch = yield* Planetscale.MySQLBranch("ExistingBranch", {
+                    name: branchName,
+                    database,
+                    parentBranch: "main",
+                    isProduction: false,
+                  });
 
                   return { database, branch };
                 }),
               )
               .pipe(Effect.exit);
 
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
             yield* stack.destroy();
             yield* waitForDatabaseToBeDeleted(dbName, database.organization);
 
@@ -220,16 +177,8 @@ describe
               }),
             );
 
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              "main",
-            );
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
             const backup = yield* ps.createBackup({
               organization: database.organization,
@@ -239,12 +188,7 @@ describe
               retention_unit: "hour",
               retention_value: 1,
             });
-            yield* waitForBackupSuccess(
-              database.organization,
-              dbName,
-              "main",
-              backup.id,
-            );
+            yield* waitForBackupSuccess(database.organization, dbName, "main", backup.id);
 
             const { branch } = yield* stack.deploy(
               Effect.gen(function* () {
@@ -253,17 +197,14 @@ describe
                   region: { slug: "us-east" },
                   clusterSize: "PS_10",
                 });
-                const branch = yield* Planetscale.MySQLBranch(
-                  "RestoredBranch",
-                  {
-                    name: branchName,
-                    database,
-                    parentBranch: "main",
-                    isProduction: true,
-                    backupId: backup.id,
-                    clusterSize: "PS_10",
-                  },
-                );
+                const branch = yield* Planetscale.MySQLBranch("RestoredBranch", {
+                  name: branchName,
+                  database,
+                  parentBranch: "main",
+                  isProduction: true,
+                  backupId: backup.id,
+                  clusterSize: "PS_10",
+                });
 
                 return { database, branch };
               }),
@@ -292,15 +233,12 @@ describe
                   region: { slug: "us-east" },
                   clusterSize: "PS_10",
                 });
-                const branch = yield* Planetscale.MySQLBranch(
-                  "RestoredBranch",
-                  {
-                    name: branchName,
-                    database,
-                    parentBranch: "main",
-                    isProduction: false,
-                  },
-                );
+                const branch = yield* Planetscale.MySQLBranch("RestoredBranch", {
+                  name: branchName,
+                  database,
+                  parentBranch: "main",
+                  isProduction: false,
+                });
 
                 return { database, branch };
               }),
@@ -385,10 +323,7 @@ describe
             );
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -463,10 +398,7 @@ describe
             );
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -511,10 +443,7 @@ describe
             expect(live.parent_branch).toEqual(parent.name);
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -540,16 +469,8 @@ describe
               }),
             );
 
-            yield* Planetscale.waitForBranchReady(
-              database.organization,
-              dbName,
-              "main",
-            );
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* Planetscale.waitForBranchReady(database.organization, dbName, "main");
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
 
             const { branch } = yield* stack.deploy(
               Effect.gen(function* () {
@@ -558,15 +479,12 @@ describe
                   region: { slug: "us-east" },
                   clusterSize: "PS_10",
                 }).pipe(RemovalPolicy.retain(true));
-                const branch = yield* Planetscale.MySQLBranch(
-                  "RetainedBranch",
-                  {
-                    name: branchName,
-                    database,
-                    parentBranch: "main",
-                    isProduction: false,
-                  },
-                ).pipe(RemovalPolicy.retain(true));
+                const branch = yield* Planetscale.MySQLBranch("RetainedBranch", {
+                  name: branchName,
+                  database,
+                  parentBranch: "main",
+                  isProduction: false,
+                }).pipe(RemovalPolicy.retain(true));
 
                 return { database, branch };
               }),
@@ -583,16 +501,9 @@ describe
             );
             expect(live.name).toEqual(branchName);
 
-            yield* deleteBranchIfExists(
-              database.organization,
-              dbName,
-              branchName,
-            );
+            yield* deleteBranchIfExists(database.organization, dbName, branchName);
             yield* ps
-              .deleteDatabase({
-                organization: database.organization,
-                database: dbName,
-              })
+              .deleteDatabase({ organization: database.organization, database: dbName })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
             yield* waitForDatabaseToBeDeleted(dbName, database.organization);
           }).pipe(logLevel),
@@ -627,24 +538,15 @@ const waitForBranchToBeDeleted = Effect.fn(function* (
   );
 });
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
-  yield* ps
-    .getDatabase({
-      organization,
-      database,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
+  yield* ps.getDatabase({ organization, database }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
 const waitForBackupSuccess = Effect.fn(function* (
@@ -661,22 +563,14 @@ const waitForBackupSuccess = Effect.fn(function* (
         case "failed":
         case "canceled":
         case "ignored":
-          return Effect.fail(
-            new BackupNotReady({ retryable: false, state: backup.state }),
-          );
+          return Effect.fail(new BackupNotReady({ retryable: false, state: backup.state }));
         default:
-          return Effect.fail(
-            new BackupNotReady({ retryable: true, state: backup.state }),
-          );
+          return Effect.fail(new BackupNotReady({ retryable: true, state: backup.state }));
       }
     }),
     Effect.retry({
-      while: (e): e is BackupNotReady =>
-        e instanceof BackupNotReady && e.retryable,
-      schedule: Schedule.max([
-        Schedule.exponential(1_000),
-        Schedule.recurs(120),
-      ]),
+      while: (e): e is BackupNotReady => e instanceof BackupNotReady && e.retryable,
+      schedule: Schedule.max([Schedule.exponential(1_000), Schedule.recurs(120)]),
     }),
   );
 });

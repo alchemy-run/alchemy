@@ -9,10 +9,7 @@ export { Counter } from "./worker.ts";
  * entry configured in `vite.config.ts` (which points at `worker.ts`).
  */
 export default {
-  async fetch(
-    request: Request,
-    env: Parameters<typeof worker.fetch>[1],
-  ): Promise<Response> {
+  async fetch(request: Request, env: Parameters<typeof worker.fetch>[1]): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/entry") {

@@ -5,11 +5,7 @@ import type * as Result from "effect/Result";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ObjectType } from "./Protocol/ObjectCodec.ts";
 import { StoreError } from "./Protocol/Store.ts";
-import type {
-  CommitPushResult,
-  RefCommand,
-  RepoMetaData,
-} from "./RepoObject.ts";
+import type { CommitPushResult, RefCommand, RepoMetaData } from "./RepoObject.ts";
 import type { StreamingFeeder } from "./Store/StreamingSource.ts";
 
 /** A proposed ref change. Zero old/new OIDs mean creation/deletion. */
@@ -24,9 +20,7 @@ export interface PushInput {
 /** @internal The decoder and engine share this state; applications see PushInput. */
 export interface IncomingState {
   readonly feeder: StreamingFeeder;
-  readonly receiving: Fiber.Fiber<
-    Result.Result<{ readonly total: number }, StoreError>
-  >;
+  readonly receiving: Fiber.Fiber<Result.Result<{ readonly total: number }, StoreError>>;
   readonly packStart: number;
   readonly declaredBytes: number | undefined;
   active: boolean;
@@ -56,16 +50,12 @@ export const preparedStates = new WeakMap<
   PreparedPush,
   {
     readonly owner: object;
-    readonly commit: Effect.Effect<
-      CommitPushResult,
-      StoreError,
-      RuntimeContext
-    >;
+    readonly commit: Effect.Effect<CommitPushResult, StoreError, RuntimeContext>;
   }
 >();
 
 /** A transaction/input was already consumed, escaped its scope, or belongs to another engine. */
 export const invalidPush = () =>
-  new StoreError({
+  StoreError.make({
     reason: "push is no longer active or belongs to another engine",
   });

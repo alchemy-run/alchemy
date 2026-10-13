@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ConnectorProfile } from "@/AWS/AppFlow";
-import * as Test from "@/Test/Alchemy";
 import * as appflow from "@distilled.cloud/aws/appflow";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ConnectorProfile } from "@/AWS/AppFlow";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,9 +25,7 @@ test.provider(
           connectionMode: "Public",
           connectorProfileConfig: {
             connectorProfileProperties: {
-              Salesforce: {
-                instanceUrl: "https://invalid-example.my.salesforce.com",
-              },
+              Salesforce: { instanceUrl: "https://invalid-example.my.salesforce.com" },
             },
             connectorProfileCredentials: {
               Salesforce: {
@@ -41,10 +39,9 @@ test.provider(
       // ConnectorServerException (unreachable host) is the observed tag;
       // ConnectorAuthenticationException covers a reachable-but-unauthorized
       // vendor. Both are typed via the distilled patch for this operation.
-      expect([
-        "ConnectorServerException",
-        "ConnectorAuthenticationException",
-      ]).toContain(error._tag);
+      expect(["ConnectorServerException", "ConnectorAuthenticationException"]).toContain(
+        error._tag,
+      );
     }),
   { tags: ["provider:aws", "provider:aws:appflow", "live"] },
 );
@@ -78,9 +75,7 @@ test.provider.skipIf(!process.env.AWS_TEST_APPFLOW_CONNECTOR)(
         connectionMode: "Public" as const,
         connectorProfileConfig: {
           connectorProfileProperties: {
-            Salesforce: {
-              instanceUrl: process.env.APPFLOW_SALESFORCE_INSTANCE_URL!,
-            },
+            Salesforce: { instanceUrl: process.env.APPFLOW_SALESFORCE_INSTANCE_URL! },
           },
           connectorProfileCredentials: {
             Salesforce: {
@@ -91,9 +86,7 @@ test.provider.skipIf(!process.env.AWS_TEST_APPFLOW_CONNECTOR)(
         },
       };
 
-      const created = yield* stack.deploy(
-        ConnectorProfile("Salesforce", props),
-      );
+      const created = yield* stack.deploy(ConnectorProfile("Salesforce", props));
       expect(created.connectorProfileName).toBe("alchemy-test-appflow-cp");
       expect(created.connectorProfileArn).toContain(":appflow:");
       expect(created.connectorType).toBe("Salesforce");

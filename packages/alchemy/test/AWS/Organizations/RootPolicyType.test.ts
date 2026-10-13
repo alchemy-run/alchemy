@@ -1,16 +1,13 @@
+import * as organizations from "@distilled.cloud/aws/organizations";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Root, RootPolicyType } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as organizations from "@distilled.cloud/aws/organizations";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = OrganizationLease.make(
-  { providers: AWS.providers() },
-  "shared",
-);
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 // A RootPolicyType is the enable/disable state of a policy type on an org root.
 // `list()` enumerates roots via `listRoots` and emits one Attributes per
@@ -74,8 +71,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
               (root.PolicyTypes ?? []).some(
                 (summary) =>
                   summary.Type === "BACKUP_POLICY" &&
-                  (summary.Status === "ENABLED" ||
-                    summary.Status === "PENDING_ENABLE"),
+                  (summary.Status === "ENABLED" || summary.Status === "PENDING_ENABLE"),
               ),
             ),
           ),
@@ -113,20 +109,15 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Organizations.RootPolicyType",
+          isResourceState(r.row) && r.row.resourceType === "AWS.Organizations.RootPolicyType",
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.RootPolicyType state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.RootPolicyType state row found after deploy"),
         );
       }
       yield* state.set({

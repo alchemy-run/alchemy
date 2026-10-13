@@ -1,4 +1,5 @@
 import * as kms from "@distilled.cloud/aws/kms";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -7,15 +8,12 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import { toWireDays } from "../../Util/Duration.ts";
 
 export type KeyId = string;
 export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
@@ -221,8 +219,7 @@ export const KeyProvider = () =>
     diff: Effect.fn(function* ({ news = {}, olds = {} }) {
       if (!isResolved(news)) return;
       if (
-        (news.keyUsage ?? defaultKeyUsage) !==
-          (olds.keyUsage ?? defaultKeyUsage) ||
+        (news.keyUsage ?? defaultKeyUsage) !== (olds.keyUsage ?? defaultKeyUsage) ||
         (news.keySpec ?? defaultKeySpec) !== (olds.keySpec ?? defaultKeySpec) ||
         (news.multiRegion ?? false) !== (olds.multiRegion ?? false)
       ) {
@@ -237,8 +234,7 @@ export const KeyProvider = () =>
       const enabled = news.enabled ?? true;
       const enableKeyRotation = news.enableKeyRotation ?? false;
       const multiRegion = news.multiRegion ?? false;
-      const deletionWindowInDays =
-        toWireDays(news.deletionWindow) ?? defaultDeletionWindowInDays;
+      const deletionWindowInDays = toWireDays(news.deletionWindow) ?? defaultDeletionWindowInDays;
       const rotationPeriodInDays = toWireDays(news.rotationPeriod);
       const desiredPolicy =
         news.policy === undefined
@@ -279,9 +275,7 @@ export const KeyProvider = () =>
         }
         state = yield* readKey({ keyId, deletionWindowInDays });
         if (!state) {
-          return yield* Effect.die(
-            new Error(`failed to read created KMS key ${keyId}`),
-          );
+          return yield* Effect.die(new Error(`failed to read created KMS key ${keyId}`));
         }
       }
 
@@ -309,10 +303,7 @@ export const KeyProvider = () =>
         );
       }
 
-      if (
-        desiredPolicy !== undefined &&
-        !samePolicy(state.policy, desiredPolicy)
-      ) {
+      if (desiredPolicy !== undefined && !samePolicy(state.policy, desiredPolicy)) {
         yield* kms
           .putKeyPolicy({
             KeyId: state.keyId,
@@ -369,9 +360,7 @@ export const KeyProvider = () =>
         yield* kms
           .tagResource({
             KeyId: state.keyId,
-            Tags: toKmsTags(
-              Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
-            ),
+            Tags: toKmsTags(Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value]))),
           })
           .pipe(
             Effect.retry({
@@ -415,8 +404,10 @@ export const KeyProvider = () =>
           PendingWindowInDays: output.deletionWindowInDays,
         })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.void),
-          Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+          Effect.catchTags({
+            NotFoundException: () => Effect.void,
+            KMSInvalidStateException: () => Effect.void,
+          }),
         );
 
       const remaining = yield* Effect.repeat(
@@ -431,10 +422,8 @@ export const KeyProvider = () =>
         },
       );
       if (remaining !== undefined && remaining !== "PendingDeletion") {
-        yield* Effect.die(
-          new Error(
-            `KMS key ${output.keyId} remained ${remaining} after scheduling deletion`,
-          ),
+        return yield* Effect.die(
+          new Error(`KMS key ${output.keyId} remained ${remaining} after scheduling deletion`),
         );
       }
       yield* session.note(`Scheduled KMS key deletion: ${output.keyId}`);
@@ -450,9 +439,7 @@ const readKey = Effect.fn(function* ({
 }) {
   const described = yield* kms
     .describeKey({ KeyId: keyId })
-    .pipe(
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
   const metadata = described?.KeyMetadata;
   if (!metadata?.Arn) return undefined;
@@ -461,11 +448,7 @@ const readKey = Effect.fn(function* ({
   }
 
   const [tags, rotation, policy] = yield* Effect.all(
-    [
-      listKeyTags(metadata.KeyId),
-      readKeyRotation(metadata.KeyId),
-      readKeyPolicy(metadata.KeyId),
-    ],
+    [listKeyTags(metadata.KeyId), readKeyRotation(metadata.KeyId), readKeyPolicy(metadata.KeyId)],
     { concurrency: "unbounded" },
   );
 
@@ -500,40 +483,36 @@ const readConvergedKey = Effect.fn(function* ({
   const observeConverged = Effect.gen(function* () {
     const key = yield* readKey({ keyId, deletionWindowInDays });
     if (!key) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if ((key.description ?? "") !== desiredDescription) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (key.enabled !== desiredEnabled) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (
-      !Object.entries(desiredTags).every(
-        ([name, value]) => key.tags[name] === value,
-      ) ||
-      !Object.keys(key.tags).every(
-        (name) => desiredTags[name] === key.tags[name],
-      )
+      !Object.entries(desiredTags).every(([name, value]) => key.tags[name] === value) ||
+      !Object.keys(key.tags).every((name) => desiredTags[name] === key.tags[name])
     ) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (desiredPolicy !== undefined && !samePolicy(key.policy, desiredPolicy)) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (desiredEnabled) {
       if (desiredKeyRotationEnabled && key.keyRotationEnabled !== true) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
       if (!desiredKeyRotationEnabled && key.keyRotationEnabled === true) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
       if (
         desiredKeyRotationEnabled &&
         desiredRotationPeriodInDays !== undefined &&
         key.rotationPeriodInDays !== desiredRotationPeriodInDays
       ) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
     }
     return key;
@@ -572,23 +551,21 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
       enabled: response.KeyRotationEnabled,
       periodInDays: response.RotationPeriodInDays,
     })),
-    Effect.catchTag("UnsupportedOperationException", () =>
-      Effect.succeed(undefined),
-    ),
-    Effect.catchTag("KMSInvalidStateException", () =>
-      Effect.succeed(undefined),
-    ),
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      UnsupportedOperationException: () => Effect.succeed(undefined),
+      KMSInvalidStateException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.succeed(undefined),
+    }),
   );
 });
 
 const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
     Effect.map((response) => response.Policy),
-    Effect.catchTag("KMSInvalidStateException", () =>
-      Effect.succeed(undefined),
-    ),
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      KMSInvalidStateException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.succeed(undefined),
+    }),
   );
 });
 
@@ -624,8 +601,7 @@ const toTagRecord = (tags: kms.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
-        (tag): tag is kms.Tag =>
-          typeof tag.TagKey === "string" && typeof tag.TagValue === "string",
+        (tag): tag is kms.Tag => typeof tag.TagKey === "string" && typeof tag.TagValue === "string",
       )
       .map((tag) => [tag.TagKey, tag.TagValue]),
   );
@@ -638,10 +614,7 @@ const toKmsTags = (tags: Record<string, string>): kms.Tag[] =>
  * IAM canonicalizer so a re-deploy of an equivalent document (different key
  * order, whitespace, or PolicyDocument-vs-string form) is a no-op.
  */
-const samePolicy = (
-  observed: string | undefined,
-  desired: string | undefined,
-) => {
+const samePolicy = (observed: string | undefined, desired: string | undefined) => {
   if (observed === desired) return true;
   if (observed === undefined || desired === undefined) return false;
   return normalizePolicyDocument(observed) === normalizePolicyDocument(desired);
@@ -652,11 +625,6 @@ const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "KMSInternalException" ||
   error._tag === "KMSInvalidStateException";
 
-class KmsKeyNotConverged extends Error {
-  readonly _tag = "KmsKeyNotConverged";
-}
+class KmsKeyNotConverged extends Data.TaggedError("KmsKeyNotConverged") {}
 
-const kmsRetrySchedule = Schedule.max([
-  Schedule.exponential(250),
-  Schedule.recurs(7),
-]);
+const kmsRetrySchedule = Schedule.max([Schedule.exponential(250), Schedule.recurs(7)]);

@@ -22,33 +22,31 @@ export const StartQueryHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CloudTrail.StartQuery(${store}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["cloudtrail:StartQuery"],
-                  Resource: [store.eventDataStoreArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.CloudTrail.StartQuery(${store}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["cloudtrail:StartQuery"],
+                Resource: [store.eventDataStoreArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.CloudTrail.StartQuery(${store.LogicalId})`)(
-        function* (request: StartQueryRequest) {
-          const arn = yield* Arn;
-          const eventDataStoreId = arn.split("/").pop()!;
-          const { QueryStatement, ...rest } = request;
-          return yield* startQuery({
-            ...rest,
-            QueryStatement:
-              typeof QueryStatement === "function"
-                ? QueryStatement(eventDataStoreId)
-                : QueryStatement,
-          });
-        },
-      );
+      return Effect.fn(`AWS.CloudTrail.StartQuery(${store.LogicalId})`)(function* (
+        request: StartQueryRequest,
+      ) {
+        const arn = yield* Arn;
+        const eventDataStoreId = arn.split("/").pop()!;
+        const { QueryStatement, ...rest } = request;
+        return yield* startQuery({
+          ...rest,
+          QueryStatement:
+            typeof QueryStatement === "function"
+              ? QueryStatement(eventDataStoreId)
+              : QueryStatement,
+        });
+      });
     });
   }),
 );

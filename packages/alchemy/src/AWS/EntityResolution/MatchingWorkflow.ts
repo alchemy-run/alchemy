@@ -129,9 +129,7 @@ export interface MatchingWorkflow extends Resource<
  *
  * @resource
  */
-export const MatchingWorkflow = Resource<MatchingWorkflow>(
-  "AWS.EntityResolution.MatchingWorkflow",
-);
+export const MatchingWorkflow = Resource<MatchingWorkflow>("AWS.EntityResolution.MatchingWorkflow");
 
 export const MatchingWorkflowProvider = () =>
   Provider.effect(
@@ -141,29 +139,21 @@ export const MatchingWorkflowProvider = () =>
         id: string,
         props: { workflowName?: string | undefined },
       ) {
-        return (
-          props.workflowName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.workflowName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get a workflow by name; typed not-found → undefined. */
       const getByName = Effect.fn(function* (workflowName: string) {
         return yield* entityresolution
           .getMatchingWorkflow({ workflowName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
         stables: ["workflowName", "workflowArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.workflowName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.workflowName ?? (yield* createName(id, olds ?? {}));
           const workflow = yield* getByName(name);
           if (workflow === undefined) return undefined;
           const attrs = {
@@ -272,10 +262,7 @@ export const MatchingWorkflowProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
             );
         }),

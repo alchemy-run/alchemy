@@ -27,12 +27,7 @@ export interface GetMembers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.GetMembersRequest,
-    ) => Effect.Effect<
-      securityhub.GetMembersResponse,
-      securityhub.GetMembersError
-    >
+    ) => Effect.Effect<securityhub.GetMembersResponse, securityhub.GetMembersError>
   >
 > {}
-export const GetMembers = Binding.Service<GetMembers>(
-  "AWS.SecurityHub.GetMembers",
-);
+export const GetMembers = Binding.Service<GetMembers>("AWS.SecurityHub.GetMembers");

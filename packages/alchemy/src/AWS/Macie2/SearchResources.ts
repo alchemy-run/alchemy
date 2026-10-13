@@ -27,12 +27,7 @@ export interface SearchResources extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.SearchResourcesRequest,
-    ) => Effect.Effect<
-      macie2.SearchResourcesResponse,
-      macie2.SearchResourcesError
-    >
+    ) => Effect.Effect<macie2.SearchResourcesResponse, macie2.SearchResourcesError>
   >
 > {}
-export const SearchResources = Binding.Service<SearchResources>(
-  "AWS.Macie2.SearchResources",
-);
+export const SearchResources = Binding.Service<SearchResources>("AWS.Macie2.SearchResources");

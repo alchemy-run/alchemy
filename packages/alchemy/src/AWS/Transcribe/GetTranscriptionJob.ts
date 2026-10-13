@@ -33,10 +33,7 @@ export interface GetTranscriptionJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetTranscriptionJobRequest,
-    ) => Effect.Effect<
-      transcribe.GetTranscriptionJobResponse,
-      transcribe.GetTranscriptionJobError
-    >
+    ) => Effect.Effect<transcribe.GetTranscriptionJobResponse, transcribe.GetTranscriptionJobError>
   >
 > {}
 export const GetTranscriptionJob = Binding.Service<GetTranscriptionJob>(

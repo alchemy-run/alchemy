@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { HostedZone, QueryLoggingConfig } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { HostedZone, QueryLoggingConfig } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,9 +28,7 @@ const ensureLogGroup = (logGroupName: string) =>
   inUsEast1(
     logs
       .createLogGroup({ logGroupName })
-      .pipe(
-        Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
-      ),
+      .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void)),
   );
 
 const removeLogGroup = (logGroupName: string) =>
@@ -48,16 +46,11 @@ const removePolicy = inUsEast1(
 
 const assertConfigGone = (id: string) =>
   route53.getQueryLoggingConfig({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("query logging config still exists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("query logging config still exists"))),
     Effect.catchTag("NoSuchQueryLoggingConfig", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -128,12 +121,8 @@ test.provider(
         const observed = yield* route53.getQueryLoggingConfig({
           Id: created.id,
         });
-        expect(observed.QueryLoggingConfig.HostedZoneId).toBe(
-          created.hostedZoneId,
-        );
-        expect(observed.QueryLoggingConfig.CloudWatchLogsLogGroupArn).toBe(
-          logGroupArnA,
-        );
+        expect(observed.QueryLoggingConfig.HostedZoneId).toBe(created.hostedZoneId);
+        expect(observed.QueryLoggingConfig.CloudWatchLogsLogGroupArn).toBe(logGroupArnA);
 
         // Changing the log group replaces the configuration (no update API).
         const replaced = yield* stack.deploy(

@@ -1,16 +1,4 @@
-import * as Effect from "effect/Effect";
-import { Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetProjectBranchesResponse,
   type GetProjectsResponse,
@@ -21,7 +9,17 @@ import {
   updateBranch,
   createProjectBranch,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedBranch } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -31,8 +29,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { ObservedBranch } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface BranchProps {
   /**
@@ -139,10 +135,7 @@ const createGitName = (id: string, gitName: string | undefined) =>
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listBranches = (
-  projectId: string,
-  query?: { readonly gitName?: string },
-) =>
+const listBranches = (projectId: string, query?: { readonly gitName?: string }) =>
   Effect.gen(function* () {
     const branches: GetProjectBranchesResponse["data"][number][] = [];
     let cursor: string | undefined;
@@ -156,12 +149,10 @@ const listBranches = (
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -178,12 +169,10 @@ const listProjects = () =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -193,9 +182,7 @@ const listProjects = () =>
 const findBranch = (projectId: string, gitName: string) =>
   listBranches(projectId, { gitName }).pipe(
     Effect.flatMap((branches) => {
-      const matches = branches.filter(
-        (b: ObservedBranch) => b.gitName === gitName,
-      );
+      const matches = branches.filter((b: ObservedBranch) => b.gitName === gitName);
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -224,8 +211,7 @@ const ensureBranchIdentity = (
   branch: ObservedBranch,
   expected: { projectId: string; gitName: string },
 ) =>
-  branch.project.id === expected.projectId &&
-  branch.gitName === expected.gitName
+  branch.project.id === expected.projectId && branch.gitName === expected.gitName
     ? Effect.void
     : Effect.fail(
         new Error(
@@ -244,9 +230,7 @@ const ProviderLive = () =>
           const branches = yield* Effect.forEach(
             projects,
             (project) =>
-              listBranches(project.id).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed([])),
-              ),
+              listBranches(project.id).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
             { concurrency: 8 },
           );
           // Current defaults and production-role branches are project-owned
@@ -254,9 +238,7 @@ const ProviderLive = () =>
           // them; omit them here so unsafe nuke only receives deletable rows.
           return branches
             .flat()
-            .filter(
-              (branch) => !branch.isDefault && branch.role !== "production",
-            )
+            .filter((branch) => !branch.isDefault && branch.role !== "production")
             .map((branch) => attrsFrom(branch));
         }),
         diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -264,8 +246,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.branchId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -275,8 +256,7 @@ const ProviderLive = () =>
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
             (newGitName !== undefined &&
-              newGitName !==
-                (output?.gitName ?? (yield* createGitName(id, olds.gitName))))
+              newGitName !== (output?.gitName ?? (yield* createGitName(id, olds.gitName))))
           ) {
             return { action: "replace" } as const;
           }
@@ -290,23 +270,19 @@ const ProviderLive = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
-          const branchId = isPrismaDevId(output?.branchId)
-            ? undefined
-            : output?.branchId;
+          const branchId = isPrismaDevId(output?.branchId) ? undefined : output?.branchId;
+          const findBranchInProject = Effect.gen(function* () {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            return projectId
+              ? yield* findBranch(projectId, yield* createGitName(id, olds.gitName))
+              : undefined;
+          });
           const branch = branchId
             ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findBranch(
-                      projectId,
-                      yield* createGitName(id, olds.gitName),
-                    )
-                  : undefined;
-              });
+            : yield* findBranchInProject;
           if (!branch) return undefined;
           const attrs = attrsFrom(branch, output?.previousDefaultBranchId);
           return branchId === undefined ? Unowned(attrs) : attrs;
@@ -315,9 +291,7 @@ const ProviderLive = () =>
           const projectId = yield* resolveProjectId(news.project);
           const gitName = yield* createGitName(id, news.gitName);
           let previousDefaultBranchId = output?.previousDefaultBranchId;
-          const branchId = isPrismaDevId(output?.branchId)
-            ? undefined
-            : output?.branchId;
+          const branchId = isPrismaDevId(output?.branchId) ? undefined : output?.branchId;
           let branch = branchId
             ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
@@ -326,9 +300,7 @@ const ProviderLive = () =>
             : undefined;
           if (!branch) {
             const liveBranches = yield* listBranches(projectId);
-            const defaults = liveBranches.filter(
-              (candidate) => candidate.isDefault,
-            );
+            const defaults = liveBranches.filter((candidate) => candidate.isDefault);
             if (defaults.length !== 1) {
               return yield* Effect.fail(
                 new Error(
@@ -342,9 +314,7 @@ const ProviderLive = () =>
             branch = yield* createProjectBranch({
               projectId,
               gitName,
-              ...(news.isDefault === undefined
-                ? {}
-                : { isDefault: news.isDefault }),
+              ...(news.isDefault === undefined ? {} : { isDefault: news.isDefault }),
             }).pipe(
               // A replayed create would make a second branch; the retry
               // policy cannot see the request, so opt out explicitly.
@@ -365,9 +335,7 @@ const ProviderLive = () =>
           });
           if (news.isDefault === true && !branch.isDefault) {
             const liveBranches = yield* listBranches(projectId);
-            const defaults = liveBranches.filter(
-              (candidate) => candidate.isDefault,
-            );
+            const defaults = liveBranches.filter((candidate) => candidate.isDefault);
             if (defaults.length !== 1 || defaults[0]!.id === branch.id) {
               return yield* Effect.fail(
                 new Error(
@@ -416,10 +384,7 @@ const ProviderLive = () =>
           }
           if (branch.isDefault) {
             const previousDefaultBranchId = output.previousDefaultBranchId;
-            if (
-              previousDefaultBranchId === undefined ||
-              previousDefaultBranchId === branch.id
-            ) {
+            if (previousDefaultBranchId === undefined || previousDefaultBranchId === branch.id) {
               return yield* Effect.fail(
                 new Error(
                   `Cannot safely delete default Prisma branch '${branch.gitName}' because state does not identify the branch it displaced. Promote another branch explicitly before deleting this resource.`,
@@ -438,10 +403,7 @@ const ProviderLive = () =>
                 ),
               ),
             );
-            if (
-              previous.project.id !== output.projectId ||
-              previous.id === branch.id
-            ) {
+            if (previous.project.id !== output.projectId || previous.id === branch.id) {
               return yield* Effect.fail(
                 new Error(
                   `Previous default Prisma branch '${previous.id}' does not belong to project '${output.projectId}'. Refusing an unsafe promotion.`,
@@ -484,9 +446,18 @@ const ProviderLive = () =>
               );
             }
           }
+          // A member deleted moments ago (e.g. an App) can still count as
+          // live until Prisma's control plane catches up.
           yield* deleteBranch({
             branchId: output.branchId,
-          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              schedule: Schedule.exponential("500 millis"),
+              times: 6,
+            }),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
       };
     }),

@@ -1,12 +1,10 @@
 import { frameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SolidStart build. */
-export const SOLIDSTART_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/solidstart";
+export const SOLIDSTART_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart";
 
 /** The Node container deploy target for the SolidStart build. */
-export const SOLIDSTART_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/solidstart/node";
+export const SOLIDSTART_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/node";
 
 export interface SolidStartProps extends FrameworkSiteProps {
   /**

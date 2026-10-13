@@ -1,17 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import PollyTestFunctionLive, {
-  BUCKET,
-  LEXICON_NAME,
-  PollyTestFunction,
-} from "./handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import PollyTestFunctionLive, { BUCKET, LEXICON_NAME, PollyTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "PollyBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -40,39 +33,26 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("2 seconds"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
     }),
   );
 
 describe.sequential(
   "Polly Bindings",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:polly",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:polly", "provider:aws:s3", "live"],
   },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Polly test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Polly test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Polly test setup: deploying fixture");
@@ -86,21 +66,15 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/ping`;
-        yield* Effect.logInfo(
-          `Polly test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Polly test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Polly test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Polly test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -108,22 +82,16 @@ describe.sequential(
       { timeout: 300_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 180_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 180_000 });
 
     describe("DescribeVoices", () => {
       test.provider(
         "lists en-US voices including Joanna",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/voices`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              error?: string;
-              count: number;
-              voiceIds: string[];
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/voices`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { error?: string; count: number; voiceIds: string[] };
 
             expect(response.error).toBeUndefined();
             expect(response.count).toBeGreaterThan(0);
@@ -138,12 +106,9 @@ describe.sequential(
         "lists the fixture's deployed lexicon",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/lexicons`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              error?: string;
-              names: string[];
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/lexicons`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { error?: string; names: string[] };
 
             expect(response.error).toBeUndefined();
             expect(response.names).toContain(LEXICON_NAME);
@@ -157,9 +122,9 @@ describe.sequential(
         "reads the lexicon's PLS content scoped to its ARN",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/lexicon-content`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/lexicon-content`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               error?: string;
               name: string | null;
               containsAlias: boolean;
@@ -190,14 +155,9 @@ describe.sequential(
         "streams text events in and collects audio events out",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/stream`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              error?: string;
-              events: number;
-              audioBytes: number;
-              closed: boolean;
-            };
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/stream`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { error?: string; events: number; audioBytes: number; closed: boolean };
 
             expect(response.error).toBeUndefined();
             expect(response.events).toBeGreaterThan(0);
@@ -213,13 +173,9 @@ describe.sequential(
         "synthesizes text with the lexicon applied to non-empty mp3 bytes",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/synthesize`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              error?: string;
-              contentType?: string;
-              byteLength: number;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/synthesize`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { error?: string; contentType?: string; byteLength: number };
 
             expect(response.error).toBeUndefined();
             expect(response.contentType).toContain("audio/mpeg");
@@ -234,9 +190,9 @@ describe.sequential(
         "runs an async synthesis task to completion in S3",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/task`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/task`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               error?: string;
               taskId: string;
               status: string | null;

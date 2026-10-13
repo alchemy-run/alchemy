@@ -1,16 +1,13 @@
-import {
-  createComputeArchive,
-  normalizeEntrypoint,
-} from "@/Prisma/ComputeArchive";
-import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
-import { PlatformServices } from "@/Util/PlatformServices";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { gunzipSync } from "node:zlib";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { createComputeArchive, normalizeEntrypoint } from "@/Prisma/ComputeArchive";
+import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
+import { PlatformServices } from "@/Util/PlatformServices";
 
 interface TarEntry {
   name: string;
@@ -57,16 +54,12 @@ describe(
     it(
       "closes Node and Bun directory handles without masking traversal",
       async () => {
-        await expect(
-          closeDirectoryHandle({ close: () => undefined }),
-        ).resolves.toBeUndefined();
+        await expect(closeDirectoryHandle({ close: () => undefined })).resolves.toBeUndefined();
         await expect(
           closeDirectoryHandle({ close: () => Promise.resolve() }),
         ).resolves.toBeUndefined();
         await expect(
-          closeDirectoryHandle({
-            close: () => Promise.reject(new Error("closed")),
-          }),
+          closeDirectoryHandle({ close: () => Promise.reject(new Error("closed")) }),
         ).resolves.toBeUndefined();
         await expect(
           closeDirectoryHandle({
@@ -89,14 +82,8 @@ describe(
             prefix: "alchemy-prisma-required-index-",
           });
           yield* fs.makeDirectory(path.join(root, "public"));
-          yield* fs.writeFileString(
-            path.join(root, "server.mjs"),
-            "export {};",
-          );
-          yield* fs.writeFileString(
-            path.join(root, "public", "index.html"),
-            "site",
-          );
+          yield* fs.writeFileString(path.join(root, "server.mjs"), "export {};");
+          yield* fs.writeFileString(path.join(root, "public", "index.html"), "site");
 
           const error = yield* createComputeArchive({
             directory: root,
@@ -119,30 +106,19 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           yield* fs.makeDirectory(path.join(root, "src"));
-          yield* fs.writeFileString(
-            path.join(root, "src", "main.ts"),
-            "console.log('hello');",
-          );
+          yield* fs.writeFileString(path.join(root, "src", "main.ts"), "console.log('hello');");
           yield* fs.writeFileString(path.join(root, "package.json"), "{}");
 
           const archive = yield* createComputeArchive({
             directory: root,
             entrypoint: "src/main.ts",
           });
-          const entries = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          );
-          const byName = new Map(
-            entries.map((entry) => [entry.name, entry.body]),
-          );
+          const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
+          const byName = new Map(entries.map((entry) => [entry.name, entry.body]));
 
-          expect(byName.get("bundle/src/main.ts")).toBe(
-            "console.log('hello');",
-          );
+          expect(byName.get("bundle/src/main.ts")).toBe("console.log('hello');");
           expect(byName.get("bundle/package.json")).toBe("{}");
           expect(JSON.parse(byName.get("compute.manifest.json")!)).toEqual({
             manifestVersion: "1",
@@ -152,49 +128,32 @@ describe(
       { tags: ["unit"] },
     );
 
-    it.effect(
-      "round-trips long framework chunk names and symlink targets through tar",
-      () =>
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-          const root = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-prisma-long-path-",
-          });
-          const output = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-prisma-extract-",
-          });
-          const name = `${"framework-".repeat(12)}é.js`;
-          yield* fs.writeFileString(
-            path.join(root, name),
-            "export const greeting = 'vinext';",
-          );
-          yield* fs.symlink(name, path.join(root, "server.js"));
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.js",
-          });
-          const again = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.js",
-          });
-          expect(again).toEqual(archive);
-          const archivePath = path.join(output, "site.tar.gz");
-          yield* fs.writeFile(archivePath, archive);
-          const extracted = yield* spawner.exitCode(
-            ChildProcess.make("tar", ["-xzf", archivePath, "-C", output]),
-          );
-          expect(Number(extracted)).toBe(0);
-          expect(
-            yield* fs.readFileString(path.join(output, "bundle", name)),
-          ).toBe("export const greeting = 'vinext';");
-          expect(
-            (yield* fs.readLink(
-              path.join(output, "bundle", "server.js"),
-            )).normalize("NFC"),
-          ).toBe(name);
-        }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+    it.effect("round-trips long framework chunk names and symlink targets through tar", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-long-path-" });
+        const output = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-extract-" });
+        const name = `${"framework-".repeat(12)}é.js`;
+        yield* fs.writeFileString(path.join(root, name), "export const greeting = 'vinext';");
+        yield* fs.symlink(name, path.join(root, "server.js"));
+        const archive = yield* createComputeArchive({ directory: root, entrypoint: "server.js" });
+        const again = yield* createComputeArchive({ directory: root, entrypoint: "server.js" });
+        expect(again).toEqual(archive);
+        const archivePath = path.join(output, "site.tar.gz");
+        yield* fs.writeFile(archivePath, archive);
+        const extracted = yield* spawner.exitCode(
+          ChildProcess.make("tar", ["-xzf", archivePath, "-C", output]),
+        );
+        expect(Number(extracted)).toBe(0);
+        expect(yield* fs.readFileString(path.join(output, "bundle", name))).toBe(
+          "export const greeting = 'vinext';",
+        );
+        expect(
+          (yield* fs.readLink(path.join(output, "bundle", "server.js"))).normalize("NFC"),
+        ).toBe(name);
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
     );
 
     it.effect(
@@ -210,14 +169,8 @@ describe(
           yield* fs.writeFileString(path.join(root, "server.ts"), "server");
           yield* fs.writeFileString(path.join(root, "a.ts"), "a");
 
-          const first = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-          });
-          const second = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-          });
+          const first = yield* createComputeArchive({ directory: root, entrypoint: "server.ts" });
+          const second = yield* createComputeArchive({ directory: root, entrypoint: "server.ts" });
 
           expect(second).toEqual(first);
         }).pipe(Effect.provide(PlatformServices)),
@@ -228,12 +181,8 @@ describe(
       "rejects unsafe entrypoints",
       () =>
         Effect.gen(function* () {
-          const parent = yield* Effect.exit(
-            normalizeEntrypoint("../server.ts"),
-          );
-          const absolute = yield* Effect.exit(
-            normalizeEntrypoint("/server.ts"),
-          );
+          const parent = yield* Effect.exit(normalizeEntrypoint("../server.ts"));
+          const absolute = yield* Effect.exit(normalizeEntrypoint("/server.ts"));
 
           expect(parent._tag).toBe("Failure");
           expect(absolute._tag).toBe("Failure");
@@ -247,20 +196,13 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           const server = path.join(root, "server.sh");
           yield* fs.writeFileString(server, "#!/bin/sh\n");
           yield* fs.chmod(server, 0o755);
 
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.sh",
-          });
-          const entries = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          );
+          const archive = yield* createComputeArchive({ directory: root, entrypoint: "server.sh" });
+          const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
           const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
           expect(byName.get("bundle/server.sh")?.mode).toBe(0o755);
@@ -273,14 +215,9 @@ describe(
       () =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           const result = yield* Effect.exit(
-            createComputeArchive({
-              directory: root,
-              entrypoint: "server.ts",
-            }),
+            createComputeArchive({ directory: root, entrypoint: "server.ts" }),
           );
 
           expect(result._tag).toBe("Failure");
@@ -294,29 +231,16 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
           yield* fs.writeFileString(path.join(root, "real.ts"), "real file");
-          yield* fs.symlink(
-            path.join(root, "real.ts"),
-            path.join(root, "link.ts"),
-          );
+          yield* fs.symlink(path.join(root, "real.ts"), path.join(root, "link.ts"));
 
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-          });
-          const entries = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          );
+          const archive = yield* createComputeArchive({ directory: root, entrypoint: "server.ts" });
+          const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
           const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
-          expect(byName.get("bundle/link.ts")).toMatchObject({
-            type: "2",
-            linkname: "real.ts",
-          });
+          expect(byName.get("bundle/link.ts")).toMatchObject({ type: "2", linkname: "real.ts" });
           expect(byName.get("bundle/real.ts")?.body).toBe("real file");
         }).pipe(Effect.provide(PlatformServices)),
       { tags: ["unit"] },
@@ -328,28 +252,18 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           const realDir = path.join(root, "real");
           yield* fs.makeDirectory(realDir);
           yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
           yield* fs.writeFileString(path.join(realDir, "nested.ts"), "nested");
           yield* fs.symlink(realDir, path.join(root, "linked"));
 
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-          });
-          const entries = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          );
+          const archive = yield* createComputeArchive({ directory: root, entrypoint: "server.ts" });
+          const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
           const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
-          expect(byName.get("bundle/linked")).toMatchObject({
-            type: "2",
-            linkname: "real",
-          });
+          expect(byName.get("bundle/linked")).toMatchObject({ type: "2", linkname: "real" });
           expect(byName.get("bundle/real/nested.ts")?.body).toBe("nested");
           expect(byName.has("bundle/linked/nested.ts")).toBe(false);
         }).pipe(Effect.provide(PlatformServices)),
@@ -362,24 +276,16 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           const outside = yield* fs.makeTempDirectory({
             prefix: "alchemy-prisma-compute-outside-",
           });
           yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
           yield* fs.writeFileString(path.join(outside, "secret.ts"), "secret");
-          yield* fs.symlink(
-            path.join(outside, "secret.ts"),
-            path.join(root, "secret.ts"),
-          );
+          yield* fs.symlink(path.join(outside, "secret.ts"), path.join(root, "secret.ts"));
 
           const result = yield* Effect.exit(
-            createComputeArchive({
-              directory: root,
-              entrypoint: "server.ts",
-            }),
+            createComputeArchive({ directory: root, entrypoint: "server.ts" }),
           );
 
           expect(result._tag).toBe("Failure");
@@ -393,9 +299,7 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-" });
           const outside = yield* fs.makeTempDirectory({
             prefix: "alchemy-prisma-compute-outside-",
           });
@@ -404,10 +308,7 @@ describe(
           yield* fs.symlink(outside, path.join(root, "outside"));
 
           const result = yield* Effect.exit(
-            createComputeArchive({
-              directory: root,
-              entrypoint: "server.ts",
-            }),
+            createComputeArchive({ directory: root, entrypoint: "server.ts" }),
           );
 
           expect(result._tag).toBe("Failure");
@@ -421,15 +322,9 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-sensitive-",
-          });
-          yield* fs.makeDirectory(path.join(root, "apps", "api", ".git"), {
-            recursive: true,
-          });
-          yield* fs.makeDirectory(path.join(root, "apps", "api", ".alchemy"), {
-            recursive: true,
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-sensitive-" });
+          yield* fs.makeDirectory(path.join(root, "apps", "api", ".git"), { recursive: true });
+          yield* fs.makeDirectory(path.join(root, "apps", "api", ".alchemy"), { recursive: true });
           yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
           yield* fs.writeFileString(path.join(root, ".env"), "ROOT_SECRET=x");
           yield* fs.writeFileString(
@@ -451,9 +346,9 @@ describe(
             entrypoint: "server.ts",
             ignore: ["*.log"],
           });
-          const names = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          ).map((entry) => entry.name);
+          const names = parseTar(yield* Effect.sync(() => gunzipSync(archive))).map(
+            (entry) => entry.name,
+          );
 
           expect(names).toContain("bundle/server.ts");
           expect(names.some((name) => name.includes(".env"))).toBe(false);
@@ -501,9 +396,9 @@ describe(
             entrypoint: "server.ts",
             ignore: ["foo..bar"],
           });
-          const names = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          ).map((entry) => entry.name);
+          const names = parseTar(yield* Effect.sync(() => gunzipSync(archive))).map(
+            (entry) => entry.name,
+          );
           const unsafe = yield* Effect.exit(
             createComputeArchive({
               directory: root,
@@ -617,9 +512,9 @@ describe(
             output: "file",
           });
           const bytes = yield* fs.readFile(archive.path);
-          const names = parseTar(
-            yield* Effect.sync(() => gunzipSync(bytes)),
-          ).map((entry) => entry.name);
+          const names = parseTar(yield* Effect.sync(() => gunzipSync(bytes))).map(
+            (entry) => entry.name,
+          );
 
           expect(archive.size).toBe(bytes.byteLength);
           expect(archive.sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -637,18 +532,12 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-limit-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-limit-" });
           yield* fs.writeFileString(path.join(root, "server.ts"), "12345");
           yield* fs.writeFileString(path.join(root, "other.ts"), "67890");
 
           const fileResult = yield* Effect.exit(
-            createComputeArchive({
-              directory: root,
-              entrypoint: "server.ts",
-              maxFileBytes: 4,
-            }),
+            createComputeArchive({ directory: root, entrypoint: "server.ts", maxFileBytes: 4 }),
           );
           const totalResult = yield* Effect.exit(
             createComputeArchive({
@@ -671,33 +560,22 @@ describe(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-prisma-compute-long-link-",
-          });
+          const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-compute-long-link-" });
           const segments = Array.from(
             { length: 12 },
             (_, index) => `segment-${index.toString().padStart(2, "0")}`,
           );
           const target = path.join(...segments, "target.ts");
-          yield* fs.makeDirectory(path.join(root, ...segments), {
-            recursive: true,
-          });
+          yield* fs.makeDirectory(path.join(root, ...segments), { recursive: true });
           yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
           yield* fs.writeFileString(path.join(root, target), "target");
           yield* fs.symlink(target, path.join(root, "long-link.ts"));
 
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-          });
-          const entries = parseTar(
-            yield* Effect.sync(() => gunzipSync(archive)),
-          );
+          const archive = yield* createComputeArchive({ directory: root, entrypoint: "server.ts" });
+          const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
           expect(
             entries.some(
-              (entry) =>
-                entry.type === "x" &&
-                entry.body.includes(`linkpath=${target}\n`),
+              (entry) => entry.type === "x" && entry.body.includes(`linkpath=${target}\n`),
             ),
           ).toBe(true);
         }).pipe(Effect.provide(PlatformServices)),

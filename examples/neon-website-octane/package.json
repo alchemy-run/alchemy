@@ -1,7 +1,12 @@
 {
   "name": "neon-website-octane",
-  "type": "module",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/neon-website-octane"
+  },
+  "type": "module",
   "scripts": {
     "dev": "alchemy dev",
     "build": "vite build",
@@ -17,19 +22,14 @@
     "octane": "catalog:",
     "vite": "catalog:"
   },
-  "engines": {
-    "node": ">=24"
-  },
   "devDependencies": {
-    "@tailwindcss/vite": "catalog:",
-    "tailwindcss": "catalog:",
-    "@vercel/nft": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@vercel/nft": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/neon-website-octane"
+  "engines": {
+    "node": ">=24"
   }
 }

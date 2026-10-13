@@ -6,10 +6,7 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link PredictQApp} — `instanceId` is injected from the bound Q App.
  */
-export interface PredictQAppRequest extends Omit<
-  qapps.PredictQAppInput,
-  "instanceId"
-> {}
+export interface PredictQAppRequest extends Omit<qapps.PredictQAppInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:PredictQApp`.
@@ -39,12 +36,8 @@ export interface PredictQApp extends Binding.Service<
   (
     app: QApp,
   ) => Effect.Effect<
-    (
-      request?: PredictQAppRequest,
-    ) => Effect.Effect<qapps.PredictQAppOutput, qapps.PredictQAppError>
+    (request?: PredictQAppRequest) => Effect.Effect<qapps.PredictQAppOutput, qapps.PredictQAppError>
   >
 > {}
 
-export const PredictQApp = Binding.Service<PredictQApp>(
-  "AWS.QApps.PredictQApp",
-);
+export const PredictQApp = Binding.Service<PredictQApp>("AWS.QApps.PredictQApp");

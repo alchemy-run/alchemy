@@ -28,8 +28,6 @@ export interface GetTable extends Binding.Service<
   "AWS.S3Tables.GetTable",
   (
     table: Table,
-  ) => Effect.Effect<
-    () => Effect.Effect<s3tables.GetTableResponse, s3tables.GetTableError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<s3tables.GetTableResponse, s3tables.GetTableError>>
 > {}
 export const GetTable = Binding.Service<GetTable>("AWS.S3Tables.GetTable");

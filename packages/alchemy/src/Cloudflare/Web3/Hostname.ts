@@ -2,7 +2,6 @@ import * as web3 from "@distilled.cloud/cloudflare/web3";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -81,13 +80,7 @@ export interface HostnameAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Hostname = Resource<
-  TypeId,
-  HostnameProps,
-  HostnameAttributes,
-  never,
-  Providers
->;
+export type Hostname = Resource<TypeId, HostnameProps, HostnameAttributes, never, Providers>;
 
 /**
  * A Cloudflare Web3 gateway hostname — serve Ethereum or IPFS content from
@@ -201,20 +194,14 @@ export const HostnameProvider = () =>
       }
       // zoneId is Input<string>; compare only once both are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
-      if (
-        typeof oldZone === "string" &&
-        typeof n.zoneId === "string" &&
-        oldZone !== n.zoneId
-      ) {
+      if (typeof oldZone === "string" && typeof n.zoneId === "string" && oldZone !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
 
       // Owned path: refresh by our persisted hostname id.
@@ -242,9 +229,7 @@ export const HostnameProvider = () =>
       // 1. Observe — the hostname id cached on `output` is a hint, not a
       //    guarantee: a missing hostname falls through to the name scan
       //    and then to create.
-      let observed = output?.hostnameId
-        ? yield* getHostname(zoneId, output.hostnameId)
-        : undefined;
+      let observed = output?.hostnameId ? yield* getHostname(zoneId, output.hostnameId) : undefined;
 
       // 2. Fall back to scanning the zone for a name match. Ownership has
       //    already been verified upstream — `read` reports existing
@@ -272,8 +257,7 @@ export const HostnameProvider = () =>
       // 4. Sync — diff observed dnslink/description against desired;
       //    skip the patch call entirely on a no-op.
       const dirty =
-        (news.dnslink !== undefined &&
-          (observed.dnslink ?? undefined) !== news.dnslink) ||
+        (news.dnslink !== undefined && (observed.dnslink ?? undefined) !== news.dnslink) ||
         (news.description !== undefined &&
           (observed.description ?? undefined) !== news.description);
       if (dirty) {
@@ -332,10 +316,7 @@ const findByName = (zoneId: string, name: string) =>
     ),
   );
 
-const toAttributes = (
-  hostname: ObservedHostname,
-  zoneId: string,
-): HostnameAttributes => ({
+const toAttributes = (hostname: ObservedHostname, zoneId: string): HostnameAttributes => ({
   // Cloudflare always echoes id/name/target/status for a persisted
   // hostname — distilled just types every response field as optional.
   hostnameId: hostname.id ?? "",

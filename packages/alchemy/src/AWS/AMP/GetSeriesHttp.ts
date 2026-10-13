@@ -15,8 +15,7 @@ export const GetSeriesHttp = Layer.effect(
         path: "api/v1/series",
         query: {
           "match[]": request.match,
-          start:
-            request.start !== undefined ? toPromTime(request.start) : undefined,
+          start: request.start !== undefined ? toPromTime(request.start) : undefined,
           end: request.end !== undefined ? toPromTime(request.end) : undefined,
         },
       }).pipe(Effect.map((data) => data as PrometheusSeries[])),

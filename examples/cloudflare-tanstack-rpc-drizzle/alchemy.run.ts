@@ -28,11 +28,7 @@ export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 export default Alchemy.Stack(
   "CloudflareTanstackRpcDrizzleExample",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      Drizzle.providers(),
-      Neon.providers(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), Drizzle.providers(), Neon.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

@@ -47,10 +47,7 @@ export interface ReadDomainClient {
   existsDocument(
     index: string,
     id: string,
-  ): Effect.Effect<
-    boolean,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
-  >;
+  ): Effect.Effect<boolean, OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError>;
   /**
    * Raw read-only escape hatch — a SigV4-signed `GET` against any data-plane
    * path (e.g. `_cluster/health`, `_cat/indices?format=json`).
@@ -58,10 +55,7 @@ export interface ReadDomainClient {
   get(
     path: string,
     query?: Record<string, string | undefined>,
-  ): Effect.Effect<
-    unknown,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
-  >;
+  ): Effect.Effect<unknown, OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError>;
 }
 
 /**
@@ -100,6 +94,4 @@ export interface DomainRead extends Binding.Service<
   "AWS.OpenSearch.DomainRead",
   (domain: Domain) => Effect.Effect<ReadDomainClient>
 > {}
-export const DomainRead = Binding.Service<DomainRead>(
-  "AWS.OpenSearch.DomainRead",
-);
+export const DomainRead = Binding.Service<DomainRead>("AWS.OpenSearch.DomainRead");

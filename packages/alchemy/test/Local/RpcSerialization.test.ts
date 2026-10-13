@@ -1,10 +1,3 @@
-import {
-  registerRpcErrorClasses,
-  unwrapRpcHandlers,
-  wrapRpcHandlers,
-  type RpcWrapped,
-} from "@/Local/RpcSerialization.ts";
-import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -13,6 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import {
+  registerRpcErrorClasses,
+  unwrapRpcHandlers,
+  wrapRpcHandlers,
+  type RpcWrapped,
+} from "@/Local/RpcSerialization.ts";
+import * as Output from "@/Output.ts";
 
 class RpcRegisteredError extends Data.TaggedError("RpcRegisteredError")<{
   readonly message: string;
@@ -33,10 +33,7 @@ class RpcUnregisteredError extends Data.TaggedError("RpcUnregisteredError")<{
  * unwrap layers to model that hop. Streams skip the JSON hop because they
  * are bridged via a real `ReadableStream`.
  */
-const roundTrip = <T extends Record<string, any>>(
-  handlers: T,
-  streamKeys?: Array<keyof T>,
-): T => {
+const roundTrip = <T extends Record<string, any>>(handlers: T, streamKeys?: Array<keyof T>): T => {
   const wrapped = wrapRpcHandlers(handlers, streamKeys);
   const piped = Object.fromEntries(
     Object.entries(wrapped).map(([key, value]) => {
@@ -64,8 +61,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
     it.effect("round-trips a top-level Redacted argument", () =>
       Effect.gen(function* () {
         const handlers = {
-          echo: (s: Redacted.Redacted<string>) =>
-            Effect.succeed(Redacted.value(s)),
+          echo: (s: Redacted.Redacted<string>) => Effect.succeed(Redacted.value(s)),
         };
         const client = roundTrip(handlers);
         expect(yield* client.echo(Redacted.make("hush"))).toBe("hush");
@@ -79,9 +75,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
             Effect.succeed(Redacted.value(env.password)),
         };
         const client = roundTrip(handlers);
-        expect(
-          yield* client.password({ password: Redacted.make("hush") }),
-        ).toBe("hush");
+        expect(yield* client.password({ password: Redacted.make("hush") })).toBe("hush");
       }),
     );
 
@@ -92,9 +86,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
             Effect.succeed(Duration.toSeconds(env.timeout)),
         };
         const client = roundTrip(handlers);
-        expect(yield* client.timeout({ timeout: Duration.seconds(15) })).toBe(
-          15,
-        );
+        expect(yield* client.timeout({ timeout: Duration.seconds(15) })).toBe(15);
       }),
     );
 
@@ -112,8 +104,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
     it.effect("preserves objects with their own toJSON (Date)", () =>
       Effect.gen(function* () {
         const handlers = {
-          withDate: (env: { when: Date | string }) =>
-            Effect.succeed(String(env.when)),
+          withDate: (env: { when: Date | string }) => Effect.succeed(String(env.when)),
         };
         const client = roundTrip(handlers);
         const d = new Date("2026-05-16T12:00:00.000Z");
@@ -139,11 +130,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
             Effect.succeed(xs.reduce((a, x) => a + Redacted.value(x), 0)),
         };
         const client = roundTrip(handlers);
-        const result = yield* client.sum([
-          Redacted.make(1),
-          Redacted.make(2),
-          Redacted.make(3),
-        ]);
+        const result = yield* client.sum([Redacted.make(1), Redacted.make(2), Redacted.make(3)]);
         expect(result).toBe(6);
       }),
     );
@@ -216,9 +203,7 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
             ),
         };
         const exit = yield* Effect.exit(roundTrip(handlers).boom());
-        const found = Exit.isFailure(exit)
-          ? Cause.findErrorOption(exit.cause)
-          : undefined;
+        const found = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
         expect(found?._tag).toBe("Some");
         if (found?._tag === "Some") {
           const error = found.value;
@@ -226,35 +211,25 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
           expect(error).toBeInstanceOf(Error);
           expect(error._tag).toBe("RpcRegisteredError");
           expect(error.message).toBe("did not stabilize");
-          expect(error.arn).toBe(
-            "arn:aws:ecs:us-east-1:000000000000:task-definition/app:3",
-          );
+          expect(error.arn).toBe("arn:aws:ecs:us-east-1:000000000000:task-definition/app:3");
           expect(Redacted.value(error.secret)).toBe("hush");
         }
       }),
     );
 
-    it.effect(
-      "keeps an unregistered tagged error's tag and fields for catchTag",
-      () =>
-        Effect.gen(function* () {
-          const handlers = {
-            boom: (): Effect.Effect<never, RpcUnregisteredError> =>
-              Effect.fail(
-                new RpcUnregisteredError({ message: "nope", code: 7 }),
-              ),
-          };
-          const caught = yield* roundTrip(handlers)
-            .boom()
-            .pipe(
-              Effect.catchTag("RpcUnregisteredError", (error) =>
-                Effect.succeed(error),
-              ),
-            );
-          expect(caught._tag).toBe("RpcUnregisteredError");
-          expect(caught.code).toBe(7);
-          expect(caught.message).toBe("nope");
-        }),
+    it.effect("keeps an unregistered tagged error's tag and fields for catchTag", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          boom: (): Effect.Effect<never, RpcUnregisteredError> =>
+            Effect.fail(new RpcUnregisteredError({ message: "nope", code: 7 })),
+        };
+        const caught = yield* roundTrip(handlers)
+          .boom()
+          .pipe(Effect.catchTag("RpcUnregisteredError", (error) => Effect.succeed(error)));
+        expect(caught._tag).toBe("RpcUnregisteredError");
+        expect(caught.code).toBe(7);
+        expect(caught.message).toBe("nope");
+      }),
     );
 
     it.effect("propagates Die (defect)", () =>
@@ -337,14 +312,11 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const handlers = {
           group: {
-            echo: (s: Redacted.Redacted<string>) =>
-              Effect.succeed(Redacted.value(s)),
+            echo: (s: Redacted.Redacted<string>) => Effect.succeed(Redacted.value(s)),
           },
         };
         const client = roundTrip(handlers);
-        expect(yield* client.group.echo(Redacted.make("nested"))).toBe(
-          "nested",
-        );
+        expect(yield* client.group.echo(Redacted.make("nested"))).toBe("nested");
       }),
     );
   });

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ComprehendTestFunctionLive, { ComprehendTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "ComprehendBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,31 +33,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe(
   "Comprehend Bindings",
@@ -78,9 +66,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Comprehend test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Comprehend test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Comprehend test setup: deploying fixture");
@@ -94,21 +80,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Comprehend test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Comprehend test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Comprehend test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Comprehend test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -194,9 +174,7 @@ describe(
         "drives the typed ResourceUnavailableException path for a missing endpoint",
         (_stack) =>
           Effect.gen(function* () {
-            const result = (yield* getJson("/classify-document")) as {
-              tag: string;
-            };
+            const result = (yield* getJson("/classify-document")) as { tag: string };
             expect(result.tag).toBe("ResourceUnavailableException");
           }),
         { timeout: 120_000 },
@@ -208,10 +186,7 @@ describe(
         "every list binding returns a page",
         (_stack) =>
           Effect.gen(function* () {
-            const counts = (yield* getJson("/jobs/list-all")) as Record<
-              string,
-              number
-            >;
+            const counts = (yield* getJson("/jobs/list-all")) as Record<string, number>;
             for (const family of [
               "documentClassification",
               "dominantLanguage",
@@ -235,18 +210,14 @@ describe(
         "every describe binding surfaces the typed JobNotFoundException",
         (_stack) =>
           Effect.gen(function* () {
-            const tags = (yield* getJson(
-              "/jobs/describe-not-found-all",
-            )) as Record<string, string>;
+            const tags = (yield* getJson("/jobs/describe-not-found-all")) as Record<string, string>;
             expect(tags).toEqual({
               documentClassification: "JobNotFoundException",
               dominantLanguage: "JobNotFoundException",
               entities: "JobNotFoundException",
               // Events detection is closed to new customers; entitled accounts
               // return JobNotFoundException instead.
-              events: expect.stringMatching(
-                /^(JobNotFoundException|NotAuthorizedException)$/,
-              ),
+              events: expect.stringMatching(/^(JobNotFoundException|NotAuthorizedException)$/),
               keyPhrases: "JobNotFoundException",
               piiEntities: "JobNotFoundException",
               sentiment: "JobNotFoundException",
@@ -263,18 +234,14 @@ describe(
         "every stop binding surfaces the typed JobNotFoundException",
         (_stack) =>
           Effect.gen(function* () {
-            const tags = (yield* postJson(
-              "/jobs/stop-not-found-all",
-            )) as Record<string, string>;
+            const tags = (yield* postJson("/jobs/stop-not-found-all")) as Record<string, string>;
             expect(tags).toEqual({
               dominantLanguage: "JobNotFoundException",
               entities: "JobNotFoundException",
               // Events detection is closed to new customers — the stop path
               // hits the entitlement gate before the job lookup, surfacing the
               // (patched) typed NotAuthorizedException.
-              events: expect.stringMatching(
-                /^(JobNotFoundException|NotAuthorizedException)$/,
-              ),
+              events: expect.stringMatching(/^(JobNotFoundException|NotAuthorizedException)$/),
               keyPhrases: "JobNotFoundException",
               piiEntities: "JobNotFoundException",
               sentiment: "JobNotFoundException",
@@ -290,10 +257,7 @@ describe(
         "every start binding reaches Comprehend and surfaces the typed validation error",
         (_stack) =>
           Effect.gen(function* () {
-            const tags = (yield* postJson("/jobs/start-invalid-all")) as Record<
-              string,
-              string
-            >;
+            const tags = (yield* postJson("/jobs/start-invalid-all")) as Record<string, string>;
             // A missing IAM/PassRole grant would surface AccessDenied as a 500
             // (untyped, through orDie) — a typed server-side validation tag
             // proves role injection + the grant end-to-end.
@@ -336,9 +300,7 @@ describe(
             };
             expect(result.jobId.length).toBeGreaterThan(0);
             expect(["SUBMITTED", "IN_PROGRESS"]).toContain(result.startStatus);
-            expect(["SUBMITTED", "IN_PROGRESS"]).toContain(
-              result.describedStatus,
-            );
+            expect(["SUBMITTED", "IN_PROGRESS"]).toContain(result.describedStatus);
             expect(["STOP_REQUESTED", "STOPPED"]).toContain(result.stopStatus);
           }),
         { timeout: 120_000 },

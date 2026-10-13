@@ -35,6 +35,4 @@ export interface GetAdminScope extends Binding.Service<
   >
 > {}
 
-export const GetAdminScope = Binding.Service<GetAdminScope>(
-  "AWS.FMS.GetAdminScope",
-);
+export const GetAdminScope = Binding.Service<GetAdminScope>("AWS.FMS.GetAdminScope");

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Group, UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Group, UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -76,9 +76,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(oldGone).toBe(true);
 
@@ -90,9 +88,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }),

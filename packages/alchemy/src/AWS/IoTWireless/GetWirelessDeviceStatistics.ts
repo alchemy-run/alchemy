@@ -51,7 +51,6 @@ export interface GetWirelessDeviceStatistics extends Binding.Service<
     >
   >
 > {}
-export const GetWirelessDeviceStatistics =
-  Binding.Service<GetWirelessDeviceStatistics>(
-    "AWS.IoTWireless.GetWirelessDeviceStatistics",
-  );
+export const GetWirelessDeviceStatistics = Binding.Service<GetWirelessDeviceStatistics>(
+  "AWS.IoTWireless.GetWirelessDeviceStatistics",
+);

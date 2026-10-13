@@ -26,10 +26,7 @@ const BucketEnvelope = Schema.Struct({
   }),
 });
 /** Validated wire envelope shared by native and Effect handlers. */
-export const FunctionTriggerEnvelope = Schema.Union([
-  ScheduleEnvelope,
-  BucketEnvelope,
-]);
+export const FunctionTriggerEnvelope = Schema.Union([ScheduleEnvelope, BucketEnvelope]);
 export type FunctionTriggerEnvelope = typeof FunctionTriggerEnvelope.Type;
 
 export interface CronEvent {
@@ -45,26 +42,23 @@ export interface BucketEvent {
   /** Exact bucket name. */ bucketName: string;
   /** Exact uploaded key, without path normalization. */ objectKey: string;
 }
-export class FunctionTriggerEventError extends Data.TaggedError(
-  "FunctionTriggerEventError",
-)<{ status: 400 | 403 | 405; message: string }> {}
+export class FunctionTriggerEventError extends Data.TaggedError("FunctionTriggerEventError")<{
+  status: 400 | 403 | 405;
+  message: string;
+}> {}
 
 /**
  * Decode a Neon POST envelope and compare the edge-attested invocation header.
  * Trust this header only behind Neon's edge, which strips client-supplied
  * X-Neon-* headers. It is not authentication for an arbitrary local HTTP server.
  */
-export const decodeFunctionTriggerEvent = Effect.fn(function* (
-  request: Request,
-) {
+export const decodeFunctionTriggerEvent = Effect.fn(function* (request: Request) {
   if (request.method !== "POST")
     return yield* new FunctionTriggerEventError({
       status: 405,
       message: "Trigger delivery requires POST",
     });
-  const invocation = request.headers
-    .get("x-neon-trigger-invocation-id")
-    ?.trim();
+  const invocation = request.headers.get("x-neon-trigger-invocation-id")?.trim();
   if (!invocation)
     return yield* new FunctionTriggerEventError({
       status: 403,
@@ -78,9 +72,7 @@ export const decodeFunctionTriggerEvent = Effect.fn(function* (
         message: "Invalid trigger JSON",
       }),
   });
-  const event = yield* Schema.decodeUnknownEffect(FunctionTriggerEnvelope)(
-    json,
-  ).pipe(
+  const event = yield* Schema.decodeUnknownEffect(FunctionTriggerEnvelope)(json).pipe(
     Effect.mapError(
       () =>
         new FunctionTriggerEventError({
@@ -95,8 +87,7 @@ export const decodeFunctionTriggerEvent = Effect.fn(function* (
     (event.trigger.type === "schedule" &&
       "scheduled_at" in event.data &&
       !event.data.scheduled_at) ||
-    ("bucket_name" in event.data &&
-      (!event.data.bucket_name || !event.data.object_key))
+    ("bucket_name" in event.data && (!event.data.bucket_name || !event.data.object_key))
   )
     return yield* new FunctionTriggerEventError({
       status: 400,

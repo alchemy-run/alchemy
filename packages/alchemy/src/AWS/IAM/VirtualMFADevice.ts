@@ -7,8 +7,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 import { toRedactedBytes, toTagRecord } from "./common.ts";
 
 export interface VirtualMFADeviceProps {
@@ -50,9 +50,7 @@ export interface VirtualMFADevice extends Resource<
     /** When the device was activated, if activated. */
     enableDate: Date | undefined;
     /** The base32 seed for configuring an authenticator app. AWS only returns it at creation. */
-    base32StringSeed:
-      | Redacted.Redacted<Uint8Array<ArrayBufferLike>>
-      | undefined;
+    base32StringSeed: Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined;
     /** A QR-code PNG encoding the seed. AWS only returns it at creation. */
     qrCodePNG: Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined;
     /** The tags applied to the device. */
@@ -84,9 +82,7 @@ export interface VirtualMFADevice extends Resource<
  *
  * @resource
  */
-export const VirtualMFADevice = Resource<VirtualMFADevice>(
-  "AWS.IAM.VirtualMFADevice",
-);
+export const VirtualMFADevice = Resource<VirtualMFADevice>("AWS.IAM.VirtualMFADevice");
 
 export const VirtualMFADeviceProvider = () =>
   Provider.effect(
@@ -125,11 +121,7 @@ export const VirtualMFADeviceProvider = () =>
             SerialNumber: serialNumber,
             UserName: userName,
           })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -142,9 +134,7 @@ export const VirtualMFADeviceProvider = () =>
             const devices = yield* iam.listVirtualMFADevices.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.VirtualMFADevices ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.VirtualMFADevices ?? []),
               ),
             );
             return yield* Effect.forEach(
@@ -158,9 +148,7 @@ export const VirtualMFADeviceProvider = () =>
                     .pipe(
                       Effect.map((resp) => resp.Tags),
                       // The device may vanish between listing and tag lookup.
-                      Effect.catchTag("NoSuchEntityException", () =>
-                        Effect.succeed<iam.Tag[]>([]),
-                      ),
+                      Effect.catchTag("NoSuchEntityException", () => Effect.succeed<iam.Tag[]>([])),
                     );
                   return {
                     serialNumber: device.SerialNumber,
@@ -183,10 +171,8 @@ export const VirtualMFADeviceProvider = () =>
               (yield* toName(id, news)) ||
             (olds.path ?? "/") !== (news.path ?? "/") ||
             (olds.userName ?? undefined) !== (news.userName ?? undefined) ||
-            (olds.authenticationCode1 ?? undefined) !==
-              (news.authenticationCode1 ?? undefined) ||
-            (olds.authenticationCode2 ?? undefined) !==
-              (news.authenticationCode2 ?? undefined)
+            (olds.authenticationCode1 ?? undefined) !== (news.authenticationCode1 ?? undefined) ||
+            (olds.authenticationCode2 ?? undefined) !== (news.authenticationCode2 ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
@@ -250,20 +236,14 @@ export const VirtualMFADeviceProvider = () =>
               );
             }
             serialNumber = created.VirtualMFADevice.SerialNumber;
-            base32StringSeed = toRedactedBytes(
-              created.VirtualMFADevice.Base32StringSeed,
-            );
+            base32StringSeed = toRedactedBytes(created.VirtualMFADevice.Base32StringSeed);
             qrCodePNG = toRedactedBytes(created.VirtualMFADevice.QRCodePNG);
 
             // The device was just created, so it is unassigned. Activate
             // it for the user when activation codes are provided. After
             // first activation the codes lose their meaning (`diff`
             // triggers replacement on code change).
-            if (
-              news.userName &&
-              news.authenticationCode1 &&
-              news.authenticationCode2
-            ) {
+            if (news.userName && news.authenticationCode1 && news.authenticationCode2) {
               yield* iam.enableMFADevice({
                 UserName: news.userName,
                 SerialNumber: serialNumber,
@@ -274,9 +254,7 @@ export const VirtualMFADeviceProvider = () =>
           }
 
           if (!serialNumber) {
-            return yield* Effect.fail(
-              new Error(`Virtual MFA device has no serial number`),
-            );
+            return yield* Effect.fail(new Error(`Virtual MFA device has no serial number`));
           }
 
           // Sync tags against the cloud's actual tags.
@@ -321,9 +299,7 @@ export const VirtualMFADeviceProvider = () =>
                 UserName: output.userName,
                 SerialNumber: output.serialNumber,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
           yield* iam
             .deleteVirtualMFADevice({

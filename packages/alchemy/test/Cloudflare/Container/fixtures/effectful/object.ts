@@ -1,7 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { MyContainer } from "./container.ts";
 import { Storage } from "./storage.ts";
 
@@ -19,46 +18,36 @@ export class Object extends Cloudflare.DurableObject<Object>()(
         "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, name TEXT)",
       );
 
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const conn = yield* container.getTcpPort(3000);
 
       return {
         // Seed R2 through the DO's NATIVE binding so the container (which reads
         // over its HTTP token) sees a value written by a different binding.
-        put: (key: string, value: string) =>
-          bucket.put(key, value).pipe(Effect.asVoid),
+        put: (key: string, value: string) => bucket.put(key, value).pipe(Effect.asVoid),
         get: (key: string) => bucket.get(key),
-        ping: () => container.ping(),
+        ping: () => start.pipe(Effect.andThen(container.ping())),
         // The env var a `Binding.Service` injected into the container.
-        boundEnv: () => container.boundEnv(),
+        boundEnv: () => start.pipe(Effect.andThen(container.boundEnv())),
         // Read the object from inside the container over RPC.
-        readObjectRpc: (key: string) => container.readObject(key),
+        readObjectRpc: (key: string) => start.pipe(Effect.andThen(container.readObject(key))),
         // Read the object from inside the container over its TCP port (fetch).
         readObjectFetch: (key: string) =>
           Effect.gen(function* () {
+            yield* start;
             const response = yield* conn.fetch(
-              HttpClientRequest.get(
-                `http://container/object?key=${encodeURIComponent(key)}`,
-              ),
+              HttpClientRequest.get(`http://container/object?key=${encodeURIComponent(key)}`),
             );
             return (yield* response.json) as { value: string | null };
           }).pipe(Effect.orDie),
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* conn.fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            yield* start;
+            const response = yield* conn.fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.R2.ReadWriteBucketBinding,
-        Cloudflare.Containers.layer(MyContainer, {
-          enableInternet: true,
-        }),
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

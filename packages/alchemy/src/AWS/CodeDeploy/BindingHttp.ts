@@ -110,9 +110,7 @@ export const makeCodeDeployGroupHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

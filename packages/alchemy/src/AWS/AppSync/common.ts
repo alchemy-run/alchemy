@@ -24,9 +24,7 @@ export const retryConcurrentModification = <A, E extends { _tag: string }, R>(
         Schedule.exponential(Duration.seconds(1), 2),
         Schedule.modifyDelay(({ duration }) =>
           Effect.succeed(
-            Duration.isGreaterThan(duration, Duration.seconds(8))
-              ? Duration.seconds(8)
-              : duration,
+            Duration.isGreaterThan(duration, Duration.seconds(8)) ? Duration.seconds(8) : duration,
           ),
         ),
       ),
@@ -41,21 +39,13 @@ export const retryConcurrentModification = <A, E extends { _tag: string }, R>(
  * is not authorized to assume the role. Bounded retry (~20s), scoped to
  * role-assumption messages so genuine validation errors fail fast.
  */
-export const retryWhileRolePropagates = <
-  A,
-  E extends { _tag: string; message?: string },
-  R,
->(
+export const retryWhileRolePropagates = <A, E extends { _tag: string; message?: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
     while: (error: E) =>
-      error._tag === "BadRequestException" &&
-      /assume|role|authorized/i.test(error.message ?? ""),
-    schedule: Schedule.max([
-      Schedule.fixed(Duration.seconds(2)),
-      Schedule.recurs(10),
-    ]),
+      error._tag === "BadRequestException" && /assume|role|authorized/i.test(error.message ?? ""),
+    schedule: Schedule.max([Schedule.fixed(Duration.seconds(2)), Schedule.recurs(10)]),
   }) as Effect.Effect<A, E, R>;
 
 /**
@@ -75,9 +65,7 @@ export const tagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**

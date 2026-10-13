@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AsgBindingsFunctionLive, {
   AsgBindingsFunction,
   bindingsAsgName,
@@ -17,10 +17,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AutoScalingBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,11 +35,7 @@ interface RouteResult {
 // Routes whose EXPECTED outcome is a scoped denial pass
 // `retryDenied: false` (they run after routes that already proved the
 // policy propagated).
-const callRoute = (
-  method: "GET" | "POST",
-  path: string,
-  options: { retryDenied?: boolean } = {},
-) =>
+const callRoute = (method: "GET" | "POST", path: string, options: { retryDenied?: boolean } = {}) =>
   Effect.gen(function* () {
     const request =
       method === "GET"
@@ -52,9 +45,7 @@ const callRoute = (
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       // `json` is the untyped `Json` union; RouteResult's optional props
       // (`string | undefined`) aren't Json-assignable, so the intentional
@@ -105,9 +96,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -123,9 +112,7 @@ describe(
         // explicitly for the out-of-band distilled call.
         const remaining = yield* Core.withProviders(
           autoscaling
-            .describeAutoScalingGroups({
-              AutoScalingGroupNames: [bindingsAsgName],
-            } as any)
+            .describeAutoScalingGroups({ AutoScalingGroupNames: [bindingsAsgName] } as any)
             .pipe(
               Effect.map((r) => (r.AutoScalingGroups ?? []).length),
               Effect.repeat({
@@ -198,9 +185,7 @@ describe(
       "SetInstanceHealth dispatches a signed request (scoped denial for a bogus instance)",
       (_stack) =>
         Effect.gen(function* () {
-          const body = yield* callRoute("POST", "/set-health", {
-            retryDenied: false,
-          });
+          const body = yield* callRoute("POST", "/set-health", { retryDenied: false });
           expect(body.tag).toEqual("AccessDeniedException");
         }),
       { timeout: 60_000 },
@@ -220,9 +205,7 @@ describe(
       "TerminateInstanceInAutoScalingGroup dispatches a signed request (scoped denial)",
       (_stack) =>
         Effect.gen(function* () {
-          const body = yield* callRoute("POST", "/terminate", {
-            retryDenied: false,
-          });
+          const body = yield* callRoute("POST", "/terminate", { retryDenied: false });
           expect(body.tag).toEqual("AccessDeniedException");
         }),
       { timeout: 60_000 },
@@ -252,9 +235,7 @@ describe(
           };
           // A refresh on the empty fleet completes (or is already in progress
           // from a previous run) — never an authorization failure.
-          expect(["Success", "InstanceRefreshInProgressFault"]).toContain(
-            body.startTag,
-          );
+          expect(["Success", "InstanceRefreshInProgressFault"]).toContain(body.startTag);
           expect(body.describeOk).toBe(true);
           expect(body.describeCount).toBeGreaterThanOrEqual(1);
           expect(body.cancelTag).toEqual("Success");
@@ -287,9 +268,7 @@ describe(
           }
           expect(rule).toBeDefined();
           expect(rule?.EventPattern).toContain("aws.autoscaling");
-          expect(rule?.EventPattern).toContain(
-            "EC2 Instance Launch Successful",
-          );
+          expect(rule?.EventPattern).toContain("EC2 Instance Launch Successful");
         }),
       { tags: ["provider:aws:eventbridge"], timeout: 60_000 },
     );

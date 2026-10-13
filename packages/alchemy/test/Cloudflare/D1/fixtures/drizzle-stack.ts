@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Cloudflare from "@/Cloudflare";
 import * as Drizzle from "@/Drizzle";
 import * as Alchemy from "@/index";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import D1DrizzleWorker from "./drizzle-worker.ts";
 
 /**

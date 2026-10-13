@@ -38,12 +38,7 @@ export interface StartSigningJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<signer.StartSigningJobRequest, "profileName">,
-    ) => Effect.Effect<
-      signer.StartSigningJobResponse,
-      signer.StartSigningJobError
-    >
+    ) => Effect.Effect<signer.StartSigningJobResponse, signer.StartSigningJobError>
   >
 > {}
-export const StartSigningJob = Binding.Service<StartSigningJob>(
-  "AWS.Signer.StartSigningJob",
-);
+export const StartSigningJob = Binding.Service<StartSigningJob>("AWS.Signer.StartSigningJob");

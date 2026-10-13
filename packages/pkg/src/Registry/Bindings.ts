@@ -61,10 +61,7 @@ export type Settings = typeof Settings.Type;
  * Worker props the registry forwards verbatim. `main`, `env`, and `crons`
  * are owned by the registry itself.
  */
-export type WorkerOverrides = Omit<
-  Cloudflare.WorkerProps,
-  "main" | "env" | "crons"
->;
+export type WorkerOverrides = Omit<Cloudflare.WorkerProps, "main" | "env" | "crons">;
 
 export interface GitHubCredentials {
   /** The App id. Read from the deploy environment, bound to the Worker. */

@@ -1,19 +1,16 @@
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zones from "@distilled.cloud/hetzner/zones";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -76,9 +73,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.recordSet.changeProtection).toEqual(false);
       expect(created.recordSet.labels).toMatchObject({ env: "test" });
       expect(created.recordSet.records).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ value: "192.0.2.1" }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ value: "192.0.2.1" })]),
       );
       expect(created.recordSet.records).toHaveLength(1);
 
@@ -92,9 +87,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(fetched.rrset.ttl).toEqual(300);
       expect(fetched.rrset.protection.change).toEqual(false);
       expect(fetched.rrset.labels.env).toEqual("test");
-      expect(
-        fetched.rrset.records.map((record) => record.value).sort(),
-      ).toEqual(["192.0.2.1"]);
+      expect(fetched.rrset.records.map((record) => record.value).sort()).toEqual(["192.0.2.1"]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -124,9 +117,10 @@ test.provider.skipIf(!hasHetznerCreds)(
         role: "dns",
       });
       expect(updated.recordSet.records).toHaveLength(2);
-      expect(
-        updated.recordSet.records.map((record) => record.value).sort(),
-      ).toEqual(["192.0.2.1", "192.0.2.2"]);
+      expect(updated.recordSet.records.map((record) => record.value).sort()).toEqual([
+        "192.0.2.1",
+        "192.0.2.2",
+      ]);
 
       const refetched = yield* zoneRrsets.getZoneRrset({
         id_or_name: String(updated.zone.zoneId),
@@ -137,9 +131,10 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(refetched.rrset.protection.change).toEqual(true);
       expect(refetched.rrset.labels.env).toEqual("prod");
       expect(refetched.rrset.labels.role).toEqual("dns");
-      expect(
-        refetched.rrset.records.map((record) => record.value).sort(),
-      ).toEqual(["192.0.2.1", "192.0.2.2"]);
+      expect(refetched.rrset.records.map((record) => record.value).sort()).toEqual([
+        "192.0.2.1",
+        "192.0.2.2",
+      ]);
 
       yield* stack.destroy();
 
@@ -211,9 +206,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         rr_type: "A",
       });
       expect(fetched.rrset.id).toEqual("api/A");
-      expect(fetched.rrset.records.map((record) => record.value)).toEqual([
-        "192.0.2.10",
-      ]);
+      expect(fetched.rrset.records.map((record) => record.value)).toEqual(["192.0.2.10"]);
 
       const oldGone = yield* waitUntilGone(created.zone.zoneId, "www", "A");
       expect(oldGone).toEqual("gone");
@@ -261,15 +254,12 @@ test.provider.skipIf(!hasHetznerCreds)(
       const provider = yield* Provider.findProvider(Hetzner.RecordSet);
       const all = yield* provider.list();
       const found = all.find(
-        (rrset) =>
-          rrset.zoneId === deployed.zone.zoneId && rrset.id === "www/A",
+        (rrset) => rrset.zoneId === deployed.zone.zoneId && rrset.id === "www/A",
       );
       expect(found).toBeDefined();
       expect(found?.name).toEqual("www");
       expect(found?.type).toEqual("A");
-      expect(found?.records.map((record) => record.value)).toEqual([
-        "192.0.2.20",
-      ]);
+      expect(found?.records.map((record) => record.value)).toEqual(["192.0.2.20"]);
 
       yield* stack.destroy();
 

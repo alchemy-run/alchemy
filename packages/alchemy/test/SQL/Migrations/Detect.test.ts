@@ -1,3 +1,7 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe as plainDescribe, expect, layer, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import {
   detectLayout,
   inlineSqlParams,
@@ -7,13 +11,8 @@ import {
   resolveMigrations,
   timestampPrefixMillis,
 } from "@/SQL/Migrations/index.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe as plainDescribe, expect, layer, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
-const fixture = (name: string) =>
-  new URL(`./fixtures/${name}`, import.meta.url).pathname;
+const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
 
 const describe = layer(NodeServices.layer);
 
@@ -51,9 +50,7 @@ describe("detectLayout", (it) => {
     "fails on drizzle-v0 layouts with the drizzle-kit up hint",
     () =>
       Effect.gen(function* () {
-        const result = yield* Effect.result(
-          detectLayout(fixture("drizzle-v0")),
-        );
+        const result = yield* Effect.result(detectLayout(fixture("drizzle-v0")));
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure._tag).toBe("DrizzleV0LayoutError");
@@ -96,10 +93,7 @@ describe("readers", (it) => {
     () =>
       Effect.gen(function* () {
         const records = yield* readFlatRecords(fixture("flat"));
-        expect(records.map((r) => r.name)).toEqual([
-          "0001_users.sql",
-          "0002_posts.sql",
-        ]);
+        expect(records.map((r) => r.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
       }),
     { tags: ["unit", "local"] },
   );
@@ -109,12 +103,10 @@ plainDescribe("resolveMigrations", { tags: ["local"] }, () => {
   test(
     "defaults to __alchemy_migrations",
     () => {
-      expect(resolveMigrations({ input: { dir: "./m" }, stamped: {} })).toEqual(
-        {
-          dir: "./m",
-          table: "__alchemy_migrations",
-        },
-      );
+      expect(resolveMigrations({ input: { dir: "./m" }, stamped: {} })).toEqual({
+        dir: "./m",
+        table: "__alchemy_migrations",
+      });
     },
     { tags: ["unit"] },
   );
@@ -126,10 +118,7 @@ plainDescribe("resolveMigrations", { tags: ["local"] }, () => {
       // neon_migrations, custom names); honoring it keeps them converging
       // against the same table, upgraded in place.
       expect(
-        resolveMigrations({
-          input: { dir: "./m" },
-          stamped: { table: "neon_migrations" },
-        }).table,
+        resolveMigrations({ input: { dir: "./m" }, stamped: { table: "neon_migrations" } }).table,
       ).toBe("neon_migrations");
     },
     { tags: ["unit"] },
@@ -153,18 +142,14 @@ plainDescribe("normalizeMigrationsInput", { tags: ["local"] }, () => {
   test(
     "string is a directory",
     () => {
-      expect(normalizeMigrationsInput("./migrations")).toEqual({
-        dir: "./migrations",
-      });
+      expect(normalizeMigrationsInput("./migrations")).toEqual({ dir: "./migrations" });
     },
     { tags: ["unit"] },
   );
   test(
     "Drizzle.Schema-shaped outputs are accepted structurally",
     () => {
-      expect(normalizeMigrationsInput({ out: "./migrations" })).toEqual({
-        dir: "./migrations",
-      });
+      expect(normalizeMigrationsInput({ out: "./migrations" })).toEqual({ dir: "./migrations" });
     },
     { tags: ["unit"] },
   );
@@ -184,9 +169,7 @@ plainDescribe("helpers", { tags: ["local"] }, () => {
   test(
     "timestampPrefixMillis parses drizzle dir prefixes",
     () => {
-      expect(timestampPrefixMillis("20240101000000_init")).toBe(
-        Date.UTC(2024, 0, 1),
-      );
+      expect(timestampPrefixMillis("20240101000000_init")).toBe(Date.UTC(2024, 0, 1));
       expect(timestampPrefixMillis("0001_users.sql")).toBeUndefined();
     },
     { tags: ["unit"] },
@@ -195,20 +178,12 @@ plainDescribe("helpers", { tags: ["local"] }, () => {
   test(
     "inlineSqlParams inlines ? placeholders outside quotes",
     () => {
-      expect(
-        inlineSqlParams(
-          "INSERT INTO t (a, b) VALUES (?, ?);",
-          ["it's", 42],
-          "sqlite",
-        ),
-      ).toBe("INSERT INTO t (a, b) VALUES ('it''s', 42);");
-      expect(
-        inlineSqlParams(
-          "SELECT * FROM t WHERE a = 'lit?' AND b = ?;",
-          [1],
-          "sqlite",
-        ),
-      ).toBe("SELECT * FROM t WHERE a = 'lit?' AND b = 1;");
+      expect(inlineSqlParams("INSERT INTO t (a, b) VALUES (?, ?);", ["it's", 42], "sqlite")).toBe(
+        "INSERT INTO t (a, b) VALUES ('it''s', 42);",
+      );
+      expect(inlineSqlParams("SELECT * FROM t WHERE a = 'lit?' AND b = ?;", [1], "sqlite")).toBe(
+        "SELECT * FROM t WHERE a = 'lit?' AND b = 1;",
+      );
     },
     { tags: ["unit"] },
   );
@@ -216,9 +191,7 @@ plainDescribe("helpers", { tags: ["local"] }, () => {
   test(
     "inlineSqlParams inlines $n placeholders for postgres",
     () => {
-      expect(inlineSqlParams("SELECT $1, $2;", ["x", null], "postgres")).toBe(
-        "SELECT 'x', NULL;",
-      );
+      expect(inlineSqlParams("SELECT $1, $2;", ["x", null], "postgres")).toBe("SELECT 'x', NULL;");
     },
     { tags: ["unit"] },
   );

@@ -31,10 +31,7 @@ export interface GetAccuracyMetrics extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.GetAccuracyMetricsRequest,
-    ) => Effect.Effect<
-      forecast.GetAccuracyMetricsResponse,
-      forecast.GetAccuracyMetricsError
-    >
+    ) => Effect.Effect<forecast.GetAccuracyMetricsResponse, forecast.GetAccuracyMetricsError>
   >
 > {}
 export const GetAccuracyMetrics = Binding.Service<GetAccuracyMetrics>(

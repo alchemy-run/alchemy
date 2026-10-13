@@ -10,10 +10,7 @@ import type { AsyncPlatformWorkerEnv } from "./shared.ts";
  * routes so the test can drive both styles identically.
  */
 export default {
-  async fetch(
-    request: Request,
-    env: AsyncPlatformWorkerEnv,
-  ): Promise<Response> {
+  async fetch(request: Request, env: AsyncPlatformWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
     const match = url.pathname.match(/^\/dispatch\/([^/]+)(\/.*)?$/);
     if (!match) {

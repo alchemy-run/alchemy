@@ -22,9 +22,7 @@ export const defaultNetwork = Effect.gen(function* () {
     .sort()
     .slice(0, 2);
   if (subnetIds.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-AZ subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-AZ subnets"));
   }
   const groups = yield* EC2.describeSecurityGroups({
     Filters: [
@@ -34,9 +32,7 @@ export const defaultNetwork = Effect.gen(function* () {
   });
   const securityGroupId = groups.SecurityGroups?.[0]?.GroupId;
   if (securityGroupId === undefined) {
-    return yield* Effect.die(
-      new Error("default VPC has no default security group"),
-    );
+    return yield* Effect.die(new Error("default VPC has no default security group"));
   }
   return { vpcId: vpc.vpcId as string, subnetIds, securityGroupId };
 }).pipe(Effect.orDie);
@@ -51,18 +47,13 @@ export const assertEndpointDeleting = (endpointId: string) =>
       r.ResolverEndpoint?.Status === "DELETING"
         ? Effect.void
         : Effect.fail(
-            new Error(
-              `resolver endpoint '${endpointId}' still ${r.ResolverEndpoint?.Status}`,
-            ),
+            new Error(`resolver endpoint '${endpointId}' still ${r.ResolverEndpoint?.Status}`),
           ),
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -75,18 +66,11 @@ export const assertRuleGone = (ruleId: string) =>
     Effect.flatMap((r) =>
       r.ResolverRule?.Status === "DELETING"
         ? Effect.void
-        : Effect.fail(
-            new Error(
-              `resolver rule '${ruleId}' still ${r.ResolverRule?.Status}`,
-            ),
-          ),
+        : Effect.fail(new Error(`resolver rule '${ruleId}' still ${r.ResolverRule?.Status}`)),
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );

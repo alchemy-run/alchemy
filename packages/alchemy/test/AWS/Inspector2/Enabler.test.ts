@@ -1,25 +1,21 @@
-import * as AWS from "@/AWS";
-import { CisScanConfiguration } from "@/AWS/Inspector2/CisScanConfiguration.ts";
-import { Enabler } from "@/AWS/Inspector2/Enabler.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CisScanConfiguration } from "@/AWS/Inspector2/CisScanConfiguration.ts";
+import { Enabler } from "@/AWS/Inspector2/Enabler.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const accountStatus = inspector2
-  .batchGetAccountStatus({})
-  .pipe(Effect.map((r) => r.accounts?.[0]));
+const accountStatus = inspector2.batchGetAccountStatus({}).pipe(Effect.map((r) => r.accounts?.[0]));
 
-const typeStatus = (
-  account: inspector2.AccountState | undefined,
-  key: "ec2" | "ecr" | "lambda",
-) => account?.resourceState?.[key]?.status;
+const typeStatus = (account: inspector2.AccountState | undefined, key: "ec2" | "ecr" | "lambda") =>
+  account?.resourceState?.[key]?.status;
 
 class InspectorNotSettled extends Data.TaggedError("InspectorNotSettled")<{
   readonly expected: string;
@@ -27,9 +23,7 @@ class InspectorNotSettled extends Data.TaggedError("InspectorNotSettled")<{
   readonly ec2: string | undefined;
 }> {}
 
-class InspectorRequestRejected extends Data.TaggedError(
-  "InspectorRequestRejected",
-)<{
+class InspectorRequestRejected extends Data.TaggedError("InspectorRequestRejected")<{
   readonly operation: "enable" | "disable";
   readonly failedAccounts: readonly inspector2.FailedAccount[];
 }> {}
@@ -37,10 +31,7 @@ class InspectorRequestRejected extends Data.TaggedError(
 // Enablement transitions are asynchronous (ENABLING/DISABLING). Poll with a
 // bounded budget (~50s) and check the terminal value — Effect.repeat returns
 // its last success when the budget runs out even if `until` never held.
-const waitForAccount = (
-  expected: string,
-  done: (account: inspector2.AccountState) => boolean,
-) =>
+const waitForAccount = (expected: string, done: (account: inspector2.AccountState) => boolean) =>
   accountStatus.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
@@ -87,10 +78,7 @@ const restoreDisabled = (accountId: string) =>
     }
     // Live disable can stay DISABLING for minutes. An accepted disable that is
     // still converging is not a leak; anything else is.
-    yield* waitForAccount(
-      "DISABLED",
-      (account) => account.state?.status === "DISABLED",
-    ).pipe(
+    yield* waitForAccount("DISABLED", (account) => account.state?.status === "DISABLED").pipe(
       Effect.catchTag("InspectorNotSettled", (e) =>
         e.ec2 === "DISABLING"
           ? Effect.logWarning(
@@ -108,9 +96,7 @@ const restoreDisabled = (accountId: string) =>
 const withInspectorEnabled = Effect.gen(function* () {
   const initial = yield* waitForAccount(
     "ENABLED or DISABLED",
-    (account) =>
-      account.state?.status === "ENABLED" ||
-      account.state?.status === "DISABLED",
+    (account) => account.state?.status === "ENABLED" || account.state?.status === "DISABLED",
   );
   if (initial.state?.status === "ENABLED") {
     yield* Effect.logInfo(
@@ -121,27 +107,23 @@ const withInspectorEnabled = Effect.gen(function* () {
 
   const accountId = initial.accountId;
   yield* Effect.acquireRelease(
-    inspector2
-      .enable({ accountIds: [accountId], resourceTypes: [CIS_SCAN_TYPE] })
-      .pipe(
-        Effect.flatMap((response) =>
-          response.failedAccounts && response.failedAccounts.length > 0
-            ? Effect.fail(
-                new InspectorRequestRejected({
-                  operation: "enable",
-                  failedAccounts: response.failedAccounts,
-                }),
-              )
-            : Effect.void,
-        ),
+    inspector2.enable({ accountIds: [accountId], resourceTypes: [CIS_SCAN_TYPE] }).pipe(
+      Effect.flatMap((response) =>
+        response.failedAccounts && response.failedAccounts.length > 0
+          ? Effect.fail(
+              new InspectorRequestRejected({
+                operation: "enable",
+                failedAccounts: response.failedAccounts,
+              }),
+            )
+          : Effect.void,
       ),
+    ),
     () => restoreDisabled(accountId).pipe(Effect.orDie),
   );
   yield* waitForAccount(
     "ENABLED",
-    (account) =>
-      account.state?.status === "ENABLED" &&
-      typeStatus(account, "ec2") === "ENABLED",
+    (account) => account.state?.status === "ENABLED" && typeStatus(account, "ec2") === "ENABLED",
   );
 });
 
@@ -152,14 +134,10 @@ test.provider(
       const account = yield* accountStatus;
       expect(account?.accountId).toBeTruthy();
       expect(
-        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-          typeStatus(account, "ec2") ?? "",
-        ),
+        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ec2") ?? ""),
       ).toBe(true);
       expect(
-        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-          typeStatus(account, "ecr") ?? "",
-        ),
+        ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ecr") ?? ""),
       ).toBe(true);
     }),
   { tags: ["provider:aws", "provider:aws:inspector2", "live"] },
@@ -179,17 +157,14 @@ describe.sequential("Inspector2 account enablement", () => {
     "CIS scan APIs reject a non-enabled account (typed)",
     () =>
       Effect.gen(function* () {
-        const account = (yield* inspector2.batchGetAccountStatus({}))
-          .accounts?.[0];
+        const account = (yield* inspector2.batchGetAccountStatus({})).accounts?.[0];
         if (account?.state?.status === "ENABLED") {
           yield* Effect.logInfo(
             "Inspector is enabled in this account — CIS APIs are accessible, probe not applicable",
           );
           return;
         }
-        const result = yield* Effect.result(
-          inspector2.listCisScanConfigurations({}),
-        );
+        const result = yield* Effect.result(inspector2.listCisScanConfigurations({}));
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure._tag).toBe("AccessDeniedException");
@@ -213,21 +188,13 @@ describe.sequential("Inspector2 account enablement", () => {
 
           yield* stack.destroy();
 
-          const deploy = (props: {
-            securityLevel: "LEVEL_1" | "LEVEL_2";
-            timeOfDay: string;
-          }) =>
+          const deploy = (props: { securityLevel: "LEVEL_1" | "LEVEL_2"; timeOfDay: string }) =>
             stack.deploy(
               Effect.gen(function* () {
                 const cis = yield* CisScanConfiguration("NightlyCis", {
                   securityLevel: props.securityLevel,
                   schedule: {
-                    daily: {
-                      startTime: {
-                        timeOfDay: props.timeOfDay,
-                        timezone: "UTC",
-                      },
-                    },
+                    daily: { startTime: { timeOfDay: props.timeOfDay, timezone: "UTC" } },
                   },
                   targets: {
                     accountIds: ["SELF"],
@@ -243,10 +210,7 @@ describe.sequential("Inspector2 account enablement", () => {
               }),
             );
 
-          const created = yield* deploy({
-            securityLevel: "LEVEL_1",
-            timeOfDay: "02:00",
-          });
+          const created = yield* deploy({ securityLevel: "LEVEL_1", timeOfDay: "02:00" });
           // arn:aws:inspector2:<region>:<account>:owner/<owner>/cis-configuration/<id>
           expect(created.scanConfigurationArn).toContain("cis-configuration");
           expect(created.securityLevel).toBe("LEVEL_1");
@@ -256,10 +220,7 @@ describe.sequential("Inspector2 account enablement", () => {
               .listCisScanConfigurations({
                 filterCriteria: {
                   scanConfigurationArnFilters: [
-                    {
-                      comparison: "EQUALS",
-                      value: created.scanConfigurationArn,
-                    },
+                    { comparison: "EQUALS", value: created.scanConfigurationArn },
                   ],
                 },
               })
@@ -272,35 +233,23 @@ describe.sequential("Inspector2 account enablement", () => {
           // Canonical list() coverage.
           const provider = yield* Provider.findProvider(CisScanConfiguration);
           const all = yield* provider.list();
-          expect(
-            all.some(
-              (c) => c.scanConfigurationArn === created.scanConfigurationArn,
-            ),
-          ).toBe(true);
+          expect(all.some((c) => c.scanConfigurationArn === created.scanConfigurationArn)).toBe(
+            true,
+          );
 
           // Update in place — the ARN is stable.
-          const updated = yield* deploy({
-            securityLevel: "LEVEL_2",
-            timeOfDay: "03:30",
-          });
-          expect(updated.scanConfigurationArn).toBe(
-            created.scanConfigurationArn,
-          );
+          const updated = yield* deploy({ securityLevel: "LEVEL_2", timeOfDay: "03:30" });
+          expect(updated.scanConfigurationArn).toBe(created.scanConfigurationArn);
           expect(updated.securityLevel).toBe("LEVEL_2");
           const liveUpdated = yield* byArn();
-          expect(liveUpdated?.schedule?.daily?.startTime.timeOfDay).toBe(
-            "03:30",
-          );
+          expect(liveUpdated?.schedule?.daily?.startTime.timeOfDay).toBe("03:30");
 
           // Destroy — the configuration is gone.
           yield* stack.destroy();
           expect(yield* byArn()).toBeUndefined();
         }),
       ),
-    {
-      tags: ["provider:aws", "provider:aws:inspector2", "live"],
-      timeout: 240_000,
-    },
+    { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 240_000 },
   );
 
   // This test only runs when Inspector is fully disabled — it must never
@@ -322,9 +271,7 @@ describe.sequential("Inspector2 account enablement", () => {
         // Create — enable EC2 + ECR scanning.
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Enabler("Inspector", {
-              resourceTypes: ["EC2", "ECR"],
-            });
+            return yield* Enabler("Inspector", { resourceTypes: ["EC2", "ECR"] });
           }),
         );
         expect(created.accountId).toBeTruthy();
@@ -343,9 +290,7 @@ describe.sequential("Inspector2 account enablement", () => {
         // Update — add LAMBDA scanning.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Enabler("Inspector", {
-              resourceTypes: ["EC2", "ECR", "LAMBDA"],
-            });
+            return yield* Enabler("Inspector", { resourceTypes: ["EC2", "ECR", "LAMBDA"] });
           }),
         );
         expect(updated.resourceTypes.sort()).toEqual(["EC2", "ECR", "LAMBDA"]);
@@ -359,9 +304,6 @@ describe.sequential("Inspector2 account enablement", () => {
         expect(typeStatus(after, "ecr")).not.toBe("ENABLED");
         expect(typeStatus(after, "lambda")).not.toBe("ENABLED");
       }),
-    {
-      tags: ["provider:aws", "provider:aws:inspector2", "live"],
-      timeout: 240_000,
-    },
+    { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 240_000 },
   );
 });

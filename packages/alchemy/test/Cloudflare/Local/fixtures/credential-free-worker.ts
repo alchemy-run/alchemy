@@ -1,14 +1,7 @@
-import type {
-  D1Database,
-  KVNamespace,
-  R2Bucket,
-} from "@cloudflare/workers-types";
+import type { D1Database, KVNamespace, R2Bucket } from "@cloudflare/workers-types";
 
 export default {
-  async fetch(
-    _request: Request,
-    env: { KV: KVNamespace; BUCKET: R2Bucket; DB: D1Database },
-  ) {
+  async fetch(_request: Request, env: { KV: KVNamespace; BUCKET: R2Bucket; DB: D1Database }) {
     return Response.json({
       kv: await env.KV.get("seed"),
       r2: await (await env.BUCKET.get("seed"))?.text(),

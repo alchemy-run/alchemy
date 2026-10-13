@@ -31,9 +31,7 @@ export interface ReadSecret extends Binding.Service<
   (secret: Secret) => Effect.Effect<ReadSecretClient>
 > {}
 
-export const ReadSecret = Binding.Service<ReadSecret>(
-  "Cloudflare.SecretsStore.ReadSecret",
-);
+export const ReadSecret = Binding.Service<ReadSecret>("Cloudflare.SecretsStore.ReadSecret");
 
 export class SecretError extends Data.TaggedError("SecretError")<{
   message: string;

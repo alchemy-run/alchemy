@@ -24,6 +24,4 @@ export interface ListReleaseLabels extends Binding.Service<
     ) => Effect.Effect<SVC.ListReleaseLabelsOutput, SVC.ListReleaseLabelsError>
   >
 > {}
-export const ListReleaseLabels = Binding.Service<ListReleaseLabels>(
-  "AWS.EMR.ListReleaseLabels",
-);
+export const ListReleaseLabels = Binding.Service<ListReleaseLabels>("AWS.EMR.ListReleaseLabels");

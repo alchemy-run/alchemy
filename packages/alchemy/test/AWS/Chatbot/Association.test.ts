@@ -1,17 +1,13 @@
-import * as AWS from "@/AWS";
-import {
-  Association,
-  CustomAction,
-  SlackChannelConfiguration,
-} from "@/AWS/Chatbot";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as chatbot from "@distilled.cloud/aws/chatbot";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { Association, CustomAction, SlackChannelConfiguration } from "@/AWS/Chatbot";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -75,23 +71,15 @@ class AssociationMismatch extends Data.TaggedError("AssociationMismatch")<{
 const listAssociatedResources = (configuration: string) =>
   chatbot.listAssociations.items({ ChatConfiguration: configuration }).pipe(
     Stream.runCollect,
-    Effect.map((listings) =>
-      Array.from(listings).map((listing) => listing.Resource),
-    ),
-    Effect.catchTag("InvalidRequestException", () =>
-      Effect.succeed([] as string[]),
-    ),
+    Effect.map((listings) => Array.from(listings).map((listing) => listing.Resource)),
+    Effect.catchTag("InvalidRequestException", () => Effect.succeed([] as string[])),
   );
 
 // Bounded wait until the configuration's association list equals `expected`.
-const assertAssociations = (
-  configuration: string,
-  expected: readonly string[],
-) =>
+const assertAssociations = (configuration: string, expected: readonly string[]) =>
   listAssociatedResources(configuration).pipe(
     Effect.flatMap((resources) =>
-      JSON.stringify([...resources].sort()) ===
-      JSON.stringify([...expected].sort())
+      JSON.stringify([...resources].sort()) === JSON.stringify([...expected].sort())
         ? Effect.void
         : Effect.fail(new AssociationMismatch({ configuration, expected })),
     ),
@@ -148,32 +136,23 @@ test.provider.skipIf(
             });
             const association = yield* Association("Assoc", {
               chatConfiguration: config.chatConfigurationArn,
-              resource:
-                target === "a"
-                  ? actionA.customActionArn
-                  : actionB.customActionArn,
+              resource: target === "a" ? actionA.customActionArn : actionB.customActionArn,
             });
             return { config, actionA, actionB, association };
           }),
         );
 
       const first = yield* deploy("a");
-      expect(first.association.chatConfigurationArn).toBe(
-        first.config.chatConfigurationArn,
-      );
+      expect(first.association.chatConfigurationArn).toBe(first.config.chatConfigurationArn);
       expect(first.association.resourceArn).toBe(first.actionA.customActionArn);
 
       // out-of-band verification via distilled
-      yield* assertAssociations(first.config.chatConfigurationArn, [
-        first.actionA.customActionArn,
-      ]);
+      yield* assertAssociations(first.config.chatConfigurationArn, [first.actionA.customActionArn]);
 
       // re-pointing the association to a different resource is a replacement:
       // the new pair is associated and the old one disassociated
       const second = yield* deploy("b");
-      expect(second.association.resourceArn).toBe(
-        second.actionB.customActionArn,
-      );
+      expect(second.association.resourceArn).toBe(second.actionB.customActionArn);
       yield* assertAssociations(second.config.chatConfigurationArn, [
         second.actionB.customActionArn,
       ]);

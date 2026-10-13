@@ -40,6 +40,4 @@ export interface BatchDeleteImage extends Binding.Service<
   >
 > {}
 
-export const BatchDeleteImage = Binding.Service<BatchDeleteImage>(
-  "AWS.ECR.BatchDeleteImage",
-);
+export const BatchDeleteImage = Binding.Service<BatchDeleteImage>("AWS.ECR.BatchDeleteImage");

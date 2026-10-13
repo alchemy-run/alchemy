@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { HttpNamespace } from "@/AWS/CloudMap";
-import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { HttpNamespace } from "@/AWS/CloudMap";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,10 +28,7 @@ const assertNamespaceDeleted = (namespaceId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "NamespaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -60,11 +57,7 @@ test.provider(
       expect(created?.Description).toBe("initial description");
       const tags = yield* sd
         .listTagsForResource({ ResourceARN: namespace.namespaceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestHttpNamespace");
 
@@ -84,11 +77,7 @@ test.provider(
       expect(afterUpdate?.Description).toBe("updated description");
       const tagsAfter = yield* sd
         .listTagsForResource({ ResourceARN: namespace.namespaceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tagsAfter.Extra).toBe("yes");
 
       yield* stack.destroy();

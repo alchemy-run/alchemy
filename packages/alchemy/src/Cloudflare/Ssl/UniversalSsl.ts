@@ -2,7 +2,6 @@ import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -140,9 +139,7 @@ export const UniversalSslProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is UniversalSslAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is UniversalSslAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -151,13 +148,8 @@ export const UniversalSslProvider = () =>
       // zoneId is the resource's identity; it is Input<string>, so
       // compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -176,8 +168,7 @@ export const UniversalSslProvider = () =>
       // Cloudflare default — there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed value at adoption
       // time becomes the `initialEnabled` restored on destroy.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
       return { zoneId, enabled, initialEnabled };
     }),
 
@@ -193,8 +184,7 @@ export const UniversalSslProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
 
       // 3. Sync — patch only when the observed value differs.
       if (enabled === news.enabled) {

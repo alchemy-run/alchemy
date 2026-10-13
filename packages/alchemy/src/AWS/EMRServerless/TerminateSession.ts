@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link TerminateSession} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type TerminateSessionInput = Omit<
-  emr.TerminateSessionRequest,
-  "applicationId"
->;
+export type TerminateSessionInput = Omit<emr.TerminateSessionRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:TerminateSession`.

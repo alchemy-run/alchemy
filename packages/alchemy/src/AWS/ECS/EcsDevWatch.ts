@@ -13,8 +13,7 @@ import * as Effect from "effect/Effect";
 export { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 
 /** The family segment of a task definition revision ARN. */
-const familyOfArn = (arn: string | undefined) =>
-  arn?.split("/").pop()?.split(":")[0];
+const familyOfArn = (arn: string | undefined) => arn?.split("/").pop()?.split(":")[0];
 
 /**
  * Restart every RUNNING task of `family` that is not yet on
@@ -63,8 +62,7 @@ export const restartFamilyTasks = Effect.fn(function* (options: {
       // ECS stamps service tasks with their deployment id (`ecs-svc/<id>`);
       // older floci builds used the bare `ecs-svc`.
       const isServiceManaged =
-        task.startedBy === "ecs-svc" ||
-        (task.startedBy?.startsWith("ecs-svc/") ?? false);
+        task.startedBy === "ecs-svc" || (task.startedBy?.startsWith("ecs-svc/") ?? false);
       if (isServiceManaged !== options.serviceManaged) continue;
       yield* ecs.stopTask({
         cluster,

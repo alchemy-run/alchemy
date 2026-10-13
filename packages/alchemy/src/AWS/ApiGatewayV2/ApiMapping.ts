@@ -74,9 +74,7 @@ export interface ApiMapping extends Resource<
  *
  * @resource
  */
-export const ApiMappingResource = Resource<ApiMapping>(
-  "AWS.ApiGatewayV2.ApiMapping",
-);
+export const ApiMappingResource = Resource<ApiMapping>("AWS.ApiGatewayV2.ApiMapping");
 
 export interface ApiMappingInputProps extends Omit<
   {
@@ -117,8 +115,7 @@ const snapshotFromMapping = (
   apiId: mapping.ApiId ?? "",
   domainName,
   stage: mapping.Stage ?? "",
-  apiMappingKey:
-    mapping.ApiMappingKey === "" ? undefined : mapping.ApiMappingKey,
+  apiMappingKey: mapping.ApiMappingKey === "" ? undefined : mapping.ApiMappingKey,
 });
 
 export const ApiMappingProvider = () =>
@@ -128,11 +125,7 @@ export const ApiMappingProvider = () =>
       const getMappingSafe = (domainName: string, apiMappingId: string) =>
         agw2
           .getApiMapping({ DomainName: domainName, ApiMappingId: apiMappingId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return ApiMappingResource.Provider.of({
         stables: ["apiMappingId", "domainName"],
@@ -154,9 +147,7 @@ export const ApiMappingProvider = () =>
                   Effect.map((items) =>
                     items
                       .filter((mapping) => mapping.ApiMappingId != null)
-                      .map((mapping) =>
-                        snapshotFromMapping(domain.DomainName!, mapping),
-                      ),
+                      .map((mapping) => snapshotFromMapping(domain.DomainName!, mapping)),
                   ),
                   Effect.catchTag("NotFoundException", () =>
                     Effect.succeed([] as ApiMapping["Attributes"][]),
@@ -169,10 +160,7 @@ export const ApiMappingProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.domainName || !output.apiMappingId) return undefined;
-          const mapping = yield* getMappingSafe(
-            output.domainName,
-            output.apiMappingId,
-          );
+          const mapping = yield* getMappingSafe(output.domainName, output.apiMappingId);
           if (!mapping?.ApiMappingId) return undefined;
           return snapshotFromMapping(output.domainName, mapping);
         }),

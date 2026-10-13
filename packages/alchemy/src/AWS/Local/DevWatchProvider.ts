@@ -39,24 +39,15 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import {
-  diffBindings,
-  havePropsChanged,
-  isResolved,
-  stripEffects,
-} from "../../Diff.ts";
+import { diffBindings, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { canonicalHash } from "../../Local/LocalProvider.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ProviderService } from "../../Provider.ts";
-import type {
-  ResourceBinding,
-  ResourceClassLike,
-  ResourceLike,
-} from "../../Resource.ts";
+import type { ResourceBinding, ResourceClassLike, ResourceLike } from "../../Resource.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
-import { moduleExtension } from "../../Util/Node.ts";
 
 /**
  * The AWS provider group module ([Local.ts](./Local.ts)) — every
@@ -64,10 +55,7 @@ import { moduleExtension } from "../../Util/Node.ts";
  * providers are served from the same group by the dev sidecar.
  */
 export const flociProvidersUrl = () =>
-  import.meta.resolve(
-    `./Local${moduleExtension(import.meta.url)}`,
-    import.meta.url,
-  );
+  import.meta.resolve(`./Local${moduleExtension(import.meta.url)}`, import.meta.url);
 
 /** A diff decision produced by {@link DevWatchSpec.replaceOn}. */
 export interface DevReplaceDecision {
@@ -186,9 +174,7 @@ export interface DevWatchSpec<Props, Attrs> {
    * override services provided; failures are logged, never propagated. A
    * spec with nothing to watch for a given props shape simply returns.
    */
-  readonly startWatch: (
-    ctx: DevWatchContext<Props, Attrs>,
-  ) => Effect.Effect<void, any, any>;
+  readonly startWatch: (ctx: DevWatchContext<Props, Attrs>) => Effect.Effect<void, any, any>;
 }
 
 interface WatchEntry {
@@ -231,17 +217,17 @@ export const makeDevWatchProvider = <
         ) as Layer.Layer<any, any, never>,
         scope,
       ).pipe(Effect.orDie);
-      const services = Layer.succeedContext(
-        Context.merge(ambient, overrides),
-      ) as Layer.Layer<any, never, never>;
+      const services = Layer.succeedContext(Context.merge(ambient, overrides)) as Layer.Layer<
+        any,
+        never,
+        never
+      >;
 
       // The live provider machinery, every lifecycle method endpoint-wrapped
       // to the emulator — same F1 combinator the plain `flociDual` resources
       // use, applied to a provider instance we build ourselves.
       const liveCtx = yield* Layer.buildWithScope(
-        spec
-          .liveProvider()
-          .pipe(Layer.provide(services)) as unknown as Layer.Layer<
+        spec.liveProvider().pipe(Layer.provide(services)) as unknown as Layer.Layer<
           any,
           any,
           never
@@ -354,10 +340,7 @@ export const makeDevWatchProvider = <
         const fiber = yield* spec.startWatch(ctx).pipe(
           Effect.provide(services),
           Effect.catchCause((cause) =>
-            Effect.logWarning(
-              `[alchemy dev] ${input.id}: watch loop exited`,
-              cause,
-            ),
+            Effect.logWarning(`[alchemy dev] ${input.id}: watch loop exited`, cause),
           ),
           Effect.forkDetach,
           Scope.provide(scope),
@@ -376,9 +359,7 @@ export const makeDevWatchProvider = <
       });
 
       const normalize = (props: Props | undefined): object | undefined =>
-        props === undefined
-          ? undefined
-          : ((spec.normalizeProps?.(props) ?? props) as object);
+        props === undefined ? undefined : ((spec.normalizeProps?.(props) ?? props) as object);
 
       const provider: any = {
         // read / precreate / list / tail / logs / stables delegate to the
@@ -423,8 +404,7 @@ export const makeDevWatchProvider = <
           const entry = watches.get(id);
           if (
             entry === undefined ||
-            (entry.fiber !== undefined &&
-              entry.fiber.pollUnsafe() !== undefined)
+            (entry.fiber !== undefined && entry.fiber.pollUnsafe() !== undefined)
           ) {
             return { action: "update" as const };
           }
@@ -445,11 +425,7 @@ export const makeDevWatchProvider = <
           // reconcile, not the watch loop. An explicit `noop` is final — the
           // engine does not re-check bindings after it — so a binding-only
           // change must plan an update here.
-          if (
-            diffBindings(oldBindings, newBindings).some(
-              (b) => b.action !== "noop",
-            )
-          ) {
+          if (diffBindings(oldBindings, newBindings).some((b) => b.action !== "noop")) {
             return { action: "update" as const };
           }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {
@@ -462,8 +438,7 @@ export const makeDevWatchProvider = <
         reconcile: Effect.fn(function* (input: any) {
           return yield* withLock(input.id)(
             Effect.gen(function* () {
-              const previous = (input.output ??
-                watches.get(input.id)?.attrs) as Attrs | undefined;
+              const previous = (input.output ?? watches.get(input.id)?.attrs) as Attrs | undefined;
               const reconcileNews =
                 spec.transformReconcileNews !== undefined
                   ? yield* spec
@@ -493,9 +468,7 @@ export const makeDevWatchProvider = <
         }),
         delete: Effect.fn(function* (input: any) {
           yield* stopWatch(input.id, input.instanceId);
-          yield* withLock(input.id)(
-            wrapped.delete(withSafeSession(input) as any),
-          );
+          yield* withLock(input.id)(wrapped.delete(withSafeSession(input) as any));
         }),
       };
       if (typeof (live as any).precreate === "function") {

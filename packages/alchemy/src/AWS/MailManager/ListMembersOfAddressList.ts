@@ -28,13 +28,9 @@ export interface ListMembersOfAddressList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.ListMembersOfAddressListRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.ListMembersOfAddressListResponse,
-      mm.ListMembersOfAddressListError
-    >
+    ) => Effect.Effect<mm.ListMembersOfAddressListResponse, mm.ListMembersOfAddressListError>
   >
 > {}
-export const ListMembersOfAddressList =
-  Binding.Service<ListMembersOfAddressList>(
-    "AWS.MailManager.ListMembersOfAddressList",
-  );
+export const ListMembersOfAddressList = Binding.Service<ListMembersOfAddressList>(
+  "AWS.MailManager.ListMembersOfAddressList",
+);

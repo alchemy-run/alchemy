@@ -157,9 +157,7 @@ const normalizeTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -172,9 +170,7 @@ interface ComparableComponentSpec {
 }
 
 const canonicalComponents = (
-  components:
-    | { [key: string]: ComparableComponentSpec | undefined }
-    | undefined,
+  components: { [key: string]: ComparableComponentSpec | undefined } | undefined,
 ): string =>
   JSON.stringify(
     Object.keys(components ?? {})
@@ -215,11 +211,7 @@ export const DeploymentProvider = () =>
       const observeDeployment = (deploymentId: string) =>
         greengrassv2
           .getDeployment({ deploymentId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // The latest deployment revision for a target (cloud-authoritative).
       const observeLatestForTarget = (targetArn: string) =>
@@ -238,11 +230,9 @@ export const DeploymentProvider = () =>
       ) {
         const deploymentId = live.deploymentId;
         if (deploymentId === undefined) {
-          return yield* Effect.fail(
-            new GreengrassDeploymentMissingId({
-              message: "getDeployment returned no deploymentId",
-            }),
-          );
+          return yield* new GreengrassDeploymentMissingId({
+            message: "getDeployment returned no deploymentId",
+          });
         }
         return {
           deploymentId,
@@ -262,20 +252,14 @@ export const DeploymentProvider = () =>
             // Already completed/canceled/inactive revisions reject the
             // cancellation — that is exactly the state we want.
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "ConflictException",
-                "ValidationException",
-              ],
+              ["ResourceNotFoundException", "ConflictException", "ValidationException"],
               () => Effect.succeed(undefined),
             ),
           );
-          yield* greengrassv2
-            .deleteDeployment({ deploymentId })
-            .pipe(retryWhileConflict)
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* greengrassv2.deleteDeployment({ deploymentId }).pipe(
+            retryWhileConflict,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         });
 
       return Deployment.Provider.of({
@@ -295,10 +279,7 @@ export const DeploymentProvider = () =>
               iotJobArn?: string;
             }[] = [];
             for (const deployment of deployments) {
-              if (
-                deployment.deploymentId === undefined ||
-                deployment.targetArn === undefined
-              ) {
+              if (deployment.deploymentId === undefined || deployment.targetArn === undefined) {
                 continue;
               }
               results.push({
@@ -319,13 +300,8 @@ export const DeploymentProvider = () =>
                 ? yield* observeLatestForTarget(olds.targetArn)
                 : undefined;
           if (live?.deploymentId === undefined) return undefined;
-          const attrs = yield* attributesOf(
-            live,
-            output?.targetArn ?? olds?.targetArn ?? "",
-          );
-          return (yield* hasAlchemyTags(id, normalizeTags(live.tags)))
-            ? attrs
-            : Unowned(attrs);
+          const attrs = yield* attributesOf(live, output?.targetArn ?? olds?.targetArn ?? "");
+          return (yield* hasAlchemyTags(id, normalizeTags(live.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -360,11 +336,9 @@ export const DeploymentProvider = () =>
               tags: desiredTags,
             });
             if (created.deploymentId === undefined) {
-              return yield* Effect.fail(
-                new GreengrassDeploymentMissingId({
-                  message: `createDeployment for ${news.targetArn} returned no deploymentId`,
-                }),
-              );
+              return yield* new GreengrassDeploymentMissingId({
+                message: `createDeployment for ${news.targetArn} returned no deploymentId`,
+              });
             }
             // Clean up the revision we previously created, now superseded.
             if (
@@ -375,11 +349,9 @@ export const DeploymentProvider = () =>
             }
             live = yield* observeDeployment(created.deploymentId);
             if (live === undefined) {
-              return yield* Effect.fail(
-                new GreengrassDeploymentMissingId({
-                  message: `deployment ${created.deploymentId} disappeared after creation`,
-                }),
-              );
+              return yield* new GreengrassDeploymentMissingId({
+                message: `deployment ${created.deploymentId} disappeared after creation`,
+              });
             }
           }
 
@@ -387,11 +359,9 @@ export const DeploymentProvider = () =>
           // the !inSync branch re-observed after create, but TS cannot track
           // that through the reassignment — guard with a typed error.
           if (live === undefined) {
-            return yield* Effect.fail(
-              new GreengrassDeploymentMissingId({
-                message: `no deployment observed for target ${news.targetArn} after reconcile`,
-              }),
-            );
+            return yield* new GreengrassDeploymentMissingId({
+              message: `no deployment observed for target ${news.targetArn} after reconcile`,
+            });
           }
 
           const attrs = yield* attributesOf(live, news.targetArn);

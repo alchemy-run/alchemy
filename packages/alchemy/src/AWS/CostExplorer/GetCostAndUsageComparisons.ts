@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetCostAndUsageComparisons}.
  */
-export interface GetCostAndUsageComparisonsRequest
-  extends ce.GetCostAndUsageComparisonsRequest {}
+export interface GetCostAndUsageComparisonsRequest extends ce.GetCostAndUsageComparisonsRequest {}
 
 /**
  * Runtime binding for `ce:GetCostAndUsageComparisons`.
@@ -36,14 +35,10 @@ export interface GetCostAndUsageComparisons extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetCostAndUsageComparisonsRequest,
-    ) => Effect.Effect<
-      ce.GetCostAndUsageComparisonsResponse,
-      ce.GetCostAndUsageComparisonsError
-    >
+    ) => Effect.Effect<ce.GetCostAndUsageComparisonsResponse, ce.GetCostAndUsageComparisonsError>
   >
 > {}
 
-export const GetCostAndUsageComparisons =
-  Binding.Service<GetCostAndUsageComparisons>(
-    "AWS.CostExplorer.GetCostAndUsageComparisons",
-  );
+export const GetCostAndUsageComparisons = Binding.Service<GetCostAndUsageComparisons>(
+  "AWS.CostExplorer.GetCostAndUsageComparisons",
+);

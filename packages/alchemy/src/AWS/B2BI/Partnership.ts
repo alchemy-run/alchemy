@@ -7,7 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readB2biTags, syncB2biTags, toWireTags } from "./internal.ts";
+import { readB2biTags, syncB2biTags } from "./internal.ts";
 
 export interface PartnershipProps {
   /**
@@ -89,10 +89,7 @@ export interface Partnership extends Resource<
 export const Partnership = Resource<Partnership>("AWS.B2BI.Partnership");
 
 const toAttrs = (
-  r:
-    | b2bi.GetPartnershipResponse
-    | b2bi.CreatePartnershipResponse
-    | b2bi.UpdatePartnershipResponse,
+  r: b2bi.GetPartnershipResponse | b2bi.CreatePartnershipResponse | b2bi.UpdatePartnershipResponse,
 ) => ({
   partnershipId: r.partnershipId,
   partnershipArn: r.partnershipArn,
@@ -113,9 +110,7 @@ export const PartnershipProvider = () =>
               ? b2bi
                   .getPartnership({ partnershipId: head.value.partnershipId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   )
               : Effect.succeed(undefined),
           ),
@@ -130,10 +125,7 @@ export const PartnershipProvider = () =>
           // the replacement keeps the same user-facing name, which is how
           // lost state is recovered (findByName), so the old instance must
           // be gone before the new one is created.
-          if (
-            olds.profileId !== undefined &&
-            olds.profileId !== news.profileId
-          ) {
+          if (olds.profileId !== undefined && olds.profileId !== news.profileId) {
             return { action: "replace", deleteFirst: true } as const;
           }
         }),
@@ -142,11 +134,7 @@ export const PartnershipProvider = () =>
           const found = output?.partnershipId
             ? yield* b2bi
                 .getPartnership({ partnershipId: output.partnershipId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -162,11 +150,7 @@ export const PartnershipProvider = () =>
           let live = output?.partnershipId
             ? yield* b2bi
                 .getPartnership({ partnershipId: output.partnershipId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -213,9 +197,7 @@ export const PartnershipProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* b2bi
             .deletePartnership({ partnershipId: output.partnershipId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
@@ -223,9 +205,7 @@ export const PartnershipProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getPartnership({ partnershipId: s.partnershipId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               ),
             ),
             Stream.filter((item) => item !== undefined),

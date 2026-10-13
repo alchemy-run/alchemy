@@ -43,6 +43,4 @@ export interface RetrievePaymentMethodConfiguration extends Binding.Service<
 > {}
 
 export const RetrievePaymentMethodConfiguration =
-  Binding.Service<RetrievePaymentMethodConfiguration>(
-    "Stripe.RetrievePaymentMethodConfiguration",
-  );
+  Binding.Service<RetrievePaymentMethodConfiguration>("Stripe.RetrievePaymentMethodConfiguration");

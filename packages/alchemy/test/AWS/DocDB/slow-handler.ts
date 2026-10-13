@@ -1,13 +1,13 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import * as DocDB from "@/AWS/DocDB";
 import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import * as Lambda from "@/AWS/Lambda";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "slow-handler.ts");
 
@@ -46,7 +46,7 @@ export class DocDBSlowTestFunction extends Lambda.Function<Lambda.Function>()(
 
 /**
  * Data-plane fixture: deploys a real DocumentDB cluster + instance
- * (~10-15 minutes, billed per instance-hour — gated behind AWS_TEST_SLOW)
+ * (~10-15 minutes, billed per instance-hour — skipped under `--fast`)
  * and a VPC-attached Lambda bound with Connect + the mongo Effect client.
  */
 export default DocDBSlowTestFunction.make(
@@ -110,11 +110,17 @@ export default DocDBSlowTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/ping") {
-          const { use } = yield* db;
-          const pong = yield* use((_db, client) =>
-            client.db("admin").command({ ping: 1 }),
+          return yield* db.pipe(
+            Effect.flatMap(({ use }) =>
+              use((_db, client) => client.db("admin").command({ ping: 1 })),
+            ),
+            Effect.flatMap((pong) => HttpServerResponse.json({ ok: pong.ok })),
+            // Surface the driver failure (server selection timeout, TLS,
+            // auth, …) so the test failure names it.
+            Effect.catchTag("AWS.DocDB.MongoError", (e) =>
+              HttpServerResponse.json({ error: e.message }, { status: 500 }),
+            ),
           );
-          return yield* HttpServerResponse.json({ ok: pong.ok });
         }
 
         if (request.method === "GET" && pathname === "/crud") {

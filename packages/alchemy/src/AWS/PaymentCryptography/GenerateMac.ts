@@ -43,6 +43,4 @@ export interface GenerateMac extends Binding.Service<
   >
 > {}
 
-export const GenerateMac = Binding.Service<GenerateMac>(
-  "AWS.PaymentCryptography.GenerateMac",
-);
+export const GenerateMac = Binding.Service<GenerateMac>("AWS.PaymentCryptography.GenerateMac");

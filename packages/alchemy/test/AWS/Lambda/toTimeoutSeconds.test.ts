@@ -1,6 +1,6 @@
-import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
-import * as Duration from "effect/Duration";
 import { describe, expect, it } from "alchemy-test";
+import * as Duration from "effect/Duration";
+import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
 
 describe(
   "toTimeoutSeconds",
@@ -31,11 +31,7 @@ describe(
 
       it("converts a rehydrated Millis Duration", () => {
         const json = roundTrip(Duration.seconds(42));
-        expect(json).toEqual({
-          _id: "Duration",
-          _tag: "Millis",
-          millis: 42_000,
-        });
+        expect(json).toEqual({ _id: "Duration", _tag: "Millis", millis: 42_000 });
         expect(toTimeoutSeconds(json)).toBe(42);
       });
 

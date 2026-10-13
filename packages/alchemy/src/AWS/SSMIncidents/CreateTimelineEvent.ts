@@ -34,10 +34,7 @@ export interface CreateTimelineEvent extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.CreateTimelineEventInput,
-    ) => Effect.Effect<
-      incidents.CreateTimelineEventOutput,
-      incidents.CreateTimelineEventError
-    >
+    ) => Effect.Effect<incidents.CreateTimelineEventOutput, incidents.CreateTimelineEventError>
   >
 > {}
 export const CreateTimelineEvent = Binding.Service<CreateTimelineEvent>(

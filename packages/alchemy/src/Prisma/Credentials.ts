@@ -10,7 +10,7 @@ import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
 export { Credentials } from "@distilled.cloud/prisma";
 
 const toConfigError = (cause: unknown) =>
-  new ConfigError({
+  ConfigError.make({
     message: `Failed to resolve Prisma credentials: ${
       (cause as { message?: string })?.message ?? String(cause)
     }`,

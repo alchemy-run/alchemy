@@ -38,9 +38,8 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
     const apiToken = yield* getEnvRedacted("PRISMA_API_TOKEN");
     const token = serviceToken ?? apiToken;
     if (token === undefined || Redacted.value(token).trim().length === 0) {
-      return yield* new AuthError({
-        message:
-          "Prisma CI credentials not found. Set PRISMA_SERVICE_TOKEN or PRISMA_API_TOKEN.",
+      return yield* AuthError.make({
+        message: "Prisma CI credentials not found. Set PRISMA_SERVICE_TOKEN or PRISMA_API_TOKEN.",
       });
     }
     return {
@@ -48,10 +47,7 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
       serviceToken: Redacted.make(Redacted.value(token).trim()),
       source: {
         type: "env" as const,
-        details:
-          serviceToken === undefined
-            ? "PRISMA_API_TOKEN"
-            : "PRISMA_SERVICE_TOKEN",
+        details: serviceToken === undefined ? "PRISMA_API_TOKEN" : "PRISMA_SERVICE_TOKEN",
       },
     };
   }),

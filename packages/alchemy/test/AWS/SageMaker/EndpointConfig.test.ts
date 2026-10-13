@@ -1,11 +1,11 @@
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { EndpointConfig, Model } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { sklearnImage } from "./images.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -29,11 +29,7 @@ test.provider(
 const findConfig = (name: string) =>
   sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(
-      Effect.catchTag("EndpointConfigNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
 
 test.provider(
   "create serverless endpoint config, verify out-of-band, destroy",
@@ -57,9 +53,7 @@ test.provider(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
           });
           const model = yield* Model("ConfigTestModel", {
             executionRoleArn: role.roleArn,
@@ -101,12 +95,7 @@ test.provider(
       expect(yield* findConfig(config.endpointConfigName)).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:sagemaker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:sagemaker", "live"],
     timeout: 240_000,
   },
 );

@@ -5,7 +5,7 @@ import type { Collection } from "./Collection.ts";
 
 /**
  * Runtime binding for the `GetIndex` operation scoped to one collection
- * (IAM action `aoss:APIAccessAll` on the collection ARN).
+ * (IAM actions `aoss:GetIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
  * Reads an index's schema definition from the bound {@link Collection}. A
  * missing index surfaces the typed `ResourceNotFoundException`. The calling
@@ -33,6 +33,4 @@ export interface GetIndex extends Binding.Service<
     ) => Effect.Effect<aoss.GetIndexResponse, aoss.GetIndexError>
   >
 > {}
-export const GetIndex = Binding.Service<GetIndex>(
-  "AWS.OpenSearchServerless.GetIndex",
-);
+export const GetIndex = Binding.Service<GetIndex>("AWS.OpenSearchServerless.GetIndex");

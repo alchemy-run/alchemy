@@ -26,10 +26,7 @@ export interface StartPolicyGeneration extends Binding.Service<
   () => Effect.Effect<
     (
       request: aa.StartPolicyGenerationRequest,
-    ) => Effect.Effect<
-      aa.StartPolicyGenerationResponse,
-      aa.StartPolicyGenerationError
-    >
+    ) => Effect.Effect<aa.StartPolicyGenerationResponse, aa.StartPolicyGenerationError>
   >
 > {}
 

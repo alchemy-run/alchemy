@@ -1,5 +1,5 @@
-import * as Neon from "@/Neon";
 import * as Effect from "effect/Effect";
+import * as Neon from "@/Neon";
 
 export const backendProject = Neon.Project("BackendBindingProject", {
   region: "aws-us-east-2",

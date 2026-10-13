@@ -22,8 +22,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -127,9 +127,8 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const isDeletedCustomer = (
-  value: StripeCustomer | DeletedCustomer,
-): value is DeletedCustomer => "deleted" in value && value.deleted === true;
+const isDeletedCustomer = (value: StripeCustomer | DeletedCustomer): value is DeletedCustomer =>
+  "deleted" in value && value.deleted === true;
 
 const asCustomer = (
   value: StripeCustomer | DeletedCustomer | undefined,
@@ -189,10 +188,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -226,9 +222,7 @@ export const CustomerProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -257,9 +251,7 @@ export const CustomerProvider = () =>
         current = yield* CreateCustomer({
           ...(desiredEmail.length > 0 ? { email: desiredEmail } : {}),
           ...(desiredName.length > 0 ? { name: desiredName } : {}),
-          ...(desiredDescription.length > 0
-            ? { description: desiredDescription }
-            : {}),
+          ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
           metadata,
         }).pipe(
@@ -274,8 +266,7 @@ export const CustomerProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const emailChanged = (current.email ?? "") !== desiredEmail;
       const nameChanged = (current.name ?? "") !== desiredName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const phoneChanged = (current.phone ?? "") !== desiredPhone;
 
       if (
@@ -297,9 +288,7 @@ export const CustomerProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

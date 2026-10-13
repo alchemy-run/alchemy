@@ -1,9 +1,8 @@
-/** Repository operations over storage services. HTTP handlers adapt these results. */
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64 } from "effect/encoding";
+/** Repository operations over storage services. HTTP handlers adapt these results. */
+import type * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as Layer from "effect/Layer";
 import type {
   CompactRepo,
@@ -51,12 +50,7 @@ import {
   TreeEntry,
   type Oid,
 } from "./Api.ts";
-
-import {
-  parseCommit,
-  parseTree,
-  treeEntryKind,
-} from "./Protocol/ObjectCodec.ts";
+import { parseCommit, parseTree, treeEntryKind } from "./Protocol/ObjectCodec.ts";
 import type { StoreError } from "./Protocol/Store.ts";
 import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
 import {
@@ -86,7 +80,7 @@ const asOid = (value: string): Oid => value as Oid;
 
 /** Maps the Repo DO's plain metadata onto the REST `Repo` schema class. */
 const toRepo = (meta: RepoMetaData): Repo =>
-  new Repo({
+  Repo.make({
     owner: meta.owner,
     name: meta.name,
     repoId: meta.repoId,
@@ -97,15 +91,15 @@ const toRepo = (meta: RepoMetaData): Repo =>
     forkOf: meta.forkOf,
     status: meta.status,
     createdAt: meta.createdAt,
-    objects: new ObjectStats(meta.objects),
-    lastPush: meta.lastPush === null ? null : new PushStats(meta.lastPush),
+    objects: ObjectStats.make(meta.objects),
+    lastPush: meta.lastPush === null ? null : PushStats.make(meta.lastPush),
   });
 
 /** Maps a DO ref onto the REST `Ref` schema class. */
 const toRef = (ref: RefData): Ref =>
   ref.peeled === undefined
-    ? new Ref({ name: ref.name, oid: asOid(ref.oid) })
-    : new Ref({
+    ? Ref.make({ name: ref.name, oid: asOid(ref.oid) })
+    : Ref.make({
         name: ref.name,
         oid: asOid(ref.oid),
         peeled: asOid(ref.peeled),
@@ -113,7 +107,7 @@ const toRef = (ref: RefData): Ref =>
 
 /** Maps a DO diff entry onto the REST `DiffEntry` schema class. */
 const toDiffEntry = (entry: DiffEntryData): DiffEntry =>
-  new DiffEntry({
+  DiffEntry.make({
     path: entry.path,
     status: entry.status,
     oldOid: entry.oldOid === undefined ? undefined : asOid(entry.oldOid),
@@ -126,7 +120,7 @@ const toDiffEntry = (entry: DiffEntryData): DiffEntry =>
 
 /** Maps a DO pull row onto the REST `Pull` schema class. */
 const toPull = (pull: PullData): Pull =>
-  new Pull({
+  Pull.make({
     number: pull.number,
     title: pull.title,
     body: pull.body,
@@ -141,7 +135,7 @@ const toPull = (pull: PullData): Pull =>
 
 /** Maps a DO pull detail onto the REST `PullDetail` schema class. */
 const toPullDetail = (pull: PullDetailData): PullDetail =>
-  new PullDetail({
+  PullDetail.make({
     number: pull.number,
     title: pull.title,
     body: pull.body,
@@ -163,7 +157,7 @@ const toPullDetail = (pull: PullDetailData): PullDetail =>
 
 /** Maps a DO commit onto the REST `CommitInfo` schema class. */
 const toCommitInfo = (commit: CommitData): CommitInfo =>
-  new CommitInfo({
+  CommitInfo.make({
     oid: asOid(commit.oid),
     tree: asOid(commit.tree),
     parents: commit.parents.map(asOid),
@@ -178,7 +172,7 @@ const toCommitInfo = (commit: CommitData): CommitInfo =>
  * between the Registry insert and `initRepo`).
  */
 const registryFallbackRepo = (entry: RegistryEntry): Repo =>
-  new Repo({
+  Repo.make({
     owner: entry.owner,
     name: entry.name,
     repoId: entry.repoId,
@@ -187,11 +181,10 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     readOnly: entry.readOnly,
     public: entry.public,
     forkOf: entry.forkOf,
-    status:
-      entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
+    status: entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
-    objects: new ObjectStats({
+    objects: ObjectStats.make({
       loose: 0,
       resident: 0,
       packed: 0,
@@ -216,8 +209,7 @@ export const makeOperations = Effect.gen(function* () {
   }
   const resolveCache = new Map<string, CacheSlot>();
 
-  const cacheKey = (owner: string, repo: string) =>
-    `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+  const cacheKey = (owner: string, repo: string) => `${owner.toLowerCase()}/${repo.toLowerCase()}`;
 
   const dropCached = (owner: string, repo: string) =>
     Effect.sync(() => {
@@ -259,7 +251,7 @@ export const makeOperations = Effect.gen(function* () {
       Effect.catchTag("StoreError", (error: StoreError) => Effect.die(error)),
       Effect.flatMap((entry) =>
         entry === undefined
-          ? Effect.fail(new RepoNotFound({ owner, repo }))
+          ? Effect.fail(RepoNotFound.make({ owner, repo }))
           : Effect.succeed(entry),
       ),
     );
@@ -273,12 +265,11 @@ export const makeOperations = Effect.gen(function* () {
     resolveIncludingDeleting(owner, repo).pipe(
       Effect.filterOrFail(
         (entry) => entry.deletedAt === null,
-        () => new RepoNotFound({ owner, repo }),
+        () => RepoNotFound.make({ owner, repo }),
       ),
     );
 
-  const remoteUrl = (owner: string, name: string) =>
-    Effect.succeed(`/${owner}/${name}.git`);
+  const remoteUrl = (owner: string, name: string) => Effect.succeed(`/${owner}/${name}.git`);
 
   // Accept decoded fields rather than endpoint metadata so these handlers also
   // work with APIs that add middleware or prefixes.
@@ -301,45 +292,40 @@ export const makeOperations = Effect.gen(function* () {
     registryStub()
       .createRepo(input)
       .pipe(
-        Effect.catchTag("StoreError", (error) => Effect.die(error)),
-        Effect.catchTag("RepoAlreadyExists", (conflict) =>
-          Effect.gen(function* () {
-            const existing = yield* resolveCached(input.owner, input.name).pipe(
-              Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            );
-            if (existing === undefined) {
-              return yield* Effect.fail(conflict);
-            }
-            const orphaned = yield* repos
-              .getByName(existing.repoId)
-              .readMeta()
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
-                Effect.catchCause(() => Effect.succeed(false)),
-              );
-            if (!orphaned) {
-              return yield* Effect.fail(conflict);
-            }
-            yield* registryStub()
-              .removeRow(existing.repoId)
-              .pipe(
+        Effect.catchTags({
+          StoreError: (error) => Effect.die(error),
+          RepoAlreadyExists: (conflict) =>
+            Effect.gen(function* () {
+              const existing = yield* resolveCached(input.owner, input.name).pipe(
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
               );
-            yield* dropCached(input.owner, input.name);
-            return yield* registryStub()
-              .createRepo(input)
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
-          }),
-        ),
+              if (existing === undefined) {
+                return yield* conflict;
+              }
+              const orphaned = yield* repos
+                .getByName(existing.repoId)
+                .readMeta()
+                .pipe(
+                  Effect.as(false),
+                  Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
+                  Effect.catchCause(() => Effect.succeed(false)),
+                );
+              if (!orphaned) {
+                return yield* conflict;
+              }
+              yield* registryStub()
+                .removeRow(existing.repoId)
+                .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
+              yield* dropCached(input.owner, input.name);
+              return yield* registryStub()
+                .createRepo(input)
+                .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
+            }),
+        }),
       );
 
   const reposRoutes = {
-    create: ({
-      payload,
-    }: Pick<HttpApiEndpoint.Request<typeof CreateRepo>, "payload">) =>
+    create: ({ payload }: Pick<HttpApiEndpoint.Request<typeof CreateRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* insertRepoRow({
           owner: payload.owner,
@@ -365,31 +351,23 @@ export const makeOperations = Effect.gen(function* () {
             Effect.onError(() =>
               registryStub()
                 .removeRow(entry.repoId)
-                .pipe(
-                  Effect.ignore,
-                  Effect.andThen(dropCached(entry.owner, entry.name)),
-                ),
+                .pipe(Effect.ignore, Effect.andThen(dropCached(entry.owner, entry.name))),
             ),
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
           );
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
       }),
-    get: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetRepo>, "params">) =>
+    get: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetRepo>, "params">) =>
       Effect.gen(function* () {
         // Includes rows mid-purge: GET keeps reporting
         // status "deleting" until the purge alarm frees the name (only
         // then a 404), so "poll GET until 404 then re-create" never
         // races the purge.
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
+        const entry = yield* resolveIncludingDeleting(params.owner, params.repo);
         if (entry.deletedAt !== null) {
           return registryFallbackRepo(entry);
         }
@@ -397,25 +375,23 @@ export const makeOperations = Effect.gen(function* () {
           .getByName(entry.repoId)
           .getRepoMeta()
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toRepo(meta);
       }),
     update: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdateRepo>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdateRepo>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const meta = yield* repos
@@ -427,21 +403,20 @@ export const makeOperations = Effect.gen(function* () {
             public: payload.public,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toRepo(meta);
       }),
-    list: ({
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof ListRepos>, "query">) =>
+    list: ({ query }: Pick<HttpApiEndpoint.Request<typeof ListRepos>, "query">) =>
       Effect.gen(function* () {
         // Everything the Registry holds; `public: true` narrows it. Who
         // may list at all was decided in front of the route.
@@ -465,14 +440,9 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    delete: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
+    delete: ({ params }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
       Effect.gen(function* () {
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
+        const entry = yield* resolveIncludingDeleting(params.owner, params.repo);
         // Always (re-)arm the purge — even when the row is already
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
@@ -481,18 +451,17 @@ export const makeOperations = Effect.gen(function* () {
           .getByName(entry.repoId)
           .startPurge()
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // The registry row exists but the DO holds no state — an
-            // orphan, or a purge that already wiped storage. There is
-            // nothing to purge, so free the name directly (never 404:
-            // the caller can see this repo, so DELETE must remove it).
-            Effect.catchTag("RepoNotFound", () =>
-              registryStub()
-                .removeRow(entry.repoId)
-                .pipe(
-                  Effect.catchTag("StoreError", (error) => Effect.die(error)),
-                ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              // The registry row exists but the DO holds no state — an
+              // orphan, or a purge that already wiped storage. There is
+              // nothing to purge, so free the name directly (never 404:
+              // the caller can see this repo, so DELETE must remove it).
+              RepoNotFound: () =>
+                registryStub()
+                  .removeRow(entry.repoId)
+                  .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error))),
+            }),
           );
         yield* registryStub()
           .markDeleted(entry.repoId)
@@ -509,18 +478,19 @@ export const makeOperations = Effect.gen(function* () {
           .getByName(source.repoId)
           .readMeta()
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         if (sourceMeta.status !== "ready") {
-          return yield* new RepoNotReady({ status: sourceMeta.status });
+          return yield* RepoNotReady.make({ status: sourceMeta.status });
         }
         const entry = yield* registryStub()
           .createRepo({
@@ -530,17 +500,18 @@ export const makeOperations = Effect.gen(function* () {
             forkOf: source.repoId,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // `fork` declares no ValidationError (reserved target
-            // owner) — surface it as the closest declared conflict.
-            Effect.catchTag("ValidationError", () =>
-              Effect.fail(
-                new RepoAlreadyExists({
-                  owner: payload.targetOwner,
-                  repo: payload.targetName,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              // `fork` declares no ValidationError (reserved target
+              // owner) — surface it as the closest declared conflict.
+              ValidationError: () =>
+                Effect.fail(
+                  RepoAlreadyExists.make({
+                    owner: payload.targetOwner,
+                    repo: payload.targetName,
+                  }),
+                ),
+            }),
           );
         const init = yield* repos
           .getByName(entry.repoId)
@@ -558,34 +529,31 @@ export const makeOperations = Effect.gen(function* () {
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
       }),
-    compact: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof CompactRepo>, "params">) =>
+    compact: ({ params }: Pick<HttpApiEndpoint.Request<typeof CompactRepo>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         yield* repos
           .getByName(entry.repoId)
           .startCompact()
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
       }),
-    import: ({
-      payload,
-    }: Pick<HttpApiEndpoint.Request<typeof ImportRepo>, "payload">) =>
+    import: ({ payload }: Pick<HttpApiEndpoint.Request<typeof ImportRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* registryStub()
           .createRepo({
@@ -593,12 +561,12 @@ export const makeOperations = Effect.gen(function* () {
             name: payload.name,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // `import` declares no ValidationError — a reserved owner
-            // is an import that can never succeed.
-            Effect.catchTag("ValidationError", (error) =>
-              Effect.fail(new ImportFailed({ reason: error.message })),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              // `import` declares no ValidationError — a reserved owner
+              // is an import that can never succeed.
+              ValidationError: (error) => Effect.fail(ImportFailed.make({ reason: error.message })),
+            }),
           );
         const init = yield* repos
           .getByName(entry.repoId)
@@ -619,7 +587,7 @@ export const makeOperations = Effect.gen(function* () {
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
+        return RepoCreated.make({
           repo: toRepo(init.meta),
           remote,
         });
@@ -627,47 +595,43 @@ export const makeOperations = Effect.gen(function* () {
   };
 
   const refsRoutes = {
-    list: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof ListRefs>, "params" | "query">) =>
+    list: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof ListRefs>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
           .getByName(entry.repoId)
           .listRefs(query.prefix)
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return { head: page.head, refs: page.refs.map(toRef) };
       }),
-    get: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof GetRef>, "params" | "query">) =>
+    get: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof GetRef>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const ref = yield* repos
           .getByName(entry.repoId)
           .getRef(query.name)
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toRef(ref);
       }),
@@ -675,10 +639,7 @@ export const makeOperations = Effect.gen(function* () {
       params,
       query,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdateRef>,
-      "params" | "query" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdateRef>, "params" | "query" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -689,15 +650,16 @@ export const makeOperations = Effect.gen(function* () {
             expectedOid: payload.expectedOid,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toRef(ref);
       }),
@@ -705,10 +667,7 @@ export const makeOperations = Effect.gen(function* () {
       params,
       query,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof RemoveRef>,
-      "params" | "query" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof RemoveRef>, "params" | "query" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -718,42 +677,42 @@ export const makeOperations = Effect.gen(function* () {
             expectedOid: payload.expectedOid,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
       }),
   };
 
   const objectsRoutes = {
-    commit: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetCommit>, "params">) =>
+    commit: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetCommit>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
           .getByName(entry.repoId)
           .readObject({ oid: params.oid, expect: "commit" })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         // A stored commit that fails to parse is corrupt — a defect.
         const parsed = yield* parseCommit(data.content).pipe(Effect.orDie);
-        return new CommitInfo({
+        return CommitInfo.make({
           oid: params.oid,
           tree: asOid(parsed.tree),
           parents: parsed.parents.map(asOid),
@@ -772,10 +731,7 @@ export const makeOperations = Effect.gen(function* () {
           message: parsed.message,
         });
       }),
-    log: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof GetLog>, "params" | "query">) =>
+    log: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof GetLog>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -786,15 +742,16 @@ export const makeOperations = Effect.gen(function* () {
             limit: query.limit,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return {
           items: page.items.map(toCommitInfo),
@@ -802,60 +759,57 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    tree: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetTree>, "params">) =>
+    tree: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetTree>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
           .getByName(entry.repoId)
           .readObject({ oid: params.oid, expect: "tree" })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         const entries = yield* parseTree(data.content).pipe(Effect.orDie);
         return {
           oid: params.oid,
-          entries: entries.map(
-            (item) =>
-              new TreeEntry({
-                mode: item.mode,
-                name: item.name,
-                oid: asOid(item.oid),
-                type: treeEntryKind(item.mode),
-              }),
+          entries: entries.map((item) =>
+            TreeEntry.make({
+              mode: item.mode,
+              name: item.name,
+              oid: asOid(item.oid),
+              type: treeEntryKind(item.mode),
+            }),
           ),
         };
       }),
-    blob: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetBlob>, "params">) =>
+    blob: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetBlob>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
           .getByName(entry.repoId)
           .readObject({ oid: params.oid, expect: "blob" })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         if (data.size > MAX_JSON_BLOB_BYTES) {
-          return yield* new ObjectTooLarge({
+          return yield* ObjectTooLarge.make({
             oid: params.oid,
             size: data.size,
           });
@@ -864,29 +818,28 @@ export const makeOperations = Effect.gen(function* () {
           oid: params.oid,
           size: data.size,
           encoding: "base64" as const,
-          content: Encoding.encodeBase64(data.content),
+          content: Base64.encode(data.content),
         };
       }),
-    diff: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetDiff>, "params">) =>
+    diff: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetDiff>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
           .getByName(entry.repoId)
           .readCommitDiff({ oid: params.oid })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
-        return new CommitDiff({
+        return CommitDiff.make({
           oid: params.oid,
           parent: data.parent === null ? null : asOid(data.parent),
           files: data.files.map(toDiffEntry),
@@ -903,17 +856,18 @@ export const makeOperations = Effect.gen(function* () {
           .getByName(entry.repoId)
           .compareCommits({ base: query.base, head: query.head })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
-        return new Comparison({
+        return Comparison.make({
           base: asOid(data.base),
           head: asOid(data.head),
           mergeBase: asOid(data.mergeBase),
@@ -931,10 +885,7 @@ export const makeOperations = Effect.gen(function* () {
     create: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof CreatePull>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof CreatePull>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos
@@ -946,15 +897,16 @@ export const makeOperations = Effect.gen(function* () {
             head: payload.head,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toPull(pull);
       }),
@@ -972,15 +924,16 @@ export const makeOperations = Effect.gen(function* () {
             limit: query.limit,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return {
           items: page.items.map(toPull),
@@ -988,34 +941,30 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    get: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetPull>, "params">) =>
+    get: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetPull>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const detail = yield* repos
           .getByName(entry.repoId)
           .getPull(params.number)
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toPullDetail(detail);
       }),
     update: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdatePull>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdatePull>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos
@@ -1027,15 +976,16 @@ export const makeOperations = Effect.gen(function* () {
             state: payload.state,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
         return toPull(pull);
       }),
@@ -1053,17 +1003,18 @@ export const makeOperations = Effect.gen(function* () {
             expectedHeadOid: payload.expectedHeadOid,
           })
           .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
+            Effect.catchTags({
+              StoreError: (error) => Effect.die(error),
+              RepoNotFound: () =>
+                Effect.fail(
+                  RepoNotFound.make({
+                    owner: params.owner,
+                    repo: params.repo,
+                  }),
+                ),
+            }),
           );
-        return new MergeResult({
+        return MergeResult.make({
           method: result.method,
           oid: asOid(result.oid),
           pull: toPull(result.pull),

@@ -81,29 +81,17 @@ export interface ChannelGroup extends Resource<
  *
  * @resource
  */
-export const ChannelGroup = Resource<ChannelGroup>(
-  "AWS.MediaPackageV2.ChannelGroup",
-);
+export const ChannelGroup = Resource<ChannelGroup>("AWS.MediaPackageV2.ChannelGroup");
 
 export const ChannelGroupProvider = () =>
   Provider.effect(
     ChannelGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: ChannelGroupProps,
-      ) {
-        return (
-          props.channelGroupName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: ChannelGroupProps) {
+        return props.channelGroupName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
-      const toAttrs = (group: {
-        ChannelGroupName: string;
-        Arn: string;
-        EgressDomain: string;
-      }) => ({
+      const toAttrs = (group: { ChannelGroupName: string; Arn: string; EgressDomain: string }) => ({
         channelGroupName: group.ChannelGroupName,
         channelGroupArn: group.Arn,
         egressDomain: group.EgressDomain,
@@ -113,11 +101,7 @@ export const ChannelGroupProvider = () =>
       const getGroup = Effect.fn(function* (channelGroupName: string) {
         return yield* mediapackagev2
           .getChannelGroup({ ChannelGroupName: channelGroupName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -132,21 +116,17 @@ export const ChannelGroupProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.channelGroupName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.channelGroupName ?? (yield* createName(id, olds ?? {}));
           const group = yield* getGroup(name);
           if (group === undefined) return undefined;
           const attrs = toAttrs(group);
-          return (yield* hasAlchemyTags(id, toMpTagRecord(group.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toMpTagRecord(group.Tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const name =
-            output?.channelGroupName ?? (yield* createName(id, news));
+          const name = output?.channelGroupName ?? (yield* createName(id, news));
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
           let group = yield* getGroup(name);
@@ -190,8 +170,7 @@ export const ChannelGroupProvider = () =>
           const channels = yield* listGroupChannels(channelGroupName);
           yield* Effect.forEach(
             channels,
-            (channel) =>
-              deleteChannelWithEndpoints(channelGroupName, channel.ChannelName),
+            (channel) => deleteChannelWithEndpoints(channelGroupName, channel.ChannelName),
             { concurrency: 5, discard: true },
           );
           // MediaPackage v2 deletes are idempotent (deleting a missing group
@@ -204,32 +183,22 @@ export const ChannelGroupProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const items = yield* mediapackagev2.listChannelGroups
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Items ?? []),
-                ),
-              );
+            const items = yield* mediapackagev2.listChannelGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+            );
             // The list shape omits the egress domain, so hydrate each item
             // via get; a group can vanish between enumeration and hydration.
             const groups = yield* Effect.forEach(
               items,
               (item) =>
-                mediapackagev2
-                  .getChannelGroup({ ChannelGroupName: item.ChannelGroupName })
-                  .pipe(
-                    Effect.map(toAttrs),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
-                  ),
+                mediapackagev2.getChannelGroup({ ChannelGroupName: item.ChannelGroupName }).pipe(
+                  Effect.map(toAttrs),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                ),
               { concurrency: 5 },
             );
-            return groups.filter(
-              (g): g is ChannelGroup["Attributes"] => g !== undefined,
-            );
+            return groups.filter((g): g is ChannelGroup["Attributes"] => g !== undefined);
           }),
       };
     }),

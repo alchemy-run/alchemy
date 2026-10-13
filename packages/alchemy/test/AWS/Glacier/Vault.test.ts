@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Vault } from "@/AWS/Glacier";
-import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Alchemy";
 import * as glacier from "@distilled.cloud/aws/glacier";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Vault } from "@/AWS/Glacier";
+import { Topic } from "@/AWS/SNS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,9 +40,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const vaultName = "alchemy-glacier-entitlement-probe";
-      const created = yield* Effect.result(
-        glacier.createVault({ accountId: "-", vaultName }),
-      );
+      const created = yield* Effect.result(glacier.createVault({ accountId: "-", vaultName }));
       if (Result.isFailure(created)) {
         expect(created.failure._tag).toBe("NoLongerSupportedException");
         return;
@@ -54,32 +52,23 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:glacier", "live"] },
 );
 
-class VaultStillExists extends Data.TaggedError("VaultStillExists")<{
-  vaultName: string;
-}> {}
+class VaultStillExists extends Data.TaggedError("VaultStillExists")<{ vaultName: string }> {}
 
 // Typed wait-until-gone: DescribeVault must return the typed
 // ResourceNotFoundException once deletion has propagated.
 const assertVaultDeleted = (vaultName: string) =>
   Effect.gen(function* () {
-    const exists = yield* glacier
-      .describeVault({ accountId: "-", vaultName })
-      .pipe(
-        Effect.map(() => true),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(false),
-        ),
-      );
+    const exists = yield* glacier.describeVault({ accountId: "-", vaultName }).pipe(
+      Effect.map(() => true),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+    );
     if (exists) {
       yield* Effect.fail(new VaultStillExists({ vaultName }));
     }
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VaultStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -108,10 +97,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
           const topic = yield* Topic("VaultEvents");
           const vault = yield* Vault("Backups", {
             tags: { fixture: "glacier-vault" },
-            notificationConfig: {
-              snsTopic: topic.topicArn,
-              events: ["ArchiveRetrievalCompleted"],
-            },
+            notificationConfig: { snsTopic: topic.topicArn, events: ["ArchiveRetrievalCompleted"] },
           });
           return { topic, vault };
         }),
@@ -132,12 +118,8 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
         accountId: "-",
         vaultName: step1.vault.vaultName,
       });
-      expect(notifications.vaultNotificationConfig?.SNSTopic).toBe(
-        step1.topic.topicArn,
-      );
-      expect(notifications.vaultNotificationConfig?.Events).toEqual([
-        "ArchiveRetrievalCompleted",
-      ]);
+      expect(notifications.vaultNotificationConfig?.SNSTopic).toBe(step1.topic.topicArn);
+      expect(notifications.vaultNotificationConfig?.Events).toEqual(["ArchiveRetrievalCompleted"]);
 
       const tags = yield* glacier.listTagsForVault({
         accountId: "-",
@@ -148,10 +130,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
 
       // No access policy yet.
       const noPolicy = yield* Effect.flip(
-        glacier.getVaultAccessPolicy({
-          accountId: "-",
-          vaultName: step1.vault.vaultName,
-        }),
+        glacier.getVaultAccessPolicy({ accountId: "-", vaultName: step1.vault.vaultName }),
       );
       expect(noPolicy._tag).toBe("ResourceNotFoundException");
 
@@ -167,10 +146,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
             accessPolicy: denyArchiveDeletes(vaultArn),
             notificationConfig: {
               snsTopic: topic.topicArn,
-              events: [
-                "ArchiveRetrievalCompleted",
-                "InventoryRetrievalCompleted",
-              ],
+              events: ["ArchiveRetrievalCompleted", "InventoryRetrievalCompleted"],
             },
           });
           return { vault };
@@ -188,11 +164,10 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
         accountId: "-",
         vaultName: step2.vault.vaultName,
       });
-      expect(
-        [
-          ...(updatedNotifications.vaultNotificationConfig?.Events ?? []),
-        ].sort(),
-      ).toEqual(["ArchiveRetrievalCompleted", "InventoryRetrievalCompleted"]);
+      expect([...(updatedNotifications.vaultNotificationConfig?.Events ?? [])].sort()).toEqual([
+        "ArchiveRetrievalCompleted",
+        "InventoryRetrievalCompleted",
+      ]);
 
       const updatedTags = yield* glacier.listTagsForVault({
         accountId: "-",
@@ -205,26 +180,18 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
       yield* stack.deploy(
         Effect.gen(function* () {
           yield* Topic("VaultEvents");
-          const vault = yield* Vault("Backups", {
-            tags: { fixture: "glacier-vault" },
-          });
+          const vault = yield* Vault("Backups", { tags: { fixture: "glacier-vault" } });
           return { vault };
         }),
       );
 
       const removedPolicy = yield* Effect.flip(
-        glacier.getVaultAccessPolicy({
-          accountId: "-",
-          vaultName: step1.vault.vaultName,
-        }),
+        glacier.getVaultAccessPolicy({ accountId: "-", vaultName: step1.vault.vaultName }),
       );
       expect(removedPolicy._tag).toBe("ResourceNotFoundException");
 
       const removedNotifications = yield* Effect.flip(
-        glacier.getVaultNotifications({
-          accountId: "-",
-          vaultName: step1.vault.vaultName,
-        }),
+        glacier.getVaultNotifications({ accountId: "-", vaultName: step1.vault.vaultName }),
       );
       expect(removedNotifications._tag).toBe("ResourceNotFoundException");
 
@@ -237,10 +204,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
       yield* stack.destroy();
       yield* assertVaultDeleted(step1.vault.vaultName);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:glacier", "provider:aws:sns", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:glacier", "provider:aws:sns", "live"], timeout: 240_000 },
 );
 
 test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
@@ -261,25 +225,18 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
       const vaultArn = step1.vaultArn;
       yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Vault("LockedVault", {
-            lockPolicy: denyArchiveDeletes(vaultArn),
-          });
+          return yield* Vault("LockedVault", { lockPolicy: denyArchiveDeletes(vaultArn) });
         }),
       );
 
-      const lock = yield* glacier.getVaultLock({
-        accountId: "-",
-        vaultName: step1.vaultName,
-      });
+      const lock = yield* glacier.getVaultLock({ accountId: "-", vaultName: step1.vaultName });
       expect(lock.State).toBe("InProgress");
       expect(lock.Policy).toContain("deny-archive-deletes");
 
       // Reconcile is idempotent while the lock is in progress.
       yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Vault("LockedVault", {
-            lockPolicy: denyArchiveDeletes(vaultArn),
-          });
+          return yield* Vault("LockedVault", { lockPolicy: denyArchiveDeletes(vaultArn) });
         }),
       );
 
@@ -290,10 +247,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
         }),
       );
       const aborted = yield* Effect.flip(
-        glacier.getVaultLock({
-          accountId: "-",
-          vaultName: step1.vaultName,
-        }),
+        glacier.getVaultLock({ accountId: "-", vaultName: step1.vaultName }),
       );
       expect(aborted._tag).toBe("ResourceNotFoundException");
 
@@ -317,9 +271,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GLACIER)(
 
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Vault("Renamed", {
-            vaultName: "alchemy-test-glacier-vault-renamed",
-          });
+          return yield* Vault("Renamed", { vaultName: "alchemy-test-glacier-vault-renamed" });
         }),
       );
 

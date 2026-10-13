@@ -42,10 +42,7 @@ export interface OptimizeWaypoints extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoRoutes.OptimizeWaypointsRequest,
-    ) => Effect.Effect<
-      geoRoutes.OptimizeWaypointsResponse,
-      geoRoutes.OptimizeWaypointsError
-    >
+    ) => Effect.Effect<geoRoutes.OptimizeWaypointsResponse, geoRoutes.OptimizeWaypointsError>
   >
 > {}
 export const OptimizeWaypoints = Binding.Service<OptimizeWaypoints>(

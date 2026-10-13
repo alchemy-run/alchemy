@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListDiscoveredResources}.
  */
-export interface ListDiscoveredResourcesRequest
-  extends fms.ListDiscoveredResourcesRequest {}
+export interface ListDiscoveredResourcesRequest extends fms.ListDiscoveredResourcesRequest {}
 
 /**
  * Runtime binding for `fms:ListDiscoveredResources`.
@@ -35,10 +34,7 @@ export interface ListDiscoveredResources extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListDiscoveredResourcesRequest,
-    ) => Effect.Effect<
-      fms.ListDiscoveredResourcesResponse,
-      fms.ListDiscoveredResourcesError
-    >
+    ) => Effect.Effect<fms.ListDiscoveredResourcesResponse, fms.ListDiscoveredResourcesError>
   >
 > {}
 

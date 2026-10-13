@@ -1,10 +1,10 @@
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Filter } from "@/AWS/Inspector2/Filter.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,9 +27,7 @@ test.provider(
       yield* Effect.forEach(orphans, (f) =>
         inspector2
           .deleteFilter({ arn: f.arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       );
 
       const deploy = (props: { action: "NONE" | "SUPPRESS"; reason: string }) =>
@@ -39,9 +37,7 @@ test.provider(
               action: props.action,
               reason: props.reason,
               description: "created by alchemy Inspector2 resource test",
-              filterCriteria: {
-                severity: [{ comparison: "EQUALS", value: "INFORMATIONAL" }],
-              },
+              filterCriteria: { severity: [{ comparison: "EQUALS", value: "INFORMATIONAL" }] },
               tags: { env: "test" },
             });
             return {
@@ -62,8 +58,7 @@ test.provider(
       expect(created.action).toBe("SUPPRESS");
 
       // Out-of-band verification via distilled.
-      const live = (yield* inspector2.listFilters({ arns: [created.arn] }))
-        .filters[0];
+      const live = (yield* inspector2.listFilters({ arns: [created.arn] })).filters[0];
       expect(live?.action).toBe("SUPPRESS");
       expect(live?.tags?.["env"]).toBe("test");
       expect(live?.tags?.["alchemy::id"]).toBe("SuppressInfo");
@@ -74,15 +69,10 @@ test.provider(
       expect(all.some((f) => f.arn === created.arn)).toBe(true);
 
       // Update in place — the ARN is stable.
-      const updated = yield* deploy({
-        action: "NONE",
-        reason: "keep them visible after all",
-      });
+      const updated = yield* deploy({ action: "NONE", reason: "keep them visible after all" });
       expect(updated.arn).toBe(created.arn);
       expect(updated.action).toBe("NONE");
-      const liveUpdated = (yield* inspector2.listFilters({
-        arns: [created.arn],
-      })).filters[0];
+      const liveUpdated = (yield* inspector2.listFilters({ arns: [created.arn] })).filters[0];
       expect(liveUpdated?.action).toBe("NONE");
       expect(liveUpdated?.reason).toBe("keep them visible after all");
 
@@ -91,8 +81,5 @@ test.provider(
       const gone = yield* inspector2.listFilters({ arns: [created.arn] });
       expect(gone.filters).toHaveLength(0);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:inspector2", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 120_000 },
 );

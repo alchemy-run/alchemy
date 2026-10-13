@@ -7,10 +7,7 @@ import type { FileSystem } from "./FileSystem.ts";
  * `PutBackupPolicy` request with `FileSystemId` injected from the bound
  * {@link FileSystem}.
  */
-export interface PutBackupPolicyRequest extends Omit<
-  efs.PutBackupPolicyRequest,
-  "FileSystemId"
-> {}
+export interface PutBackupPolicyRequest extends Omit<efs.PutBackupPolicyRequest, "FileSystemId"> {}
 
 /**
  * Runtime binding for the `PutBackupPolicy` operation (IAM action
@@ -44,6 +41,4 @@ export interface PutBackupPolicy extends Binding.Service<
     ) => Effect.Effect<efs.BackupPolicyDescription, efs.PutBackupPolicyError>
   >
 > {}
-export const PutBackupPolicy = Binding.Service<PutBackupPolicy>(
-  "AWS.EFS.PutBackupPolicy",
-);
+export const PutBackupPolicy = Binding.Service<PutBackupPolicy>("AWS.EFS.PutBackupPolicy");

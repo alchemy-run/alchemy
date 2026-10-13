@@ -25,12 +25,7 @@ export interface GetSessionEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.GetSessionEndpointInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.GetSessionEndpointOutput,
-      SVC.GetSessionEndpointError
-    >
+    ) => Effect.Effect<SVC.GetSessionEndpointOutput, SVC.GetSessionEndpointError>
   >
 > {}
-export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>(
-  "AWS.EMR.GetSessionEndpoint",
-);
+export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>("AWS.EMR.GetSessionEndpoint");

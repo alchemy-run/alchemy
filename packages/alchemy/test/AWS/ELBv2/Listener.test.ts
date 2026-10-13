@@ -1,12 +1,12 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2";
 import { Listener, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -27,8 +27,7 @@ test.provider(
 
       const azResult = yield* EC2.describeAvailabilityZones({});
       const availableAzs =
-        azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
-        [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available") ?? [];
       const az1 = availableAzs[0]?.ZoneName!;
       const az2 = availableAzs[1]?.ZoneName!;
       const defaultVpc = yield* getDefaultVpc;
@@ -81,17 +80,13 @@ test.provider(
         ListenerArn: deployed.listener.listenerArn,
       });
       expect(
-        attrs.Attributes?.find(
-          (a) => a.Key === "routing.http.response.server.enabled",
-        )?.Value,
+        attrs.Attributes?.find((a) => a.Key === "routing.http.response.server.enabled")?.Value,
       ).toBe("false");
 
       const provider = yield* Provider.findProvider(Listener);
       const all = yield* provider.list();
 
-      expect(
-        all.some((l) => l.listenerArn === deployed.listener.listenerArn),
-      ).toBe(true);
+      expect(all.some((l) => l.listenerArn === deployed.listener.listenerArn)).toBe(true);
 
       yield* stack.destroy();
 

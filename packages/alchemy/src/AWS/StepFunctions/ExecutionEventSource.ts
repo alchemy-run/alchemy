@@ -42,12 +42,7 @@ export interface ExecutionEventDetail {
 export type ExecutionEvent = EventRecord<ExecutionEventDetail>;
 
 /** An execution status a subscription can filter on. */
-export type ExecutionEventStatus =
-  | "RUNNING"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "TIMED_OUT"
-  | "ABORTED";
+export type ExecutionEventStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "ABORTED";
 
 export interface ExecutionEventSourceProps extends EventRouteProps {
   /**
@@ -118,17 +113,13 @@ export const consumeExecutionEvents = <StreamReq = never, Req = never>(
         ? props.statuses !== undefined && props.statuses.length > 0
           ? {
               detail: {
-                stateMachineArn: props.stateMachines.map(
-                  (machine) => machine.stateMachineArn,
-                ),
+                stateMachineArn: props.stateMachines.map((machine) => machine.stateMachineArn),
                 status: [...props.statuses],
               },
             }
           : {
               detail: {
-                stateMachineArn: props.stateMachines.map(
-                  (machine) => machine.stateMachineArn,
-                ),
+                stateMachineArn: props.stateMachines.map((machine) => machine.stateMachineArn),
               },
             }
         : props.statuses !== undefined && props.statuses.length > 0

@@ -27,10 +27,7 @@ export interface StopDataSourceSyncJob extends Binding.Service<
   (
     dataSource: DataSource,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      kendra.StopDataSourceSyncJobResponse,
-      kendra.StopDataSourceSyncJobError
-    >
+    () => Effect.Effect<kendra.StopDataSourceSyncJobResponse, kendra.StopDataSourceSyncJobError>
   >
 > {}
 export const StopDataSourceSyncJob = Binding.Service<StopDataSourceSyncJob>(

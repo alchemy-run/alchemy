@@ -29,7 +29,7 @@ export const toWireTags = (tags: Record<string, string>): rolesanywhere.Tag[] =>
 export const readRolesAnywhereTags = Effect.fn(function* (arn: string) {
   const response = yield* rolesanywhere
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

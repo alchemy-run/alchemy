@@ -25,10 +25,7 @@ export interface ListTerminologies extends Binding.Service<
   () => Effect.Effect<
     (
       request?: translate.ListTerminologiesRequest,
-    ) => Effect.Effect<
-      translate.ListTerminologiesResponse,
-      translate.ListTerminologiesError
-    >
+    ) => Effect.Effect<translate.ListTerminologiesResponse, translate.ListTerminologiesError>
   >
 > {}
 export const ListTerminologies = Binding.Service<ListTerminologies>(

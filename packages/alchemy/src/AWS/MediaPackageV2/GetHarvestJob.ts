@@ -34,12 +34,7 @@ export interface GetHarvestJob extends Binding.Service<
         mediapackagev2.GetHarvestJobRequest,
         "ChannelGroupName" | "ChannelName" | "OriginEndpointName"
       >,
-    ) => Effect.Effect<
-      mediapackagev2.GetHarvestJobResponse,
-      mediapackagev2.GetHarvestJobError
-    >
+    ) => Effect.Effect<mediapackagev2.GetHarvestJobResponse, mediapackagev2.GetHarvestJobError>
   >
 > {}
-export const GetHarvestJob = Binding.Service<GetHarvestJob>(
-  "AWS.MediaPackageV2.GetHarvestJob",
-);
+export const GetHarvestJob = Binding.Service<GetHarvestJob>("AWS.MediaPackageV2.GetHarvestJob");

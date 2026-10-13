@@ -11,7 +11,7 @@ import { diffTags, tagRecord } from "../../Tags.ts";
 export const readMailManagerTags = (arn: string) =>
   mm.listTagsForResource({ ResourceArn: arn }).pipe(
     Effect.map((r) => tagRecord(r.Tags ?? [])),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 /**
@@ -37,11 +37,7 @@ export const syncMailManagerTags = Effect.fn(function* (
  * deleting an ingress point that is still PROVISIONING. Explicitly typed so
  * `Retry.Return`'s conditional type never leaks into declaration emit.
  */
-export const retryWhileMailManagerConflict = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryWhileMailManagerConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {

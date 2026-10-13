@@ -30,10 +30,7 @@ export interface GetArchiveSearchResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: mm.GetArchiveSearchResultsRequest,
-    ) => Effect.Effect<
-      mm.GetArchiveSearchResultsResponse,
-      mm.GetArchiveSearchResultsError
-    >
+    ) => Effect.Effect<mm.GetArchiveSearchResultsResponse, mm.GetArchiveSearchResultsError>
   >
 > {}
 export const GetArchiveSearchResults = Binding.Service<GetArchiveSearchResults>(

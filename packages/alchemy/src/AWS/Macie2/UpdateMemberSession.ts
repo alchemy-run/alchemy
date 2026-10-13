@@ -27,10 +27,7 @@ export interface UpdateMemberSession extends Binding.Service<
   () => Effect.Effect<
     (
       request: macie2.UpdateMemberSessionRequest,
-    ) => Effect.Effect<
-      macie2.UpdateMemberSessionResponse,
-      macie2.UpdateMemberSessionError
-    >
+    ) => Effect.Effect<macie2.UpdateMemberSessionResponse, macie2.UpdateMemberSessionError>
   >
 > {}
 export const UpdateMemberSession = Binding.Service<UpdateMemberSession>(

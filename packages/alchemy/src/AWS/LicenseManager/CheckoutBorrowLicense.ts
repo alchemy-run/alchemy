@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CheckoutBorrowLicense}.
  */
-export interface CheckoutBorrowLicenseRequest
-  extends licensemanager.CheckoutBorrowLicenseRequest {}
+export interface CheckoutBorrowLicenseRequest extends licensemanager.CheckoutBorrowLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CheckoutBorrowLicense` — check out

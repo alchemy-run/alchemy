@@ -18,12 +18,7 @@ import type { Secret } from "./Secret.ts";
  * and the runtime half injects the secret ARN as `SecretId` into every
  * request.
  */
-export const makeSecretHttpBinding = <
-  I extends { SecretId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeSecretHttpBinding = <I extends { SecretId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SecretsManager.GetSecretValue`. */
   tag: string;
   /** The distilled operation. */

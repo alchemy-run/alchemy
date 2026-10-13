@@ -10,10 +10,6 @@ export const UpdateConnectivityInfoHttp = Layer.effect(
     operation: greengrassv2.updateConnectivityInfo,
     // Connectivity info is stored in IoT Core; Greengrass writes it with the
     // caller's credentials (documented dependent action).
-    actions: [
-      "greengrass:UpdateConnectivityInfo",
-      "iot:GetThingShadow",
-      "iot:UpdateThingShadow",
-    ],
+    actions: ["greengrass:UpdateConnectivityInfo", "iot:GetThingShadow", "iot:UpdateThingShadow"],
   }),
 );

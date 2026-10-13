@@ -14,14 +14,8 @@ export const unredact = (value: string | Redacted.Redacted<string>): string =>
  * Coerce a Personalize wire tag list (`{ tagKey, tagValue }[]`, values decode
  * as `Redacted`) into a plain `Record<string, string>`.
  */
-export const toTagRecord = (
-  tags: personalize.Tag[] | undefined,
-): Record<string, string> =>
-  Object.fromEntries(
-    (tags ?? []).map(
-      (t) => [unredact(t.tagKey), unredact(t.tagValue)] as const,
-    ),
-  );
+export const toTagRecord = (tags: personalize.Tag[] | undefined): Record<string, string> =>
+  Object.fromEntries((tags ?? []).map((t) => [unredact(t.tagKey), unredact(t.tagValue)] as const));
 
 /**
  * Read the observed tags of a Personalize resource by ARN. Tag reads are
@@ -30,7 +24,7 @@ export const toTagRecord = (
 export const readPersonalizeTags = Effect.fn(function* (arn: string) {
   const response = yield* personalize
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

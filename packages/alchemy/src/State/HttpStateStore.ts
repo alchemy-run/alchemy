@@ -1,20 +1,16 @@
 import * as Effect from "effect/Effect";
 import { identity } from "effect/Function";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
+import * as Schema from "effect/Schema";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi } from "./HttpStateApi.ts";
-
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import {
-  StateStoreError,
-  type PersistedState,
-  type StateService,
-} from "./State.ts";
+import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -42,13 +38,7 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   ) => HttpClientRequest.HttpClientRequest;
 }
 
-export const checkHttpStateStoreAuth = ({
-  url,
-  authToken,
-}: {
-  url: string;
-  authToken: string;
-}) =>
+export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authToken: string }) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
@@ -75,20 +65,12 @@ export const checkHttpStateStoreAuth = ({
     );
   });
 
-export const makeHttpStateStore = ({
-  url,
-  authToken,
-  transformClient,
-  id,
-}: HttpStateStoreProps) =>
+export const makeHttpStateStore = ({ url, authToken, transformClient, id }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
       transformClient: HttpClient.mapRequest((req) =>
-        req.pipe(
-          HttpClientRequest.bearerToken(authToken),
-          transformClient ?? identity,
-        ),
+        req.pipe(HttpClientRequest.bearerToken(authToken), transformClient ?? identity),
       ),
     });
     const state = apiClient.state;
@@ -105,10 +87,8 @@ export const makeHttpStateStore = ({
           Effect.map((stacks) => [...stacks]),
           mapStateStoreError,
         ),
-      listStages: (stack) =>
-        state.listStages({ params: { stack } }).pipe(mapStateStoreError),
-      list: (request) =>
-        state.listResources({ params: request }).pipe(mapStateStoreError),
+      listStages: (stack) => state.listStages({ params: { stack } }).pipe(mapStateStoreError),
+      list: (request) => state.listResources({ params: request }).pipe(mapStateStoreError),
       get: (request) =>
         state
           .getState({
@@ -119,19 +99,13 @@ export const makeHttpStateStore = ({
             },
           })
           .pipe(
-            Effect.map((s) =>
-              s == null
-                ? undefined
-                : (reviveStateRecursive(s) as ResourceState),
-            ),
+            Effect.map((s) => (s == null ? undefined : (reviveStateRecursive(s) as ResourceState))),
             mapStateStoreError,
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
           Effect.map((resources) =>
-            resources.map(
-              (s) => reviveStateRecursive(s) as ReplacedResourceState,
-            ),
+            resources.map((s) => reviveStateRecursive(s) as ReplacedResourceState),
           ),
           mapStateStoreError,
         ),
@@ -180,9 +154,7 @@ export const makeHttpStateStore = ({
             params: { stack: request.stack, stage: request.stage },
           })
           .pipe(
-            Effect.map((s) =>
-              s == null ? undefined : reviveStateRecursive(s),
-            ),
+            Effect.map((s) => (s == null ? undefined : reviveStateRecursive(s))),
             mapStateStoreError,
           ),
       setOutput: (request) =>
@@ -243,7 +215,7 @@ export const describeStateStoreFailure = (
   e: unknown,
   profileCommand = "alchemy profile edit",
 ): string => {
-  if (e instanceof HttpApiError.Unauthorized) {
+  if (Schema.is(HttpApiError.Unauthorized)(e)) {
     return (
       "State store rejected the request as unauthorized. " +
       `The stored state-store credentials may be stale. Run \`${profileCommand}\` to reconfigure them.`
@@ -263,16 +235,14 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.catch((e: E) =>
       Effect.gen(function* () {
         const command = yield* profileCommandHint("alchemy profile edit");
-        return yield* Effect.fail(
-          new StateStoreError({
-            message: describeStateStoreFailure(e, command),
-            http: HttpClientError.isHttpClientError(e)
-              ? { status: e.response?.status }
-              : e instanceof HttpApiError.Unauthorized
-                ? { status: 401 }
-                : undefined,
-          }),
-        );
+        return yield* new StateStoreError({
+          message: describeStateStoreFailure(e, command),
+          http: HttpClientError.isHttpClientError(e)
+            ? { status: e.response?.status }
+            : Schema.is(HttpApiError.Unauthorized)(e)
+              ? { status: 401 }
+              : undefined,
+        });
       }),
     ),
   ) as Effect.Effect<A, StateStoreError, R>;

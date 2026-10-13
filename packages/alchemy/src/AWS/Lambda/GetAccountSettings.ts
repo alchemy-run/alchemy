@@ -24,10 +24,7 @@ export interface GetAccountSettings extends Binding.Service<
   GetAccountSettings,
   "AWS.Lambda.GetAccountSettings",
   () => Effect.Effect<
-    () => Effect.Effect<
-      Lambda.GetAccountSettingsResponse,
-      Lambda.GetAccountSettingsError
-    >
+    () => Effect.Effect<Lambda.GetAccountSettingsResponse, Lambda.GetAccountSettingsError>
   >
 > {}
 export const GetAccountSettings = Binding.Service<GetAccountSettings>(

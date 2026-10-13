@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface SendMessageBatchRequest extends Omit<
-  sqs.SendMessageBatchRequest,
-  "QueueUrl"
-> {}
+export interface SendMessageBatchRequest extends Omit<sqs.SendMessageBatchRequest, "QueueUrl"> {}
 
 /**
  * Runtime binding for `sqs:SendMessageBatch`.
@@ -48,6 +45,4 @@ export interface SendMessageBatch extends Binding.Service<
   >
 > {}
 
-export const SendMessageBatch = Binding.Service<SendMessageBatch>(
-  "AWS.SQS.SendMessageBatch",
-);
+export const SendMessageBatch = Binding.Service<SendMessageBatch>("AWS.SQS.SendMessageBatch");

@@ -26,10 +26,7 @@ export interface DeleteSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: serverless.DeleteSnapshotRequest,
-    ) => Effect.Effect<
-      serverless.DeleteSnapshotResponse,
-      serverless.DeleteSnapshotError
-    >
+    ) => Effect.Effect<serverless.DeleteSnapshotResponse, serverless.DeleteSnapshotError>
   >
 > {}
 export const DeleteSnapshot = Binding.Service<DeleteSnapshot>(

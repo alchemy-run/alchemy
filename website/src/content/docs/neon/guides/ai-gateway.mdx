@@ -54,7 +54,7 @@ configured string:
 
 ```typescript
 import * as Effect from "effect/Effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { LanguageModel } from "effect/ai";
 
 const reply = yield* LanguageModel.generateText({
   prompt: "Reply with hello.",

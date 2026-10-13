@@ -33,8 +33,6 @@ export interface GetStream extends Binding.Service<
   "AWS.IVS.GetStream",
   (
     channel: Channel,
-  ) => Effect.Effect<
-    () => Effect.Effect<ivs.GetStreamResponse, ivs.GetStreamError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ivs.GetStreamResponse, ivs.GetStreamError>>
 > {}
 export const GetStream = Binding.Service<GetStream>("AWS.IVS.GetStream");

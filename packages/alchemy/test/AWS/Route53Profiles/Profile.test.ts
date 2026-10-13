@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Profile } from "@/AWS/Route53Profiles";
-import * as Test from "@/Test/Alchemy";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Profile } from "@/AWS/Route53Profiles";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,10 +20,7 @@ const assertProfileGone = (profileId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -54,9 +51,7 @@ test.provider(
         ResourceArn: first.profile.profileArn,
       });
       expect(tags.Tags.env).toBe("test");
-      expect(
-        Object.keys(tags.Tags).some((key) => key.startsWith("alchemy:")),
-      ).toBe(true);
+      expect(Object.keys(tags.Tags).some((key) => key.startsWith("alchemy:"))).toBe(true);
 
       // Update tags in place — same profile id.
       const second = yield* stack.deploy(

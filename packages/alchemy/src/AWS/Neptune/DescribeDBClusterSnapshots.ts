@@ -29,13 +29,9 @@ export interface DescribeDBClusterSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.DescribeDBClusterSnapshotsMessage,
-    ) => Effect.Effect<
-      neptune.DBClusterSnapshotMessage,
-      neptune.DescribeDBClusterSnapshotsError
-    >
+    ) => Effect.Effect<neptune.DBClusterSnapshotMessage, neptune.DescribeDBClusterSnapshotsError>
   >
 > {}
-export const DescribeDBClusterSnapshots =
-  Binding.Service<DescribeDBClusterSnapshots>(
-    "AWS.Neptune.DescribeDBClusterSnapshots",
-  );
+export const DescribeDBClusterSnapshots = Binding.Service<DescribeDBClusterSnapshots>(
+  "AWS.Neptune.DescribeDBClusterSnapshots",
+);

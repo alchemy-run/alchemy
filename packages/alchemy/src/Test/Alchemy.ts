@@ -23,7 +23,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
-
+import * as Semaphore from "effect/Semaphore";
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
@@ -77,6 +77,11 @@ interface ProviderFn {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     options?: TestOptions,
   ) => void;
+  todo: (
+    name: string,
+    fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
+    options?: TestOptions,
+  ) => void;
 }
 
 interface BeforeAllFn {
@@ -89,9 +94,7 @@ interface BeforeEachFn {
 
 interface AfterAllFn {
   (eff: TestEffect<any>, options?: TestOptions): void;
-  skipIf: (
-    predicate: boolean,
-  ) => (eff: TestEffect<any>, options?: TestOptions) => void;
+  skipIf: (predicate: boolean) => (eff: TestEffect<any>, options?: TestOptions) => void;
 }
 
 interface AfterEachFn {
@@ -170,6 +173,26 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   test.only = (name, eff, opts) => addTest(name, eff, opts, "only");
   test.todo = (name, eff, opts) => addTest(name, eff, opts, "todo");
 
+  // One lock per scratch stack. When an attempt times out, the runner fires
+  // an interrupt and ABANDONS the attempt's fiber after a short grace — but
+  // the fiber keeps running its teardown (`scratch.destroy()` below) in the
+  // background, e.g. a CloudFront disable-wait. Without this lock the retry
+  // starts concurrently on the SAME scratch state: the stale teardown then
+  // deletes the state rows the retry just wrote for the same logical ids,
+  // orphaning the retry's cloud resources (observed: two leaked CloudFront
+  // distributions + buckets + OACs from one retried test). Holding the lock
+  // across body + teardown makes a retry wait (on its own timeout clock)
+  // until the previous attempt's teardown has fully settled.
+  const scratchLocks = new Map<string, Semaphore.Semaphore>();
+  const scratchLock = (name: string) => {
+    let lock = scratchLocks.get(name);
+    if (lock === undefined) {
+      lock = Semaphore.makeUnsafe(1);
+      scratchLocks.set(name, lock);
+    }
+    return lock;
+  };
+
   const wrapProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
@@ -193,20 +216,16 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     // runs the finalizer on success, failure, AND interruption.
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
       Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
+      scratchLock(scratch.name).withPermits(1),
     );
-    return Core.toEffect(
-      body,
-      { ...options, state: scratch.state },
-      sharedScope,
-      sidecar,
-    );
+    return Core.toEffect(body, { ...options, state: scratch.state }, sharedScope, sidecar);
   };
 
   const addProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     opts: TestOptions | undefined,
-    mode: "run" | "skip",
+    mode: "run" | "skip" | "todo",
   ) => {
     // Captured at registration (module evaluation during collection) — the
     // collection context is gone by the time the body runs.
@@ -219,7 +238,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       timeout: timeoutOf(opts),
       tags: tagsOf(opts),
       optInTags: optInTagsOf(opts),
-      body: mode === "skip" ? undefined : () => wrapProvider(name, fn, file),
+      body: mode === "run" ? () => wrapProvider(name, fn, file) : undefined,
     });
   };
 
@@ -229,12 +248,10 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   provider.skip = (name, fn, opts) => addProvider(name, fn, opts, "skip");
   provider.skipIf = (condition) => (name, fn, opts) =>
     addProvider(name, fn, opts, condition ? "skip" : "run");
+  provider.todo = (name, fn, opts) => addProvider(name, fn, opts, "todo");
   test.provider = provider;
 
-  const beforeAll: BeforeAllFn = <A>(
-    eff: TestEffect<A>,
-    hookOptions?: TestOptions,
-  ) => {
+  const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: TestOptions) => {
     let result: A | undefined;
     clearResults.add(() => {
       result = undefined;
@@ -253,10 +270,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const beforeEach: BeforeEachFn = (eff, hookOptions) => {
-    registerHook("beforeEach", {
-      body: () => wrap(eff),
-      timeout: timeoutOf(hookOptions),
-    });
+    registerHook("beforeEach", { body: () => wrap(eff), timeout: timeoutOf(hookOptions) });
   };
 
   const afterAll = ((eff, hookOptions) => {
@@ -276,10 +290,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {
-    registerHook("afterEach", {
-      body: () => wrap(eff),
-      timeout: timeoutOf(hookOptions),
-    });
+    registerHook("afterEach", { body: () => wrap(eff), timeout: timeoutOf(hookOptions) });
   };
 
   // `destroy(Stack)` needs the dev sidecar alive so it can call `sidecar.stop`
@@ -287,9 +298,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
   const closeScope = Effect.suspend(() =>
-    sharedScope === undefined
-      ? Effect.void
-      : Scope.close(sharedScope, Exit.void),
+    sharedScope === undefined ? Effect.void : Scope.close(sharedScope, Exit.void),
   ).pipe(Effect.ignore);
 
   // File cleanup runs after user afterAll, including skipped/failed imports.

@@ -60,45 +60,35 @@ describe("pkt-line", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  it.live(
-    "round-trips a mixed body and strips trailing LF in payload text",
-    () =>
-      Effect.gen(function* () {
-        const body = concatBytes([
-          pktText(
-            "want 0000000000000000000000000000000000000001 side-band-64k",
-          ),
-          flushPkt,
-          pktText("done"),
-        ]);
-        const pkts = yield* decodePktLines(body);
-        expect(pkts.length).toBe(3);
-        expect(pkts[0]!._tag).toBe("data");
-        expect(pkts[1]!._tag).toBe("flush");
-        expect(pkts[2]!._tag).toBe("data");
-        const first = pkts[0]!;
-        if (first._tag === "data") {
-          expect(pktPayloadText(first.payload)).toBe(
-            "want 0000000000000000000000000000000000000001 side-band-64k",
-          );
-        }
-      }),
+  it.live("round-trips a mixed body and strips trailing LF in payload text", () =>
+    Effect.gen(function* () {
+      const body = concatBytes([
+        pktText("want 0000000000000000000000000000000000000001 side-band-64k"),
+        flushPkt,
+        pktText("done"),
+      ]);
+      const pkts = yield* decodePktLines(body);
+      expect(pkts.length).toBe(3);
+      expect(pkts[0]!._tag).toBe("data");
+      expect(pkts[1]!._tag).toBe("flush");
+      expect(pkts[2]!._tag).toBe("data");
+      const first = pkts[0]!;
+      if (first._tag === "data") {
+        expect(pktPayloadText(first.payload)).toBe(
+          "want 0000000000000000000000000000000000000001 side-band-64k",
+        );
+      }
+    }),
   );
 
   it.live("stream decoder survives pathological 1-byte chunking", () =>
     Effect.gen(function* () {
-      const body = concatBytes([
-        pktText("hello"),
-        flushPkt,
-        pktLine(utf8Encode("raw")),
-      ]);
+      const body = concatBytes([pktText("hello"), flushPkt, pktLine(utf8Encode("raw"))]);
       const chunks: Uint8Array[] = [];
       for (let i = 0; i < body.length; i++) {
         chunks.push(body.subarray(i, i + 1));
       }
-      const pkts = yield* Stream.runCollect(
-        decodePktStream(Stream.fromArray(chunks)),
-      );
+      const pkts = yield* Stream.runCollect(decodePktStream(Stream.fromArray(chunks)));
       expect(pkts.length).toBe(3);
     }),
   );
@@ -139,33 +129,21 @@ describe("sideband framing", { tags: ["unit", "local"] }, () => {
 });
 
 describe("pack varints", { tags: ["unit", "local"] }, () => {
-  it.live(
-    "type/size header round-trips across the continuation boundaries",
-    () =>
-      Effect.gen(function* () {
-        for (const size of [
-          0,
-          15,
-          16,
-          127,
-          128,
-          4095,
-          4096,
-          1 << 20,
-          2 ** 32 + 5,
-        ]) {
-          for (const type of [1, 2, 3, 4, 6, 7] as const) {
-            const enc = encodeTypeSize(type, size);
-            const dec = decodeTypeSize(enc, 0);
-            expect(dec.type).toBe(type);
-            expect(dec.size).toBe(size);
-            expect(dec.next).toBe(enc.length);
-          }
+  it.live("type/size header round-trips across the continuation boundaries", () =>
+    Effect.gen(function* () {
+      for (const size of [0, 15, 16, 127, 128, 4095, 4096, 1 << 20, 2 ** 32 + 5]) {
+        for (const type of [1, 2, 3, 4, 6, 7] as const) {
+          const enc = encodeTypeSize(type, size);
+          const dec = decodeTypeSize(enc, 0);
+          expect(dec.type).toBe(type);
+          expect(dec.size).toBe(size);
+          expect(dec.next).toBe(enc.length);
         }
-        // 4-bit sizes fit in one byte; 5 bits force a continuation
-        expect(encodeTypeSize(ObjectType.blob, 15).length).toBe(1);
-        expect(encodeTypeSize(ObjectType.blob, 16).length).toBe(2);
-      }),
+      }
+      // 4-bit sizes fit in one byte; 5 bits force a continuation
+      expect(encodeTypeSize(ObjectType.blob, 15).length).toBe(1);
+      expect(encodeTypeSize(ObjectType.blob, 16).length).toBe(2);
+    }),
   );
 
   it.live("delta-payload size varint round-trips", () =>
@@ -188,31 +166,15 @@ describe("pack varints", { tags: ["unit", "local"] }, () => {
       expect(Array.from(encodeOfsDeltaOffset(128))).toEqual([0x80, 0x00]);
       expect(encodeOfsDeltaOffset(16511).length).toBe(2);
       expect(encodeOfsDeltaOffset(16512).length).toBe(3);
-      for (const v of [
-        1,
-        127,
-        128,
-        129,
-        255,
-        256,
-        16383,
-        16384,
-        16511,
-        16512,
-        2 ** 24,
-      ]) {
+      for (const v of [1, 127, 128, 129, 255, 256, 16383, 16384, 16511, 16512, 2 ** 24]) {
         const enc = encodeOfsDeltaOffset(v);
         const dec = decodeOfsDeltaOffset(enc, 0);
         expect(dec.value).toBe(v);
         expect(dec.next).toBe(enc.length);
       }
       // known decode vectors
-      expect(decodeOfsDeltaOffset(Uint8Array.from([0x80, 0x00]), 0).value).toBe(
-        128,
-      );
-      expect(decodeOfsDeltaOffset(Uint8Array.from([0x81, 0x00]), 0).value).toBe(
-        256,
-      );
+      expect(decodeOfsDeltaOffset(Uint8Array.from([0x80, 0x00]), 0).value).toBe(128);
+      expect(decodeOfsDeltaOffset(Uint8Array.from([0x81, 0x00]), 0).value).toBe(256);
     }),
   );
 });
@@ -303,37 +265,33 @@ describe("tree codec", { tags: ["unit", "local"] }, () => {
   );
 });
 
-describe(
-  "object hashing (real-git oracle oids)",
-  { tags: ["unit", "local"] },
-  () => {
-    it.live("hashes blobs to the oids git computes", () =>
-      Effect.gen(function* () {
-        // git hash-object oracle values
-        expect(yield* hashObject(ObjectType.blob, utf8Encode("hello\n"))).toBe(
-          "ce013625030ba8dba906f756967f9e9ca394464a",
-        );
-        expect(
-          yield* hashObject(ObjectType.blob, utf8Encode("hello world\n")),
-        ).toBe("3b18e512dba79e4c8300dd08aeb37f8e728b8dad");
-        // the famous empty blob / empty tree constants
-        expect(yield* hashObject(ObjectType.blob, new Uint8Array(0))).toBe(
-          "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
-        );
-        expect(yield* hashObject(ObjectType.tree, new Uint8Array(0))).toBe(
-          "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
-        );
-      }),
-    );
+describe("object hashing (real-git oracle oids)", { tags: ["unit", "local"] }, () => {
+  it.live("hashes blobs to the oids git computes", () =>
+    Effect.gen(function* () {
+      // git hash-object oracle values
+      expect(yield* hashObject(ObjectType.blob, utf8Encode("hello\n"))).toBe(
+        "ce013625030ba8dba906f756967f9e9ca394464a",
+      );
+      expect(yield* hashObject(ObjectType.blob, utf8Encode("hello world\n"))).toBe(
+        "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
+      );
+      // the famous empty blob / empty tree constants
+      expect(yield* hashObject(ObjectType.blob, new Uint8Array(0))).toBe(
+        "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      );
+      expect(yield* hashObject(ObjectType.tree, new Uint8Array(0))).toBe(
+        "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      );
+    }),
+  );
 
-    it.live("hex codecs round-trip", () =>
-      Effect.gen(function* () {
-        const hex = "9e0b5a0bd293f9feda554193a204193a2c3c5d9c";
-        expect(bytesToHex(hexToBytes(hex))).toBe(hex);
-      }),
-    );
-  },
-);
+  it.live("hex codecs round-trip", () =>
+    Effect.gen(function* () {
+      const hex = "9e0b5a0bd293f9feda554193a204193a2c3c5d9c";
+      expect(bytesToHex(hexToBytes(hex))).toBe(hex);
+    }),
+  );
+});
 
 describe("commit parsing", { tags: ["unit", "local"] }, () => {
   it.live("parses tree/parents/identities/message", () =>
@@ -423,9 +381,7 @@ describe("commit encoding", { tags: ["unit", "local"] }, () => {
         when: 1700000000,
         tz: "+0000",
       };
-      expect(formatIdentity(identity)).toBe(
-        "git-service <git-service@localhost> 1700000000 +0000",
-      );
+      expect(formatIdentity(identity)).toBe("git-service <git-service@localhost> 1700000000 +0000");
       const encoded = yield* encodeCommit({
         tree,
         parents: [p1, p2],
@@ -444,12 +400,7 @@ describe("commit encoding", { tags: ["unit", "local"] }, () => {
   it.live("rejects malformed oids and identities", () =>
     Effect.gen(function* () {
       const tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-      const identity = {
-        name: "ok",
-        email: "ok@example.com",
-        when: 1,
-        tz: "+0000",
-      };
+      const identity = { name: "ok", email: "ok@example.com", when: 1, tz: "+0000" };
       const badTree = yield* Effect.result(
         encodeCommit({
           tree: "nope",

@@ -1,24 +1,21 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN custom apps are entitlement-gated. On the standard testing
 // account every app call fails with the typed `MagicWanUnauthorized`
-// error (Cloudflare code 1025) or `Forbidden` (403) depending on token
-// scope. The lifecycle test below is gated behind an explicit opt-in env
+// error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). The lifecycle test below is gated behind an explicit opt-in env
 // flag for entitled accounts; the probe test always runs and pins the
 // typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
@@ -29,9 +26,7 @@ const findApp = (accountId: string, appId: string) =>
     .listApps({ accountId })
     .pipe(
       Effect.map((r) =>
-        r.result.find(
-          (app) => "accountAppId" in app && app.accountAppId === appId,
-        ),
+        r.result.find((app) => "accountAppId" in app && app.accountAppId === appId),
       ),
     );
 
@@ -43,15 +38,12 @@ const expectGone = (accountId: string, appId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "AppNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
 test.provider(
-  "unentitled accounts surface the typed MagicWanUnauthorized error",
+  "unentitled accounts surface the typed Magic WAN entitlement error",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -60,23 +52,19 @@ test.provider(
 
       const canList = yield* magicTransit.listApps({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
           Effect.succeed(false),
         ),
       );
       if (canList) {
         // Entitled account — the gated lifecycle test covers real behavior.
-        yield* Effect.logInfo(
-          "account is Magic WAN-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is Magic WAN-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* magicTransit
-        .listApps({ accountId })
-        .pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
+      const error = yield* magicTransit.listApps({ accountId }).pipe(Effect.flip);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(error._tag);
 
       const createError = yield* magicTransit
         .createApp({
@@ -86,7 +74,7 @@ test.provider(
           hostnames: ["probe.alchemy.test"],
         })
         .pipe(Effect.flip);
-      expect(["MagicWanUnauthorized", "Forbidden"]).toContain(createError._tag);
+      expect(["MagicWanUnauthorized", "MagicWanNotEnabled"]).toContain(createError._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -150,16 +138,14 @@ test.provider.skipIf(!entitled)(
 
 // Read-only list assertion. Always safe: on an unentitled account the
 // account-scoped apps list rejects with the typed `MagicWanUnauthorized` /
-// `Forbidden`, which `list()` maps to a well-typed empty array.
+// `MagicWanNotEnabled`, which `list()` maps to a well-typed empty array.
 test.provider(
   "list enumerates account apps (well-typed [] when unentitled)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicApp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicApp);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -192,9 +178,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicApp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicApp);
       const all = yield* provider.list();
 
       expect(all.some((app) => app.appId === deployed.appId)).toBe(true);

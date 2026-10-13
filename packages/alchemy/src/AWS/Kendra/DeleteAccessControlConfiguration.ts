@@ -44,7 +44,6 @@ export interface DeleteAccessControlConfiguration extends Binding.Service<
     >
   >
 > {}
-export const DeleteAccessControlConfiguration =
-  Binding.Service<DeleteAccessControlConfiguration>(
-    "AWS.Kendra.DeleteAccessControlConfiguration",
-  );
+export const DeleteAccessControlConfiguration = Binding.Service<DeleteAccessControlConfiguration>(
+  "AWS.Kendra.DeleteAccessControlConfiguration",
+);

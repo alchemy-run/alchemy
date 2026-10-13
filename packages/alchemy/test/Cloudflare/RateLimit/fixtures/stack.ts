@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as path from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
 import RateLimitEffectWorker from "./effect.ts";
 
 export const AsyncWorker = Cloudflare.Worker("RateLimitAsyncWorker", {

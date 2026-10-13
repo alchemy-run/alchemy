@@ -29,8 +29,7 @@ export const ConnectHttp = Layer.effect(
           // MemoryDB is VPC-only — request the host's VPC attachment
           // declaratively through the `vpc` binding channel.
           const vpc =
-            options?.subnetIds !== undefined ||
-            options?.securityGroupIds !== undefined
+            options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
               ? {
                   vpc: {
                     subnetIds: options?.subnetIds ?? [],
@@ -44,9 +43,7 @@ export const ConnectHttp = Layer.effect(
               [`${prefix}_HOST`]: cluster.endpointAddress,
               // Lambda environment variables are strings — stringify the port.
               [`${prefix}_PORT`]: Output.interpolate`${cluster.endpointPort}`,
-              [`${prefix}_TLS`]: Output.map(cluster.tlsEnabled, (tls) =>
-                String(tls ?? true),
-              ),
+              [`${prefix}_TLS`]: Output.map(cluster.tlsEnabled, (tls) => String(tls ?? true)),
             },
             policyStatements: [
               {
@@ -55,9 +52,7 @@ export const ConnectHttp = Layer.effect(
                 // IAM auth authorizes against both the cluster and the user.
                 Resource: [
                   Output.interpolate`${cluster.clusterArn}`,
-                  ...(options?.users ?? []).map(
-                    (user) => Output.interpolate`${user.userArn}`,
-                  ),
+                  ...(options?.users ?? []).map((user) => Output.interpolate`${user.userArn}`),
                 ],
               },
             ],

@@ -158,9 +158,8 @@ export const SubscriberNotificationProvider = () =>
           // A missing subscriber (or an account that never onboarded
           // Security Lake) means "no notification", not a failure.
           const endpoint = yield* getSubscriberEndpoint(subscriberId).pipe(
-            Effect.catchTag(
-              ["ResourceNotFoundException", "UnauthorizedException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["ResourceNotFoundException", "UnauthorizedException"], () =>
+              Effect.succeed(undefined),
             ),
           );
           // Notifications carry no tags, so ownership can't be
@@ -174,9 +173,7 @@ export const SubscriberNotificationProvider = () =>
         // notification endpoint.
         list: () =>
           securitylake.listSubscribers.items({}).pipe(
-            Stream.filter(
-              (subscriber) => subscriber.subscriberEndpoint !== undefined,
-            ),
+            Stream.filter((subscriber) => subscriber.subscriberEndpoint !== undefined),
             Stream.runCollect,
             Effect.map((subscribers) =>
               [...subscribers].map((subscriber) => ({
@@ -187,11 +184,7 @@ export const SubscriberNotificationProvider = () =>
             // An account that never onboarded Security Lake has no
             // subscribers to enumerate.
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () => Effect.succeed([]),
             ),
           ),
@@ -209,9 +202,7 @@ export const SubscriberNotificationProvider = () =>
           const configuration = toWireConfiguration(news);
 
           // 1. OBSERVE — the subscriber's current notification endpoint.
-          const observedEndpoint = yield* getSubscriberEndpoint(
-            news.subscriberId,
-          );
+          const observedEndpoint = yield* getSubscriberEndpoint(news.subscriberId);
 
           let endpoint = observedEndpoint;
           if (observedEndpoint === undefined) {
@@ -251,15 +242,12 @@ export const SubscriberNotificationProvider = () =>
               })
               .pipe(
                 retryWhileConflict,
-                Effect.map(
-                  (response) => response.subscriberEndpoint ?? endpoint,
-                ),
+                Effect.map((response) => response.subscriberEndpoint ?? endpoint),
               );
           }
 
           // 4. RETURN fresh attributes.
-          const final =
-            endpoint ?? (yield* getSubscriberEndpoint(news.subscriberId));
+          const final = endpoint ?? (yield* getSubscriberEndpoint(news.subscriberId));
           yield* session.note(final ?? news.subscriberId);
           return {
             subscriberId: news.subscriberId,
@@ -277,11 +265,7 @@ export const SubscriberNotificationProvider = () =>
               // Gone already, the subscriber was deleted first, or the data
               // lake itself was offboarded.
               Effect.catchTag(
-                [
-                  "AccessDeniedException",
-                  "ResourceNotFoundException",
-                  "UnauthorizedException",
-                ],
+                ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
                 () => Effect.void,
               ),
             );

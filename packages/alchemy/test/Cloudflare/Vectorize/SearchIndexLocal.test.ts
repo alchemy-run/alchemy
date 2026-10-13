@@ -1,18 +1,15 @@
-import { Action } from "@/Action";
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
 import type * as runtime from "@cloudflare/workers-types";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { Action } from "@/Action";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Vectorize requires dimensions in [32, 1536]; use the minimum. Two
 // deterministic, well-separated 32-d vectors so the nearest neighbor of the

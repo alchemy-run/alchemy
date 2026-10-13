@@ -32,10 +32,7 @@ export interface CancelTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.CancelTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.CancelTaskExecutionResponse,
-      datasync.CancelTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.CancelTaskExecutionResponse, datasync.CancelTaskExecutionError>
   >
 > {}
 export const CancelTaskExecution = Binding.Service<CancelTaskExecution>(

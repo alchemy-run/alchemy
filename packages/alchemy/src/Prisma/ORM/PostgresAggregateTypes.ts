@@ -37,8 +37,7 @@ type Ordered =
   | "sql/char@1"
   | "sql/text@1";
 type MinMax = {
-  readonly byCodec: Identity<Ordered> &
-    MapResult<"pg/varchar@1" | "sql/varchar@1", "pg/text@1">;
+  readonly byCodec: Identity<Ordered> & MapResult<"pg/varchar@1" | "sql/varchar@1", "pg/text@1">;
 };
 type Count<Output extends string> = {
   readonly byCodec: {};
@@ -53,18 +52,12 @@ export type PostgresAggregateTypes = {
   readonly min: MinMax;
   readonly max: MinMax;
   readonly avg: {
-    readonly byCodec: MapResult<
-      Integer | Float | "pg/unboundedint@1",
-      "pg/float8@1"
-    > &
+    readonly byCodec: MapResult<Integer | Float | "pg/unboundedint@1", "pg/float8@1"> &
       MapResult<Time, "pg/interval@1"> &
       Identity<"pg/numeric@1" | "pg/interval@1">;
   };
   readonly avgDecimal: {
-    readonly byCodec: MapResult<
-      Integer | "pg/unboundedint@1" | "pg/numeric@1",
-      "pg/numeric@1"
-    >;
+    readonly byCodec: MapResult<Integer | "pg/unboundedint@1" | "pg/numeric@1", "pg/numeric@1">;
   };
   readonly sum: {
     readonly byCodec: MapResult<Integer, "pg/int8number@1"> &
@@ -74,13 +67,7 @@ export type PostgresAggregateTypes = {
       Identity<"pg/numeric@1" | "pg/interval@1" | "pg/unboundedint@1">;
   };
   readonly sumBigInt: {
-    readonly byCodec: MapResult<
-      Exclude<Integer, "pg/int8@1" | "pg/int8number@1">,
-      "pg/int8@1"
-    > &
-      MapResult<
-        "pg/int8@1" | "pg/int8number@1" | "pg/unboundedint@1",
-        "pg/unboundedint@1"
-      >;
+    readonly byCodec: MapResult<Exclude<Integer, "pg/int8@1" | "pg/int8number@1">, "pg/int8@1"> &
+      MapResult<"pg/int8@1" | "pg/int8number@1" | "pg/unboundedint@1", "pg/unboundedint@1">;
   };
 };

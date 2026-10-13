@@ -20,12 +20,7 @@ export interface ConnectionProps {
    * Source-provider the connection authenticates against. Changing the
    * provider replaces the connection.
    */
-  providerType:
-    | "GitHub"
-    | "GitHubEnterpriseServer"
-    | "Bitbucket"
-    | "GitLab"
-    | "GitLabSelfManaged";
+  providerType: "GitHub" | "GitHubEnterpriseServer" | "Bitbucket" | "GitLab" | "GitLabSelfManaged";
   /**
    * ARN of a CodeConnections `Host` (required for self-managed providers
    * such as `GitHubEnterpriseServer` / `GitLabSelfManaged`).
@@ -79,9 +74,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>(
-  "AWS.CodeConnections.Connection",
-);
+export const Connection = Resource<Connection>("AWS.CodeConnections.Connection");
 
 export const ConnectionProvider = () =>
   Provider.effect(
@@ -96,31 +89,20 @@ export const ConnectionProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* codeconnections
           .getConnection({ ConnectionArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.Connection;
       });
 
       /** Find a connection by name (getConnection only accepts an ARN). */
       const findByName = Effect.fn(function* (name: string) {
-        const connections = yield* codeconnections.listConnections
-          .pages({})
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Connections ?? []),
-            ),
-          );
+        const connections = yield* codeconnections.listConnections.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Connections ?? [])),
+        );
         return connections.find((c) => c.ConnectionName === name);
       });
 
-      const toAttrs = (
-        connection: codeconnections.Connection,
-        name: string,
-      ) => ({
+      const toAttrs = (connection: codeconnections.Connection, name: string) => ({
         connectionName: connection.ConnectionName ?? name,
         connectionArn: connection.ConnectionArn!,
         connectionStatus: connection.ConnectionStatus ?? "PENDING",
@@ -132,15 +114,12 @@ export const ConnectionProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Provider type and host are immutable — replace on change.
           if (
-            (news?.providerType ?? undefined) !==
-              (olds?.providerType ?? undefined) ||
+            (news?.providerType ?? undefined) !== (olds?.providerType ?? undefined) ||
             (news?.hostArn ?? undefined) !== (olds?.hostArn ?? undefined)
           ) {
             return { action: "replace" } as const;
@@ -148,8 +127,7 @@ export const ConnectionProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.connectionName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.connectionName ?? (yield* toName(id, olds ?? {}));
           const connection = output?.connectionArn
             ? yield* getByArn(output.connectionArn)
             : yield* findByName(name);
@@ -201,9 +179,7 @@ export const ConnectionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* codeconnections
             .deleteConnection({ ConnectionArn: output.connectionArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

@@ -14,9 +14,6 @@ export const AssociateVehicleFleetHttp = Layer.effect(
     identifier: (fleet: Fleet) => fleet.fleetId,
     // The action authorizes on both the fleet and the vehicle; the vehicle
     // is a runtime argument, so its grant is the account-wide pattern.
-    resources: (fleet: Fleet) => [
-      fleet.fleetArn,
-      "arn:aws:iotfleetwise:*:*:vehicle/*",
-    ],
+    resources: (fleet: Fleet) => [fleet.fleetArn, "arn:aws:iotfleetwise:*:*:vehicle/*"],
   }),
 );

@@ -22,13 +22,9 @@ export interface ListSupportedInstanceTypes extends Binding.Service<
   () => Effect.Effect<
     (
       request: SVC.ListSupportedInstanceTypesInput,
-    ) => Effect.Effect<
-      SVC.ListSupportedInstanceTypesOutput,
-      SVC.ListSupportedInstanceTypesError
-    >
+    ) => Effect.Effect<SVC.ListSupportedInstanceTypesOutput, SVC.ListSupportedInstanceTypesError>
   >
 > {}
-export const ListSupportedInstanceTypes =
-  Binding.Service<ListSupportedInstanceTypes>(
-    "AWS.EMR.ListSupportedInstanceTypes",
-  );
+export const ListSupportedInstanceTypes = Binding.Service<ListSupportedInstanceTypes>(
+  "AWS.EMR.ListSupportedInstanceTypes",
+);

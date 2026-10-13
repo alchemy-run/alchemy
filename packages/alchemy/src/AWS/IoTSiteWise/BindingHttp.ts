@@ -44,22 +44,20 @@ export const makeSiteWiseAssetHttpBinding = <I, A, E, R, Req>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}(${asset}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [asset.assetArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}(${asset}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: [asset.assetArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.IoTSiteWise.${options.capability}(${asset.LogicalId})`,
-      )(function* (request: Req) {
+      return Effect.fn(`AWS.IoTSiteWise.${options.capability}(${asset.LogicalId})`)(function* (
+        request: Req,
+      ) {
         const assetId = yield* AssetId;
         return yield* op(options.prepare(request, assetId));
       });
@@ -87,22 +85,18 @@ export const makeSiteWiseAccountHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.IoTSiteWise.${options.capability}`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`AWS.IoTSiteWise.${options.capability}`)(function* (request: I) {
         return yield* op(request);
       });
     });

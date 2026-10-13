@@ -54,10 +54,7 @@ export const ensurePodRole = Effect.fn(function* ({
         iam.getRole({ RoleName: roleName }).pipe(
           Effect.filterOrFail(
             (existing) => hasTags(tags, existing.Role?.Tags),
-            () =>
-              new Error(
-                `Role '${roleName}' already exists and is not managed by alchemy`,
-              ),
+            () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
           ),
         ),
       ),
@@ -144,11 +141,7 @@ export const findAssociation = Effect.fn(function* ({
       clusterName,
       associationId: summary.associationId,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const association = described?.association;
   if (!association?.associationArn || !association.associationId) {
     return undefined;

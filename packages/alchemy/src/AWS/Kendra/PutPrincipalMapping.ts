@@ -44,10 +44,7 @@ export interface PutPrincipalMapping extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutPrincipalMappingRequest,
-    ) => Effect.Effect<
-      kendra.PutPrincipalMappingResponse,
-      kendra.PutPrincipalMappingError
-    >
+    ) => Effect.Effect<kendra.PutPrincipalMappingResponse, kendra.PutPrincipalMappingError>
   >
 > {}
 export const PutPrincipalMapping = Binding.Service<PutPrincipalMapping>(

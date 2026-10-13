@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Discovery, GroupingConfiguration } from "@/AWS/ApplicationSignals";
-import * as Test from "@/Test/Alchemy";
 import * as appsignals from "@distilled.cloud/aws/application-signals";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Discovery, GroupingConfiguration } from "@/AWS/ApplicationSignals";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,9 +39,9 @@ test.provider(
       );
 
       expect(first.discovery.accountId).toMatch(/^\d{12}$/);
-      expect(
-        first.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName),
-      ).toEqual(["AlchemyTestTeam"]);
+      expect(first.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName)).toEqual([
+        "AlchemyTestTeam",
+      ]);
 
       // Out-of-band verification via distilled.
       const observed = yield* observedDefinitions;
@@ -69,9 +69,10 @@ test.provider(
         }),
       );
 
-      expect(
-        second.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName),
-      ).toEqual(["AlchemyTestTeam", "AlchemyTestCostCenter"]);
+      expect(second.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName)).toEqual([
+        "AlchemyTestTeam",
+        "AlchemyTestCostCenter",
+      ]);
       const updated = yield* observedDefinitions;
       expect(updated).toHaveLength(2);
 

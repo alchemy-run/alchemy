@@ -30,17 +30,13 @@ export interface DeleteWorkspaceServiceAccount extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.DeleteWorkspaceServiceAccountRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.DeleteWorkspaceServiceAccountRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.DeleteWorkspaceServiceAccountResponse,
       grafana.DeleteWorkspaceServiceAccountError
     >
   >
 > {}
-export const DeleteWorkspaceServiceAccount =
-  Binding.Service<DeleteWorkspaceServiceAccount>(
-    "AWS.Grafana.DeleteWorkspaceServiceAccount",
-  );
+export const DeleteWorkspaceServiceAccount = Binding.Service<DeleteWorkspaceServiceAccount>(
+  "AWS.Grafana.DeleteWorkspaceServiceAccount",
+);

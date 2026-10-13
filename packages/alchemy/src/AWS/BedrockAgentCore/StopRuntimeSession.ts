@@ -40,10 +40,7 @@ export interface StopRuntimeSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopRuntimeSessionRequest,
-    ) => Effect.Effect<
-      agentcore.StopRuntimeSessionResponse,
-      agentcore.StopRuntimeSessionError
-    >
+    ) => Effect.Effect<agentcore.StopRuntimeSessionResponse, agentcore.StopRuntimeSessionError>
   >
 > {}
 export const StopRuntimeSession = Binding.Service<StopRuntimeSession>(

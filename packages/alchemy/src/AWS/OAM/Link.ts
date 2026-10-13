@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  deleteLinkAndWait,
-  readOamTags,
-  retryOamMutation,
-  syncOamTags,
-} from "./internal.ts";
+import { deleteLinkAndWait, readOamTags, retryOamMutation, syncOamTags } from "./internal.ts";
 
 /**
  * The telemetry resource types that can be shared over a link.
@@ -153,18 +148,14 @@ const toLinkConfiguration = (
 const sameResourceTypes = (
   a: readonly string[] | undefined,
   b: readonly string[] | undefined,
-): boolean =>
-  JSON.stringify([...(a ?? [])].sort()) ===
-  JSON.stringify([...(b ?? [])].sort());
+): boolean => JSON.stringify([...(a ?? [])].sort()) === JSON.stringify([...(b ?? [])].sort());
 
 const sameLinkConfiguration = (
   a: oam.LinkConfiguration | undefined,
   b: oam.LinkConfiguration | undefined,
 ): boolean =>
-  (a?.LogGroupConfiguration?.Filter ?? null) ===
-    (b?.LogGroupConfiguration?.Filter ?? null) &&
-  (a?.MetricConfiguration?.Filter ?? null) ===
-    (b?.MetricConfiguration?.Filter ?? null);
+  (a?.LogGroupConfiguration?.Filter ?? null) === (b?.LogGroupConfiguration?.Filter ?? null) &&
+  (a?.MetricConfiguration?.Filter ?? null) === (b?.MetricConfiguration?.Filter ?? null);
 
 export const LinkProvider = () =>
   Provider.effect(
@@ -173,11 +164,7 @@ export const LinkProvider = () =>
       const getLinkByArn = Effect.fn(function* (linkArn: string) {
         return yield* oam
           .getLink({ Identifier: linkArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Link.Provider.of({
@@ -187,9 +174,7 @@ export const LinkProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                page.Items.filter(
-                  (item) => item.Arn != null && item.Id != null,
-                ).map((item) => ({
+                page.Items.filter((item) => item.Arn != null && item.Id != null).map((item) => ({
                   linkArn: item.Arn!,
                   linkId: item.Id!,
                   label: item.Label ?? "",
@@ -242,15 +227,11 @@ export const LinkProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const desiredConfiguration = toLinkConfiguration(
-            news.linkConfiguration,
-          );
+          const desiredConfiguration = toLinkConfiguration(news.linkConfiguration);
 
           // OBSERVE — the cached ARN is only a hint; a deleted link falls
           // through to create.
-          let live = output?.linkArn
-            ? yield* getLinkByArn(output.linkArn)
-            : undefined;
+          let live = output?.linkArn ? yield* getLinkByArn(output.linkArn) : undefined;
 
           // ENSURE
           if (live?.Arn == null) {
@@ -269,10 +250,7 @@ export const LinkProvider = () =>
           // SYNC — resource types + filters, diffed against observed state.
           if (
             !sameResourceTypes(live!.ResourceTypes, news.resourceTypes) ||
-            !sameLinkConfiguration(
-              live!.LinkConfiguration,
-              desiredConfiguration,
-            )
+            !sameLinkConfiguration(live!.LinkConfiguration, desiredConfiguration)
           ) {
             live = yield* retryOamMutation(
               oam.updateLink({

@@ -16,28 +16,23 @@ export const GetPoliciesHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.VerifiedPermissions.GetPolicies(${store}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  // BatchGetPolicy authorizes under verifiedpermissions:GetPolicy
-                  Action: [
-                    "verifiedpermissions:GetPolicy",
-                    "verifiedpermissions:BatchGetPolicy",
-                  ],
-                  Resource: [store.policyStoreArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.VerifiedPermissions.GetPolicies(${store}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                // BatchGetPolicy authorizes under verifiedpermissions:GetPolicy
+                Action: ["verifiedpermissions:GetPolicy", "verifiedpermissions:BatchGetPolicy"],
+                Resource: [store.policyStoreArn],
+              },
+            ],
+          });
         }
       }
       const label = store.LogicalId;
       return {
-        batchGetPolicy: Effect.fn(
-          `AWS.VerifiedPermissions.BatchGetPolicy(${label})`,
-        )(function* (request: GetPoliciesRequest) {
+        batchGetPolicy: Effect.fn(`AWS.VerifiedPermissions.BatchGetPolicy(${label})`)(function* (
+          request: GetPoliciesRequest,
+        ) {
           const policyStoreId = yield* PolicyStoreId;
           return yield* batchGetPolicy({
             requests: request.policyIds.map((policyId) => ({

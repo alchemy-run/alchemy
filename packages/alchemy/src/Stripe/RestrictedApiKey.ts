@@ -139,9 +139,7 @@ export type RestrictedApiKey = Resource<
  * @resource
  * @product Secrets
  */
-export const RestrictedApiKey = Resource<RestrictedApiKey>(
-  "Stripe.RestrictedApiKey",
-);
+export const RestrictedApiKey = Resource<RestrictedApiKey>("Stripe.RestrictedApiKey");
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -188,14 +186,13 @@ export const RestrictedApiKeyProvider = () =>
       // key's scopes, persist the returned `rk_…` as `value`, and teach
       // list/delete to enumerate/revoke it. Until then this is a logical
       // token: Dashboard `news.value` or the account secret.
+      const resolveAccountApiKey = Effect.gen(function* () {
+        const resolve = yield* Credentials;
+        const cfg = yield* resolve;
+        return cfg.apiKey.pipe(Redacted.value, Redacted.make);
+      });
       const value =
-        props.value !== undefined
-          ? Redacted.make(props.value)
-          : yield* Effect.gen(function* () {
-              const resolve = yield* Credentials;
-              const cfg = yield* resolve;
-              return Redacted.make(Redacted.value(cfg.apiKey));
-            });
+        props.value !== undefined ? Redacted.make(props.value) : yield* resolveAccountApiKey;
       return {
         id: output?.id ?? name,
         name,

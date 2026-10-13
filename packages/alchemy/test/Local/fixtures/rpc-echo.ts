@@ -39,9 +39,7 @@ interface TrackedCall {
 
 const calls = new Map<string, TrackedCall>();
 
-export class TestEcho extends Context.Service<TestEcho, EchoClient>()(
-  "Test.Echo",
-) {}
+export class TestEcho extends Context.Service<TestEcho, EchoClient>()("Test.Echo") {}
 
 let active = 0;
 let built = 0;
@@ -70,9 +68,7 @@ export const makeEcho = (blocked = false) =>
               Effect.sleep("50 millis").pipe(
                 Effect.andThen(
                   Effect.sync(() => {
-                    call.events.push(
-                      `call-finalized:${alive ? "live" : "closed"}`,
-                    );
+                    call.events.push(`call-finalized:${alive ? "live" : "closed"}`);
                     bag.set(label, "finalizer-artifact");
                     artifacts.set("fixture", bag);
                   }),
@@ -100,8 +96,7 @@ export const makeEcho = (blocked = false) =>
             alive = false;
             active--;
             finalized++;
-            for (const label of labels)
-              calls.get(label)?.events.push("provider-finalized");
+            for (const label of labels) calls.get(label)?.events.push("provider-finalized");
           }),
       );
       if (blocked) yield* Effect.never;
@@ -109,8 +104,7 @@ export const makeEcho = (blocked = false) =>
         echo: (msg) => Effect.succeed(`echo:${msg}`),
         processId: () => Effect.sync(() => process.pid),
         boom: () => Effect.fail({ _tag: "Boom" as const, msg: "kaboom" }),
-        identity: () =>
-          Effect.succeed({ name: stack.name, stage: stack.stage }),
+        identity: () => Effect.succeed({ name: stack.name, stage: stack.stage }),
         stats: () => Effect.sync(() => ({ active, built, finalized })),
         retainArtifact: () =>
           Effect.sync(() => {

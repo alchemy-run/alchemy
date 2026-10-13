@@ -55,7 +55,6 @@ export interface ListProfileResourceAssociations extends Binding.Service<
   >
 > {}
 
-export const ListProfileResourceAssociations =
-  Binding.Service<ListProfileResourceAssociations>(
-    "AWS.Route53Profiles.ListProfileResourceAssociations",
-  );
+export const ListProfileResourceAssociations = Binding.Service<ListProfileResourceAssociations>(
+  "AWS.Route53Profiles.ListProfileResourceAssociations",
+);

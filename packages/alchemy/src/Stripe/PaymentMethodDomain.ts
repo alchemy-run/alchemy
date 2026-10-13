@@ -13,8 +13,8 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const DOMAIN_SUFFIX = ".example.com";
 const DOMAIN_LABEL_MAX_LENGTH = 63;
@@ -136,9 +136,7 @@ export type PaymentMethodDomain = Resource<
  * @resource
  * @product Payment Methods
  */
-export const PaymentMethodDomain = Resource<PaymentMethodDomain>(
-  "Stripe.PaymentMethodDomain",
-);
+export const PaymentMethodDomain = Resource<PaymentMethodDomain>("Stripe.PaymentMethodDomain");
 
 export class PaymentMethodDomainNotResolved extends Data.TaggedError(
   "Stripe.PaymentMethodDomainNotResolved",
@@ -148,11 +146,7 @@ export class PaymentMethodDomainNotResolved extends Data.TaggedError(
 
 type PaymentMethodDomainAttributes = PaymentMethodDomain["Attributes"];
 
-const toDomainName = (
-  id: string,
-  domainName: string | undefined,
-  existing?: string,
-) =>
+const toDomainName = (id: string, domainName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       domainName ??
@@ -175,9 +169,7 @@ const toPaymentMethodStatus = (
       : { errorMessage: value.status_details.error_message },
 });
 
-const toAttrs = (
-  domain: StripePaymentMethodDomain,
-): PaymentMethodDomainAttributes => ({
+const toAttrs = (domain: StripePaymentMethodDomain): PaymentMethodDomainAttributes => ({
   id: domain.id,
   domainName: domain.domain_name,
   enabled: domain.enabled,
@@ -193,15 +185,16 @@ const toAttrs = (
 
 const isMissingDomain = isMissingStripeResource;
 
+/** Stripe-hosted domains (`buy.stripe.com`, …) Stripe registers itself. */
+const isStripeManagedDomain = (domainName: string) =>
+  domainName === "stripe.com" || domainName.endsWith(".stripe.com");
+
 const getById = (paymentMethodDomain: string) =>
   GetPaymentMethodDomain({
     payment_method_domain: paymentMethodDomain,
   }).pipe(Effect.catchIf(isMissingDomain, () => Effect.succeed(undefined)));
 
-const listByEnabled = Effect.fn(function* (
-  enabled: boolean,
-  domainName?: string,
-) {
+const listByEnabled = Effect.fn(function* (enabled: boolean, domainName?: string) {
   const domains: StripePaymentMethodDomain[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
@@ -228,16 +221,11 @@ const findByDomainName = Effect.fn(function* (domainName: string) {
     [listByEnabled(true, domainName), listByEnabled(false, domainName)],
     { concurrency: 2 },
   );
-  const matches = [...enabled, ...disabled].filter(
-    (domain) => domain.domain_name === domainName,
-  );
+  const matches = [...enabled, ...disabled].filter((domain) => domain.domain_name === domainName);
   return matches.find((domain) => domain.enabled) ?? matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  domainName?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; domainName?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -285,17 +273,15 @@ export const PaymentMethodDomainProvider = () =>
     list: Effect.fn(function* () {
       // No metadata on this resource. Default list is enabled domains;
       // disabled rows stay in Stripe (domain_name remains reserved) but
-      // must not re-enter nuke.
+      // must not re-enter nuke. Stripe auto-registers its own hosted
+      // domains (e.g. `buy.stripe.com` for Payment Links) on the account;
+      // those are Stripe-managed, never ours, and are skipped.
       const domains = yield* listByEnabled(true);
-      return domains.map(toAttrs);
+      return domains.filter((domain) => !isStripeManagedDomain(domain.domain_name)).map(toAttrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const domainName = yield* toDomainName(
-        id,
-        news.domainName,
-        output?.domainName,
-      );
+      const domainName = yield* toDomainName(id, news.domainName, output?.domainName);
       const desiredEnabled = news.enabled ?? true;
 
       let current = yield* observe({

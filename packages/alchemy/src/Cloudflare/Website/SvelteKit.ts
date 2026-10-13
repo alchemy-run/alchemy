@@ -12,9 +12,7 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface SvelteKitProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -177,79 +175,70 @@ export const SvelteKit: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | SvelteKitInput<Bindings>
-        | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
+      propsEff?: SvelteKitInput<Bindings> | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | SvelteKitInput<Bindings>
-      | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
+    propsEff?: SvelteKitInput<Bindings> | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
 } = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
   id?: string,
-  propsEff?:
-    | SvelteKitInput<Bindings>
-    | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
+  propsEff?: SvelteKitInput<Bindings> | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
 ) =>
   id === undefined
     ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
         id: string,
-        propsEff?:
-          | SvelteKitInput<Bindings>
-          | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
+        propsEff?: SvelteKitInput<Bindings> | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
       ) => effectClass(SvelteKit(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // SvelteKit's server graph is built for Node and needs
-            // `nodejs_compat` — `getCompatibility` already adds it to every
-            // non-python Worker.
-            assets: props?.assets,
-            source: {
-              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // SvelteKit's server graph is built for Node and needs
+          // `nodejs_compat` — `getCompatibility` already adds it to every
+          // non-python Worker.
+          assets: props?.assets,
+          source: {
+            provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-                kit: props?.kit,
-                // The adapter's build-time page GENERATION (404.html /
-                // app-shell index.html) is derived from the one
-                // platform-native knob, `assets.notFoundHandling`, so a
-                // single prop configures generation AND serving — the two
-                // halves can never disagree. The generated 404-page
-                // renders the app shell so kit's own error page shows.
-                ...(props?.assets?.notFoundHandling !== undefined &&
-                props.assets.notFoundHandling !== "none"
-                  ? {
-                      adapter: {
-                        notFoundHandling: props.assets.notFoundHandling,
-                        fallback: "spa",
-                      },
-                    }
-                  : {}),
-              },
+              memo: props?.memo,
+              kit: props?.kit,
+              // The adapter's build-time page GENERATION (404.html /
+              // app-shell index.html) is derived from the one
+              // platform-native knob, `assets.notFoundHandling`, so a
+              // single prop configures generation AND serving — the two
+              // halves can never disagree. The generated 404-page
+              // renders the app shell so kit's own error page shows.
+              ...(props?.assets?.notFoundHandling !== undefined &&
+              props.assets.notFoundHandling !== "none"
+                ? {
+                    adapter: {
+                      notFoundHandling: props.assets.notFoundHandling,
+                      fallback: "spa",
+                    },
+                  }
+                : {}),
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

@@ -16,9 +16,7 @@ export type Props = Record<string, any>;
 export type Attr = Record<string, any>;
 
 export type ResourceStatus = ResourceState["status"];
-export type ReplacementResourceState =
-  | ReplacingResourceState
-  | ReplacedResourceState;
+export type ReplacementResourceState = ReplacingResourceState | ReplacedResourceState;
 export type ReplacementOldResourceState =
   | CreatingResourceState
   | CreatedResourceState

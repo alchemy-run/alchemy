@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { ProfileStore } from "../Auth/Profile.ts";
-import {
-  CLOUDFLARE_AUTH_PROVIDER_NAME,
-  CloudflareAuthConfigSchema,
-} from "./Auth/AuthConfig.ts";
+import { CLOUDFLARE_AUTH_PROVIDER_NAME, CloudflareAuthConfigSchema } from "./Auth/AuthConfig.ts";
 
 /** Fallback identity when local dev has no configured Cloudflare account. */
 export const LOCAL_ACCOUNT_ID = "00000000000000000000000000000000";
@@ -26,9 +23,7 @@ export const localAccountId = Effect.gen(function* () {
     return LOCAL_ACCOUNT_ID;
   }
 
-  const profiles = Option.getOrUndefined(
-    yield* Effect.serviceOption(ProfileStore),
-  );
+  const profiles = Option.getOrUndefined(yield* Effect.serviceOption(ProfileStore));
   if (profiles === undefined) {
     return LOCAL_ACCOUNT_ID;
   }
@@ -40,9 +35,7 @@ export const localAccountId = Effect.gen(function* () {
     return LOCAL_ACCOUNT_ID;
   }
 
-  const config = yield* Schema.decodeUnknownEffect(CloudflareAuthConfigSchema)(
-    cloudflareConfig,
-  );
+  const config = yield* Schema.decodeUnknownEffect(CloudflareAuthConfigSchema)(cloudflareConfig);
   if ("accountId" in config) {
     return config.accountId;
   }

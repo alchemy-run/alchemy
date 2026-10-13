@@ -29,10 +29,7 @@ export interface DisassociateFromAdministratorAccount extends Binding.Service<
     detector: Detector,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        guardduty.DisassociateFromAdministratorAccountRequest,
-        "DetectorId"
-      >,
+      request?: Omit<guardduty.DisassociateFromAdministratorAccountRequest, "DetectorId">,
     ) => Effect.Effect<
       guardduty.DisassociateFromAdministratorAccountResponse,
       guardduty.DisassociateFromAdministratorAccountError

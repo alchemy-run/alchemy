@@ -1,5 +1,7 @@
+import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
 import { describe, expect, test } from "alchemy-test";
-
+import * as Effect from "effect/Effect";
+import * as S from "effect/Schema";
 import {
   fromAttributeValue,
   isMapSchemaType,
@@ -8,9 +10,6 @@ import {
   toAttributeType,
   toAttributeValue,
 } from "@/AWS/DynamoDB/AttributeValue";
-import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
-import * as Effect from "effect/Effect";
-import * as S from "effect/Schema";
 
 describe(
   "toAttributeValue",
@@ -53,18 +52,12 @@ describe(
 
     test("array -> L", async () => {
       const result = await Effect.runPromise(toAttributeValue([1, 2, 3]));
-      expect(result).toEqual({
-        L: [{ N: "1" }, { N: "2" }, { N: "3" }],
-      });
+      expect(result).toEqual({ L: [{ N: "1" }, { N: "2" }, { N: "3" }] });
     });
 
     test("mixed array -> L", async () => {
-      const result = await Effect.runPromise(
-        toAttributeValue(["hello", 42, true]),
-      );
-      expect(result).toEqual({
-        L: [{ S: "hello" }, { N: "42" }, { BOOL: true }],
-      });
+      const result = await Effect.runPromise(toAttributeValue(["hello", 42, true]));
+      expect(result).toEqual({ L: [{ S: "hello" }, { N: "42" }, { BOOL: true }] });
     });
 
     test("empty array -> L", async () => {
@@ -73,41 +66,16 @@ describe(
     });
 
     test("object -> M", async () => {
-      const result = await Effect.runPromise(
-        toAttributeValue({ name: "Alice", age: 30 }),
-      );
-      expect(result).toEqual({
-        M: {
-          name: { S: "Alice" },
-          age: { N: "30" },
-        },
-      });
+      const result = await Effect.runPromise(toAttributeValue({ name: "Alice", age: 30 }));
+      expect(result).toEqual({ M: { name: { S: "Alice" }, age: { N: "30" } } });
     });
 
     test("nested object -> M", async () => {
       const result = await Effect.runPromise(
-        toAttributeValue({
-          user: {
-            name: "Alice",
-            details: {
-              age: 30,
-            },
-          },
-        }),
+        toAttributeValue({ user: { name: "Alice", details: { age: 30 } } }),
       );
       expect(result).toEqual({
-        M: {
-          user: {
-            M: {
-              name: { S: "Alice" },
-              details: {
-                M: {
-                  age: { N: "30" },
-                },
-              },
-            },
-          },
-        },
+        M: { user: { M: { name: { S: "Alice" }, details: { M: { age: { N: "30" } } } } } },
       });
     });
 
@@ -117,16 +85,12 @@ describe(
     });
 
     test("Set of strings -> SS", async () => {
-      const result = await Effect.runPromise(
-        toAttributeValue(new Set(["a", "b", "c"])),
-      );
+      const result = await Effect.runPromise(toAttributeValue(new Set(["a", "b", "c"])));
       expect(result).toEqual({ SS: ["a", "b", "c"] });
     });
 
     test("Set of numbers -> NS", async () => {
-      const result = await Effect.runPromise(
-        toAttributeValue(new Set([1, 2, 3])),
-      );
+      const result = await Effect.runPromise(toAttributeValue(new Set([1, 2, 3])));
       // NS values are returned as-is (numbers in this case)
       expect(result.NS).toEqual(["1", "2", "3"]);
     });
@@ -137,12 +101,8 @@ describe(
     });
 
     test("Set of mixed types -> L", async () => {
-      const result = await Effect.runPromise(
-        toAttributeValue(new Set([1, "two", true])),
-      );
-      expect(result).toEqual({
-        L: [{ N: "1" }, { S: "two" }, { BOOL: true }],
-      });
+      const result = await Effect.runPromise(toAttributeValue(new Set([1, "two", true])));
+      expect(result).toEqual({ L: [{ N: "1" }, { S: "two" }, { BOOL: true }] });
     });
 
     test("Uint8Array -> B", async () => {
@@ -177,10 +137,7 @@ describe(
           age: 30,
           active: true,
           tags: ["developer", "typescript"],
-          metadata: {
-            created: "2023-01-01",
-            count: 42,
-          },
+          metadata: { created: "2023-01-01", count: 42 },
           scores: new Set([100, 95, 88]),
         }),
       );
@@ -190,15 +147,8 @@ describe(
           name: { S: "Alice" },
           age: { N: "30" },
           active: { BOOL: true },
-          tags: {
-            L: [{ S: "developer" }, { S: "typescript" }],
-          },
-          metadata: {
-            M: {
-              created: { S: "2023-01-01" },
-              count: { N: "42" },
-            },
-          },
+          tags: { L: [{ S: "developer" }, { S: "typescript" }] },
+          metadata: { M: { created: { S: "2023-01-01" }, count: { N: "42" } } },
           scores: { NS: expect.any(Array) },
         },
       });
@@ -209,9 +159,7 @@ describe(
       const result = Effect.runPromise(
         toAttributeValue(symbol).pipe(
           Effect.map(() => false),
-          Effect.catchTag("InvalidAttributeValue", (_error) =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("InvalidAttributeValue", (_error) => Effect.succeed(true)),
         ),
       );
       await expect(result).resolves.toBe(true);
@@ -242,19 +190,12 @@ describe(
     });
 
     test("L -> array", () => {
-      const result = fromAttributeValue({
-        L: [{ N: "1" }, { N: "2" }, { N: "3" }],
-      });
+      const result = fromAttributeValue({ L: [{ N: "1" }, { N: "2" }, { N: "3" }] });
       expect(result).toEqual([1, 2, 3]);
     });
 
     test("M -> object", () => {
-      const result = fromAttributeValue({
-        M: {
-          name: { S: "Alice" },
-          age: { N: "30" },
-        },
-      });
+      const result = fromAttributeValue({ M: { name: { S: "Alice" }, age: { N: "30" } } });
       expect(result).toEqual({ name: "Alice", age: 30 });
     });
 
@@ -279,23 +220,15 @@ describe(
         M: {
           id: { S: "123" },
           name: { S: "Alice" },
-          tags: {
-            L: [{ S: "developer" }, { S: "typescript" }],
-          },
-          metadata: {
-            M: {
-              count: { N: "42" },
-            },
-          },
+          tags: { L: [{ S: "developer" }, { S: "typescript" }] },
+          metadata: { M: { count: { N: "42" } } },
         },
       });
       expect(result).toEqual({
         id: "123",
         name: "Alice",
         tags: ["developer", "typescript"],
-        metadata: {
-          count: 42,
-        },
+        metadata: { count: 42 },
       });
     });
 
@@ -318,14 +251,7 @@ describe(
     });
 
     test("Struct schema -> M", () => {
-      expect(
-        toAttributeType(
-          S.Struct({
-            name: S.String,
-            age: S.Number,
-          }),
-        ),
-      ).toBe("M");
+      expect(toAttributeType(S.Struct({ name: S.String, age: S.Number }))).toBe("M");
     });
 
     test("Record schema -> M", () => {
@@ -349,10 +275,7 @@ describe(
     });
 
     test("Class schema -> M", () => {
-      class User extends S.Class<User>("User")({
-        name: S.String,
-        age: S.Number,
-      }) {}
+      class User extends S.Class<User>("User")({ name: S.String, age: S.Number }) {}
       expect(toAttributeType(User)).toBe("M");
     });
 
@@ -375,21 +298,11 @@ describe(
     });
 
     test("Struct schema", () => {
-      expect(
-        isMapSchemaType(
-          S.Struct({
-            name: S.String,
-            age: S.Number,
-          }),
-        ),
-      ).toBe(true);
+      expect(isMapSchemaType(S.Struct({ name: S.String, age: S.Number }))).toBe(true);
     });
 
     test("Class schema", () => {
-      class User extends S.Class<User>("User")({
-        name: S.String,
-        age: S.Number,
-      }) {}
+      class User extends S.Class<User>("User")({ name: S.String, age: S.Number }) {}
       expect(isMapSchemaType(User)).toBe(true);
     });
 
@@ -493,10 +406,7 @@ describe(
         age: 30,
         active: true,
         tags: ["developer", "typescript"],
-        metadata: {
-          created: "2023-01-01",
-          count: 42,
-        },
+        metadata: { created: "2023-01-01", count: 42 },
       };
       const attr = await Effect.runPromise(toAttributeValue(original));
       const result = fromAttributeValue(attr);

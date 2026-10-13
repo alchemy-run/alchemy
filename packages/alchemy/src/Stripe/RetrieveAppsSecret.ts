@@ -35,14 +35,8 @@ export interface RetrieveAppsSecret extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveAppsSecretRequest,
-    ) => Effect.Effect<
-      StripeAppsSecret,
-      GetAppsSecretsFindError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeAppsSecret, GetAppsSecretsFindError, RuntimeContext>
   >
 > {}
 
-export const RetrieveAppsSecret = Binding.Service<RetrieveAppsSecret>(
-  "Stripe.RetrieveAppsSecret",
-);
+export const RetrieveAppsSecret = Binding.Service<RetrieveAppsSecret>("Stripe.RetrieveAppsSecret");

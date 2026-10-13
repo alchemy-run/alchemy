@@ -3,12 +3,7 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -101,8 +96,10 @@ const buildAttrs = (hub: securityhub.DescribeHubResponse) => ({
 // subscribed and `ResourceNotFoundException` transiently right after enable —
 // both mean "no Hub", so collapse them to `undefined`.
 const describeHub = securityhub.describeHub({}).pipe(
-  Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTags({
+    InvalidAccessException: () => Effect.succeed(undefined),
+    ResourceNotFoundException: () => Effect.succeed(undefined),
+  }),
 );
 
 export const HubProvider = () =>
@@ -112,7 +109,7 @@ export const HubProvider = () =>
       const readTags = (arn: string) =>
         securityhub.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) => tagRecord(r.Tags)),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       return {
@@ -126,8 +123,7 @@ export const HubProvider = () =>
 
         // Security Hub is an account/region singleton — `describeHub` returns
         // the single Hub or throws when unsubscribed.
-        list: () =>
-          describeHub.pipe(Effect.map((hub) => (hub ? [buildAttrs(hub)] : []))),
+        list: () => describeHub.pipe(Effect.map((hub) => (hub ? [buildAttrs(hub)] : []))),
 
         reconcile: Effect.fn(function* ({ id, news = {}, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -186,8 +182,10 @@ export const HubProvider = () =>
 
         delete: Effect.fn(function* () {
           yield* securityhub.disableSecurityHub({}).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("InvalidAccessException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              InvalidAccessException: () => Effect.void,
+            }),
           );
         }),
       };

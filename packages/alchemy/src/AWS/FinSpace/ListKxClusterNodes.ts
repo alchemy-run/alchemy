@@ -25,10 +25,7 @@ export interface ListKxClusterNodes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.ListKxClusterNodesRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.ListKxClusterNodesResponse,
-      SVC.ListKxClusterNodesError
-    >
+    ) => Effect.Effect<SVC.ListKxClusterNodesResponse, SVC.ListKxClusterNodesError>
   >
 > {}
 export const ListKxClusterNodes = Binding.Service<ListKxClusterNodes>(

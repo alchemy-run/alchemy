@@ -1,28 +1,18 @@
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 /**
  * The partial-pack scanner (src/Git/Protocol/PartialScan.ts): the hashing
  * Worker's unit of work. Entries are settled inside a buffer that starts
  * at an entry boundary; the tail is carried; deltas whose base lies in an
  * earlier buffer are reported unresolved.
  */
-import {
-  hashObject,
-  encodeTypeSize,
-  makeSha1,
-  type Oid,
-} from "@/Git/Protocol/ObjectCodec.ts";
-import {
-  findBoundary,
-  hashBounds,
-  scanBounds,
-  scanPart,
-} from "@/Git/Protocol/PartialScan.ts";
+import { hashObject, encodeTypeSize, makeSha1, type Oid } from "@/Git/Protocol/ObjectCodec.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import { findBoundary, hashBounds, scanBounds, scanPart } from "@/Git/Protocol/PartialScan.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import * as BunServices from "@effect/platform-bun/BunServices";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { concat } from "./harness/pack.ts";
 
 const buildPack = (n: number) =>
@@ -44,11 +34,7 @@ const buildPack = (n: number) =>
   });
 
 /** Drives the scanner the way the pipeline does: parts + carry. */
-const scanInParts = (
-  pack: Uint8Array,
-  count: number,
-  partSizes: (i: number) => number,
-) =>
+const scanInParts = (pack: Uint8Array, count: number, partSizes: (i: number) => number) =>
   Effect.gen(function* () {
     // Parts run to the END of the pack (trailer included) so the last entry
     // is followed by bytes, per the scanner's contract.
@@ -64,11 +50,7 @@ const scanInParts = (
       const n = Math.min(partSizes(i++), end - cursor);
       const payload = concat([carry, pack.subarray(cursor, cursor + n)]);
       const base = consumedTo;
-      const result = yield* scanPart(payload, {
-        base,
-        remaining,
-        maxObjectSize: 64 << 20,
-      });
+      const result = yield* scanPart(payload, { base, remaining, maxObjectSize: 64 << 20 });
       for (const e of result.entries) all.push(e.oid);
       for (const u of result.unresolved) unresolved.push(u);
       remaining -= result.count;
@@ -86,11 +68,7 @@ describe("scanPart", { tags: ["unit", "local"] }, () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { pack, oids, count } = yield* buildPack(400);
-        for (const sizes of [
-          () => 1000,
-          (i: number) => 100 + ((i * 7919) % 5000),
-          () => 1 << 20,
-        ]) {
+        for (const sizes of [() => 1000, (i: number) => 100 + ((i * 7919) % 5000), () => 1 << 20]) {
           const { all, unresolved } = yield* scanInParts(pack, count, sizes);
           expect(all.length).toBe(count);
           expect(new Set(all)).toEqual(new Set(oids));
@@ -107,9 +85,7 @@ describe("scanPart", { tags: ["unit", "local"] }, () => {
         const path = yield* Path.Path;
         const dir = path.join(import.meta.dirname, "fixtures", "packs");
         const pack = yield* fs.readFile(path.join(dir, "ofs-delta.pack"));
-        const manifest = JSON.parse(
-          yield* fs.readFileString(path.join(dir, "manifest.json")),
-        ) as {
+        const manifest = JSON.parse(yield* fs.readFileString(path.join(dir, "manifest.json"))) as {
           packs: Record<string, { oids: ReadonlyArray<string> }>;
         };
         const expected = new Set(manifest.packs["ofs-delta"]!.oids);
@@ -155,97 +131,78 @@ describe(
           });
           expect(partial.count).toBe(1);
           expect(partial.consumedTo).toBeLessThan(cut);
-          expect(partial.consumedTo).toBe(
-            first.entries[0]!.dataOffset + first.entries[0]!.span,
-          );
+          expect(partial.consumedTo).toBe(first.entries[0]!.dataOffset + first.entries[0]!.span);
         }),
       );
     });
   },
 );
 
-describe(
-  "scanBounds + hashBounds (DESIGN §22.8)",
-  { tags: ["unit", "local"] },
-  () => {
-    test("boundary scan then known-span hashing equals the single-pass scan on a synthetic pack", async () => {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const { pack, oids, count } = yield* buildPack(300);
-          const buf = pack.subarray(12);
-          const bounds = yield* scanBounds(buf, {
-            base: 12,
-            remaining: count,
-            maxObjectSize: 64 << 20,
-          });
-          expect(bounds.entries.length).toBe(count);
-          expect(bounds.consumedTo).toBe(pack.length - 20);
-          const hashed = yield* hashBounds(buf, bounds.entries, {
-            base: 12,
-            maxObjectSize: 64 << 20,
-          });
-          expect(hashed.entries.map((e) => e.oid)).toEqual(oids);
-          expect(hashed.unresolved).toEqual([]);
-          const single = yield* scanPart(buf, {
-            base: 12,
-            remaining: count,
-            maxObjectSize: 64 << 20,
-          });
-          expect(
-            hashed.entries.map((e) => [e.oid, e.offset, e.dataOffset, e.span]),
-          ).toEqual(
-            single.entries.map((e) => [e.oid, e.offset, e.dataOffset, e.span]),
-          );
-        }),
-      );
-    });
+describe("scanBounds + hashBounds (DESIGN §22.8)", { tags: ["unit", "local"] }, () => {
+  test("boundary scan then known-span hashing equals the single-pass scan on a synthetic pack", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack, oids, count } = yield* buildPack(300);
+        const buf = pack.subarray(12);
+        const bounds = yield* scanBounds(buf, {
+          base: 12,
+          remaining: count,
+          maxObjectSize: 64 << 20,
+        });
+        expect(bounds.entries.length).toBe(count);
+        expect(bounds.consumedTo).toBe(pack.length - 20);
+        const hashed = yield* hashBounds(buf, bounds.entries, {
+          base: 12,
+          maxObjectSize: 64 << 20,
+        });
+        expect(hashed.entries.map((e) => e.oid)).toEqual(oids);
+        expect(hashed.unresolved).toEqual([]);
+        const single = yield* scanPart(buf, {
+          base: 12,
+          remaining: count,
+          maxObjectSize: 64 << 20,
+        });
+        expect(hashed.entries.map((e) => [e.oid, e.offset, e.dataOffset, e.span])).toEqual(
+          single.entries.map((e) => [e.oid, e.offset, e.dataOffset, e.span]),
+        );
+      }),
+    );
+  });
 
-    test("the ofs-delta fixture: bounds carry base offsets; hashing resolves every in-buffer delta", async () => {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const dir = path.join(import.meta.dirname, "fixtures", "packs");
-          const pack = yield* fs.readFile(path.join(dir, "ofs-delta.pack"));
-          const manifest = JSON.parse(
-            yield* fs.readFileString(path.join(dir, "manifest.json")),
-          ) as {
-            packs: Record<string, { oids: ReadonlyArray<string> }>;
-          };
-          const expected = new Set(manifest.packs["ofs-delta"]!.oids);
-          const count = new DataView(pack.buffer, pack.byteOffset).getUint32(8);
-          const buf = pack.subarray(12);
-          const bounds = yield* scanBounds(buf, {
-            base: 12,
-            remaining: count,
-            maxObjectSize: 64 << 20,
-          });
-          expect(bounds.entries.length).toBe(count);
-          expect(
-            bounds.entries.some(
-              (b) => b.type === 6 && b.baseOffset !== undefined,
-            ),
-          ).toBe(true);
-          const hashed = yield* hashBounds(buf, bounds.entries, {
-            base: 12,
-            maxObjectSize: 64 << 20,
-          });
-          expect(hashed.unresolved).toEqual([]);
-          expect(new Set(hashed.entries.map((e) => e.oid))).toEqual(expected);
-          // Hashing only the second half: bases in the first half are unresolved.
-          const half = bounds.entries.slice(Math.floor(count / 2));
-          const partial = yield* hashBounds(buf, half, {
-            base: 12,
-            maxObjectSize: 64 << 20,
-          });
-          expect(partial.entries.length + partial.unresolved.length).toBe(
-            half.length,
-          );
-        }).pipe(Effect.provide(BunServices.layer)),
-      );
-    });
-  },
-);
+  test("the ofs-delta fixture: bounds carry base offsets; hashing resolves every in-buffer delta", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = path.join(import.meta.dirname, "fixtures", "packs");
+        const pack = yield* fs.readFile(path.join(dir, "ofs-delta.pack"));
+        const manifest = JSON.parse(yield* fs.readFileString(path.join(dir, "manifest.json"))) as {
+          packs: Record<string, { oids: ReadonlyArray<string> }>;
+        };
+        const expected = new Set(manifest.packs["ofs-delta"]!.oids);
+        const count = new DataView(pack.buffer, pack.byteOffset).getUint32(8);
+        const buf = pack.subarray(12);
+        const bounds = yield* scanBounds(buf, {
+          base: 12,
+          remaining: count,
+          maxObjectSize: 64 << 20,
+        });
+        expect(bounds.entries.length).toBe(count);
+        expect(bounds.entries.some((b) => b.type === 6 && b.baseOffset !== undefined)).toBe(true);
+        const hashed = yield* hashBounds(buf, bounds.entries, {
+          base: 12,
+          maxObjectSize: 64 << 20,
+        });
+        expect(hashed.unresolved).toEqual([]);
+        expect(new Set(hashed.entries.map((e) => e.oid))).toEqual(expected);
+        // Hashing only the second half: bases in the first half are unresolved.
+        const half = bounds.entries.slice(Math.floor(count / 2));
+        const partial = yield* hashBounds(buf, half, { base: 12, maxObjectSize: 64 << 20 });
+        expect(partial.entries.length + partial.unresolved.length).toBe(half.length);
+      }).pipe(Effect.provide(BunServices.layer)),
+    );
+  });
+});
 
 describe("findBoundary (DESIGN §22.9)", { tags: ["unit", "local"] }, () => {
   test("a boundary past the first MiB is found: the search covers the whole chunk", async () => {
@@ -271,12 +228,8 @@ describe("findBoundary (DESIGN §22.9)", { tags: ["unit", "local"] }, () => {
         const pack = concat([body, sha.digest()]);
         const bigEnd = 12 + pieces[1]!.length + pieces[2]!.length;
         const chunk = pack.subarray(100);
-        expect(findBoundary(chunk, { maxObjectSize: 1 << 24 })).toBe(
-          bigEnd - 100,
-        );
-        expect(
-          findBoundary(chunk, { maxObjectSize: 1 << 24, maxSearch: 1 << 20 }),
-        ).toBeUndefined();
+        expect(findBoundary(chunk, { maxObjectSize: 1 << 24 })).toBe(bigEnd - 100);
+        expect(findBoundary(chunk, { maxObjectSize: 1 << 24, maxSearch: 1 << 20 })).toBeUndefined();
       }),
     );
   });
@@ -299,9 +252,7 @@ describe("findBoundary (DESIGN §22.9)", { tags: ["unit", "local"] }, () => {
           expect(found).toBeDefined();
           expect(starts.has(at + found!)).toBe(true);
           // And it is the FIRST true boundary at or after `at`.
-          const first = truth.entries.find(
-            (b) => b.offset >= at && b.offset + 10 < at + 30_000,
-          )!;
+          const first = truth.entries.find((b) => b.offset >= at && b.offset + 10 < at + 30_000)!;
           expect(at + found!).toBe(first.offset);
         }
       }),
@@ -325,14 +276,9 @@ describe("findBoundary (DESIGN §22.9)", { tags: ["unit", "local"] }, () => {
         // Skip the last two entries: a boundary needs a following entry.
         const lastTestable = starts[starts.length - 2]!;
         for (let at = 12; at < lastTestable; at++) {
-          const found = findBoundary(pack.subarray(at), {
-            maxObjectSize: 1 << 20,
-          });
+          const found = findBoundary(pack.subarray(at), { maxObjectSize: 1 << 20 });
           expect(found, `from ${at}`).toBeDefined();
-          expect(
-            starts.includes(at + found!),
-            `from ${at} → ${at + found!}`,
-          ).toBe(true);
+          expect(starts.includes(at + found!), `from ${at} → ${at + found!}`).toBe(true);
         }
       }).pipe(Effect.provide(BunServices.layer)),
     );

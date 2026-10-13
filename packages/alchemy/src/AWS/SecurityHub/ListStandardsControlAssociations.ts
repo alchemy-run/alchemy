@@ -34,7 +34,6 @@ export interface ListStandardsControlAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListStandardsControlAssociations =
-  Binding.Service<ListStandardsControlAssociations>(
-    "AWS.SecurityHub.ListStandardsControlAssociations",
-  );
+export const ListStandardsControlAssociations = Binding.Service<ListStandardsControlAssociations>(
+  "AWS.SecurityHub.ListStandardsControlAssociations",
+);

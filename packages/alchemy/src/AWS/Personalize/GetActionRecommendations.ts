@@ -36,7 +36,6 @@ export interface GetActionRecommendations extends Binding.Service<
     >
   >
 > {}
-export const GetActionRecommendations =
-  Binding.Service<GetActionRecommendations>(
-    "AWS.Personalize.GetActionRecommendations",
-  );
+export const GetActionRecommendations = Binding.Service<GetActionRecommendations>(
+  "AWS.Personalize.GetActionRecommendations",
+);

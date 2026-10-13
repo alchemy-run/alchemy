@@ -72,9 +72,7 @@ export const makeFleetWiseResourceHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.requestKey]: yield* Identifier,

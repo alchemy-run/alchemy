@@ -36,12 +36,7 @@ export interface TranslateText extends Binding.Service<
   () => Effect.Effect<
     (
       request: translate.TranslateTextRequest,
-    ) => Effect.Effect<
-      translate.TranslateTextResponse,
-      translate.TranslateTextError
-    >
+    ) => Effect.Effect<translate.TranslateTextResponse, translate.TranslateTextError>
   >
 > {}
-export const TranslateText = Binding.Service<TranslateText>(
-  "AWS.Translate.TranslateText",
-);
+export const TranslateText = Binding.Service<TranslateText>("AWS.Translate.TranslateText");

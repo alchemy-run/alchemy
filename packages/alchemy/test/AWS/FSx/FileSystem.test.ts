@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as fsx from "@distilled.cloud/aws/fsx";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -33,13 +33,12 @@ const describeById = (fileSystemId: string) =>
   );
 
 // FSx create → AVAILABLE takes ~5 minutes; slow polling is allowed only
-// because the whole lifecycle is gated behind AWS_TEST_SLOW=1.
+// because the whole lifecycle is skipped under `--fast`.
 const waitUntilAvailable = (fileSystemId: string) =>
   describeById(fileSystemId).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("15 seconds"),
-      until: (fs) =>
-        fs?.Lifecycle === "AVAILABLE" || fs?.Lifecycle === "FAILED",
+      until: (fs) => fs?.Lifecycle === "AVAILABLE" || fs?.Lifecycle === "FAILED",
       times: 60,
     }),
   );
@@ -57,9 +56,9 @@ const fsxTags = (tags: readonly fsx.Tag[] | undefined) =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 // A Lustre SCRATCH_2 file system takes several minutes to provision and a few
-// more to delete (and bills hourly while up), so the live lifecycle is gated
-// behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// more to delete (and bills hourly while up), so the live lifecycle is skipped
+// under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
   "create Lustre scratch file system, update tags, delete",
   (stack) =>
     Effect.gen(function* () {
@@ -87,9 +86,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         });
 
       // --- create ---
-      const created = yield* stack.deploy(
-        build({ purpose: "alchemy-fsx-test" }),
-      );
+      const created = yield* stack.deploy(build({ purpose: "alchemy-fsx-test" }));
       expect(created.scratch.fileSystemId).toContain("fs-");
       expect(created.scratch.fileSystemArn).toContain(":file-system/fs-");
       expect(created.scratch.fileSystemType).toBe("LUSTRE");
@@ -104,9 +101,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(tags["alchemy::id"]).toBe("Scratch");
 
       // --- update: tags sync in place, identity preserved ---
-      const updated = yield* stack.deploy(
-        build({ purpose: "alchemy-fsx-test", stage: "prod" }),
-      );
+      const updated = yield* stack.deploy(build({ purpose: "alchemy-fsx-test", stage: "prod" }));
       expect(updated.scratch.fileSystemId).toBe(fileSystemId);
       const observed = yield* describeById(fileSystemId);
       expect(fsxTags(observed?.Tags).stage).toBe("prod");

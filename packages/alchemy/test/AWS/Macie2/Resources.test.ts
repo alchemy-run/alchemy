@@ -1,12 +1,12 @@
+import * as macie2 from "@distilled.cloud/aws/macie2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AllowList } from "@/AWS/Macie2/AllowList.ts";
 import { CustomDataIdentifier } from "@/AWS/Macie2/CustomDataIdentifier.ts";
 import { FindingsFilter } from "@/AWS/Macie2/FindingsFilter.ts";
 import { Session } from "@/AWS/Macie2/Session.ts";
 import * as Test from "@/Test/Alchemy";
-import * as macie2 from "@distilled.cloud/aws/macie2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeMacie2TestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -35,9 +35,7 @@ test.provider(
     Effect.gen(function* () {
       const preexisting = yield* getSession;
       if (preexisting) {
-        yield* Effect.logInfo(
-          "Macie already enabled — skipping Macie2 resources lifecycle test",
-        );
+        yield* Effect.logInfo("Macie already enabled — skipping Macie2 resources lifecycle test");
         return;
       }
 
@@ -98,9 +96,7 @@ test.provider(
         id: created.filterId,
       });
       expect(liveFilter.action).toBe("ARCHIVE");
-      expect(
-        liveFilter.findingCriteria?.criterion?.["severity.description"]?.eq,
-      ).toEqual(["Low"]);
+      expect(liveFilter.findingCriteria?.criterion?.["severity.description"]?.eq).toEqual(["Low"]);
 
       // Phase 2 — in-place updates (allow list criteria + filter action/tags)
       // and a replacement (custom data identifiers are immutable, so a regex

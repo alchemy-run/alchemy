@@ -1,23 +1,19 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as efs from "@distilled.cloud/aws/efs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const efsTagsToRecord = (
-  tags: readonly efs.Tag[] | undefined,
-): Record<string, string> =>
+const efsTagsToRecord = (tags: readonly efs.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 // Typed wait-until-gone for an access point.
 const waitUntilAccessPointGone = (accessPointId: string) =>
   efs.describeAccessPoints({ AccessPointId: accessPointId }).pipe(
-    Effect.map((r) =>
-      (r.AccessPoints ?? []).every((ap) => ap.LifeCycleState === "deleted"),
-    ),
+    Effect.map((r) => (r.AccessPoints ?? []).every((ap) => ap.LifeCycleState === "deleted")),
     Effect.catchTag("AccessPointNotFound", () => Effect.succeed(true)),
     Effect.repeat({
       schedule: Schedule.fixed("2 seconds"),
@@ -71,9 +67,7 @@ test.provider(
 
       // --- update tags in place ---
       const retagged = yield* stack.deploy(infra(1000, "alchemy-efs-ap-retag"));
-      expect(retagged.accessPoint.accessPointId).toBe(
-        created.accessPoint.accessPointId,
-      );
+      expect(retagged.accessPoint.accessPointId).toBe(created.accessPoint.accessPointId);
       const retaggedObserved = yield* efs
         .describeAccessPoints({
           AccessPointId: created.accessPoint.accessPointId,
@@ -83,32 +77,24 @@ test.provider(
 
       // --- posixUser change replaces the access point ---
       const replaced = yield* stack.deploy(infra(1001, "alchemy-efs-ap-retag"));
-      expect(replaced.accessPoint.accessPointId).not.toBe(
-        created.accessPoint.accessPointId,
-      );
+      expect(replaced.accessPoint.accessPointId).not.toBe(created.accessPoint.accessPointId);
       const replacedObserved = yield* efs
         .describeAccessPoints({
           AccessPointId: replaced.accessPoint.accessPointId,
         })
         .pipe(Effect.map((r) => r.AccessPoints![0]));
       expect(replacedObserved.PosixUser?.Uid).toBe(1001);
-      const oldGone = yield* waitUntilAccessPointGone(
-        created.accessPoint.accessPointId,
-      );
+      const oldGone = yield* waitUntilAccessPointGone(created.accessPoint.accessPointId);
       expect(oldGone).toBe(true);
 
       // --- destroy: access point and file system both gone ---
       yield* stack.destroy();
-      const apGone = yield* waitUntilAccessPointGone(
-        replaced.accessPoint.accessPointId,
-      );
+      const apGone = yield* waitUntilAccessPointGone(replaced.accessPoint.accessPointId);
       expect(apGone).toBe(true);
       const fsGone = yield* efs
         .describeFileSystems({ FileSystemId: created.files.fileSystemId })
         .pipe(
-          Effect.map((r) =>
-            (r.FileSystems ?? []).every((f) => f.LifeCycleState === "deleted"),
-          ),
+          Effect.map((r) => (r.FileSystems ?? []).every((f) => f.LifeCycleState === "deleted")),
           Effect.catchTag("FileSystemNotFound", () => Effect.succeed(true)),
           Effect.repeat({
             schedule: Schedule.fixed("2 seconds"),

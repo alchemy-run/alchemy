@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Planetscale from "@/Planetscale";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Cloudflare from "@/Cloudflare";
+import * as Planetscale from "@/Planetscale";
+import * as Test from "@/Test/Alchemy";
 import { exerciseSqlSurface, postJson } from "./exercise.ts";
-import type { UserRow } from "./fixtures/routes.ts";
 import Stack from "./fixtures/mysql-stack.ts";
+import type { UserRow } from "./fixtures/routes.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.merge(Cloudflare.providers(), Planetscale.providers()),
@@ -65,10 +65,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
           name: "erin",
           email: "erin@example.com",
         };
-        const committed = (yield* postJson(`${url}/tx/commit`, [
-          dave,
-          erin,
-        ])) as {
+        const committed = (yield* postJson(`${url}/tx/commit`, [dave, erin])) as {
           rows: UserRow[];
         };
         expect(committed.rows).toEqual([dave, erin]);

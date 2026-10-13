@@ -28,12 +28,7 @@ export interface SendActivationCode extends Binding.Service<
   "AWS.SSMContacts.SendActivationCode",
   (
     channel: ContactChannel,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      ssm.SendActivationCodeResult,
-      ssm.SendActivationCodeError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<ssm.SendActivationCodeResult, ssm.SendActivationCodeError>>
 > {}
 export const SendActivationCode = Binding.Service<SendActivationCode>(
   "AWS.SSMContacts.SendActivationCode",

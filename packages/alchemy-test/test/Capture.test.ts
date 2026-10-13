@@ -5,19 +5,13 @@ it("bounds previews while persisting every complete original message", () => {
   const capture = makeCapture({ capture: 4096, total: 8192 });
   const persisted: string[] = [];
   const logs = capture.create((entry) => persisted.push(entry.message));
-  const messages = Array.from(
-    { length: 100 },
-    (_, index) => `${index}: ${"🧪".repeat(1000)}`,
-  );
-  for (const message of messages)
-    logs.push({ message, level: "info", time: new Date(0) });
+  const messages = Array.from({ length: 100 }, (_, index) => `${index}: ${"🧪".repeat(1000)}`);
+  for (const message of messages) logs.push({ message, level: "info", time: new Date(0) });
   expect(persisted).toEqual(messages);
   expect(
     logs.reduce((total, log) => total + Buffer.byteLength(log.message) + 64, 0),
   ).toBeLessThanOrEqual(4096);
-  expect(logs.some((log) => log.message.includes("omitted from preview"))).toBe(
-    true,
-  );
+  expect(logs.some((log) => log.message.includes("omitted from preview"))).toBe(true);
 });
 
 it("bounds combined previews and reuses the same live array across retries", () => {
@@ -32,9 +26,7 @@ it("bounds combined previews and reuses the same live array across retries", () 
       });
   }
   expect(
-    buffers
-      .flat()
-      .reduce((total, log) => total + Buffer.byteLength(log.message) + 64, 0),
+    buffers.flat().reduce((total, log) => total + Buffer.byteLength(log.message) + 64, 0),
   ).toBeLessThanOrEqual(8192);
   const reused = buffers.at(-1)!;
   capture.release(reused);

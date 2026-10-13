@@ -1,17 +1,14 @@
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Railway.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/sveltekit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/sveltekit-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [".gitignore", "package.json", "src", "static"];
 
@@ -33,9 +30,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Railway.Website.SvelteKit("Web", {
-                rootDir,
-              });
+              const site = yield* Railway.Website.SvelteKit("Web", { rootDir });
               return { site };
             }),
           );
@@ -49,16 +44,12 @@ describe(
             timeout: "90 seconds",
             label: "dev home page",
           });
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=roundtrip`,
-            "SVELTEKIT_AWS_API_MARKER",
-            { label: "api route (dev)" },
-          );
-          yield* expectUrlContains(
-            `${url}/prerendered`,
-            "SVELTEKIT_AWS_PRERENDERED_MARKER",
-            { label: "extra route (dev)" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SVELTEKIT_AWS_API_MARKER", {
+            label: "api route (dev)",
+          });
+          yield* expectUrlContains(`${url}/prerendered`, "SVELTEKIT_AWS_PRERENDERED_MARKER", {
+            label: "extra route (dev)",
+          });
 
           yield* stack.destroy();
         }),

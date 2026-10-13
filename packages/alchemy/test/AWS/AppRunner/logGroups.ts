@@ -21,9 +21,7 @@ export const observeLogGroups = (logGroupNames: readonly string[]) =>
       .describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 })
       .pipe(
         Effect.map((response) =>
-          (response.logGroups ?? []).some(
-            (group) => group.logGroupName === logGroupName,
-          ),
+          (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
         ),
       ),
   );

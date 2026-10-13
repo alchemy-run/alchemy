@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface UpdateChannelRequest extends Omit<
-  repostspace.UpdateChannelInput,
-  "spaceId"
-> {}
+export interface UpdateChannelRequest extends Omit<repostspace.UpdateChannelInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `UpdateChannel` operation (IAM action
@@ -37,12 +34,7 @@ export interface UpdateChannel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateChannelRequest,
-    ) => Effect.Effect<
-      repostspace.UpdateChannelOutput,
-      repostspace.UpdateChannelError
-    >
+    ) => Effect.Effect<repostspace.UpdateChannelOutput, repostspace.UpdateChannelError>
   >
 > {}
-export const UpdateChannel = Binding.Service<UpdateChannel>(
-  "AWS.RePostSpace.UpdateChannel",
-);
+export const UpdateChannel = Binding.Service<UpdateChannel>("AWS.RePostSpace.UpdateChannel");

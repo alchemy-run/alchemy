@@ -36,9 +36,7 @@ export const getDefaultVpcScope = ec2
  * when the account has no default VPC. Rules on this group are AWS-provisioned
  * furniture; rules on user-created groups inside the default VPC are not.
  */
-export const getDefaultVpcDefaultSecurityGroupId = (
-  vpcId: string | undefined,
-) =>
+export const getDefaultVpcDefaultSecurityGroupId = (vpcId: string | undefined) =>
   vpcId === undefined
     ? Effect.succeed(undefined)
     : ec2
@@ -49,3 +47,36 @@ export const getDefaultVpcDefaultSecurityGroupId = (
           ],
         })
         .pipe(Effect.map((r) => r.SecurityGroups?.[0]?.GroupId));
+
+/**
+ * The GroupIds of the EMR-managed default security groups
+ * (`ElasticMapReduce-master` / `ElasticMapReduce-slave`, tagged
+ * `for-use-with-amazon-emr-managed-policies`) that Amazon EMR auto-creates in
+ * the default VPC the first time a cluster launches there without explicit
+ * security groups. EMR owns and reuses them for every later cluster in the
+ * VPC (like Glue's shared `/aws-glue/*` log groups), and their mutual
+ * references make them undeletable piecemeal — they are default-VPC
+ * furniture, not leaks. Empty when the account has no default VPC.
+ */
+export const getDefaultVpcEmrManagedSecurityGroupIds = (vpcId: string | undefined) =>
+  vpcId === undefined
+    ? Effect.succeed(new Set<string>())
+    : ec2
+        .describeSecurityGroups({
+          Filters: [
+            { Name: "vpc-id", Values: [vpcId] },
+            { Name: "tag-key", Values: ["for-use-with-amazon-emr-managed-policies"] },
+          ],
+        })
+        .pipe(
+          Effect.map(
+            (r) =>
+              new Set(
+                (r.SecurityGroups ?? []).flatMap((sg) =>
+                  sg.GroupId !== undefined && sg.GroupName?.startsWith("ElasticMapReduce-")
+                    ? [sg.GroupId]
+                    : [],
+                ),
+              ),
+          ),
+        );

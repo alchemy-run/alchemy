@@ -1,10 +1,3 @@
-import * as AWS from "@/AWS";
-import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
-import type { PolicyStatement } from "@/AWS/IAM/Policy";
-import { Bucket } from "@/AWS/S3";
-import * as Output from "@/Output";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -12,10 +5,25 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
+import type { PolicyStatement } from "@/AWS/IAM/Policy";
+import { Bucket } from "@/AWS/S3";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = !process.env.FAST;
+
+// CloudFront itself bounds these lifecycles: a create waits ~5 min for
+// `Deployed`, a config update up to several more, and delete must disable
+// the distribution and wait for `Deployed` again (~3–5 min) before the
+// DeleteDistribution call. Under a loaded full-suite run create+update+delete
+// measured ~570s — right at the old 600s cap, so attempts timed out
+// mid-teardown. 15 min covers the platform floor with headroom.
+const DEPLOY_DELETE_TIMEOUT = 900_000;
 
 describe(
   "AWS.CloudFront.Distribution",
@@ -29,12 +37,8 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* Bucket("WebsiteBucket", {
-                forceDestroy: true,
-              });
-              const oac = yield* OriginAccessControl("WebsiteOac", {
-                originType: "s3",
-              });
+              const bucket = yield* Bucket("WebsiteBucket", { forceDestroy: true });
+              const oac = yield* OriginAccessControl("WebsiteOac", { originType: "s3" });
               const distribution = yield* Distribution("WebsiteDistribution", {
                 origins: [
                   {
@@ -53,12 +57,7 @@ describe(
                   compress: true,
                   allowedMethods: ["GET", "HEAD"],
                   cachedMethods: ["GET", "HEAD"],
-                  forwardedValues: {
-                    QueryString: false,
-                    Cookies: {
-                      Forward: "none",
-                    },
-                  },
+                  forwardedValues: { QueryString: false, Cookies: { Forward: "none" } },
                   // Duration.Input → wire whole-seconds conversion under test.
                   minTtl: 0,
                   defaultTtl: "5 minutes",
@@ -68,29 +67,19 @@ describe(
 
               const statement: PolicyStatement = {
                 Effect: "Allow",
-                Principal: {
-                  Service: "cloudfront.amazonaws.com",
-                },
+                Principal: { Service: "cloudfront.amazonaws.com" },
                 Action: ["s3:GetObject"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
                 Condition: {
-                  StringEquals: {
-                    "AWS:SourceArn": distribution.distributionArn as any,
-                  },
+                  StringEquals: { "AWS:SourceArn": distribution.distributionArn as any },
                 },
               };
 
-              yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-                {
-                  policyStatements: [statement],
-                },
-              );
+              yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+                policyStatements: [statement],
+              });
 
-              return {
-                bucket,
-                oac,
-                distribution,
-              };
+              return { bucket, oac, distribution };
             }),
           );
 
@@ -98,9 +87,7 @@ describe(
             Id: deployed.distribution.distributionId,
           });
           expect(current.Distribution?.Status).toEqual("Deployed");
-          expect(current.Distribution?.DomainName).toEqual(
-            deployed.distribution.domainName,
-          );
+          expect(current.Distribution?.DomainName).toEqual(deployed.distribution.domainName);
           // Duration.Input props reached the wire as whole seconds.
           const config = current.Distribution?.DistributionConfig;
           expect(config?.Origins?.Items?.[0]?.ConnectionTimeout).toEqual(5);
@@ -111,9 +98,7 @@ describe(
           const control = yield* cloudfront.getOriginAccessControl({
             Id: deployed.oac.originAccessControlId,
           });
-          expect(control.OriginAccessControl?.Id).toEqual(
-            deployed.oac.originAccessControlId,
-          );
+          expect(control.OriginAccessControl?.Id).toEqual(deployed.oac.originAccessControlId);
 
           yield* S3.putObject({
             Bucket: deployed.bucket.bucketName,
@@ -123,11 +108,9 @@ describe(
           });
 
           yield* stack.destroy();
-          yield* assertDistributionDeleted(
-            deployed.distribution.distributionId,
-          );
+          yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Fast probe (read-only): CloudFront `list()` exhaustively paginates
@@ -167,12 +150,8 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* Bucket("ListWebsiteBucket", {
-                forceDestroy: true,
-              });
-              const oac = yield* OriginAccessControl("ListWebsiteOac", {
-                originType: "s3",
-              });
+              const bucket = yield* Bucket("ListWebsiteBucket", { forceDestroy: true });
+              const oac = yield* OriginAccessControl("ListWebsiteOac", { originType: "s3" });
               return yield* Distribution("ListWebsiteDistribution", {
                 origins: [
                   {
@@ -194,14 +173,12 @@ describe(
           const provider = yield* Provider.findProvider(Distribution);
           const all = yield* provider.list();
 
-          expect(
-            all.some((d) => d.distributionId === deployed.distributionId),
-          ).toBe(true);
+          expect(all.some((d) => d.distributionId === deployed.distributionId)).toBe(true);
 
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
     // Exercises the newly-exposed config gaps: geo restriction + custom error
     // responses. Creates with a whitelist + a custom 404, updates the geo
@@ -215,9 +192,7 @@ describe(
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
               const bucket = yield* Bucket("GeoBucket", { forceDestroy: true });
-              const oac = yield* OriginAccessControl("GeoOac", {
-                originType: "s3",
-              });
+              const oac = yield* OriginAccessControl("GeoOac", { originType: "s3" });
               const distribution = yield* Distribution("GeoDistribution", {
                 origins: [
                   {
@@ -232,10 +207,7 @@ describe(
                   viewerProtocolPolicy: "redirect-to-https",
                   compress: true,
                 },
-                geoRestriction: {
-                  restrictionType: "whitelist",
-                  locations: ["US", "CA"],
-                },
+                geoRestriction: { restrictionType: "whitelist", locations: ["US", "CA"] },
                 customErrorResponses: [
                   {
                     ErrorCode: 404,
@@ -252,25 +224,22 @@ describe(
           const created = yield* cloudfront.getDistributionConfig({
             Id: deployed.distribution.distributionId,
           });
-          expect(
-            created.DistributionConfig?.Restrictions?.GeoRestriction
-              .RestrictionType,
-          ).toEqual("whitelist");
-          expect(
-            created.DistributionConfig?.Restrictions?.GeoRestriction.Items?.sort(),
-          ).toEqual(["CA", "US"]);
-          expect(
-            created.DistributionConfig?.CustomErrorResponses?.Items?.[0]
-              .ErrorCode,
-          ).toEqual(404);
+          expect(created.DistributionConfig?.Restrictions?.GeoRestriction.RestrictionType).toEqual(
+            "whitelist",
+          );
+          expect(created.DistributionConfig?.Restrictions?.GeoRestriction.Items?.sort()).toEqual([
+            "CA",
+            "US",
+          ]);
+          expect(created.DistributionConfig?.CustomErrorResponses?.Items?.[0].ErrorCode).toEqual(
+            404,
+          );
 
           // Update: drop the geo restriction.
           yield* stack.deploy(
             Effect.gen(function* () {
               const bucket = yield* Bucket("GeoBucket", { forceDestroy: true });
-              const oac = yield* OriginAccessControl("GeoOac", {
-                originType: "s3",
-              });
+              const oac = yield* OriginAccessControl("GeoOac", { originType: "s3" });
               return yield* Distribution("GeoDistribution", {
                 origins: [
                   {
@@ -293,17 +262,14 @@ describe(
           const updated = yield* cloudfront.getDistributionConfig({
             Id: deployed.distribution.distributionId,
           });
-          expect(
-            updated.DistributionConfig?.Restrictions?.GeoRestriction
-              .RestrictionType,
-          ).toEqual("none");
+          expect(updated.DistributionConfig?.Restrictions?.GeoRestriction.RestrictionType).toEqual(
+            "none",
+          );
 
           yield* stack.destroy();
-          yield* assertDistributionDeleted(
-            deployed.distribution.distributionId,
-          );
+          yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Regression for the UpdateDistribution full-config-replacement failure:
@@ -326,22 +292,12 @@ describe(
           const program = (defaultTtl: Duration.Input) =>
             Effect.gen(function* () {
               return yield* Distribution("MergeDistribution", {
-                origins: [
-                  {
-                    id: "site",
-                    domainName: "example.com",
-                  },
-                ],
+                origins: [{ id: "site", domainName: "example.com" }],
                 defaultCacheBehavior: {
                   targetOriginId: "site",
                   viewerProtocolPolicy: "redirect-to-https",
                   compress: true,
-                  forwardedValues: {
-                    QueryString: false,
-                    Cookies: {
-                      Forward: "none",
-                    },
-                  },
+                  forwardedValues: { QueryString: false, Cookies: { Forward: "none" } },
                   minTtl: 0,
                   defaultTtl,
                   maxTtl: "1 hour",
@@ -353,9 +309,7 @@ describe(
 
           // Out-of-band read-modify-write: enrich the live config with members
           // the props above don't express.
-          const live = yield* cloudfront.getDistributionConfig({
-            Id: deployed.distributionId,
-          });
+          const live = yield* cloudfront.getDistributionConfig({ Id: deployed.distributionId });
           const liveConfig = live.DistributionConfig!;
           yield* cloudfront.updateDistribution({
             Id: deployed.distributionId,
@@ -369,9 +323,7 @@ describe(
                   ...origin,
                   CustomHeaders: {
                     Quantity: 1,
-                    Items: [
-                      { HeaderName: "x-out-of-band", HeaderValue: "kept" },
-                    ],
+                    Items: [{ HeaderName: "x-out-of-band", HeaderValue: "kept" }],
                   },
                 })),
               },
@@ -383,31 +335,26 @@ describe(
           // `IllegalUpdate`.
           yield* stack.deploy(program("10 minutes"));
 
-          const updated = yield* cloudfront.getDistributionConfig({
-            Id: deployed.distributionId,
-          });
+          const updated = yield* cloudfront.getDistributionConfig({ Id: deployed.distributionId });
           const config = updated.DistributionConfig;
           // Desired wins: the prop change went through.
           expect(config?.DefaultCacheBehavior?.DefaultTTL).toEqual(600);
           // Members the props don't express carried over from the observed
           // config instead of being dropped (or rejected) by the update.
           expect(config?.DefaultRootObject).toEqual("index.html");
-          const headers =
-            config?.Origins?.Items?.[0]?.CustomHeaders?.Items?.map(
-              (header) => ({
-                name: header.HeaderName,
-                value:
-                  typeof header.HeaderValue === "string"
-                    ? header.HeaderValue
-                    : Redacted.value(header.HeaderValue),
-              }),
-            );
+          const headers = config?.Origins?.Items?.[0]?.CustomHeaders?.Items?.map((header) => ({
+            name: header.HeaderName,
+            value:
+              typeof header.HeaderValue === "string"
+                ? header.HeaderValue
+                : Redacted.value(header.HeaderValue),
+          }));
           expect(headers).toEqual([{ name: "x-out-of-band", value: "kept" }]);
 
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { timeout: 600_000 },
+      { timeout: DEPLOY_DELETE_TIMEOUT },
     );
   },
 );
@@ -417,11 +364,7 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
     Effect.catchTag("NoSuchDistribution", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      while: (error) => error instanceof Error && error.message === "DistributionStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

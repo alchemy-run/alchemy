@@ -8,10 +8,10 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { toSeconds } from "../../Util/Duration.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
+import type { Providers } from "../Providers.ts";
 import type {
   LaunchTemplateId,
   LaunchTemplateName,
@@ -59,7 +59,8 @@ export interface AutoScalingGroupProps {
    */
   maxSize: number;
   /**
-   * Desired number of instances.
+   * Desired number of instances. When omitted, updates leave the live value
+   * alone so external scalers (e.g. ECS managed scaling) keep control.
    * @default minSize
    */
   desiredCapacity?: number;
@@ -235,28 +236,39 @@ export interface AutoScalingGroup extends Resource<
  *
  * @resource
  */
-export const AutoScalingGroup = Resource<AutoScalingGroup>(
-  "AWS.AutoScaling.AutoScalingGroup",
-);
+export const AutoScalingGroup = Resource<AutoScalingGroup>("AWS.AutoScaling.AutoScalingGroup");
 
 const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
+
+/**
+ * A launch template naming a just-created instance profile is rejected until
+ * IAM propagates it; retry that rejection (bounded, ~1 minute).
+ */
+const retryInstanceProfilePropagation = <A, R>(
+  effect: Effect.Effect<
+    A,
+    autoscaling.CreateAutoScalingGroupError | autoscaling.UpdateAutoScalingGroupError,
+    R
+  >,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "InvalidIamInstanceProfile",
+      schedule: Schedule.max([Schedule.recurs(10), Schedule.exponential("1 second")]),
+    }),
+  );
 
 export const AutoScalingGroupProvider = () =>
   Provider.effect(
     AutoScalingGroup,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { autoScalingGroupName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { autoScalingGroupName?: string } = {}) =>
         props.autoScalingGroupName
           ? Effect.succeed(props.autoScalingGroupName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
 
-      const toLaunchTemplateSpec = (
-        input: AutoScalingGroupProps["launchTemplate"],
-      ) => {
+      const toLaunchTemplateSpec = (input: AutoScalingGroupProps["launchTemplate"]) => {
         // A whole-resource `launchTemplate: template` resolves to the
         // LaunchTemplate's bare Attributes before reaching the provider —
         // the resource `Type` marker does not survive resolution — so narrow
@@ -264,9 +276,7 @@ export const AutoScalingGroupProvider = () =>
         // attributes, never on a LaunchTemplateReference). Attributes carry
         // BOTH id and name, and the API rejects a spec with both, so send
         // the id alone.
-        const attrs = input as
-          | Partial<LaunchTemplateResource["Attributes"]>
-          | undefined;
+        const attrs = input as Partial<LaunchTemplateResource["Attributes"]> | undefined;
         if (typeof attrs?.launchTemplateArn === "string") {
           return {
             LaunchTemplateId: attrs.launchTemplateId as string | undefined,
@@ -282,8 +292,7 @@ export const AutoScalingGroupProvider = () =>
         return {
           LaunchTemplateId: spec.launchTemplateId as string | undefined,
           LaunchTemplateName: spec.launchTemplateName as string | undefined,
-          Version:
-            spec.version === undefined ? "$Default" : String(spec.version),
+          Version: spec.version === undefined ? "$Default" : String(spec.version),
         };
       };
 
@@ -403,9 +412,7 @@ export const AutoScalingGroupProvider = () =>
           autoscaling.describeAutoScalingGroups.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.AutoScalingGroups ?? []).map(toAttributes),
-              ),
+              Array.from(chunk).flatMap((page) => (page.AutoScalingGroups ?? []).map(toAttributes)),
             ),
           ),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
@@ -425,25 +432,20 @@ export const AutoScalingGroupProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.autoScalingGroupName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.autoScalingGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* describeGroup(name);
           return group ? toAttributes(group) : undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const autoScalingGroupName =
-            output?.autoScalingGroupName ?? (yield* toName(id, news));
+          const autoScalingGroupName = output?.autoScalingGroupName ?? (yield* toName(id, news));
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const targetGroupArns = sortStrings(
-            (news.targetGroupArns ?? []) as string[],
-          );
+          const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
           const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
           const healthCheckType =
-            news.healthCheckType ??
-            (targetGroupArns.length > 0 ? "ELB" : "EC2");
+            news.healthCheckType ?? (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
           // Observe — fetch live state. `describeAutoScalingGroups` returns
           // an empty list when the ASG is missing; we never trust `output`
@@ -470,11 +472,8 @@ export const AutoScalingGroupProvider = () =>
                 Tags: toTags(autoScalingGroupName, desiredTags),
               } as any)
               .pipe(
-                Effect.catch((error: any) =>
-                  error?._tag === "AlreadyExistsFault"
-                    ? Effect.void
-                    : Effect.fail(error),
-                ),
+                retryInstanceProfilePropagation,
+                Effect.catchTag("AlreadyExistsFault", () => Effect.void),
               );
 
             existing = yield* describeGroup(autoScalingGroupName).pipe(
@@ -487,10 +486,7 @@ export const AutoScalingGroupProvider = () =>
               ),
               Effect.retry({
                 while: () => true,
-                schedule: Schedule.max([
-                  Schedule.recurs(8),
-                  Schedule.exponential("250 millis"),
-                ]),
+                schedule: Schedule.max([Schedule.recurs(8), Schedule.exponential("250 millis")]),
               }),
             );
           }
@@ -499,18 +495,20 @@ export const AutoScalingGroupProvider = () =>
           // overwrites min/max/desired/template/subnets/health-check
           // settings in one call, so we issue it unconditionally
           // (idempotent for matching values).
-          yield* autoscaling.updateAutoScalingGroup({
-            AutoScalingGroupName: autoScalingGroupName,
-            MinSize: news.minSize,
-            MaxSize: news.maxSize,
-            DesiredCapacity: news.desiredCapacity ?? news.minSize,
-            LaunchTemplate: launchTemplate,
-            VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
-            HealthCheckType: healthCheckType,
-            HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
-            DefaultCooldown: toSeconds(news.defaultCooldown),
-            TerminationPolicies: news.terminationPolicies,
-          } as any);
+          yield* autoscaling
+            .updateAutoScalingGroup({
+              AutoScalingGroupName: autoScalingGroupName,
+              MinSize: news.minSize,
+              MaxSize: news.maxSize,
+              DesiredCapacity: news.desiredCapacity,
+              LaunchTemplate: launchTemplate,
+              VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
+              HealthCheckType: healthCheckType,
+              HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
+              DefaultCooldown: toSeconds(news.defaultCooldown),
+              TerminationPolicies: news.terminationPolicies,
+            } as any)
+            .pipe(retryInstanceProfilePropagation);
 
           // Sync target groups — observed cloud attachments vs desired.
           const observedAttrs = toAttributes(existing);
@@ -556,17 +554,11 @@ export const AutoScalingGroupProvider = () =>
 
           yield* describeGroup(output.autoScalingGroupName).pipe(
             Effect.flatMap((group) =>
-              group
-                ? Effect.fail(new Error("AutoScalingGroupStillExists"))
-                : Effect.void,
+              group ? Effect.fail(new Error("AutoScalingGroupStillExists")) : Effect.void,
             ),
             Effect.retry({
-              while: (error) =>
-                (error as Error).message === "AutoScalingGroupStillExists",
-              schedule: Schedule.max([
-                Schedule.recurs(12),
-                Schedule.exponential("250 millis"),
-              ]),
+              while: (error) => (error as Error).message === "AutoScalingGroupStillExists",
+              schedule: Schedule.max([Schedule.recurs(12), Schedule.exponential("250 millis")]),
             }),
           );
         }),

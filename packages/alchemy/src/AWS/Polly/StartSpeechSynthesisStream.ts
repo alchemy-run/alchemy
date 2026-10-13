@@ -56,7 +56,6 @@ export interface StartSpeechSynthesisStream extends Binding.Service<
     >
   >
 > {}
-export const StartSpeechSynthesisStream =
-  Binding.Service<StartSpeechSynthesisStream>(
-    "AWS.Polly.StartSpeechSynthesisStream",
-  );
+export const StartSpeechSynthesisStream = Binding.Service<StartSpeechSynthesisStream>(
+  "AWS.Polly.StartSpeechSynthesisStream",
+);

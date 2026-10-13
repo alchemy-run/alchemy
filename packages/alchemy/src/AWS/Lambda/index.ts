@@ -30,6 +30,7 @@ export * from "./GetMicrovmImageHttp.ts";
 export * from "./GetMicrovmImageVersion.ts";
 export * from "./GetMicrovmImageVersionHttp.ts";
 export * from "./HttpServer.ts";
+export * from "./InvocationDeadline.ts";
 export * from "./InvokeFunction.ts";
 export * from "./InvokeFunctionHttp.ts";
 export * from "./InvokeWithResponseStream.ts";

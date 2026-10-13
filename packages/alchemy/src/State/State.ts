@@ -10,13 +10,11 @@ import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
  */
 export type PersistedState = ResourceState | ActionState;
 
-export const isActionState = (
-  s: PersistedState | undefined,
-): s is ActionState => !!s && (s as any).kind === "action";
+export const isActionState = (s: PersistedState | undefined): s is ActionState =>
+  !!s && (s as any).kind === "action";
 
-export const isResourceState = (
-  s: PersistedState | undefined,
-): s is ResourceState => !!s && (s as any).kind !== "task";
+export const isResourceState = (s: PersistedState | undefined): s is ResourceState =>
+  !!s && (s as any).kind !== "task";
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
@@ -28,10 +26,7 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   };
 }> {}
 
-export class State extends Context.Service<
-  State,
-  Effect.Effect<StateService>
->()("alchemy/State") {}
+export class State extends Context.Service<State, Effect.Effect<StateService>>()("alchemy/State") {}
 
 /**
  * State service interface.
@@ -60,9 +55,7 @@ export interface StateService {
    */
   getVersion(): Effect.Effect<number, StateStoreError, never>;
   listStacks(): Effect.Effect<readonly string[], StateStoreError, never>;
-  listStages(
-    stack: string,
-  ): Effect.Effect<readonly string[], StateStoreError, never>;
+  listStages(stack: string): Effect.Effect<readonly string[], StateStoreError, never>;
   /**
    * Get a resource by its FQN (namespace-qualified key).
    */
@@ -80,11 +73,7 @@ export interface StateService {
   getReplacedResources(request: {
     stack: string;
     stage: string;
-  }): Effect.Effect<
-    ReadonlyArray<ReplacedResourceState>,
-    StateStoreError,
-    never
-  >;
+  }): Effect.Effect<ReadonlyArray<ReplacedResourceState>, StateStoreError, never>;
   /**
    * Set a resource by its FQN (namespace-qualified key).
    */

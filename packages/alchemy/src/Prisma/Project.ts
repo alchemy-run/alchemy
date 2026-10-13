@@ -1,3 +1,4 @@
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetProjectDatabasesResponse,
   type GetProjectsResponse,
@@ -8,16 +9,15 @@ import {
   createProject,
   createProjectDatabase,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
-import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
@@ -26,11 +26,12 @@ import {
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedDatabase, ObservedProject } from "./Internal/Observed.ts";
-import { isInputObject, isPrismaDevId } from "./Refs.ts";
-import type { Providers } from "./Providers.ts";
-import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
+import type { Providers } from "./Providers.ts";
+import { isInputObject, isPrismaDevId } from "./Refs.ts";
+import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 
 export interface ProjectProps {
   /**
@@ -173,12 +174,10 @@ const listProjects = () =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -199,7 +198,9 @@ const findProjectByName = (name: string) =>
     }),
   );
 
-class GeneratedProjectNotVisible extends Error {}
+class GeneratedProjectNotVisible extends Data.TaggedError("GeneratedProjectNotVisible")<{
+  readonly message: string;
+}> {}
 
 const generatedProjectRecoverySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -212,9 +213,9 @@ const recoverGeneratedProjectAfterConflict = (name: string) =>
       project
         ? Effect.succeed(project)
         : Effect.fail(
-            new GeneratedProjectNotVisible(
-              `Generated Prisma project '${name}' already exists but is not visible yet.`,
-            ),
+            new GeneratedProjectNotVisible({
+              message: `Generated Prisma project '${name}' already exists but is not visible yet.`,
+            }),
           ),
     ),
     Effect.retry({
@@ -229,20 +230,16 @@ const listProjectDatabases = (projectId: string) =>
     let cursor: string | undefined;
     while (true) {
       const page = yield* getProjectDatabases(
-        cursor === undefined
-          ? { projectId, limit: 100 }
-          : { projectId, limit: 100, cursor },
+        cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
       );
       databases.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -263,7 +260,9 @@ const defaultDatabase = (projectId: string) =>
     }),
   );
 
-class DefaultDatabaseConsistencyError extends Error {}
+class DefaultDatabaseConsistencyError extends Data.TaggedError("DefaultDatabaseConsistencyError")<{
+  readonly message: string;
+}> {}
 
 const defaultDatabaseConsistencySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -278,11 +277,11 @@ const requireDefaultDatabaseInRegion = (
   database?.region?.id === desiredRegion
     ? Effect.succeed(database)
     : Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          database
+        new DefaultDatabaseConsistencyError({
+          message: database
             ? `Prisma project '${projectName}' still has default database '${database.id}' in region '${database.region?.id ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after any in-progress default database promotion completes.`
             : `Prisma project '${projectName}' does not expose the requested default database in region '${desiredRegion}'. Retry after any in-progress default database creation completes.`,
-        ),
+        }),
       );
 
 type ProjectDatabaseAttrs = ObservedDatabase;
@@ -297,9 +296,9 @@ const observeDesiredDefaultDatabase = (
     const project = (yield* getProject({ id: projectId }).pipe(
       Effect.catchTag("NotFound", () =>
         Effect.fail(
-          new DefaultDatabaseConsistencyError(
-            `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
-          ),
+          new DefaultDatabaseConsistencyError({
+            message: `Prisma project '${projectName}' (${projectId}) is not visible yet while verifying its new default database.`,
+          }),
         ),
       ),
     )).data;
@@ -307,9 +306,9 @@ const observeDesiredDefaultDatabase = (
       yield* defaultDatabase(projectId).pipe(
         Effect.catchTag("NotFound", () =>
           Effect.fail(
-            new DefaultDatabaseConsistencyError(
-              `Prisma project '${projectName}' default database list is not visible yet.`,
-            ),
+            new DefaultDatabaseConsistencyError({
+              message: `Prisma project '${projectName}' default database list is not visible yet.`,
+            }),
           ),
         ),
       ),
@@ -317,18 +316,14 @@ const observeDesiredDefaultDatabase = (
       desiredRegion,
     );
     if (database.id !== expectedDatabaseId) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
-        ),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
+      });
     }
     if (project.defaultRegion !== desiredRegion) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError(
-          `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
-        ),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
+      });
     }
     return { project, database };
   }).pipe(
@@ -394,12 +389,9 @@ const ProviderLive = () =>
           const desiredCreateDatabase = isResolved(news.createDatabase)
             ? (news.createDatabase ?? true)
             : undefined;
-          const desiredRegion = isResolved(news.region)
-            ? (news.region ?? "us-east-1")
-            : undefined;
+          const desiredRegion = isResolved(news.region) ? (news.region ?? "us-east-1") : undefined;
           const hadDatabase =
-            output?.databaseId !== undefined ||
-            (!output && (olds.createDatabase ?? true));
+            output?.databaseId !== undefined || (!output && (olds.createDatabase ?? true));
 
           // The API cannot remove a project's last/default database. Moving
           // from a database-bearing project to `createDatabase: false`
@@ -410,8 +402,7 @@ const ProviderLive = () =>
             // name. A stable explicit name collides with the old generation
             // and must be removed before creating the new project.
             const deleteFirst = isResolved(news.name)
-              ? news.name !== undefined &&
-                (!output || news.name === output.projectName)
+              ? news.name !== undefined && (!output || news.name === output.projectName)
               : true;
             return { action: "replace", deleteFirst } as const;
           }
@@ -433,8 +424,7 @@ const ProviderLive = () =>
           }
           if (
             desiredCreateDatabase === true &&
-            (output?.databaseId === undefined ||
-              (olds.createDatabase ?? true) === false)
+            (output?.databaseId === undefined || (olds.createDatabase ?? true) === false)
           ) {
             return { action: "update" } as const;
           }
@@ -443,13 +433,9 @@ const ProviderLive = () =>
             settings: news.settings,
           };
           if (!isResolved(updateProps)) return undefined;
-          const resolvedUpdateProps = updateProps as Pick<
-            ProjectProps,
-            "name" | "settings"
-          >;
+          const resolvedUpdateProps = updateProps as Pick<ProjectProps, "name" | "settings">;
           const nextName = yield* createName(id, resolvedUpdateProps.name);
-          const oldName =
-            output?.projectName ?? (yield* createName(id, olds.name));
+          const oldName = output?.projectName ?? (yield* createName(id, olds.name));
           if (
             nextName !== oldName ||
             // Settings are write-only in the Management API project
@@ -457,17 +443,14 @@ const ProviderLive = () =>
             // out-of-band changes converge, and write `{}` once when a
             // previously managed settings prop is removed.
             resolvedUpdateProps.settings !== undefined ||
-            (olds.settings !== undefined &&
-              resolvedUpdateProps.settings === undefined)
+            (olds.settings !== undefined && resolvedUpdateProps.settings === undefined)
           ) {
             return { action: "update" } as const;
           }
           return undefined;
         }),
         read: Effect.fn(function* ({ id, output, olds = {} }) {
-          const projectId = isPrismaDevId(output?.projectId)
-            ? undefined
-            : output?.projectId;
+          const projectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           const project = projectId
             ? yield* getProject({ id: projectId }).pipe(
                 Effect.map((response) => response.data),
@@ -478,13 +461,11 @@ const ProviderLive = () =>
           const database = yield* defaultDatabase(project.id).pipe(
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
-          const cachedSecrets =
-            output?.databaseId === database?.id ? output : undefined;
+          const cachedSecrets = output?.databaseId === database?.id ? output : undefined;
           const attrs = attrsFrom(project, database, {
             directConnectionString: cachedSecrets?.directConnectionString,
             pooledConnectionString: cachedSecrets?.pooledConnectionString,
-            accelerateConnectionString:
-              cachedSecrets?.accelerateConnectionString,
+            accelerateConnectionString: cachedSecrets?.accelerateConnectionString,
             host: cachedSecrets?.host,
             user: cachedSecrets?.user,
             password: cachedSecrets?.password,
@@ -492,15 +473,11 @@ const ProviderLive = () =>
           // An omitted name is derived from this exact PlanScope instance ID.
           // Finding it proves this is create-recovery, not a foreign natural-
           // key match. User-supplied names still require explicit adoption.
-          return projectId === undefined && olds.name !== undefined
-            ? Unowned(attrs)
-            : attrs;
+          return projectId === undefined && olds.name !== undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const name = yield* createName(id, news.name);
-          const outputProjectId = isPrismaDevId(output?.projectId)
-            ? undefined
-            : output?.projectId;
+          const outputProjectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           let project: ObservedProject | undefined = outputProjectId
             ? yield* getProject({ id: outputProjectId }).pipe(
                 Effect.map((response) => response.data),
@@ -528,9 +505,7 @@ const ProviderLive = () =>
                 return {
                   project,
                   database: response.data.database ?? undefined,
-                  secrets: extractConnectionSecrets(
-                    response.data.database?.connections[0],
-                  ),
+                  secrets: extractConnectionSecrets(response.data.database?.connections[0]),
                   created: true,
                   recoverSecrets: true,
                 };
@@ -565,13 +540,10 @@ const ProviderLive = () =>
           }
           if (!project) {
             return yield* Effect.fail(
-              new Error(
-                `Prisma project '${name}' could not be observed after create recovery.`,
-              ),
+              new Error(`Prisma project '${name}' could not be observed after create recovery.`),
             );
           }
-          const ownedGeneratedIdentity =
-            news.name === undefined && project.name === name;
+          const ownedGeneratedIdentity = news.name === undefined && project.name === name;
 
           if (news.createDatabase === false && createdDatabase) {
             return yield* Effect.fail(
@@ -599,8 +571,7 @@ const ProviderLive = () =>
           // forced reconcile after adoption) instead of trusting `olds` as an
           // observation of cloud state. When the prop is removed after being
           // managed, an empty object clears the previously managed settings.
-          const settingsChanged =
-            news.settings !== undefined || olds?.settings !== undefined;
+          const settingsChanged = news.settings !== undefined || olds?.settings !== undefined;
           if (project.name !== name || settingsChanged) {
             project = (yield* updateProject({
               id: project.id,
@@ -639,20 +610,12 @@ const ProviderLive = () =>
                 Effect.catchTag("Conflict", () =>
                   defaultDatabase(projectId).pipe(
                     Effect.flatMap((database) =>
-                      requireDefaultDatabaseInRegion(
-                        database,
-                        name,
-                        desiredRegion,
-                      ),
+                      requireDefaultDatabaseInRegion(database, name, desiredRegion),
                     ),
                   ),
                 ),
               );
-              database = yield* requireDefaultDatabaseInRegion(
-                created,
-                name,
-                desiredRegion,
-              );
+              database = yield* requireDefaultDatabaseInRegion(created, name, desiredRegion);
               secrets = extractConnectionSecrets(created.connections[0]);
             }
           }
@@ -663,11 +626,9 @@ const ProviderLive = () =>
           if (defaultDatabaseChanged) {
             const changedDatabaseId = database?.id;
             if (changedDatabaseId === undefined) {
-              return yield* Effect.fail(
-                new DefaultDatabaseConsistencyError(
-                  `Prisma project '${name}' did not return an identifier for its new default database.`,
-                ),
-              );
+              return yield* new DefaultDatabaseConsistencyError({
+                message: `Prisma project '${name}' did not return an identifier for its new default database.`,
+              });
             }
             const observed = yield* observeDesiredDefaultDatabase(
               name,
@@ -680,9 +641,7 @@ const ProviderLive = () =>
           }
 
           const persistedSecrets =
-            output &&
-            database !== undefined &&
-            output.databaseId === database.id
+            output && database !== undefined && output.databaseId === database.id
               ? {
                   directConnectionString: output.directConnectionString,
                   pooledConnectionString: output.pooledConnectionString,
@@ -692,24 +651,17 @@ const ProviderLive = () =>
                   password: output.password,
                 }
               : {};
-          const knownSecrets = mergeConnectionSecrets(
-            secrets,
-            persistedSecrets,
-          );
+          const knownSecrets = mergeConnectionSecrets(secrets, persistedSecrets);
           let finalSecrets = knownSecrets;
           if (
             database &&
             (recoverCreateSecrets ||
-              (ownedGeneratedIdentity &&
-                !hasCanonicalConnectionSecrets(knownSecrets)) ||
+              (ownedGeneratedIdentity && !hasCanonicalConnectionSecrets(knownSecrets)) ||
               defaultDatabaseChanged ||
               olds !== undefined ||
               news.rotateCredentialsOnAdopt === true)
           ) {
-            const recovered = yield* recoverDatabaseConnectionSecrets(
-              database,
-              knownSecrets,
-            );
+            const recovered = yield* recoverDatabaseConnectionSecrets(database, knownSecrets);
             database = recovered.database;
             finalSecrets = recovered.secrets;
           }
@@ -731,13 +683,9 @@ const ProviderLocal = () =>
     workspaceId: devId("workspace", "local"),
     createdAt: DEV_TIMESTAMP,
     defaultRegion:
-      news.createDatabase === false
-        ? (news.region ?? null)
-        : (news.region ?? "us-east-1"),
-    databaseId:
-      news.createDatabase === false ? undefined : devId("database", id),
-    defaultConnectionId:
-      news.createDatabase === false ? undefined : devId("connection", id),
+      news.createDatabase === false ? (news.region ?? null) : (news.region ?? "us-east-1"),
+    databaseId: news.createDatabase === false ? undefined : devId("database", id),
+    defaultConnectionId: news.createDatabase === false ? undefined : devId("connection", id),
     directConnectionString: undefined,
     pooledConnectionString: undefined,
     accelerateConnectionString: undefined,

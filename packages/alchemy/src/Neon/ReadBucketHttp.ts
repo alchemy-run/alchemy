@@ -4,9 +4,7 @@ import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 import { makeStorageBinding, storageHttpLayer } from "./StorageBinding.ts";
 
 export const makeReadBucketClient = (
-  client: Effect.Success<
-    ReturnType<Effect.Success<ReturnType<typeof makeStorageBinding>>>
-  >,
+  client: Effect.Success<ReturnType<Effect.Success<ReturnType<typeof makeStorageBinding>>>>,
 ): ReadBucketClient => ({
   get: client.get,
   head: client.head,

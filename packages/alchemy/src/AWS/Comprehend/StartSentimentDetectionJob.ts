@@ -63,7 +63,6 @@ export interface StartSentimentDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StartSentimentDetectionJob =
-  Binding.Service<StartSentimentDetectionJob>(
-    "AWS.Comprehend.StartSentimentDetectionJob",
-  );
+export const StartSentimentDetectionJob = Binding.Service<StartSentimentDetectionJob>(
+  "AWS.Comprehend.StartSentimentDetectionJob",
+);

@@ -1,10 +1,10 @@
+import { describe, expect, registerFileCleanup } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Interaction } from "@/Interaction.ts";
 import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect, registerFileCleanup } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 /**
  * Contract tests for the test harness's sidecar topology (see
@@ -66,9 +66,7 @@ live.test(
   "test runtimes provide a non-interactive Interaction",
   Effect.gen(function* () {
     const interaction = yield* Interaction;
-    const failure = yield* Effect.flip(
-      interaction.prompt.confirm({ message: "?" }),
-    );
+    const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "?" }));
     expect(failure._tag).toBe("NonInteractiveTerminal");
   }),
   { tags: ["provider:cloudflare", "local"] },
@@ -119,8 +117,7 @@ live.afterAll(
 registerFileCleanup({
   body: () =>
     Effect.sync(() => {
-      if (cleanupOrder.length > 0)
-        expect(cleanupOrder).toEqual(["user", "scope"]);
+      if (cleanupOrder.length > 0) expect(cleanupOrder).toEqual(["user", "scope"]);
       cleanupOrder.length = 0;
     }),
 });

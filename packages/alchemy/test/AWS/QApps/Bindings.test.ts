@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as qapps from "@distilled.cloud/aws/qapps";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import QAppsTestFunctionLive, {
-  QAppsTestFunction,
-} from "./bindings-handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import QAppsTestFunctionLive, { QAppsTestFunction } from "./bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test } = Test.make(testOptions);
@@ -43,10 +41,7 @@ describe(
   "QApps data-plane operations (typed-error probes)",
   { tags: ["provider:aws", "provider:aws:qapps", "live"] },
   () => {
-    const probes: Record<
-      string,
-      Effect.Effect<unknown, { _tag: string }, any>
-    > = {
+    const probes: Record<string, Effect.Effect<unknown, { _tag: string }, any>> = {
       startQAppSession: qapps.startQAppSession({
         instanceId: NONEXISTENT_INSTANCE,
         appId: NONEXISTENT_ID,
@@ -57,9 +52,7 @@ describe(
         sessionId: NONEXISTENT_ID,
       }),
       listQApps: qapps.listQApps({ instanceId: NONEXISTENT_INSTANCE }),
-      listCategories: qapps.listCategories({
-        instanceId: NONEXISTENT_INSTANCE,
-      }),
+      listCategories: qapps.listCategories({ instanceId: NONEXISTENT_INSTANCE }),
       batchCreateCategory: qapps.batchCreateCategory({
         instanceId: NONEXISTENT_INSTANCE,
         categories: [{ title: "alchemy-probe" }],
@@ -124,16 +117,11 @@ test.provider.skipIf(!process.env.AWS_TEST_QAPPS)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -143,18 +131,12 @@ test.provider.skipIf(!process.env.AWS_TEST_QAPPS)(
         expect(bindings.bound).toHaveLength(6);
 
         // ListQApps — instance-level builder, instance-id header injection.
-        const apps = (yield* getJson("/apps")) as {
-          count?: number;
-          errorTag?: string;
-        };
+        const apps = (yield* getJson("/apps")) as { count?: number; errorTag?: string };
         expect(apps.errorTag).toBeUndefined();
         expect(apps.count).toBeGreaterThanOrEqual(1);
 
         // ListCategories — instance-level builder.
-        const categories = (yield* getJson("/categories")) as {
-          count?: number;
-          errorTag?: string;
-        };
+        const categories = (yield* getJson("/categories")) as { count?: number; errorTag?: string };
         expect(categories.errorTag).toBeUndefined();
 
         // DescribeQAppPermissions — app-scoped builder, app-id injection.
@@ -174,8 +156,5 @@ test.provider.skipIf(!process.env.AWS_TEST_QAPPS)(
         expect(session.sessionId).toBeTruthy();
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));
     }),
-  {
-    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:qapps", "live"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:qapps", "live"], timeout: 600_000 },
 );

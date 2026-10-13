@@ -14,9 +14,7 @@ export const ai = Effect.gen(function* () {
     env: {
       EXAMPLE_API_KEY: yield* Config.Redacted("NEON_EXAMPLE_API_KEY"),
       AI_MODEL: yield* Config.String("NEON_AI_MODEL"),
-      AI_ALLOW_PAID: yield* Config.String("NEON_AI_ALLOW_PAID").pipe(
-        Config.withDefault("false"),
-      ),
+      AI_ALLOW_PAID: yield* Config.String("NEON_AI_ALLOW_PAID").pipe(Config.withDefault("false")),
     },
   });
   const effect = yield* EffectApi;

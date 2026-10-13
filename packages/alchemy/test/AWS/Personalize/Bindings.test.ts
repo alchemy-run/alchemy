@@ -1,16 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as personalize from "@distilled.cloud/aws/personalize";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import PersonalizeTestFunctionLive, {
-  PersonalizeTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import PersonalizeTestFunctionLive, { PersonalizeTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,19 +16,11 @@ const sharedStack = Core.scratchStack(testOptions, "PersonalizeBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let resourceArns:
-  | {
-      group: string;
-      tracker: string;
-      datasets: string[];
-      schemas: string[];
-    }
+  | { group: string; tracker: string; datasets: string[]; schemas: string[] }
   | undefined;
 
 // Well-formed-but-nonexistent ARNs the probe routes are driven against —
@@ -53,10 +43,7 @@ const probeArns = Effect.gen(function* () {
 // plausible inputs can surface InvalidInputException. Both are typed tags
 // decoded inside the Lambda — an IAM gap or schema break would surface a
 // different tag (AccessDeniedException / UnknownAwsError) and fail.
-const EXPECTED_PROBE_TAGS = [
-  "ResourceNotFoundException",
-  "InvalidInputException",
-];
+const EXPECTED_PROBE_TAGS = ["ResourceNotFoundException", "InvalidInputException"];
 
 const getJson = (path: string) =>
   HttpClient.get(`${baseUrl}${path}`).pipe(
@@ -66,10 +53,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -89,8 +73,7 @@ const routeTag = (path: string) =>
     }),
   );
 
-const probeTag = (path: string, arn: string) =>
-  routeTag(`${path}?arn=${encodeURIComponent(arn)}`);
+const probeTag = (path: string, arn: string) => routeTag(`${path}?arn=${encodeURIComponent(arn)}`);
 
 // Create-probes that pass a data-access role: use a nonexistent role in OUR
 // account so the service validates (and 404s) the primary resource rather
@@ -106,20 +89,11 @@ const probeTagWithRole = (path: string, arn: string) =>
 
 describe.sequential(
   "Personalize Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:personalize",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:personalize", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Personalize test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Personalize test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Personalize test setup: deploying fixture");
@@ -130,21 +104,11 @@ describe.sequential(
         );
 
         // Resolve this generation's references before destroy removes its state.
-        const refOptions = {
-          stack: sharedStack.name,
-          stage: sharedStack.stage,
-        };
-        const group = yield* AWS.Personalize.DatasetGroup.ref(
-          "BindingsGroup",
-          refOptions,
-        );
-        const tracker = yield* AWS.Personalize.EventTracker.ref(
-          "Tracker",
-          refOptions,
-        );
-        const datasets = yield* Effect.forEach(
-          ["Interactions", "Items", "Users"],
-          (id) => AWS.Personalize.Dataset.ref(id, refOptions),
+        const refOptions = { stack: sharedStack.name, stage: sharedStack.stage };
+        const group = yield* AWS.Personalize.DatasetGroup.ref("BindingsGroup", refOptions);
+        const tracker = yield* AWS.Personalize.EventTracker.ref("Tracker", refOptions);
+        const datasets = yield* Effect.forEach(["Interactions", "Items", "Users"], (id) =>
+          AWS.Personalize.Dataset.ref(id, refOptions),
         );
         const schemas = yield* Effect.forEach(
           ["InteractionsSchema", "ItemsSchema", "UsersSchema"],
@@ -153,12 +117,8 @@ describe.sequential(
         resourceArns = yield* Effect.all({
           group: Output.evaluate(group.datasetGroupArn, {}),
           tracker: Output.evaluate(tracker.eventTrackerArn, {}),
-          datasets: Effect.forEach(datasets, (dataset) =>
-            Output.evaluate(dataset.datasetArn, {}),
-          ),
-          schemas: Effect.forEach(schemas, (schema) =>
-            Output.evaluate(schema.schemaArn, {}),
-          ),
+          datasets: Effect.forEach(datasets, (dataset) => Output.evaluate(dataset.datasetArn, {})),
+          schemas: Effect.forEach(schemas, (schema) => Output.evaluate(schema.schemaArn, {})),
         }).pipe(Effect.provide(sharedStack.state));
 
         expect(functionUrl).toBeTruthy();
@@ -169,9 +129,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -187,14 +145,10 @@ describe.sequential(
         yield* Effect.forEach(
           [
             personalize
-              .describeDatasetGroup({
-                datasetGroupArn: resourceArns.group,
-              })
+              .describeDatasetGroup({ datasetGroupArn: resourceArns.group })
               .pipe(Effect.asVoid),
             personalize
-              .describeEventTracker({
-                eventTrackerArn: resourceArns.tracker,
-              })
+              .describeEventTracker({ eventTrackerArn: resourceArns.tracker })
               .pipe(Effect.asVoid),
             ...resourceArns.datasets.map((datasetArn) =>
               personalize.describeDataset({ datasetArn }).pipe(Effect.asVoid),
@@ -206,9 +160,7 @@ describe.sequential(
           (describe) =>
             describe.pipe(
               Effect.as(false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (gone) => gone,
@@ -223,12 +175,9 @@ describe.sequential(
       sharedStack.name,
     );
 
-    afterAll(
-      sharedStack
-        .destroy()
-        .pipe(Effect.andThen(assertPersonalizeResourcesGone)),
-      { timeout: 420_000 },
-    );
+    afterAll(sharedStack.destroy().pipe(Effect.andThen(assertPersonalizeResourcesGone)), {
+      timeout: 420_000,
+    });
 
     describe("binding registration", () => {
       test.provider("all nineteen capabilities initialize in the runtime", () =>
@@ -267,24 +216,20 @@ describe.sequential(
     });
 
     describe("PutActions", () => {
-      test.provider(
-        "surfaces a typed tag when the bound dataset is not an Actions dataset",
-        () =>
-          Effect.gen(function* () {
-            const tag = yield* routeTag("/put-actions-probe");
-            expect(EXPECTED_PROBE_TAGS).toContain(tag);
-          }),
+      test.provider("surfaces a typed tag when the bound dataset is not an Actions dataset", () =>
+        Effect.gen(function* () {
+          const tag = yield* routeTag("/put-actions-probe");
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
       );
     });
 
     describe("PutActionInteractions", () => {
-      test.provider(
-        "surfaces a typed tag without an Action interactions dataset",
-        () =>
-          Effect.gen(function* () {
-            const tag = yield* routeTag("/put-action-interactions-probe");
-            expect(EXPECTED_PROBE_TAGS).toContain(tag);
-          }),
+      test.provider("surfaces a typed tag without an Action interactions dataset", () =>
+        Effect.gen(function* () {
+          const tag = yield* routeTag("/put-action-interactions-probe");
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
       );
     });
 
@@ -312,10 +257,7 @@ describe.sequential(
       test.provider("surfaces a typed tag for a nonexistent campaign", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/action-recommendations-probe",
-            arns.campaign,
-          );
+          const tag = yield* probeTag("/action-recommendations-probe", arns.campaign);
           expect(EXPECTED_PROBE_TAGS).toContain(tag);
         }),
       );
@@ -325,10 +267,7 @@ describe.sequential(
       test.provider("rejects a nonexistent dataset with a typed tag", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
-          const tag = yield* probeTagWithRole(
-            "/import-create-probe",
-            arns.dataset,
-          );
+          const tag = yield* probeTagWithRole("/import-create-probe", arns.dataset);
           expect(EXPECTED_PROBE_TAGS).toContain(tag);
         }),
       );
@@ -345,17 +284,12 @@ describe.sequential(
     });
 
     describe("CreateSolution", () => {
-      test.provider(
-        "rejects a nonexistent dataset group with a typed tag",
-        () =>
-          Effect.gen(function* () {
-            const arns = yield* probeArns;
-            const tag = yield* probeTag(
-              "/solution-create-probe",
-              arns.datasetGroup,
-            );
-            expect(EXPECTED_PROBE_TAGS).toContain(tag);
-          }),
+      test.provider("rejects a nonexistent dataset group with a typed tag", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const tag = yield* probeTag("/solution-create-probe", arns.datasetGroup);
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
       );
     });
 
@@ -363,10 +297,7 @@ describe.sequential(
       test.provider("rejects a nonexistent solution with a typed tag", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/solution-version-create-probe",
-            arns.solution,
-          );
+          const tag = yield* probeTag("/solution-version-create-probe", arns.solution);
           expect(EXPECTED_PROBE_TAGS).toContain(tag);
         }),
       );
@@ -376,10 +307,7 @@ describe.sequential(
       test.provider("surfaces a typed tag for a nonexistent version", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/solution-version-probe",
-            arns.solutionVersion,
-          );
+          const tag = yield* probeTag("/solution-version-probe", arns.solutionVersion);
           expect(EXPECTED_PROBE_TAGS).toContain(tag);
         }),
       );
@@ -389,27 +317,19 @@ describe.sequential(
       test.provider("surfaces a typed tag for a nonexistent version", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
-          const tag = yield* probeTag(
-            "/solution-metrics-probe",
-            arns.solutionVersion,
-          );
+          const tag = yield* probeTag("/solution-metrics-probe", arns.solutionVersion);
           expect(EXPECTED_PROBE_TAGS).toContain(tag);
         }),
       );
     });
 
     describe("CreateCampaign", () => {
-      test.provider(
-        "rejects a nonexistent solution version with a typed tag",
-        () =>
-          Effect.gen(function* () {
-            const arns = yield* probeArns;
-            const tag = yield* probeTag(
-              "/campaign-create-probe",
-              arns.solutionVersion,
-            );
-            expect(EXPECTED_PROBE_TAGS).toContain(tag);
-          }),
+      test.provider("rejects a nonexistent solution version with a typed tag", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const tag = yield* probeTag("/campaign-create-probe", arns.solutionVersion);
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
       );
     });
 
@@ -434,17 +354,12 @@ describe.sequential(
     });
 
     describe("CreateBatchInferenceJob", () => {
-      test.provider(
-        "rejects a nonexistent solution version with a typed tag",
-        () =>
-          Effect.gen(function* () {
-            const arns = yield* probeArns;
-            const tag = yield* probeTagWithRole(
-              "/batch-create-probe",
-              arns.solutionVersion,
-            );
-            expect(EXPECTED_PROBE_TAGS).toContain(tag);
-          }),
+      test.provider("rejects a nonexistent solution version with a typed tag", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const tag = yield* probeTagWithRole("/batch-create-probe", arns.solutionVersion);
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
       );
     });
 

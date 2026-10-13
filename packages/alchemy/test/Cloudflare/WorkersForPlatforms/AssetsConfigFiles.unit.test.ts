@@ -1,21 +1,18 @@
-import {
-  mergeAssetsConfigFiles,
-  readAssetsConfigFiles,
-} from "@/Cloudflare/Workers/Assets.ts";
 import { PutDispatchNamespaceScriptRequest } from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { buildRequest } from "@distilled.cloud/core/protocol-http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import { mergeAssetsConfigFiles, readAssetsConfigFiles } from "@/Cloudflare/Workers/Assets.ts";
 
 const directory = pathe.resolve(import.meta.dirname, "fixtures/assets-config");
 
-layer(NodeServices.layer)(
-  "dispatch asset configuration serialization",
-  (it) => {
-    for (const keepAssets of [false, true]) {
-      it.effect(`preserves file rules with keepAssets=${keepAssets}`, () =>
+layer(NodeServices.layer)("dispatch asset configuration serialization", (it) => {
+  for (const keepAssets of [false, true]) {
+    it.effect(
+      `preserves file rules with keepAssets=${keepAssets}`,
+      () =>
         Effect.gen(function* () {
           const files = yield* readAssetsConfigFiles(directory);
           const config = mergeAssetsConfigFiles(undefined, files);
@@ -50,7 +47,7 @@ layer(NodeServices.layer)(
             },
           });
         }),
-      );
-    }
-  },
-);
+      { tags: ["unit", "provider:cloudflare", "provider:cloudflare:workersforplatforms", "local"] },
+    );
+  }
+});

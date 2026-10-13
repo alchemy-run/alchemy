@@ -125,9 +125,7 @@ export interface RotationSchedule extends Resource<
  *
  * @resource
  */
-export const RotationSchedule = Resource<RotationSchedule>(
-  "AWS.SecretsManager.RotationSchedule",
-);
+export const RotationSchedule = Resource<RotationSchedule>("AWS.SecretsManager.RotationSchedule");
 
 /**
  * Bounded retry while Secrets Manager can't yet invoke the rotation Lambda
@@ -157,11 +155,7 @@ export const RotationScheduleProvider = () =>
       const readRotation = Effect.fn(function* (secretId: string) {
         return yield* secretsmanager
           .describeSecret({ SecretId: secretId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -178,11 +172,7 @@ export const RotationScheduleProvider = () =>
             return undefined;
           }
           const described = yield* readRotation(secretId);
-          if (
-            !described?.ARN ||
-            !described.Name ||
-            !described.RotationEnabled
-          ) {
+          if (!described?.ARN || !described.Name || !described.RotationEnabled) {
             return undefined;
           }
           return {
@@ -216,8 +206,7 @@ export const RotationScheduleProvider = () =>
           return {
             secretArn: described?.ARN ?? secretArn,
             secretName: described?.Name ?? rotated.Name ?? secretId,
-            rotationLambdaArn:
-              described?.RotationLambdaARN ?? news.rotationLambdaArn,
+            rotationLambdaArn: described?.RotationLambdaARN ?? news.rotationLambdaArn,
             rotationEnabled: described?.RotationEnabled === true,
           };
         }),
@@ -251,10 +240,7 @@ export const RotationScheduleProvider = () =>
                     ): entry is secretsmanager.SecretListEntry & {
                       ARN: string;
                       Name: string;
-                    } =>
-                      entry.ARN != null &&
-                      entry.Name != null &&
-                      entry.RotationEnabled === true,
+                    } => entry.ARN != null && entry.Name != null && entry.RotationEnabled === true,
                   )
                   .map((entry) => ({
                     secretArn: entry.ARN,

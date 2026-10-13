@@ -10,24 +10,17 @@ import { isResolved } from "../../Diff.ts";
 import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import {
-  isResourceOfType,
-  Resource,
-  type ResourceClass,
-} from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Providers } from "../Providers.ts";
+import { isResourceOfType, Resource, type ResourceClass } from "../../Resource.ts";
 import type { Model } from "../AI/Model.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Variant } from "../Images/Variant.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { Providers } from "../Providers.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { SuperSlurperJob } from "../R2/SuperSlurperJob.ts";
 import type { Index } from "../Vectorize/VectorizeIndex.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import type {
-  WorkflowBinding,
-  WorkflowResource,
-} from "../Workflows/Workflow.ts";
+import type { WorkflowBinding, WorkflowResource } from "../Workflows/Workflow.ts";
 
 const TypeId = "Cloudflare.Queues.Subscription" as const;
 type TypeId = typeof TypeId;
@@ -76,6 +69,14 @@ export type SubscriptionSource =
       type: "workflows.workflow";
       /** Name of the workflow to subscribe to. */
       workflowName: string;
+    }
+  | {
+      /** Email Sending lifecycle events for one sending domain. */
+      type: "email.sending";
+      /** Zone the sending domain belongs to. */
+      zoneId: string;
+      /** The zone apex or a verified sending subdomain, e.g. `mail.example.com`. */
+      domain: string;
     };
 
 export type SubscriptionProps = {
@@ -184,22 +185,14 @@ export type SubscriptionInput = Omit<
   "source" | "sourceAccountId"
 > & {
   /** An explicit source, Workflow binding, resource, or yielded resource reference. */
-  source:
-    | PropsInput<SubscriptionProps>["source"]
-    | WorkflowBinding
-    | SubscriptionResourceSource;
+  source: PropsInput<SubscriptionProps>["source"] | WorkflowBinding | SubscriptionResourceSource;
 };
 
 type SubscriptionConstructor<Req = never> = {
   Type: TypeId;
   Props: SubscriptionProps;
-  <const Methods extends Record<string, any>>(
-    methods: Methods,
-  ): SubscriptionClass & Methods;
-  (
-    id: string,
-    props: SubscriptionInput,
-  ): Effect.Effect<Subscription, never, Req>;
+  <const Methods extends Record<string, any>>(methods: Methods): SubscriptionClass & Methods;
+  (id: string, props: SubscriptionInput): Effect.Effect<Subscription, never, Req>;
   <PropsReq = never>(
     id: string,
     props: Effect.Effect<SubscriptionInput, never, PropsReq>,
@@ -217,19 +210,14 @@ const SubscriptionResource = Resource<Subscription>(TypeId, {
 const isSourceResource = <Type extends SubscriptionResourceSource["Type"]>(
   source: SubscriptionInput["source"],
   type: Type,
-): source is Extract<SubscriptionResourceSource, { Type: Type }> =>
-  isResourceOfType(source, type);
+): source is Extract<SubscriptionResourceSource, { Type: Type }> => isResourceOfType(source, type);
 
-const isWorkflowBinding = (
-  source: SubscriptionInput["source"],
-): source is WorkflowBinding =>
+const isWorkflowBinding = (source: SubscriptionInput["source"]): source is WorkflowBinding =>
   typeof source === "object" &&
   source !== null &&
   (source as WorkflowBinding).kind === "Cloudflare.Workflow";
 
-const normalizeSubscriptionProps = (
-  props: SubscriptionInput,
-): PropsInput<SubscriptionProps> => {
+const normalizeSubscriptionProps = (props: SubscriptionInput): PropsInput<SubscriptionProps> => {
   const source = props.source;
   // Resource references are Output proxies; inspect their type before binding fields.
   if (isSourceResource(source, "Cloudflare.Workflow")) {
@@ -304,9 +292,7 @@ export class SubscriptionSourceAccountMismatch extends Data.TaggedError(
 
 const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
   sourceAccountId !== undefined && sourceAccountId !== accountId
-    ? Effect.fail(
-        new SubscriptionSourceAccountMismatch({ accountId, sourceAccountId }),
-      )
+    ? Effect.fail(new SubscriptionSourceAccountMismatch({ accountId, sourceAccountId }))
     : Effect.void;
 
 /**
@@ -387,6 +373,15 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
  *   source: { type: "workflows.workflow", workflowName: "existing-ingestion" },
  *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Bounces and complaints from an Email Sending domain
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("MailEvents", {
+ *   source: { type: "email.sending", zoneId: zone.zoneId, domain: "mail.example.com" },
+ *   events: ["message.bounced", "message.complained"],
  *   queueId: queue.queueId,
  * });
  * ```
@@ -507,12 +502,7 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
 export const Subscription: SubscriptionClass = Object.assign(
   (
     ...args:
-      | [
-          id: string,
-          props:
-            | SubscriptionInput
-            | Effect.Effect<SubscriptionInput, never, any>,
-        ]
+      | [id: string, props: SubscriptionInput | Effect.Effect<SubscriptionInput, never, any>]
       | [methods: Record<string, any>]
   ) => {
     if (typeof args[0] === "object") {
@@ -530,8 +520,7 @@ export const Subscription: SubscriptionClass = Object.assign(
   SubscriptionResource,
   Effectable.Prototype({
     label: `Resource<${TypeId}>`,
-    evaluate: (): Effect.Effect<SubscriptionConstructor> =>
-      Effect.succeed(Subscription),
+    evaluate: (): Effect.Effect<SubscriptionConstructor> => Effect.succeed(Subscription),
   }),
 ) as SubscriptionClass;
 
@@ -572,10 +561,7 @@ export const SubscriptionProvider = () =>
       const acct = output?.accountId ?? accountId;
 
       if (output?.subscriptionId) {
-        const observed = yield* getSubscriptionOrUndefined(
-          acct,
-          output.subscriptionId,
-        );
+        const observed = yield* getSubscriptionOrUndefined(acct, output.subscriptionId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
       // Cold read — recover from lost state by matching the deterministic
@@ -671,15 +657,10 @@ type ObservedSubscription =
  * Read a subscription by ID, mapping "gone" (`SubscriptionNotFound`,
  * HTTP 404 "No subscription with this ID") to `undefined`.
  */
-const getSubscriptionOrUndefined = (
-  accountId: string,
-  subscriptionId: string,
-) =>
+const getSubscriptionOrUndefined = (accountId: string, subscriptionId: string) =>
   queues
     .getSubscription({ accountId, subscriptionId })
-    .pipe(
-      Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a subscription by exact name. Cloudflare's list endpoint has no
@@ -706,6 +687,8 @@ type WireSource = {
   modelName?: string | null;
   workerName?: string | null;
   workflowName?: string | null;
+  zoneId?: string | null;
+  domain?: string | null;
 };
 
 const toSource = (wire: unknown): SubscriptionSource => {
@@ -722,6 +705,12 @@ const toSource = (wire: unknown): SubscriptionSource => {
       return {
         type: "workflows.workflow",
         workflowName: source.workflowName ?? "",
+      };
+    case "email.sending":
+      return {
+        type: "email.sending",
+        zoneId: source.zoneId ?? "",
+        domain: source.domain ?? "",
       };
     case "images":
     case "kv":
@@ -745,6 +734,10 @@ const sameSource = (a: SubscriptionSource, b: SubscriptionSource): boolean => {
       return a.workerName === (b as { workerName?: string }).workerName;
     case "workflows.workflow":
       return a.workflowName === (b as { workflowName?: string }).workflowName;
+    case "email.sending": {
+      const other = b as { zoneId?: string; domain?: string };
+      return a.zoneId === other.zoneId && a.domain === other.domain;
+    }
     default:
       return true;
   }

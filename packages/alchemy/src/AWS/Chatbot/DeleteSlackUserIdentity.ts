@@ -30,10 +30,7 @@ export interface DeleteSlackUserIdentity extends Binding.Service<
   () => Effect.Effect<
     (
       request: chatbot.DeleteSlackUserIdentityRequest,
-    ) => Effect.Effect<
-      chatbot.DeleteSlackUserIdentityResult,
-      chatbot.DeleteSlackUserIdentityError
-    >
+    ) => Effect.Effect<chatbot.DeleteSlackUserIdentityResult, chatbot.DeleteSlackUserIdentityError>
   >
 > {}
 

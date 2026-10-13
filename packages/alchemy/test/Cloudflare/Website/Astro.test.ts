@@ -1,6 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,25 +9,19 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/astro-app");
-const staticFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/astro-static-app",
-);
+const staticFixtureDir = pathe.resolve(import.meta.dirname, "fixtures/astro-static-app");
 
 // Keep the temp clone under the alchemy package so the project root stays
 // within the workspace (same constraint as the Vite tests) and so the
@@ -55,23 +46,14 @@ const fetchSession = (url: string, cookie?: string) =>
       const res = await fetch(u, {
         signal,
         cache: "no-store",
-        headers: {
-          "cache-control": "no-cache",
-          accept: "*/*",
-          ...(cookie ? { cookie } : {}),
-        },
+        headers: { "cache-control": "no-cache", accept: "*/*", ...(cookie ? { cookie } : {}) },
       });
       const body = await res.text();
-      const sessionCookie = res.headers
-        .get("set-cookie")
-        ?.match(/astro-session=[^;,\s]+/)?.[0];
+      const sessionCookie = res.headers.get("set-cookie")?.match(/astro-session=[^;,\s]+/)?.[0];
       return { status: res.status, body, sessionCookie };
     },
     catch: (e) =>
-      new SessionFetchFailed({
-        url,
-        message: e instanceof Error ? e.message : String(e),
-      }),
+      new SessionFetchFailed({ url, message: e instanceof Error ? e.message : String(e) }),
   });
 
 class AstroResponseMismatch extends Data.TaggedError("AstroResponseMismatch")<{
@@ -84,10 +66,7 @@ class AstroResponseMismatch extends Data.TaggedError("AstroResponseMismatch")<{
 }
 
 const responseRetry = Effect.retry({
-  schedule: Schedule.min([
-    Schedule.exponential("1 second", 1.5),
-    Schedule.spaced("8 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("1 second", 1.5), Schedule.spaced("8 seconds")]),
   times: 8,
 });
 
@@ -115,10 +94,7 @@ const expectMiddlewareLocals = (url: string) =>
       };
     },
     catch: (e) =>
-      new AstroResponseMismatch({
-        url,
-        detail: e instanceof Error ? e.message : String(e),
-      }),
+      new AstroResponseMismatch({ url, detail: e instanceof Error ? e.message : String(e) }),
   }).pipe(
     Effect.filterOrFail(
       (r) =>
@@ -152,10 +128,7 @@ const expectImmutableAsset = (assetUrl: string) =>
         headers: { "cache-control": "no-cache", accept: "*/*" },
       });
       await res.arrayBuffer();
-      return {
-        status: res.status,
-        cacheControl: res.headers.get("cache-control"),
-      };
+      return { status: res.status, cacheControl: res.headers.get("cache-control") };
     },
     catch: (e) =>
       new AstroResponseMismatch({
@@ -164,9 +137,7 @@ const expectImmutableAsset = (assetUrl: string) =>
       }),
   }).pipe(
     Effect.filterOrFail(
-      (r) =>
-        r.status === 200 &&
-        r.cacheControl === "public, max-age=31536000, immutable",
+      (r) => r.status === 200 && r.cacheControl === "public, max-age=31536000, immutable",
       (r) =>
         new AstroResponseMismatch({
           url: assetUrl,
@@ -177,9 +148,7 @@ const expectImmutableAsset = (assetUrl: string) =>
   );
 
 /** The exact payload `src/pages/api/binary.ts` serves. */
-const BINARY_BYTES = [
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
-];
+const BINARY_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03];
 
 /**
  * Fetch the binary endpoint and assert the exact bytes and content type
@@ -202,10 +171,7 @@ const expectBinaryEndpoint = (url: string) =>
       };
     },
     catch: (e) =>
-      new AstroResponseMismatch({
-        url,
-        detail: e instanceof Error ? e.message : String(e),
-      }),
+      new AstroResponseMismatch({ url, detail: e instanceof Error ? e.message : String(e) }),
   }).pipe(
     Effect.filterOrFail(
       (r) =>
@@ -239,18 +205,11 @@ const expectFormPostEcho = (url: string, message: string) =>
       return { status: res.status, body: await res.text() };
     },
     catch: (e) =>
-      new AstroResponseMismatch({
-        url,
-        detail: e instanceof Error ? e.message : String(e),
-      }),
+      new AstroResponseMismatch({ url, detail: e instanceof Error ? e.message : String(e) }),
   }).pipe(
     Effect.filterOrFail(
       (r) => r.status === 200 && r.body.includes(`received: ${message}`),
-      (r) =>
-        new AstroResponseMismatch({
-          url,
-          detail: `${r.status} ${r.body.slice(0, 240)}`,
-        }),
+      (r) => new AstroResponseMismatch({ url, detail: `${r.status} ${r.body.slice(0, 240)}` }),
     ),
     responseRetry,
   );
@@ -316,19 +275,12 @@ const kvRoundTrip = (base: string, key: string, value: string) =>
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
   yield* kv.getNamespace({ accountId, namespaceId }).pipe(
     Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
     Effect.retry({
-      while: (e): e is NamespaceStillExists =>
-        e instanceof NamespaceStillExists,
-      schedule: Schedule.min([
-        Schedule.exponential(250),
-        Schedule.spaced("2 seconds"),
-      ]),
+      while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+      schedule: Schedule.min([Schedule.exponential(250), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -372,12 +324,7 @@ describe.concurrent(
           // the unchanged-rebuild memo assertion below. Workspace-aware
           // memoization has its own dedicated test in Vite.test.ts.
           const memo = {
-            include: [
-              "src/**",
-              "public/**",
-              "package.json",
-              "astro.config.mjs",
-            ],
+            include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
             workspaces: [],
           };
 
@@ -401,16 +348,12 @@ describe.concurrent(
                   compatibility: { date: "2026-03-10" },
                   memo,
                   env: { TEST_MARKER: marker, SITE_KV: siteKv },
-                  assets: {
-                    htmlHandling: "auto-trailing-slash",
-                    notFoundHandling: "none",
-                  },
+                  assets: { htmlHandling: "auto-trailing-slash", notFoundHandling: "none" },
                 });
                 // Resource creation dedupes by logical id, so this returns the
                 // session namespace the Astro resource auto-provisioned — a
                 // handle for the out-of-band lifecycle assertions below.
-                const sessions =
-                  yield* Cloudflare.KV.Namespace("AstroSiteSession");
+                const sessions = yield* Cloudflare.KV.Namespace("AstroSiteSession");
                 return { site, sessions, siteKv };
               }),
             );
@@ -428,23 +371,15 @@ describe.concurrent(
           });
           // Prerendered page served from static assets. Keep the body — the
           // hashed-asset assertion below extracts the `/_astro/*.css` href.
-          const aboutBody = yield* expectUrlContains(
-            `${site1.url!}/about/`,
-            "prerendered-page",
-            {
-              timeout: "60 seconds",
-              label: "prerendered page",
-            },
-          );
+          const aboutBody = yield* expectUrlContains(`${site1.url!}/about/`, "prerendered-page", {
+            timeout: "60 seconds",
+            label: "prerendered page",
+          });
           // Plain static asset from public/.
-          yield* expectUrlContains(
-            `${site1.url!}/static.txt`,
-            "astro-static-asset",
-            {
-              timeout: "60 seconds",
-              label: "static asset",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/static.txt`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "static asset",
+          });
 
           // ── sessions: the SESSION KV namespace is auto-provisioned and
           // `Astro.session` round-trips through it ───────────────────────────
@@ -473,10 +408,7 @@ describe.concurrent(
                   message: `expected 200, got ${res.status}: ${res.body.slice(0, 240)}`,
                 }),
             ),
-            Effect.retry({
-              schedule: Schedule.exponential("1 second", 1.5),
-              times: 8,
-            }),
+            Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
           );
           expect(first.status).toBe(200);
           expect(first.body).toContain("session-count=1");
@@ -484,10 +416,7 @@ describe.concurrent(
 
           // Replaying the session cookie must observe the previous request's
           // KV write. Retry through KV's (brief, same-colo) read lag.
-          const second = yield* fetchSession(
-            `${site1.url!}/session`,
-            first.sessionCookie,
-          ).pipe(
+          const second = yield* fetchSession(`${site1.url!}/session`, first.sessionCookie).pipe(
             Effect.filterOrFail(
               (res) => res.body.includes("session-count=2"),
               (res) =>
@@ -496,10 +425,7 @@ describe.concurrent(
                   message: `expected session-count=2, got: ${res.body.slice(0, 240)}`,
                 }),
             ),
-            Effect.retry({
-              schedule: Schedule.exponential("1 second", 1.5),
-              times: 8,
-            }),
+            Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
           );
           expect(second.body).toContain("session-count=2");
 
@@ -534,15 +460,10 @@ describe.concurrent(
             .pipe(
               Effect.flatMap((res) =>
                 Effect.tryPromise(() =>
-                  new Response(
-                    Stream.toReadableStream(res.body) as BodyInit,
-                  ).text(),
+                  new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
                 ),
               ),
-              Effect.retry({
-                schedule: Schedule.exponential("1 second", 1.5),
-                times: 8,
-              }),
+              Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
             );
           expect(observed).toBe(marker);
 
@@ -602,9 +523,7 @@ describe.concurrent(
       { tags: ["provider:cloudflare:kv"], timeout: 420_000 },
     );
 
-    class NotFoundPageMismatch extends Data.TaggedError(
-      "NotFoundPageMismatch",
-    )<{
+    class NotFoundPageMismatch extends Data.TaggedError("NotFoundPageMismatch")<{
       url: string;
       actual: string;
     }> {}
@@ -630,25 +549,16 @@ describe.concurrent(
           return { status: res.status, body };
         },
         catch: (e) =>
-          new NotFoundPageMismatch({
-            url,
-            actual: e instanceof Error ? e.message : String(e),
-          }),
+          new NotFoundPageMismatch({ url, actual: e instanceof Error ? e.message : String(e) }),
       }).pipe(
         Effect.filterOrFail(
           (res) => res.status === 404 && res.body.includes(marker),
           (res) =>
-            new NotFoundPageMismatch({
-              url,
-              actual: `${res.status} ${res.body.slice(0, 240)}`,
-            }),
+            new NotFoundPageMismatch({ url, actual: `${res.status} ${res.body.slice(0, 240)}` }),
         ),
         Effect.retry({
           schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("750 millis", 1.5),
-              Schedule.spaced("8 seconds"),
-            ]),
+            Schedule.min([Schedule.exponential("750 millis", 1.5), Schedule.spaced("8 seconds")]),
             Schedule.recurs(15),
           ]),
         }),
@@ -685,10 +595,7 @@ describe.concurrent(
           // Same discipline as the SSR test above: pin the input hash to the
           // fixture so concurrent development in this repo can't bust the
           // unchanged-rebuild memo assertion.
-          const memo = {
-            include: ["src/**", "public/**", "package.json"],
-            workspaces: [],
-          };
+          const memo = { include: ["src/**", "public/**", "package.json"], workspaces: [] };
 
           const deploy = () =>
             stack.deploy(
@@ -723,36 +630,25 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "static about page",
           });
-          yield* expectUrlContains(
-            `${site1.url!}/static.txt`,
-            "astro-static-public-asset",
-            {
-              timeout: "60 seconds",
-              label: "public asset",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/static.txt`, "astro-static-public-asset", {
+            timeout: "60 seconds",
+            label: "public asset",
+          });
 
           // Unknown routes get the BUILT 404.html with a real 404 status —
           // Cloudflare's asset layer applies `notFoundHandling` itself; no
           // Worker script is involved.
-          yield* expectNotFoundPage(
-            `${site1.url!}/definitely-not-a-page`,
-            "static-404",
-          );
+          yield* expectNotFoundPage(`${site1.url!}/definitely-not-a-page`, "static-404");
 
           // Session auto-provisioning is skipped for declared-static sites:
           // no KV namespace titled for this stack's session id may exist.
           // (Physical titles embed the logical id verbatim:
           // `{stack}-AstroStaticSiteSession-{stage}-{suffix}`.)
-          const sessionNamespace = yield* kv.listNamespaces
-            .items({ accountId })
-            .pipe(
-              Stream.filter((ns) =>
-                ns.title.includes("AstroStaticSiteSession"),
-              ),
-              Stream.runHead,
-              Effect.map(Option.getOrUndefined),
-            );
+          const sessionNamespace = yield* kv.listNamespaces.items({ accountId }).pipe(
+            Stream.filter((ns) => ns.title.includes("AstroStaticSiteSession")),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
           expect(sessionNamespace).toBeUndefined();
 
           // ── deploy 2: nothing changed ⇒ memo hit, still assets-only ────────
@@ -766,10 +662,7 @@ describe.concurrent(
           // and the deploy REMAINS assets-only ───────────────────────────────
           const indexPath = path.join(rootDir, "src/pages/index.astro");
           const source = yield* fs.readFileString(indexPath);
-          yield* fs.writeFileString(
-            indexPath,
-            source.replace("static-home", "static-home-v2"),
-          );
+          yield* fs.writeFileString(indexPath, source.replace("static-home", "static-home-v2"));
 
           const site3 = yield* deploy();
           expect(site3.hash?.input).toBeDefined();
@@ -815,10 +708,7 @@ describe.concurrent(
                 rootDir,
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
-                memo: {
-                  include: ["src/**", "public/**", "package.json"],
-                  workspaces: [],
-                },
+                memo: { include: ["src/**", "public/**", "package.json"], workspaces: [] },
                 astro: { output: "static" },
                 assets: { notFoundHandling: "single-page-application" },
               });
@@ -843,34 +733,23 @@ describe.concurrent(
           const deepLinkBody = yield* expectUrlContains(
             `${site.url!}/spa/definitely/not/a/route`,
             "static-home",
-            {
-              timeout: "60 seconds",
-              label: "deep link serves SPA shell",
-            },
+            { timeout: "60 seconds", label: "deep link serves SPA shell" },
           );
           expect(deepLinkBody).not.toContain("static-404");
 
           // (b) A real prerendered page still serves its own content, not
           // the shell.
-          const aboutBody = yield* expectUrlContains(
-            `${site.url!}/about/`,
-            "static-about",
-            {
-              timeout: "60 seconds",
-              label: "real page still serves",
-            },
-          );
+          const aboutBody = yield* expectUrlContains(`${site.url!}/about/`, "static-about", {
+            timeout: "60 seconds",
+            label: "real page still serves",
+          });
           expect(aboutBody).not.toContain("static-home");
 
           // (c) A real static asset still serves normally.
-          yield* expectUrlContains(
-            `${site.url!}/static.txt`,
-            "astro-static-public-asset",
-            {
-              timeout: "60 seconds",
-              label: "static asset with SPA handling",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/static.txt`, "astro-static-public-asset", {
+            timeout: "60 seconds",
+            label: "static asset with SPA handling",
+          });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);

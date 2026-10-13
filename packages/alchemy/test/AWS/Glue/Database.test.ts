@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Database } from "@/AWS/Glue";
-import * as Test from "@/Test/Alchemy";
 import * as glue from "@distilled.cloud/aws/glue";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Database } from "@/AWS/Glue";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,9 +30,7 @@ test.provider(
       );
 
       expect(created.databaseName).toBeDefined();
-      expect(created.databaseArn).toContain(
-        `:database/${created.databaseName}`,
-      );
+      expect(created.databaseArn).toContain(`:database/${created.databaseName}`);
       expect(created.catalogId).toBeDefined();
 
       // out-of-band verification

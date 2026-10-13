@@ -1,23 +1,20 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN sites (and their LANs) are entitlement-gated. On the standard
 // testing account every Magic Transit call fails with the typed
-// `MagicWanUnauthorized` error (Cloudflare code 1025) or `Forbidden` (403)
-// depending on token scope. `list()` catches `MagicWanUnauthorized` and
+// `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+// (code 1101, "forbidden: feature not enabled"). `list()` catches both tags and
 // returns `[]`, so the read-only list assertion below always runs; the live
 // deploy+enumerate case is gated behind an explicit opt-in env flag for
 // entitled accounts.
@@ -29,9 +26,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteLan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteLan);
       const all = yield* provider.list();
 
       // Either the exhaustively-paginated LANs (entitled) or [] (unentitled).
@@ -72,9 +67,7 @@ test.provider.skipIf(!entitled)(
 
       expect(deployed.lan.lanId).toBeTruthy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSiteLan,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSiteLan);
       const all = yield* provider.list();
 
       // The deployed LAN is present in the exhaustively-paginated result,

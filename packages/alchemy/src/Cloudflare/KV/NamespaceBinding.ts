@@ -1,6 +1,7 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import type { InstantNamespace } from "./InstantNamespace.ts";
 import type { Namespace } from "./Namespace.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -20,7 +21,7 @@ export const makeKVNamespaceBinding = <Client>(options: {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: Namespace | InstantNamespace) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${namespace}`({
           bindings: [
@@ -40,16 +41,14 @@ export const makeKVNamespaceBinding = <Client>(options: {
 /** Primitives shared by the read and write halves of the binding client. */
 export const makeKVNamespaceHelpers = (
   env: Record<string, any>,
-  namespace: Namespace,
+  namespace: Namespace | InstantNamespace,
 ) => {
   const raw = Effect.sync(
     // Lazy — the WorkerEnvironment binding is not populated until runtime.
     () => (env as Record<string, runtime.KVNamespace>)[namespace.LogicalId]!,
   );
 
-  const tryPromise = <T>(
-    fn: () => Promise<T>,
-  ): Effect.Effect<T, NamespaceError> =>
+  const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, NamespaceError> =>
     Effect.tryPromise({
       try: fn,
       catch: (error: any) =>

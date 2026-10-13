@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as detective from "@distilled.cloud/aws/detective";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DetectiveTestFunctionLive, { DetectiveTestFunction } from "./handler";
 import { makeDetectiveTestLease } from "./TestLease.ts";
 
@@ -21,10 +21,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let roleArn: string;
@@ -50,31 +47,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -104,14 +92,9 @@ describe.sequential(
     beforeAll(
       Effect.gen(function* () {
         // Never take over a behavior graph this fixture did not create.
-        const preexisting = (yield* aws(detective.listGraphs({})))
-          .GraphList?.[0];
+        const preexisting = (yield* aws(detective.listGraphs({}))).GraphList?.[0];
         if (preexisting?.Arn) {
-          const tags = yield* aws(
-            detective.listTagsForResource({
-              ResourceArn: preexisting.Arn,
-            }),
-          );
+          const tags = yield* aws(detective.listTagsForResource({ ResourceArn: preexisting.Arn }));
           if (tags.Tags?.["fixture"] !== "detective-bindings") {
             foreignGraphArn = preexisting.Arn;
             yield* Effect.logInfo(
@@ -121,9 +104,7 @@ describe.sequential(
           }
         }
 
-        yield* Effect.logInfo(
-          "Detective test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Detective test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Detective test setup: deploying fixture");
@@ -143,21 +124,15 @@ describe.sequential(
         expect(graphArn).toContain(":graph:");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Detective test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Detective test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Detective test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Detective test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -187,17 +162,15 @@ describe.sequential(
     });
 
     describe("ListMembers", () => {
-      test.provider(
-        "enumerates the graph's member accounts (injected graph arn)",
-        (_stack) =>
-          Effect.gen(function* () {
-            if (yield* skipForeign()) return;
-            // An organization account may see auto-enabled members even on a
-            // freshly created graph, so assert shape rather than emptiness.
-            const response = (yield* getJson("/members")) as { count: number };
-            expect(typeof response.count).toBe("number");
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("enumerates the graph's member accounts (injected graph arn)", (_stack) =>
+        Effect.gen(function* () {
+          if (yield* skipForeign()) return;
+          // An organization account may see auto-enabled members even on a
+          // freshly created graph, so assert shape rather than emptiness.
+          const response = (yield* getJson("/members")) as { count: number };
+          expect(typeof response.count).toBe("number");
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
@@ -221,9 +194,7 @@ describe.sequential(
       test.provider("the graph ingests the core package", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const response = (yield* getJson("/datasources")) as {
-            packages: string[];
-          };
+          const response = (yield* getJson("/datasources")) as { packages: string[] };
           expect(response.packages).toContain("DETECTIVE_CORE");
         }),
       );
@@ -241,10 +212,9 @@ describe.sequential(
           if (response.errorTag) {
             // A non-member account id may be rejected outright instead of
             // reported as unprocessed.
-            expect([
-              "ValidationException",
-              "ResourceNotFoundException",
-            ]).toContain(response.errorTag);
+            expect(["ValidationException", "ResourceNotFoundException"]).toContain(
+              response.errorTag,
+            );
           } else {
             expect(response.memberDatasources).toBe(0);
           }
@@ -256,9 +226,7 @@ describe.sequential(
       test.provider("a fresh graph has no investigations", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const response = (yield* getJson("/investigations")) as {
-            count: number;
-          };
+          const response = (yield* getJson("/investigations")) as { count: number };
           expect(response.count).toBe(0);
         }),
       );
@@ -290,47 +258,35 @@ describe.sequential(
     });
 
     describe("ListInvitations", () => {
-      test.provider(
-        "enumerates this account's behavior-graph invitations",
-        (_stack) =>
-          Effect.gen(function* () {
-            if (yield* skipForeign()) return;
-            // The shared test account can carry standing invitations from
-            // other admin accounts — assert shape rather than emptiness.
-            const response = (yield* getJson("/invitations")) as {
-              count: number;
-            };
-            expect(typeof response.count).toBe("number");
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("enumerates this account's behavior-graph invitations", (_stack) =>
+        Effect.gen(function* () {
+          if (yield* skipForeign()) return;
+          // The shared test account can carry standing invitations from
+          // other admin accounts — assert shape rather than emptiness.
+          const response = (yield* getJson("/invitations")) as { count: number };
+          expect(typeof response.count).toBe("number");
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
     describe("BatchGetMembershipDatasources", () => {
-      test.provider(
-        "the admin account is not a member of its own graph",
-        (_stack) =>
-          Effect.gen(function* () {
-            if (yield* skipForeign()) return;
-            const response = (yield* getJson(
-              `/membership-datasources?graphArn=${encodeURIComponent(graphArn)}`,
-            )) as {
-              membershipDatasources?: number;
-              unprocessedGraphs?: number;
-              errorTag?: string;
-            };
-            if (response.errorTag) {
-              expect([
-                "ValidationException",
-                "ResourceNotFoundException",
-              ]).toContain(response.errorTag);
-            } else {
-              expect(
-                (response.membershipDatasources ?? 0) +
-                  (response.unprocessedGraphs ?? 0),
-              ).toBeGreaterThanOrEqual(0);
-            }
-          }),
+      test.provider("the admin account is not a member of its own graph", (_stack) =>
+        Effect.gen(function* () {
+          if (yield* skipForeign()) return;
+          const response = (yield* getJson(
+            `/membership-datasources?graphArn=${encodeURIComponent(graphArn)}`,
+          )) as { membershipDatasources?: number; unprocessedGraphs?: number; errorTag?: string };
+          if (response.errorTag) {
+            expect(["ValidationException", "ResourceNotFoundException"]).toContain(
+              response.errorTag,
+            );
+          } else {
+            expect(
+              (response.membershipDatasources ?? 0) + (response.unprocessedGraphs ?? 0),
+            ).toBeGreaterThanOrEqual(0);
+          }
+        }),
       );
     });
 
@@ -371,10 +327,7 @@ describe.sequential(
               errorTag?: string;
             };
             if (response.errorTag) {
-              expect([
-                "ValidationException",
-                "AccessDeniedException",
-              ]).toContain(response.errorTag);
+              expect(["ValidationException", "AccessDeniedException"]).toContain(response.errorTag);
             } else {
               expect(response.administrators).toBeGreaterThanOrEqual(0);
             }

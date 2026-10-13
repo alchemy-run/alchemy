@@ -6,10 +6,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { RailwayS3CredentialsMissing } from "./BucketBinding.ts";
 
-export interface HeadObjectRequest extends Omit<
-  S3.HeadObjectRequest,
-  "Bucket"
-> {}
+export interface HeadObjectRequest extends Omit<S3.HeadObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for Railway `HeadObject` over the S3 API.

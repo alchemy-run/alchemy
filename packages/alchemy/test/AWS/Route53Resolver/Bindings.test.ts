@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import Route53ResolverBindingsFunctionLive, {
-  Route53ResolverBindingsFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import Route53ResolverBindingsFunctionLive, { Route53ResolverBindingsFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "Route53ResolverBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,31 +33,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "Route53Resolver Bindings",
@@ -78,9 +64,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Route53Resolver test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Route53Resolver test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Route53Resolver test setup: deploying fixture");
@@ -94,16 +78,12 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Route53Resolver test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Route53Resolver test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -116,9 +96,7 @@ describe.sequential(
       { timeout: 420_000 },
     );
 
-    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
-      timeout: 420_000,
-    });
+    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), { timeout: 420_000 });
 
     describe("binding registration", () => {
       test.provider("all 5 capabilities initialize in the runtime", (_stack) =>
@@ -135,19 +113,17 @@ describe.sequential(
     });
 
     describe("GetResolverEndpoint", () => {
-      test.provider(
-        "reads the bound endpoint's live state (ID injected)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/endpoint")) as {
-              status: string;
-              direction: string;
-              ipAddressCount: number;
-            };
-            expect(response.direction).toBe("OUTBOUND");
-            expect(response.status).toBe("OPERATIONAL");
-            expect(response.ipAddressCount).toBe(2);
-          }),
+      test.provider("reads the bound endpoint's live state (ID injected)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/endpoint")) as {
+            status: string;
+            direction: string;
+            ipAddressCount: number;
+          };
+          expect(response.direction).toBe("OUTBOUND");
+          expect(response.status).toBe("OPERATIONAL");
+          expect(response.ipAddressCount).toBe(2);
+        }),
       );
     });
 
@@ -188,9 +164,7 @@ describe.sequential(
         "fails the rule over to a new target IP at runtime",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* postJson(
-              "/rule/target?ip=10.100.0.11",
-            )) as {
+            const response = (yield* postJson("/rule/target?ip=10.100.0.11")) as {
               status: string;
               targetIps: string[];
             };
@@ -213,18 +187,14 @@ describe.sequential(
     });
 
     describe("ListResolverRuleAssociations", () => {
-      test.provider(
-        "lists the bound rule's VPC associations (filter injected)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/rule/associations")) as {
-              count: number;
-            };
-            // The fixture never associates the rule with a VPC — an empty,
-            // successfully-authorized listing proves the wiring and the
-            // rule-scoped IAM grant.
-            expect(response.count).toBe(0);
-          }),
+      test.provider("lists the bound rule's VPC associations (filter injected)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/rule/associations")) as { count: number };
+          // The fixture never associates the rule with a VPC — an empty,
+          // successfully-authorized listing proves the wiring and the
+          // rule-scoped IAM grant.
+          expect(response.count).toBe(0);
+        }),
       );
     });
   },

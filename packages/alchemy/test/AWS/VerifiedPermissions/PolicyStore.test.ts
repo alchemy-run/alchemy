@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Policy, PolicyStore, Schema } from "@/AWS/VerifiedPermissions";
-import * as Test from "@/Test/Alchemy";
 import * as avp from "@distilled.cloud/aws/verifiedpermissions";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Policy, PolicyStore, Schema } from "@/AWS/VerifiedPermissions";
+import * as Test from "@/Test/Alchemy";
 
 const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
   v === undefined ? undefined : Redacted.isRedacted(v) ? Redacted.value(v) : v;
@@ -16,29 +16,17 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findStore = (policyStoreId: string) =>
   avp
     .getPolicyStore({ policyStoreId, tags: true })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const findPolicy = (policyStoreId: string, policyId: string) =>
   avp
     .getPolicy({ policyStoreId, policyId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const findSchema = (policyStoreId: string) =>
   avp
     .getSchema({ policyStoreId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class StoreStillExists extends Data.TaggedError("StoreStillExists")<{
   readonly policyStoreId: string;
@@ -47,16 +35,11 @@ class StoreStillExists extends Data.TaggedError("StoreStillExists")<{
 const assertStoreDeleted = (policyStoreId: string) =>
   findStore(policyStoreId).pipe(
     Effect.flatMap((store) =>
-      store === undefined
-        ? Effect.void
-        : Effect.fail(new StoreStillExists({ policyStoreId })),
+      store === undefined ? Effect.void : Effect.fail(new StoreStillExists({ policyStoreId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "StoreStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -138,17 +121,12 @@ test.provider(
       const createdSchema = yield* findSchema(store.policyStoreId);
       expect(unwrap(createdSchema?.schema)).toContain("PhotoApp");
 
-      const createdPolicy = yield* findPolicy(
-        store.policyStoreId,
-        policy.policyId,
-      );
+      const createdPolicy = yield* findPolicy(store.policyStoreId, policy.policyId);
       expect(createdPolicy?.policyType).toBe("STATIC");
 
       // update: store validation mode OFF + description, and the policy's
       // description in place (policyId is stable)
-      const updated = yield* stack.deploy(
-        makeStack("OFF", "updated app", "updated policy"),
-      );
+      const updated = yield* stack.deploy(makeStack("OFF", "updated app", "updated policy"));
       expect(updated.store.policyStoreId).toBe(store.policyStoreId);
       expect(updated.policy.policyId).toBe(policy.policyId);
 

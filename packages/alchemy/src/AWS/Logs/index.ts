@@ -4,11 +4,7 @@ export * from "./DeleteLogStream.ts";
 export * from "./DeleteLogStreamHttp.ts";
 export * from "./DescribeLogStreams.ts";
 export * from "./DescribeLogStreamsHttp.ts";
-export {
-  Destination,
-  DestinationProvider,
-  type DestinationProps,
-} from "./Destination.ts";
+export { Destination, DestinationProvider, type DestinationProps } from "./Destination.ts";
 export * from "./FilterLogEvents.ts";
 export * from "./FilterLogEventsHttp.ts";
 export * from "./GetLogEvents.ts";

@@ -1,22 +1,20 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import crypto from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const retryAuthBlip = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
@@ -40,7 +38,10 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -84,18 +85,12 @@ test.provider(
       const creds = yield* r2Credentials;
       const deployed = yield* retryAuthBlip(stack.deploy(etl(creds)));
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Pipelines.Pipeline,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Pipelines.Pipeline);
       const all = yield* provider.list();
 
       // Each element is the full `read` Attributes shape, usable by delete.
-      expect(
-        all.some((p) => p.pipelineId === deployed.pipeline.pipelineId),
-      ).toBe(true);
-      const found = all.find(
-        (p) => p.pipelineId === deployed.pipeline.pipelineId,
-      )!;
+      expect(all.some((p) => p.pipelineId === deployed.pipeline.pipelineId)).toBe(true);
+      const found = all.find((p) => p.pipelineId === deployed.pipeline.pipelineId)!;
       expect(found.name).toEqual(deployed.pipeline.name);
       expect(found.sql).toEqual(deployed.pipeline.sql);
       expect(found.accountId).toEqual(deployed.pipeline.accountId);

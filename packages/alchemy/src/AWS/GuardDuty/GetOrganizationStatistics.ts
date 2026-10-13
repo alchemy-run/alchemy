@@ -34,7 +34,6 @@ export interface GetOrganizationStatistics extends Binding.Service<
     >
   >
 > {}
-export const GetOrganizationStatistics =
-  Binding.Service<GetOrganizationStatistics>(
-    "AWS.GuardDuty.GetOrganizationStatistics",
-  );
+export const GetOrganizationStatistics = Binding.Service<GetOrganizationStatistics>(
+  "AWS.GuardDuty.GetOrganizationStatistics",
+);

@@ -1,16 +1,17 @@
-import * as AWS from "@/AWS";
-import { PublicDnsNamespace } from "@/AWS/CloudMap";
-import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { PublicDnsNamespace } from "@/AWS/CloudMap";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// A public DNS namespace creates a real Route 53 public hosted zone (billed
-// while it exists, and only useful with a domain you control), so the live
-// lifecycle is opt-in.
-test.provider.skipIf(!process.env.AWS_TEST_CLOUDMAP_PUBLIC)(
+// A public DNS namespace creates a real Route 53 public hosted zone. Route 53
+// does not charge for a hosted zone deleted within 12 hours of creation, and
+// the test destroys it immediately (~75s end to end). Opt out with
+// AWS_TEST_CLOUDMAP_PUBLIC=0.
+test.provider.skipIf(process.env.AWS_TEST_CLOUDMAP_PUBLIC === "0")(
   "create and delete public DNS namespace",
   (stack) =>
     Effect.gen(function* () {

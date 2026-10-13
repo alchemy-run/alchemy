@@ -36,10 +36,7 @@ export interface BatchDeleteCategory extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchDeleteCategoryRequest,
-    ) => Effect.Effect<
-      qapps.BatchDeleteCategoryResponse,
-      qapps.BatchDeleteCategoryError
-    >
+    ) => Effect.Effect<qapps.BatchDeleteCategoryResponse, qapps.BatchDeleteCategoryError>
   >
 > {}
 

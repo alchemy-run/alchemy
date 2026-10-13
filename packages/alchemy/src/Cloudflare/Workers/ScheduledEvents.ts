@@ -2,11 +2,8 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
-import {
-  ensureAlarmTables,
-  reconcileDurableObjectAlarm,
-} from "./DurableObjectAlarmStorage.ts";
 import type { SqlStorageValue } from "./DurableObjectStorage.ts";
 
 // ---------------------------------------------------------------------------
@@ -66,14 +63,16 @@ export const scheduleEvent = Effect.fn(function* (
   yield* ensureTable;
   const ctx = yield* DurableObjectState;
 
-  yield* ctx.storage.sql.exec(
-    `INSERT OR REPLACE INTO alchemy_scheduled_events (id, run_at, repeat_ms, payload)
+  yield* ctx.storage.sql
+    .exec(
+      `INSERT OR REPLACE INTO alchemy_scheduled_events (id, run_at, repeat_ms, payload)
      VALUES (?, ?, ?, ?)`,
-    id,
-    runAt.getTime(),
-    repeatMs ?? null,
-    JSON.stringify(payload),
-  );
+      id,
+      runAt.getTime(),
+      repeatMs ?? null,
+      JSON.stringify(payload),
+    )
+    .pipe(Effect.asVoid);
 
   yield* reconcileAlarm;
 }, inTransaction);
@@ -85,10 +84,9 @@ export const cancelEvent = Effect.fn(function* (id: string) {
   yield* ensureTable;
   const ctx = yield* DurableObjectState;
 
-  yield* ctx.storage.sql.exec(
-    `DELETE FROM alchemy_scheduled_events WHERE id = ?`,
-    id,
-  );
+  yield* ctx.storage.sql
+    .exec(`DELETE FROM alchemy_scheduled_events WHERE id = ?`, id)
+    .pipe(Effect.asVoid);
 
   yield* reconcileAlarm;
 }, inTransaction);
@@ -146,16 +144,15 @@ export const processScheduledEvents: Effect.Effect<
   const rows = yield* cursor.toArray();
   const fired: ScheduledEvent[] = [];
   for (const row of rows) {
-    yield* row.repeat_ms != null
-      ? ctx.storage.sql.exec(
-          `UPDATE alchemy_scheduled_events SET run_at = ? WHERE id = ?`,
-          now + row.repeat_ms,
-          row.id,
-        )
-      : ctx.storage.sql.exec(
-          `DELETE FROM alchemy_scheduled_events WHERE id = ?`,
-          row.id,
-        );
+    yield* Effect.asVoid(
+      row.repeat_ms != null
+        ? ctx.storage.sql.exec(
+            `UPDATE alchemy_scheduled_events SET run_at = ? WHERE id = ?`,
+            now + row.repeat_ms,
+            row.id,
+          )
+        : ctx.storage.sql.exec(`DELETE FROM alchemy_scheduled_events WHERE id = ?`, row.id),
+    );
     fired.push(toScheduledEvent(row));
   }
 
@@ -166,12 +163,10 @@ export const processScheduledEvents: Effect.Effect<
 /**
  * Set the DO alarm to the earliest pending event, or clear it if none remain.
  */
-const reconcileAlarm: Effect.Effect<
-  void,
-  never,
-  DurableObjectState | RuntimeContext
-> = Effect.gen(function* () {
-  const ctx = yield* DurableObjectState;
+const reconcileAlarm: Effect.Effect<void, never, DurableObjectState | RuntimeContext> = Effect.gen(
+  function* () {
+    const ctx = yield* DurableObjectState;
 
-  yield* reconcileDurableObjectAlarm(ctx.raw.storage);
-});
+    yield* reconcileDurableObjectAlarm(ctx.raw.storage);
+  },
+);

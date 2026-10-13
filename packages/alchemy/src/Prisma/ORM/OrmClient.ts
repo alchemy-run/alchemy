@@ -20,14 +20,10 @@ import { type ClientError, wrapPrismaError } from "./Errors.ts";
 
 type AnyContract = Contract<SqlStorage>;
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-type InitialState<Ns extends string> = Omit<
-  DefaultCollectionTypeState,
-  "nsId"
-> & {
+type InitialState<Ns extends string> = Omit<DefaultCollectionTypeState, "nsId"> & {
   readonly nsId: Ns;
 };
-type WithState<S extends CollectionTypeState, Patch> = Omit<S, keyof Patch> &
-  Patch;
+type WithState<S extends CollectionTypeState, Patch> = Omit<S, keyof Patch> & Patch;
 type Args<F> = F extends {
   (...args: infer A): unknown;
   (...args: infer B): unknown;
@@ -59,11 +55,9 @@ type RootRow<C extends AnyContract, Ns extends string, M extends string> = [
   ? DefaultModelRow<C, M, Ns>
   : NativeRow<Root<C, Ns, M>>;
 
-export type WhereFilter<
-  C extends AnyContract,
-  M extends string,
-  Ns extends string,
-> = Args<Native<C, M, DefaultModelRow<C, M, Ns>, InitialState<Ns>>["where"]>[0];
+export type WhereFilter<C extends AnyContract, M extends string, Ns extends string> = Args<
+  Native<C, M, DefaultModelRow<C, M, Ns>, InitialState<Ns>>["where"]
+>[0];
 
 /** Buffer a query with `yield*`, or consume its rows incrementally through `stream`. */
 export interface QueryResult<Row, E, R> extends Effect.Effect<Row[], E, R> {
@@ -75,20 +69,12 @@ type Relation<
   Ns extends string,
   M extends string,
   Rel extends string,
-> = Rel extends keyof RelationsOf<C, M, Ns>
-  ? RelationsOf<C, M, Ns>[Rel]
-  : never;
-type TargetNamespace<
-  C extends AnyContract,
-  Rel,
-  Ns extends string,
-> = Rel extends {
+> = Rel extends keyof RelationsOf<C, M, Ns> ? RelationsOf<C, M, Ns>[Rel] : never;
+type TargetNamespace<C extends AnyContract, Rel, Ns extends string> = Rel extends {
   readonly to: { readonly namespace: infer Target extends string };
 }
   ? {
-      [K in keyof C["domain"]["namespaces"] & string]: Target extends K
-        ? K
-        : never;
+      [K in keyof C["domain"]["namespaces"] & string]: Target extends K ? K : never;
     }[keyof C["domain"]["namespaces"] & string]
   : Ns;
 type RelatedRow<
@@ -109,9 +95,7 @@ type IncludeOwner<
   S extends CollectionTypeState,
 > = Rel extends RelationNames<C, M, Ns> ? M : S["variantName"] & string;
 type KeysOfUnion<T> = T extends unknown ? keyof T : never;
-type Cardinality<Rel> = Rel extends { readonly cardinality: infer Card }
-  ? Card
-  : "1:N";
+type Cardinality<Rel> = Rel extends { readonly cardinality: infer Card } ? Card : "1:N";
 type RelationValue<Rel, Row, Refined extends boolean = false> =
   Cardinality<Rel> extends "1:1" | "N:1"
     ? Refined extends true
@@ -173,12 +157,7 @@ type Model<
     ? C["domain"]["namespaces"][Ns]["models"][M]
     : never
   : never;
-type VariantRow<
-  C extends AnyContract,
-  Ns extends string,
-  M extends string,
-  V extends string,
-> =
+type VariantRow<C extends AnyContract, Ns extends string, M extends string, V extends string> =
   Model<C, Ns, M> extends {
     readonly discriminator: { readonly field: infer Field extends string };
     readonly variants: infer Variants;
@@ -205,15 +184,7 @@ export interface EffectCollection<
 > {
   where(
     ...args: Args<Native<C, M, Row, S>["where"]>
-  ): EffectCollection<
-    C,
-    Ns,
-    M,
-    Row,
-    WithState<S, { readonly hasWhere: true }>,
-    E,
-    R
-  >;
+  ): EffectCollection<C, Ns, M, Row, WithState<S, { readonly hasWhere: true }>, E, R>;
   variant<V extends Parameters<Native<C, M, Row, S>["variant"]>[0]>(
     name: V,
   ): EffectCollection<
@@ -245,26 +216,21 @@ export interface EffectCollection<
   >;
   include<
     Rel extends Parameters<Native<C, M, Row, S>["include"]>[0],
-    Refined extends (Cardinality<
-      Relation<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>
-    > extends "1:1" | "N:1"
+    Refined extends (Cardinality<Relation<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>> extends
+      | "1:1"
+      | "N:1"
       ? { readonly _row?: unknown }
       : RefinementResult),
   >(
     relation: Rel,
-    refine: (
-      collection: Refinement<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>,
-    ) => Refined,
+    refine: (collection: Refinement<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>) => Refined,
   ): EffectCollection<
     C,
     Ns,
     M,
     Simplify<
       Row & {
-        [K in Rel]: RefinedValue<
-          Relation<C, Ns, IncludeOwner<C, Ns, M, K, S>, K>,
-          Refined
-        >;
+        [K in Rel]: RefinedValue<Relation<C, Ns, IncludeOwner<C, Ns, M, K, S>, K>, Refined>;
       }
     >,
     S,
@@ -283,8 +249,7 @@ export interface EffectCollection<
     Ns,
     M,
     Simplify<
-      Pick<DefaultModelRow<C, M, Ns>, Fields[number]> &
-        Omit<Row, KeysOfUnion<RootRow<C, Ns, M>>>
+      Pick<DefaultModelRow<C, M, Ns>, Fields[number]> & Omit<Row, KeysOfUnion<RootRow<C, Ns, M>>>
     >,
     S,
     E,
@@ -292,15 +257,7 @@ export interface EffectCollection<
   >;
   orderBy(
     ...args: Parameters<Native<C, M, Row, S>["orderBy"]>
-  ): EffectCollection<
-    C,
-    Ns,
-    M,
-    Row,
-    WithState<S, { readonly hasOrderBy: true }>,
-    E,
-    R
-  >;
+  ): EffectCollection<C, Ns, M, Row, WithState<S, { readonly hasOrderBy: true }>, E, R>;
   cursor(
     ...args: Parameters<Native<C, M, Row, S>["cursor"]>
   ): EffectCollection<C, Ns, M, Row, S, E, R>;
@@ -320,24 +277,17 @@ export interface EffectCollection<
   >(
     ...fields: Fields
   ): EffectGroupedCollection<C, Ns, M, Fields, false, E, R>;
-  all(
-    ...args: Parameters<Native<C, M, Row, S>["all"]>
-  ): QueryResult<Row, ClientError | E, R>;
+  all(...args: Parameters<Native<C, M, Row, S>["all"]>): QueryResult<Row, ClientError | E, R>;
   first(
     ...args: Args<Native<C, M, Row, S>["first"]>
   ): Effect.Effect<Row | null, ClientError | E, R>;
   aggregate<Spec extends AggregateSpec>(
     fn: (aggregate: AggregateBuilder<C, M, Ns>) => Spec,
-    ...configure: Parameters<Native<C, M, Row, S>["aggregate"]> extends [
-      unknown,
-      ...infer Rest,
-    ]
+    ...configure: Parameters<Native<C, M, Row, S>["aggregate"]> extends [unknown, ...infer Rest]
       ? Rest
       : never
   ): Effect.Effect<AggregateResult<Spec>, ClientError | E, R>;
-  create(
-    ...args: Args<Native<C, M, Row, S>["create"]>
-  ): Effect.Effect<Row, ClientError | E, R>;
+  create(...args: Args<Native<C, M, Row, S>["create"]>): Effect.Effect<Row, ClientError | E, R>;
   createAll(
     ...args: Parameters<Native<C, M, Row, S>["createAll"]>
   ): QueryResult<Row, ClientError | E, R>;
@@ -357,21 +307,15 @@ export interface EffectCollection<
     ...args: Parameters<Native<C, M, Row, S>["updateAndCount"]>
   ): Effect.Effect<number, ClientError | E, R>;
   delete(
-    this: S["hasWhere"] extends true
-      ? EffectCollection<C, Ns, M, Row, S, E, R>
-      : never,
+    this: S["hasWhere"] extends true ? EffectCollection<C, Ns, M, Row, S, E, R> : never,
     ...args: Parameters<Native<C, M, Row, S>["delete"]>
   ): Effect.Effect<Row | null, ClientError | E, R>;
   deleteAll(
-    this: S["hasWhere"] extends true
-      ? EffectCollection<C, Ns, M, Row, S, E, R>
-      : never,
+    this: S["hasWhere"] extends true ? EffectCollection<C, Ns, M, Row, S, E, R> : never,
     ...args: Parameters<Native<C, M, Row, S>["deleteAll"]>
   ): QueryResult<Row, ClientError | E, R>;
   deleteAndCount(
-    this: S["hasWhere"] extends true
-      ? EffectCollection<C, Ns, M, Row, S, E, R>
-      : never,
+    this: S["hasWhere"] extends true ? EffectCollection<C, Ns, M, Row, S, E, R> : never,
     ...args: Parameters<Native<C, M, Row, S>["deleteAndCount"]>
   ): Effect.Effect<number, ClientError | E, R>;
 }
@@ -400,17 +344,14 @@ export interface EffectGroupedCollection<
   ): EffectGroupedCollection<C, Ns, M, Fields, Ordered, E, R>;
   aggregate<Spec extends AggregateSpec>(
     fn: (aggregate: AggregateBuilder<C, M, Ns>) => Spec,
-    ...configure: Parameters<
-      GroupedCollection<C, M, Fields, Ns, Ordered>["aggregate"]
-    > extends [unknown, ...infer Rest]
+    ...configure: Parameters<GroupedCollection<C, M, Fields, Ns, Ordered>["aggregate"]> extends [
+      unknown,
+      ...infer Rest,
+    ]
       ? Rest
       : never
   ): Effect.Effect<
-    Array<
-      Simplify<
-        Pick<DefaultModelRow<C, M, Ns>, Fields[number]> & AggregateResult<Spec>
-      >
-    >,
+    Array<Simplify<Pick<DefaultModelRow<C, M, Ns>, Fields[number]> & AggregateResult<Spec>>>,
     ClientError | E,
     R
   >;
@@ -418,9 +359,7 @@ export interface EffectGroupedCollection<
 
 export type EffectOrm<C extends AnyContract, E = never, R = never> = {
   readonly [Ns in keyof C["domain"]["namespaces"] & string]: {
-    readonly [
-      M in keyof C["domain"]["namespaces"][Ns]["models"] & string
-    ]: EffectCollection<
+    readonly [M in keyof C["domain"]["namespaces"][Ns]["models"] & string]: EffectCollection<
       C,
       Ns,
       M,
@@ -447,12 +386,7 @@ const TERMINALS = new Set([
   "deleteAll",
   "deleteAndCount",
 ]);
-const STREAMING_TERMINALS = new Set([
-  "all",
-  "createAll",
-  "updateAll",
-  "deleteAll",
-]);
+const STREAMING_TERMINALS = new Set(["all", "createAll", "updateAll", "deleteAll"]);
 interface PathStep {
   readonly prop: string;
   readonly args?: readonly unknown[];
@@ -460,16 +394,11 @@ interface PathStep {
 const replayPath = (base: unknown, path: readonly PathStep[]): unknown =>
   path.reduce<any>(
     (current, step) =>
-      step.args === undefined
-        ? current[step.prop]
-        : current[step.prop](...step.args),
+      step.args === undefined ? current[step.prop] : current[step.prop](...step.args),
     base,
   );
 
-const node = (
-  root: Effect.Effect<unknown, any, any>,
-  path: readonly PathStep[],
-): any =>
+const node = (root: Effect.Effect<unknown, any, any>, path: readonly PathStep[]): any =>
   new Proxy(function () {}, {
     get: (_target, prop) => {
       if (typeof prop !== "string" || prop === "then") return undefined;

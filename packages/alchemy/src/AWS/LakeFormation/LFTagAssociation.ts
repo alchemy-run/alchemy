@@ -6,10 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { retryWhileConcurrentModification } from "./internal.ts";
-import {
-  type LakeFormationResourceSpec,
-  toWireResource,
-} from "./ResourceSpec.ts";
+import { type LakeFormationResourceSpec, toWireResource } from "./ResourceSpec.ts";
 
 /**
  * An LF-tag value assignment. A resource holds exactly one value per tag key
@@ -35,9 +32,7 @@ export interface LFTagAssignmentSpec {
  * Lake Formation returns per-tag failures with a 200 response — surfaced as
  * a typed error so partial failures fail the deploy.
  */
-export class LFTagAssociationError extends Data.TaggedError(
-  "LFTagAssociationError",
-)<{
+export class LFTagAssociationError extends Data.TaggedError("LFTagAssociationError")<{
   message: string;
   failures: lf.LFTagError[];
 }> {}
@@ -103,9 +98,7 @@ export interface LFTagAssociation extends Resource<
  *
  * @resource
  */
-export const LFTagAssociation = Resource<LFTagAssociation>(
-  "AWS.LakeFormation.LFTagAssociation",
-);
+export const LFTagAssociation = Resource<LFTagAssociation>("AWS.LakeFormation.LFTagAssociation");
 
 const failuresToError = (
   operation: string,
@@ -130,18 +123,14 @@ const failuresToError = (
     : Effect.void;
 };
 
-const sortedValues = (values: string[] | undefined): string[] =>
-  [...(values ?? [])].sort();
+const sortedValues = (values: string[] | undefined): string[] => [...(values ?? [])].sort();
 
 export const LFTagAssociationProvider = () =>
   Provider.effect(
     LFTagAssociation,
     Effect.gen(function* () {
       /** Observed tag assignments on the resource, keyed by tag key. */
-      const observe = Effect.fn(function* (
-        resource: lf.Resource,
-        catalogId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (resource: lf.Resource, catalogId: string | undefined) {
         const response = yield* lf
           .getResourceLFTags({
             Resource: resource,
@@ -153,10 +142,7 @@ export const LFTagAssociationProvider = () =>
               Effect.succeed({} as lf.GetResourceLFTagsResponse),
             ),
           );
-        const pairs = [
-          ...(response.LFTagOnDatabase ?? []),
-          ...(response.LFTagsOnTable ?? []),
-        ];
+        const pairs = [...(response.LFTagOnDatabase ?? []), ...(response.LFTagsOnTable ?? [])];
         return new Map(pairs.map((p) => [p.TagKey, [...p.TagValues]]));
       });
 
@@ -167,14 +153,11 @@ export const LFTagAssociationProvider = () =>
 
         read: Effect.fn(function* ({ olds, output }) {
           const resource =
-            output?.resource ??
-            (olds !== undefined ? toWireResource(olds.resource) : undefined);
+            output?.resource ?? (olds !== undefined ? toWireResource(olds.resource) : undefined);
           if (resource === undefined) return undefined;
           const catalogId = output?.catalogId ?? olds?.catalogId;
           const observed = yield* observe(resource, catalogId);
-          const keys = (output?.lfTags ?? olds?.lfTags ?? []).map(
-            (t) => t.tagKey,
-          );
+          const keys = (output?.lfTags ?? olds?.lfTags ?? []).map((t) => t.tagKey);
           const held = keys.filter((k) => observed.has(k));
           if (held.length === 0) return undefined;
           return {
@@ -224,10 +207,7 @@ export const LFTagAssociationProvider = () =>
                 })),
               })
               .pipe(retryWhileConcurrentModification);
-            yield* failuresToError(
-              "RemoveLFTagsFromResource",
-              response.Failures,
-            );
+            yield* failuresToError("RemoveLFTagsFromResource", response.Failures);
           }
 
           //    Assign missing/changed values (AddLFTagsToResource overwrites
@@ -253,9 +233,7 @@ export const LFTagAssociationProvider = () =>
           }
 
           // 3. RETURN
-          yield* session.note(
-            news.lfTags.map((t) => `${t.tagKey}=${t.tagValues}`).join(", "),
-          );
+          yield* session.note(news.lfTags.map((t) => `${t.tagKey}=${t.tagValues}`).join(", "));
           return {
             resource,
             lfTags: news.lfTags.map((t) => ({
@@ -270,9 +248,7 @@ export const LFTagAssociationProvider = () =>
           // Observe first — only detach keys that are actually still
           // assigned (the tag or the parent resource may already be gone).
           const observed = yield* observe(output.resource, output.catalogId);
-          const keys = output.lfTags
-            .map((t) => t.tagKey)
-            .filter((k) => observed.has(k));
+          const keys = output.lfTags.map((t) => t.tagKey).filter((k) => observed.has(k));
           if (keys.length === 0) return;
           const response = yield* lf
             .removeLFTagsFromResource({

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListResourceSetResources}.
  */
-export interface ListResourceSetResourcesRequest
-  extends fms.ListResourceSetResourcesRequest {}
+export interface ListResourceSetResourcesRequest extends fms.ListResourceSetResourcesRequest {}
 
 /**
  * Runtime binding for `fms:ListResourceSetResources`.
@@ -32,12 +31,10 @@ export interface ListResourceSetResources extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListResourceSetResourcesRequest,
-    ) => Effect.Effect<
-      fms.ListResourceSetResourcesResponse,
-      fms.ListResourceSetResourcesError
-    >
+    ) => Effect.Effect<fms.ListResourceSetResourcesResponse, fms.ListResourceSetResourcesError>
   >
 > {}
 
-export const ListResourceSetResources =
-  Binding.Service<ListResourceSetResources>("AWS.FMS.ListResourceSetResources");
+export const ListResourceSetResources = Binding.Service<ListResourceSetResources>(
+  "AWS.FMS.ListResourceSetResources",
+);

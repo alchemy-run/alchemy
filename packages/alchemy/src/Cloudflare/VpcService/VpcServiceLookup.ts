@@ -2,7 +2,6 @@ import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import * as Output from "../../Output.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { formatVpcService, type Attributes } from "./VpcService.ts";
@@ -71,13 +70,11 @@ export const lookup = (props: VpcServiceLookupProps) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ("name" in props) {
-        const match = yield* connectivity.listDirectoryServices
-          .items({ accountId })
-          .pipe(
-            Stream.filter((s) => s.name === props.name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        const match = yield* connectivity.listDirectoryServices.items({ accountId }).pipe(
+          Stream.filter((s) => s.name === props.name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         if (!match) {
           return yield* Effect.die(`VPC service "${props.name}" not found`);
         }

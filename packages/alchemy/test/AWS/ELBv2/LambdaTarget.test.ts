@@ -1,3 +1,11 @@
+import { resolve4 } from "node:dns/promises";
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { SecurityGroupRule, type SecurityGroupId } from "@/AWS/EC2";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
@@ -9,37 +17,20 @@ import {
   TargetGroupAttachment,
 } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Alchemy";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import { resolve4 } from "node:dns/promises";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-import {
-  ApiTargetFunction,
-  ApiTargetFunctionLive,
-} from "./fixtures/api-handler.ts";
-import {
-  WebTargetFunction,
-  WebTargetFunctionLive,
-} from "./fixtures/web-handler.ts";
+import { ApiTargetFunction, ApiTargetFunctionLive } from "./fixtures/api-handler.ts";
+import { WebTargetFunction, WebTargetFunctionLive } from "./fixtures/web-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The flagship ELBv2 e2e: one internet-facing ALB routes two path patterns to
 // two different Lambda targets (no VPC targets, no NAT — Lambda targets prove
-// the rule routing end-to-end). AWS kept new ALBs in `provisioning` with
-// unresolvable DNS beyond the factory's bounded readiness budget under c128,
-// so this slow live lifecycle is opt-in. Set AWS_TEST_SLOW=1 to run it.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// the rule routing end-to-end). A new ALB stays in `provisioning` with an
+// unresolvable hostname for ~1-3 minutes, so the test waits for `active`
+// before resolving DNS (~2.5 min end to end) and is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "ALB routes two paths to two Lambda targets",
   (stack) =>
     Effect.gen(function* () {
@@ -70,18 +61,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           { Name: "group-name", Values: ["default"] },
         ],
       });
-      const defaultGroupId = groupResult.SecurityGroups?.[0]
-        ?.GroupId as SecurityGroupId;
+      const defaultGroupId = groupResult.SecurityGroups?.[0]?.GroupId as SecurityGroupId;
       expect(defaultGroupId).toBeTruthy();
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const apiFn = yield* ApiTargetFunction.pipe(
-            Effect.provide(ApiTargetFunctionLive),
-          );
-          const webFn = yield* WebTargetFunction.pipe(
-            Effect.provide(WebTargetFunctionLive),
-          );
+          const apiFn = yield* ApiTargetFunction.pipe(Effect.provide(ApiTargetFunctionLive));
+          const webFn = yield* WebTargetFunction.pipe(Effect.provide(WebTargetFunctionLive));
 
           // Add one stack-owned ingress rule to the standing default SG. The
           // ALB uses only pre-existing network containers, so teardown does
@@ -173,6 +159,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
           return {
             dnsName: lb.dnsName,
+            loadBalancerArn: lb.loadBalancerArn,
             apiTargetGroupArn: apiAttachment.targetGroupArn,
             webTargetGroupArn: webAttachment.targetGroupArn,
             apiFunctionArn: apiAttachment.targetId,
@@ -186,25 +173,31 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         TargetGroupArn: out.apiTargetGroupArn,
       });
       expect(
-        apiHealth.TargetHealthDescriptions?.some(
-          (d) => d.Target?.Id === out.apiFunctionArn,
-        ),
+        apiHealth.TargetHealthDescriptions?.some((d) => d.Target?.Id === out.apiFunctionArn),
       ).toBe(true);
       const webHealth = yield* elbv2.describeTargetHealth({
         TargetGroupArn: out.webTargetGroupArn,
       });
       expect(
-        webHealth.TargetHealthDescriptions?.some(
-          (d) => d.Target?.Id === out.webFunctionArn,
-        ),
+        webHealth.TargetHealthDescriptions?.some((d) => d.Target?.Id === out.webFunctionArn),
       ).toBe(true);
+
+      // A new ALB sits in `provisioning` (hostname not yet in DNS) for ~1-3
+      // minutes. Wait until AWS reports it `active` before touching DNS so a
+      // negative lookup is never cached (bounded: 18 × 10s).
+      yield* elbv2.describeLoadBalancers({ LoadBalancerArns: [out.loadBalancerArn] }).pipe(
+        Effect.flatMap((r) =>
+          r.LoadBalancers?.[0]?.State?.Code === "active"
+            ? Effect.void
+            : Effect.fail(new Error(`ALB ${out.dnsName} is not active yet`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 18 }),
+      );
 
       // Resolve the newly-created ALB explicitly before the first HTTP
       // request. Starting fetch while its hostname is still propagating can
       // retain the negative DNS lookup for every retry in this process.
-      const [albAddress] = yield* Effect.tryPromise(() =>
-        resolve4(out.dnsName),
-      ).pipe(
+      const [albAddress] = yield* Effect.tryPromise(() => resolve4(out.dnsName)).pipe(
         Effect.flatMap((addresses) =>
           addresses[0]
             ? Effect.succeed(addresses)
@@ -230,10 +223,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const [apiBody, webBody] = (yield* Effect.all(
         [getJson(`${baseUrl}/api/hello`), getJson(`${baseUrl}/web/hello`)],
         { concurrency: "unbounded" },
-      )) as [
-        { target: string; path: string },
-        { target: string; path: string },
-      ];
+      )) as [{ target: string; path: string }, { target: string; path: string }];
       expect(apiBody.target).toBe("api");
       expect(apiBody.path).toBe("/api/hello");
       expect(webBody.target).toBe("web");
@@ -250,20 +240,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         .describeTargetGroups({ TargetGroupArns: [out.apiTargetGroupArn] })
         .pipe(
           Effect.map((r) => r.TargetGroups?.length ?? 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:ec2",
-      "provider:aws:elbv2",
-      "provider:aws:lambda",
-      "live",
-    ],
-    timeout: 240_000,
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:elbv2", "provider:aws:lambda", "live"],
+    timeout: 420_000,
   },
 );

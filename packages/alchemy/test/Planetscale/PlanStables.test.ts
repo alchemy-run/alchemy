@@ -1,18 +1,13 @@
-import * as Plan from "@/Plan";
-import * as Planetscale from "@/Planetscale";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import {
-  InMemoryService,
-  inMemoryState,
-  State,
-  type ResourceState,
-} from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Plan from "@/Plan";
+import * as Planetscale from "@/Planetscale";
+import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
+import { InMemoryService, inMemoryState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const TEST_STACK = "planetscale-plan-stables";
 const TEST_STAGE = "test";
@@ -41,6 +36,7 @@ const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
+  options?: Plan.MakePlanOptions,
 ): Effect.Effect<Plan.Plan<A>, Err, State> =>
   // @ts-expect-error - Stack.make's typing erases R unsoundly here
   Effect.gen(function* () {
@@ -53,7 +49,7 @@ const makePlan = <A, Err = never, Req = never>(
         state: inMemoryState(),
       }),
       Effect.provideService(Stage, TEST_STAGE),
-      Effect.flatMap((stackSpec: any) => Plan.make(stackSpec)),
+      Effect.flatMap((stackSpec: any) => Plan.make(stackSpec, options)),
       Effect.provide(Planetscale.providers()),
     );
   });
@@ -281,6 +277,63 @@ describe(
         expect(plan.resources.Db!.action).toBe("update");
         expect(plan.resources.Branch!.action).toBe("update");
         expect(plan.resources.Role!.action).toBe("update");
+      }),
+    );
+
+    // Regression (#1832): `--force` upgrades an unchanged database's noop
+    // to an update. Its conditional `name` stable must survive that, or the
+    // branch and role see `database.name === undefined` and plan a
+    // replacement — rotating the role's credentials on every forced deploy.
+    test(
+      "forced deploy of an unchanged stack updates (not replaces) the branch and role",
+      Effect.gen(function* () {
+        const dbAttrs = databaseAttrs({});
+        const dbProps = { name: DB_NAME, clusterSize: "PS_10" as const };
+
+        yield* seed({
+          Db: stateRow("Db", "Planetscale.PostgresDatabase", dbProps, dbAttrs),
+          Branch: stateRow(
+            "Branch",
+            "Planetscale.PostgresBranch",
+            { name: BRANCH_NAME, database: dbAttrs },
+            branchAttrs(),
+          ),
+          Role: stateRow(
+            "Role",
+            "Planetscale.PostgresRole",
+            {
+              name: ROLE_NAME,
+              database: dbAttrs,
+              branch: branchAttrs(),
+              inheritedRoles: ["pg_read_all_data"],
+            },
+            roleAttrs(),
+          ),
+        });
+
+        const program = Effect.gen(function* () {
+          const db = yield* Planetscale.PostgresDatabase("Db", dbProps);
+          const branch = yield* Planetscale.PostgresBranch("Branch", {
+            name: BRANCH_NAME,
+            database: db,
+          });
+          yield* Planetscale.PostgresRole("Role", {
+            name: ROLE_NAME,
+            database: db,
+            branch,
+            inheritedRoles: ["pg_read_all_data"],
+          });
+        });
+
+        const plan = yield* makePlan(program);
+        expect(plan.resources.Db!.action).toBe("noop");
+        expect(plan.resources.Branch!.action).toBe("noop");
+        expect(plan.resources.Role!.action).toBe("noop");
+
+        const forced = yield* makePlan(program, { force: true });
+        expect(forced.resources.Db!.action).toBe("update");
+        expect(forced.resources.Branch!.action).toBe("update");
+        expect(forced.resources.Role!.action).toBe("update");
       }),
     );
 

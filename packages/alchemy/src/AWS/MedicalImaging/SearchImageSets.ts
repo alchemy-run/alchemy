@@ -50,10 +50,7 @@ export interface SearchImageSets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: SearchImageSetsRequest,
-    ) => Effect.Effect<
-      medicalimaging.SearchImageSetsResponse,
-      medicalimaging.SearchImageSetsError
-    >
+    ) => Effect.Effect<medicalimaging.SearchImageSetsResponse, medicalimaging.SearchImageSetsError>
   >
 > {}
 export const SearchImageSets = Binding.Service<SearchImageSets>(

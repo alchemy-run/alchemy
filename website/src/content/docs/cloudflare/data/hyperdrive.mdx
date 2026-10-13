@@ -3,7 +3,8 @@ title: Hyperdrive
 description: Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pgDeps = `pg`;
 export const pgDevDeps = `@types/pg`;
@@ -17,7 +18,8 @@ cold-start connection storms.
 
 Reach for Hyperdrive whenever your app needs a real relational
 database: managed Postgres/MySQL providers like Neon and
-PlanetScale, or a database you already run. (For serverless SQLite
+PlanetScale, or a database you already run — including one in a
+[private network](/cloudflare/data/hyperdrive-private-database). (For serverless SQLite
 inside Cloudflare, use [D1](/cloudflare/data/d1) instead.) This page
 provisions a serverless database, fronts it with Hyperdrive, and
 binds the connection into your Worker.
@@ -405,60 +407,21 @@ the binding. Pick the one that matches your engine:
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (Postgres)">
 
 [`pg`](https://node-postgres.com) — node-postgres:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pgDeps} dev={pgDevDeps} />
 
   </TabItem>
   <TabItem label="PlanetScale (MySQL)">
 
 [`mysql2`](https://github.com/sidorares/node-mysql2):
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${mysqlDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={mysqlDeps} />
 
   </TabItem>
 </Tabs>
@@ -478,7 +441,7 @@ underlying `Hyperdrive` object:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -524,7 +487,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -570,7 +533,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import { createConnection } from "mysql2/promise";
 +import { Hyperdrive } from "./Db.ts";
 
@@ -668,12 +631,12 @@ Hyperdrive.
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  { main: import.meta.url, compatibilityFlags: ["nodejs_compat"] },
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
     const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const sql = yield* SQL.Postgres({ url: connection.connectionString });
@@ -718,6 +681,9 @@ driver configuration so `poolConfig` options reach mysql2.
 
 Guides that build on Hyperdrive:
 
+- [Private database (Workers VPC)](/cloudflare/data/hyperdrive-private-database)
+  — reach a database with no public endpoint, such as Aurora in an
+  AWS VPC, through a Cloudflare Tunnel.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — swap the raw
   driver for typed schemas and alchemy-managed migrations.
 - [Shared database across stages](/cloudflare/data/shared-database)

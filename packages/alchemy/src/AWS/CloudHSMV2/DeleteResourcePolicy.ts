@@ -26,10 +26,7 @@ export interface DeleteResourcePolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.DeleteResourcePolicyRequest,
-    ) => Effect.Effect<
-      cloudhsm.DeleteResourcePolicyResponse,
-      cloudhsm.DeleteResourcePolicyError
-    >
+    ) => Effect.Effect<cloudhsm.DeleteResourcePolicyResponse, cloudhsm.DeleteResourcePolicyError>
   >
 > {}
 export const DeleteResourcePolicy = Binding.Service<DeleteResourcePolicy>(

@@ -4,13 +4,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
-import {
-  packEnvValueKeepRedacted,
-  unpackEnvValue,
-} from "../../RuntimeContext.ts";
+import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type * as Serverless from "../../Serverless/index.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
+import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -19,13 +18,8 @@ import {
   deferredExecutionContext,
   type WorkerEvent,
 } from "./WorkerRuntime.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
-import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 
-export type WorkerExport =
-  | DurableObjectExport
-  | WorkflowExport
-  | SqlMigrationsExport;
+export type WorkerExport = DurableObjectExport | WorkflowExport | SqlMigrationsExport;
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
@@ -71,11 +65,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       if (options?.shape) userShape = options.shape;
       return ctx.listen(makeRequestHandler(handler));
     },
-    listen: ((
-      handler:
-        | Serverless.FunctionListener
-        | Effect.Effect<Serverless.FunctionListener>,
-    ) =>
+    listen: ((handler: Serverless.FunctionListener | Effect.Effect<Serverless.FunctionListener>) =>
       Effect.sync(() =>
         Effect.isEffect(handler)
           ? listeners.push(handler)
@@ -132,9 +122,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             ];
           }
           return [
-            Effect.die(
-              new Error(`No event handler found for event type '${type}'`),
-            ),
+            Effect.die(new Error(`No event handler found for event type '${type}'`)),
             services,
           ];
         };

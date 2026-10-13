@@ -34,12 +34,7 @@ export interface GetLogGroupFields extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetLogGroupFieldsRequest,
-    ) => Effect.Effect<
-      Logs.GetLogGroupFieldsResponse,
-      Logs.GetLogGroupFieldsError
-    >
+    ) => Effect.Effect<Logs.GetLogGroupFieldsResponse, Logs.GetLogGroupFieldsError>
   >
 > {}
-export const GetLogGroupFields = Binding.Service<GetLogGroupFields>(
-  "AWS.Logs.GetLogGroupFields",
-);
+export const GetLogGroupFields = Binding.Service<GetLogGroupFields>("AWS.Logs.GetLogGroupFields");

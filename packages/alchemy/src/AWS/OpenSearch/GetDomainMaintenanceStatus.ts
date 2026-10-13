@@ -34,7 +34,6 @@ export interface GetDomainMaintenanceStatus extends Binding.Service<
     >
   >
 > {}
-export const GetDomainMaintenanceStatus =
-  Binding.Service<GetDomainMaintenanceStatus>(
-    "AWS.OpenSearch.GetDomainMaintenanceStatus",
-  );
+export const GetDomainMaintenanceStatus = Binding.Service<GetDomainMaintenanceStatus>(
+  "AWS.OpenSearch.GetDomainMaintenanceStatus",
+);

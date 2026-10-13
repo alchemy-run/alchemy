@@ -32,10 +32,7 @@ export interface GetFaceDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetFaceDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.GetFaceDetectionResponse,
-      rekognition.GetFaceDetectionError
-    >
+    ) => Effect.Effect<rekognition.GetFaceDetectionResponse, rekognition.GetFaceDetectionError>
   >
 > {}
 export const GetFaceDetection = Binding.Service<GetFaceDetection>(

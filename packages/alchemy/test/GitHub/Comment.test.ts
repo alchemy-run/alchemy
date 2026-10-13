@@ -1,16 +1,13 @@
-import * as GitHub from "@/GitHub";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GitHub from "@/GitHub";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A GitHub Comment is keyed entirely by its parent {owner, repository,
 // issueNumber} plus a server-assigned commentId. GitHub only enumerates

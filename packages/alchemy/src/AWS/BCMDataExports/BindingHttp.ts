@@ -25,12 +25,7 @@ import type { Export } from "./Export.ts";
  * runtime callable injects the bound {@link Export}'s ARN as `ExportArn` and
  * the deploy-time half grants `iamActions` on the export ARN.
  */
-export const makeExportHttpBinding = <
-  I extends { ExportArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeExportHttpBinding = <I extends { ExportArn: string }, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"GetExecution"`.
@@ -67,11 +62,11 @@ export const makeExportHttpBinding = <
           );
         }
       }
-      return Effect.fn(
-        `AWS.BCMDataExports.${options.capability}(${dataExport.LogicalId})`,
-      )(function* (request?: Omit<I, "ExportArn">) {
-        return yield* op({ ...request, ExportArn: yield* ExportArn } as I);
-      });
+      return Effect.fn(`AWS.BCMDataExports.${options.capability}(${dataExport.LogicalId})`)(
+        function* (request?: Omit<I, "ExportArn">) {
+          return yield* op({ ...request, ExportArn: yield* ExportArn } as I);
+        },
+      );
     });
   });
 
@@ -81,12 +76,7 @@ export const makeExportHttpBinding = <
  * deploy-time half grants `iamActions` on `*` because these operations are
  * not resource-scoped.
  */
-export const makeDataExportsAccountHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeDataExportsAccountHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"ListTables"`.
@@ -108,22 +98,18 @@ export const makeDataExportsAccountHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.BCMDataExports.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.BCMDataExports.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.BCMDataExports.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.BCMDataExports.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

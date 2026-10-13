@@ -3,23 +3,21 @@
  * the default security group) for suites that read subnet and security-group
  * IDs from the environment.
  */
-import * as Floci from "../packages/floci/src/index.ts";
+import * as Floci from "@alchemy.run/floci";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
-import { FetchHttpClient } from "effect/unstable/http";
 
 export interface FlociDefaultNetwork {
   readonly subnetIds: ReadonlyArray<string>;
   readonly securityGroupIds: ReadonlyArray<string>;
 }
 
-export const resolveFlociDefaultNetwork = (
-  external: boolean,
-): Promise<FlociDefaultNetwork> =>
+export const resolveFlociDefaultNetwork = (external: boolean): Promise<FlociDefaultNetwork> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
@@ -45,8 +43,8 @@ export const resolveFlociDefaultNetwork = (
       const subnetIds = (subnets.Subnets ?? []).flatMap((subnet) =>
         subnet.SubnetId === undefined ? [] : [subnet.SubnetId],
       );
-      const securityGroupIds = (groups.SecurityGroups ?? []).flatMap(
-        (group) => (group.GroupId === undefined ? [] : [group.GroupId]),
+      const securityGroupIds = (groups.SecurityGroups ?? []).flatMap((group) =>
+        group.GroupId === undefined ? [] : [group.GroupId],
       );
       if (subnetIds.length === 0 || securityGroupIds.length === 0) {
         return yield* Effect.fail(
@@ -58,10 +56,7 @@ export const resolveFlociDefaultNetwork = (
       Effect.provide(
         Layer.mergeAll(
           Credentials.fromEnv(),
-          Layer.succeed(
-            Region,
-            Effect.succeed((process.env.AWS_REGION ?? "us-east-1") as never),
-          ),
+          Layer.succeed(Region, Effect.succeed((process.env.AWS_REGION ?? "us-east-1") as never)),
           Endpoint.of(`http://localhost:${Floci.DEFAULT_FLOCI_PORT}`),
           FetchHttpClient.layer,
         ),

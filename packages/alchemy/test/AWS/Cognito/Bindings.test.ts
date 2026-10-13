@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CognitoTestFunctionLive, { CognitoTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CognitoBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -35,19 +32,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -82,21 +74,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/config`;
 
-        yield* Effect.logInfo(
-          `Cognito test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Cognito test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Cognito test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Cognito test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -111,18 +97,13 @@ describe(
         "USER_PASSWORD_AUTH returns valid Cognito JWTs",
         (_stack) =>
           Effect.gen(function* () {
-            const config = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/config`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              userPoolId: string;
-              clientId: string;
-            };
+            const config = (yield* send(HttpClientRequest.get(`${baseUrl}/config`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { userPoolId: string; clientId: string };
             expect(config.userPoolId).toMatch(/^[a-z0-9-]+_[A-Za-z0-9]+$/);
 
             const response = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/auth-flow?username=authflow-user`,
-              ),
+              HttpClientRequest.post(`${baseUrl}/auth-flow?username=authflow-user`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               challengeName: string | undefined;
               idToken: string | undefined;
@@ -159,9 +140,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/sign-up-flow?username=signup-user`,
-              ),
+              HttpClientRequest.post(`${baseUrl}/sign-up-flow?username=signup-user`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               userConfirmed: boolean;
               userSub: string;
@@ -184,9 +163,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/user-lifecycle?username=lifecycle-user`,
-              ),
+              HttpClientRequest.post(`${baseUrl}/user-lifecycle?username=lifecycle-user`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               createdStatus: string;
               disabledEnabled: boolean;
@@ -209,9 +186,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/admin-extended?username=admin-extended-user`,
-              ),
+              HttpClientRequest.post(`${baseUrl}/admin-extended?username=admin-extended-user`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               nickname: string | undefined;
               nicknameAfter: string | null;
@@ -223,9 +198,7 @@ describe(
             expect(response.nickname).toBe("admin-extended");
             expect(response.nicknameAfter).toBeNull();
             expect(response.userGroups.length).toBe(1);
-            expect(response.allGroups).toEqual(
-              expect.arrayContaining(response.userGroups),
-            );
+            expect(response.allGroups).toEqual(expect.arrayContaining(response.userGroups));
             // no remembered devices on a fresh user (or device tracking off)
             expect(response.deviceCount).toBeLessThanOrEqual(0);
           }),
@@ -239,9 +212,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/self-service?username=self-service-user`,
-              ),
+              HttpClientRequest.post(`${baseUrl}/self-service?username=self-service-user`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               changedPasswordAuth: boolean;
               nickname: string | undefined;
@@ -265,9 +236,9 @@ describe(
         "guest getId vends AWS credentials and an OIDC token",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/identity-flow`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/identity-flow`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               identityId: string;
               hasAccessKeyId: boolean;
               hasSessionToken: boolean;
@@ -288,13 +259,9 @@ describe(
         "describeIdentity, listIdentities, deleteIdentities",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/identity-flow`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              identityId: string;
-              describedIdentityId: string;
-              listedContains: boolean;
-            };
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/identity-flow`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { identityId: string; describedIdentityId: string; listedContains: boolean };
 
             expect(response.describedIdentityId).toBe(response.identityId);
             expect(response.listedContains).toBe(true);

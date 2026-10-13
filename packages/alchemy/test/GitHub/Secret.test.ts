@@ -1,20 +1,17 @@
-import * as GitHub from "@/GitHub";
-import { Octokit } from "@/GitHub/Octokit.ts";
-import * as Provider from "@/Provider";
-import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as GitHub from "@/GitHub";
+import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Provider from "@/Provider";
+import { destroy } from "@/RemovalPolicy";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deploying a secret needs an owner + repository the token can write to —
 // the dedicated test org (never a real one). Set GITHUB_TEST_OWNER="" to
@@ -84,12 +81,7 @@ test.provider.skipIf(!owner)(
       expect(yield* secretExists("ALCHEMY_CONFIG_SECRET")).toBe(false);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:secret",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:repository", "provider:github:secret", "live"],
     timeout: 120_000,
   },
 );

@@ -87,9 +87,7 @@ export interface AwsLogSource extends Resource<
  * });
  * ```
  */
-const AwsLogSourceResource = Resource<AwsLogSource>(
-  "AWS.SecurityLake.AwsLogSource",
-);
+const AwsLogSourceResource = Resource<AwsLogSource>("AWS.SecurityLake.AwsLogSource");
 
 export { AwsLogSourceResource as AwsLogSource };
 
@@ -97,9 +95,7 @@ export { AwsLogSourceResource as AwsLogSource };
  * Security Lake reported per-account failures when enabling or disabling an
  * AWS log source.
  */
-export class AwsLogSourceOperationFailed extends Data.TaggedError(
-  "AwsLogSourceOperationFailed",
-)<{
+export class AwsLogSourceOperationFailed extends Data.TaggedError("AwsLogSourceOperationFailed")<{
   readonly operation: "create" | "delete";
   readonly sourceName: string;
   readonly failedAccounts: string[];
@@ -149,8 +145,7 @@ export const AwsLogSourceProvider = () =>
           const matched = (entry.sources ?? []).find(
             (source) =>
               source.awsLogSource?.sourceName === sourceName &&
-              (sourceVersion === undefined ||
-                source.awsLogSource.sourceVersion === sourceVersion),
+              (sourceVersion === undefined || source.awsLogSource.sourceVersion === sourceVersion),
           );
           if (matched && entry.region !== undefined) {
             regions.add(entry.region);
@@ -181,11 +176,7 @@ export const AwsLogSourceProvider = () =>
           // listLogSources — that means "no log source", not a failure.
           const observed = yield* observeSource(sourceName, sourceVersion).pipe(
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () =>
                 Effect.succeed({
                   regions: new Set<string>(),
@@ -213,11 +204,7 @@ export const AwsLogSourceProvider = () =>
               // An account that never onboarded Security Lake has no data
               // lake to list sources for.
               Effect.catchTag(
-                [
-                  "AccessDeniedException",
-                  "ResourceNotFoundException",
-                  "UnauthorizedException",
-                ],
+                ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
                 () => Effect.succeed([] as securitylake.LogSource[]),
               ),
             );
@@ -232,8 +219,7 @@ export const AwsLogSourceProvider = () =>
             for (const entry of entries) {
               for (const source of entry.sources ?? []) {
                 const aws = source.awsLogSource;
-                if (aws?.sourceName === undefined || entry.region === undefined)
-                  continue;
+                if (aws?.sourceName === undefined || entry.region === undefined) continue;
                 const key = `${aws.sourceName}@${aws.sourceVersion ?? ""}`;
                 const group = grouped.get(key) ?? {
                   sourceName: aws.sourceName,
@@ -256,10 +242,7 @@ export const AwsLogSourceProvider = () =>
         // change tears down collection for the old source and enables the new.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            news.sourceName !== olds.sourceName ||
-            news.sourceVersion !== olds.sourceVersion
-          ) {
+          if (news.sourceName !== olds.sourceName || news.sourceVersion !== olds.sourceVersion) {
             return { action: "replace" } as const;
           }
         }),
@@ -269,24 +252,14 @@ export const AwsLogSourceProvider = () =>
           const previousAccounts = output?.accounts;
 
           // 1. OBSERVE — which Regions already collect this source.
-          const observed = yield* observeSource(
-            news.sourceName,
-            news.sourceVersion,
-          );
+          const observed = yield* observeSource(news.sourceName, news.sourceVersion);
 
           // 2. ENSURE — enable collection in Regions where it is missing.
-          const missingRegions = desiredRegions.filter(
-            (region) => !observed.regions.has(region),
-          );
+          const missingRegions = desiredRegions.filter((region) => !observed.regions.has(region));
           if (missingRegions.length > 0) {
             const response = yield* securitylake.createAwsLogSource({
               sources: [
-                sourceConfig(
-                  news.sourceName,
-                  news.sourceVersion,
-                  missingRegions,
-                  news.accounts,
-                ),
+                sourceConfig(news.sourceName, news.sourceVersion, missingRegions, news.accounts),
               ],
             });
             yield* failIfPartialFailure(
@@ -326,18 +299,12 @@ export const AwsLogSourceProvider = () =>
             );
           }
           const removedAccounts = (previousAccounts ?? []).filter(
-            (account) =>
-              news.accounts !== undefined && !news.accounts.includes(account),
+            (account) => news.accounts !== undefined && !news.accounts.includes(account),
           );
           if (removedAccounts.length > 0 && desiredRegions.length > 0) {
             const response = yield* securitylake.deleteAwsLogSource({
               sources: [
-                sourceConfig(
-                  news.sourceName,
-                  news.sourceVersion,
-                  desiredRegions,
-                  removedAccounts,
-                ),
+                sourceConfig(news.sourceName, news.sourceVersion, desiredRegions, removedAccounts),
               ],
             });
             yield* failIfPartialFailure(
@@ -350,9 +317,7 @@ export const AwsLogSourceProvider = () =>
           // 3b. SYNC Region removals — only Regions this resource previously
           // managed (recorded in output) are disabled.
           const staleRegions = (output?.regions ?? []).filter(
-            (managed) =>
-              !desiredRegions.includes(managed) &&
-              observed.regions.has(managed),
+            (managed) => !desiredRegions.includes(managed) && observed.regions.has(managed),
           );
           if (staleRegions.length > 0) {
             yield* securitylake.deleteAwsLogSource({
@@ -368,18 +333,13 @@ export const AwsLogSourceProvider = () =>
           }
 
           // 4. RETURN fresh attributes.
-          const final = yield* observeSource(
-            news.sourceName,
-            news.sourceVersion,
-          );
+          const final = yield* observeSource(news.sourceName, news.sourceVersion);
           yield* session.note(news.sourceName);
           return {
             sourceName: news.sourceName,
             sourceVersion: final.resolvedVersion ?? news.sourceVersion,
             regions:
-              final.regions.size > 0
-                ? [...final.regions].sort()
-                : [...desiredRegions].sort(),
+              final.regions.size > 0 ? [...final.regions].sort() : [...desiredRegions].sort(),
             accounts: news.accounts,
           };
         }),
@@ -395,9 +355,7 @@ export const AwsLogSourceProvider = () =>
                   ...(output.sourceVersion !== undefined
                     ? { sourceVersion: output.sourceVersion }
                     : {}),
-                  ...(output.accounts !== undefined
-                    ? { accounts: output.accounts }
-                    : {}),
+                  ...(output.accounts !== undefined ? { accounts: output.accounts } : {}),
                 },
               ],
             })
@@ -406,11 +364,7 @@ export const AwsLogSourceProvider = () =>
               // (which stops all collection and makes log-source APIs reject
               // with UnauthorizedException/AccessDeniedException).
               Effect.catchTag(
-                [
-                  "AccessDeniedException",
-                  "ResourceNotFoundException",
-                  "UnauthorizedException",
-                ],
+                ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
                 () => Effect.void,
               ),
             );

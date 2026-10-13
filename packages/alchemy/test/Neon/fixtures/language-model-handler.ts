@@ -1,12 +1,12 @@
-import * as Neon from "@/Neon";
+import { LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { LanguageModel, Tool, Toolkit } from "effect/unstable/ai";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Neon from "@/Neon";
 import { languageModelGateway } from "./language-model-resources.ts";
 
 const Sum = Tool.make("sum", {
@@ -21,9 +21,7 @@ export const languageModelHandler = (source = languageModelGateway) =>
   Effect.gen(function* () {
     const gateway = yield* Neon.QueryAIGateway(source);
     const model = Layer.unwrap(
-      Config.String("AI_MODEL").pipe(
-        Effect.map((model) => gateway.model({ model })),
-      ),
+      Config.String("AI_MODEL").pipe(Effect.map((model) => gateway.model({ model }))),
     );
     return {
       fetch: Effect.gen(function* () {
@@ -64,10 +62,7 @@ export const languageModelHandler = (source = languageModelGateway) =>
       }).pipe(
         Effect.provide(model),
         Effect.catchTag("AiError", (error) =>
-          HttpServerResponse.json(
-            { reason: error.reason._tag },
-            { status: 502 },
-          ),
+          HttpServerResponse.json({ reason: error.reason._tag }, { status: 502 }),
         ),
         Effect.orDie,
       ),

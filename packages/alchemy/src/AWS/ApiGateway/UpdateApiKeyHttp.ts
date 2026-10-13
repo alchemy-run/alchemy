@@ -20,9 +20,7 @@ export const UpdateApiKeyHttp = Layer.effect(
         verb: "PATCH",
         paths: (region) => [`arn:aws:apigateway:${region}::/apikeys/*`],
       });
-      return Effect.fn("AWS.ApiGateway.UpdateApiKey")(function* (
-        request: UpdateApiKeyRequest,
-      ) {
+      return Effect.fn("AWS.ApiGateway.UpdateApiKey")(function* (request: UpdateApiKeyRequest) {
         return yield* updateApiKey(request);
       });
     });

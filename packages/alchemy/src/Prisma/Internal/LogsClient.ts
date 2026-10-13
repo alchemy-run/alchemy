@@ -108,9 +108,7 @@ const buildWebSocketUrl = (baseUrl: string, path: string, query?: object) =>
     }),
   );
 
-const logsQuery = (
-  query: DeploymentLogsQuery | undefined,
-): Record<string, unknown> | undefined => {
+const logsQuery = (query: DeploymentLogsQuery | undefined): Record<string, unknown> | undefined => {
   if (!query) return undefined;
   const { fromStart, ...rest } = query;
   return {
@@ -122,11 +120,7 @@ const logsQuery = (
 export const getDeploymentLogsRequest = (
   deploymentId: string,
   query?: DeploymentLogsQuery,
-): Effect.Effect<
-  DeploymentLogsRequest,
-  PrismaApiError | ConfigError,
-  Credentials
-> =>
+): Effect.Effect<DeploymentLogsRequest, PrismaApiError | ConfigError, Credentials> =>
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
@@ -150,11 +144,7 @@ export const getBuildLogsRequest = (
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
-    const url = yield* buildUrl(
-      apiBaseUrl,
-      `/v1/builds/${pathSegment(buildId)}/logs`,
-      query,
-    );
+    const url = yield* buildUrl(apiBaseUrl, `/v1/builds/${pathSegment(buildId)}/logs`, query);
     return {
       url,
       headers: {

@@ -1,18 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
+import * as RpcClient from "effect/rpc/RpcClient";
+import { RpcClientError } from "effect/rpc/RpcClientError";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 import { CounterRpcs } from "./fixtures/tagged-rpc-do/group.ts";
 import Stack from "./fixtures/tagged-rpc-do/stack.ts";
 
@@ -20,10 +20,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Under a full-suite run the edge propagates fresh `*.workers.dev` URLs much
 // more slowly than in isolation — give each test ample room.
@@ -39,25 +36,18 @@ const requestTimeout = "5 seconds";
 // take over a minute to stop serving the placeholder page, so the budget
 // must comfortably exceed that (~2 minutes here).
 const readinessRetry = {
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("3 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
   times: 40,
 } as const;
 
-const requestUntilReady = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const requestUntilReady = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
       Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
-          : yield* Effect.fail(
-              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
-            );
+          : yield* Effect.fail(new Error(`Worker not ready: ${res.status} ${yield* res.text}`));
       }),
     ),
     Effect.tapError(Effect.logError),
@@ -78,9 +68,7 @@ const looksLikeEdgePlaceholder = (body: string) =>
   body.includes("Script not found") ||
   body.includes("cf-error-code");
 
-const postIncrementOnce = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const postIncrementOnce = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
@@ -91,9 +79,7 @@ const postIncrementOnce = (
         const body = yield* res.text;
         return looksLikeEdgePlaceholder(body)
           ? yield* Effect.fail(new EdgeNotReady({ status: res.status }))
-          : yield* Effect.die(
-              new Error(`increment failed: ${res.status} ${body}`),
-            );
+          : yield* Effect.die(new Error(`increment failed: ${res.status} ${body}`));
       }),
     ),
     Effect.retry({
@@ -145,10 +131,7 @@ const rpcClientLayer = Test.rpcClientLayer;
 // Readiness is instead handled idempotently: each test runs a retried
 // `resetA`/`resetHttp` first (which also warms the edge), and the `beforeAll`
 // gate below settles propagation before any test runs.
-type RpcRequirements =
-  | RpcClient.Protocol
-  | RpcSerialization.RpcSerialization
-  | Scope.Scope;
+type RpcRequirements = RpcClient.Protocol | RpcSerialization.RpcSerialization | Scope.Scope;
 const withRpcA = <A, E, R>(url: string, body: Effect.Effect<A, E, R>) =>
   body.pipe(
     Effect.tapError((e) => Effect.logError("withRpcA error", e)),
@@ -192,14 +175,9 @@ const resetA = (url: string, key: string) =>
 const stack = beforeAll(
   deploy(Stack).pipe(
     Effect.tap(({ urlA, urlB, urlC }) =>
-      Effect.all(
-        [
-          resetA(urlA, "warmup"),
-          resetHttp(urlB, "warmup"),
-          resetHttp(urlC, "warmup"),
-        ],
-        { concurrency: "unbounded" },
-      ),
+      Effect.all([resetA(urlA, "warmup"), resetHttp(urlB, "warmup"), resetHttp(urlC, "warmup")], {
+        concurrency: "unbounded",
+      }),
     ),
     // just give it some extra time to propagate
     Effect.tap(Effect.sleep("5 seconds")),
@@ -232,12 +210,7 @@ test(
     );
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -279,12 +252,7 @@ test(
     expect(value).toBe(2);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -315,12 +283,7 @@ test(
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -370,21 +333,13 @@ test(
         }),
       ),
       predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
     });
     expect(d1.value).toBe(2);
     expect(dox.value).toBe(1);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -435,9 +390,7 @@ test(
     yield* postIncrementOnce(httpClient.post(`${urlC}/do/increment`));
     yield* postIncrementOnce(httpClient.post(`${urlC}/do/increment`));
 
-    const cAfter = yield* httpClient
-      .get(`${urlC}/do`)
-      .pipe(Effect.timeout(requestTimeout));
+    const cAfter = yield* httpClient.get(`${urlC}/do`).pipe(Effect.timeout(requestTimeout));
     expect((yield* cAfter.json) as { value: number }).toEqual({ value: 3 });
 
     yield* withRpcA(
@@ -450,12 +403,7 @@ test(
     );
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );

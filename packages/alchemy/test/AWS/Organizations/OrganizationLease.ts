@@ -1,11 +1,11 @@
-import { flociServices } from "@/AWS/Local/FlociServices.ts";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import { flociServices } from "@/AWS/Local/FlociServices.ts";
+import * as Test from "@/Test/Alchemy";
 
 /**
  * Process-wide lease on the account's single AWS Organization.
@@ -46,15 +46,11 @@ let touched = false;
 let createdOrganization = false;
 
 const unredact = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined || typeof value === "string"
-    ? value
-    : Redacted.value(value);
+  value === undefined || typeof value === "string" ? value : Redacted.value(value);
 
 const describeOrganization = organizations.describeOrganization({}).pipe(
   Effect.map((response) => response.Organization),
-  Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
 );
 
 const ensureOrganization = Effect.gen(function* () {
@@ -71,22 +67,18 @@ const ensureOrganization = Effect.gen(function* () {
 
 const findRootId = organizations.listRoots({}).pipe(
   Effect.map((response) => response.Roots?.[0]?.Id),
-  Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
 );
 
 const findFixtureOu = (rootId: string) =>
-  organizations.listOrganizationalUnitsForParent
-    .pages({ ParentId: rootId })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages)
-          .flatMap((page) => page.OrganizationalUnits ?? [])
-          .find((unit) => unit.Name === FIXTURE_NAME),
-      ),
-    );
+  organizations.listOrganizationalUnitsForParent.pages({ ParentId: rootId }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) =>
+      Array.from(pages)
+        .flatMap((page) => page.OrganizationalUnits ?? [])
+        .find((unit) => unit.Name === FIXTURE_NAME),
+    ),
+  );
 
 const ensureFixtureOu = Effect.gen(function* () {
   const rootId = yield* findRootId;
@@ -95,18 +87,12 @@ const ensureFixtureOu = Effect.gen(function* () {
   }
   const unit =
     (yield* findFixtureOu(rootId)) ??
-    (yield* organizations
-      .createOrganizationalUnit({ ParentId: rootId, Name: FIXTURE_NAME })
-      .pipe(
-        Effect.map((response) => response.OrganizationalUnit),
-        Effect.catchTag("DuplicateOrganizationalUnitException", () =>
-          findFixtureOu(rootId),
-        ),
-      ));
+    (yield* organizations.createOrganizationalUnit({ ParentId: rootId, Name: FIXTURE_NAME }).pipe(
+      Effect.map((response) => response.OrganizationalUnit),
+      Effect.catchTag("DuplicateOrganizationalUnitException", () => findFixtureOu(rootId)),
+    ));
   if (unit?.Arn === undefined) {
-    return yield* Effect.fail(
-      new Error(`could not resolve OU ${FIXTURE_NAME}`),
-    );
+    return yield* Effect.fail(new Error(`could not resolve OU ${FIXTURE_NAME}`));
   }
   return unit.Arn;
 });
@@ -118,9 +104,7 @@ const findFixtureMember = organizations.listAccounts.pages({}).pipe(
       .flatMap((page) => page.Accounts ?? [])
       .find((account) => unredact(account.Email) === FIXTURE_MEMBER_EMAIL),
   ),
-  Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
 );
 
 const ensureFixtureMember = Effect.gen(function* () {
@@ -132,9 +116,7 @@ const ensureFixtureMember = Effect.gen(function* () {
   });
   const requestId = created.CreateAccountStatus?.Id;
   if (requestId === undefined) {
-    return yield* Effect.fail(
-      new Error("CreateAccount returned no request id"),
-    );
+    return yield* Effect.fail(new Error("CreateAccount returned no request id"));
   }
   const status = yield* organizations
     .describeCreateAccountStatus({ CreateAccountRequestId: requestId })
@@ -169,19 +151,12 @@ const reclaimFixture = Effect.gen(function* () {
   if (unit?.Id !== undefined) {
     yield* organizations
       .deleteOrganizationalUnit({ OrganizationalUnitId: unit.Id })
-      .pipe(
-        Effect.catchTag(
-          "OrganizationalUnitNotFoundException",
-          () => Effect.void,
-        ),
-      );
+      .pipe(Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.void));
   }
   if (createdOrganization) {
     yield* organizations
       .deleteOrganization({})
-      .pipe(
-        Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.void),
-      );
+      .pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.void));
     createdOrganization = false;
   }
 });
@@ -194,9 +169,7 @@ const requireShared = Effect.suspend(() =>
   holders > 0
     ? Effect.void
     : Effect.fail(
-        new Error(
-          'the organization fixture requires OrganizationLease.make(..., "shared")',
-        ),
+        new Error('the organization fixture requires OrganizationLease.make(..., "shared")'),
       ),
 );
 
@@ -217,9 +190,7 @@ export const delegatedAdminAccountId = Effect.suspend(() => {
   const fromEnv = process.env.AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID;
   if (fromEnv) return Effect.succeed(fromEnv);
   if (!emulator) {
-    return Effect.fail(
-      new Error("AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is required"),
-    );
+    return Effect.fail(new Error("AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is required"));
   }
   return requireShared.pipe(
     Effect.andThen(fixtureLock.withPermits(1)(onEmulator(ensureFixtureMember))),
@@ -252,9 +223,7 @@ const makeShared = () => {
       held = true;
       yield* Effect.addFinalizer(() =>
         release.pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("organization lease release failed", cause),
-          ),
+          Effect.catchCause((cause) => Effect.logError("organization lease release failed", cause)),
         ),
       );
       yield* fixtureLock.withPermits(1)(

@@ -1,19 +1,16 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetApplePayDomain } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const LIFECYCLE_DOMAIN = "alchemy-apple-pay-lifecycle.example.com";
 const REPLACE_FROM_DOMAIN = "alchemy-apple-pay-replace-a.example.com";
@@ -23,9 +20,7 @@ const LIST_DOMAIN = "alchemy-apple-pay-list.example.com";
 const waitUntilGone = (id: string) =>
   GetApplePayDomain({ domain: id }).pipe(
     Effect.as("found" as const),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

@@ -122,28 +122,18 @@ export const AgentAliasProvider = () =>
         id: string,
         props: Pick<AgentAliasProps, "agentAliasName">,
       ) {
-        return (
-          props.agentAliasName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.agentAliasName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      const getAliasOrUndefined = Effect.fn(function* (
-        agentId: string,
-        agentAliasId: string,
-      ) {
+      const getAliasOrUndefined = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const findByName = Effect.fn(function* (agentId: string, name: string) {
-        const pages = yield* bedrock.listAgentAliases
-          .pages({ agentId })
-          .pipe(Stream.runCollect);
+        const pages = yield* bedrock.listAgentAliases.pages({ agentId }).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.agentAliasSummaries ?? [])
           .find((s) => s.agentAliasName === name)?.agentAliasId;
@@ -158,20 +148,13 @@ export const AgentAliasProvider = () =>
         );
       });
 
-      const waitForSettled = Effect.fn(function* (
-        agentId: string,
-        agentAliasId: string,
-      ) {
+      const waitForSettled = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
-            until: (alias) =>
-              alias === undefined ||
-              !ALIAS_TRANSIENT.has(alias.agentAliasStatus),
+            until: (alias) => alias === undefined || !ALIAS_TRANSIENT.has(alias.agentAliasStatus),
             times: 40,
           }),
         );
@@ -191,8 +174,7 @@ export const AgentAliasProvider = () =>
             output?.agentAliasId ??
             (yield* findByName(
               agentId,
-              output?.agentAliasName ??
-                (yield* createName(id, olds ?? ({} as AgentAliasProps))),
+              output?.agentAliasName ?? (yield* createName(id, olds ?? ({} as AgentAliasProps))),
             ));
           if (aliasId === undefined) return undefined;
           const alias = yield* getAliasOrUndefined(agentId, aliasId);
@@ -214,26 +196,15 @@ export const AgentAliasProvider = () =>
           if ((olds?.agentId ?? undefined) !== (news?.agentId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          const oldName = yield* createName(
-            id,
-            olds ?? ({} as AgentAliasProps),
-          );
-          const newName = yield* createName(
-            id,
-            news ?? ({} as AgentAliasProps),
-          );
+          const oldName = yield* createName(id, olds ?? ({} as AgentAliasProps));
+          const newName = yield* createName(id, news ?? ({} as AgentAliasProps));
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
           // description, routingConfiguration, and tags converge via update.
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {} as AgentAliasProps,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {} as AgentAliasProps, output, session }) {
           const name = output?.agentAliasName ?? (yield* createName(id, news));
           const agentId = news.agentId;
           const internalTags = yield* createInternalTags(id);
@@ -260,12 +231,10 @@ export const AgentAliasProvider = () =>
               tags: desiredTags,
             });
             alias = created.agentAlias;
-            alias =
-              (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
+            alias = (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
           } else {
             // 3. SYNC
-            alias =
-              (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
+            alias = (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
             yield* bedrock.updateAgentAlias({
               agentId,
               agentAliasId: alias.agentAliasId,
@@ -273,8 +242,7 @@ export const AgentAliasProvider = () =>
               description: news.description,
               routingConfiguration: news.routingConfiguration,
             });
-            alias =
-              (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
+            alias = (yield* waitForSettled(agentId, alias.agentAliasId)) ?? alias;
           }
 
           const agentAliasId = alias.agentAliasId;
@@ -286,9 +254,7 @@ export const AgentAliasProvider = () =>
           if (upsert.length > 0) {
             yield* bedrock.tagResource({
               resourceArn: agentAliasArn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
           if (removed.length > 0) {
@@ -313,9 +279,7 @@ export const AgentAliasProvider = () =>
               agentId: output.agentId,
               agentAliasId: output.agentAliasId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

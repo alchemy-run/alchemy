@@ -19,9 +19,7 @@ export const DEFAULT_REDIS_URL_ENV = "REDIS_URL";
 
 export const redisAdapter = (options?: RedisAdapterOptions) => {
   if (options?.urlEnv !== undefined && typeof options.urlEnv !== "string") {
-    throw new TypeError(
-      "[vinext] redisAdapter({ urlEnv }) must be a string env var name.",
-    );
+    throw new TypeError("[vinext] redisAdapter({ urlEnv }) must be a string env var name.");
   }
   return {
     adapter: fileURLToPath(new URL("./redis-runtime.js", import.meta.url)),

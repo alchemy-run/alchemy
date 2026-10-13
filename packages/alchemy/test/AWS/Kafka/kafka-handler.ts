@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 export class KafkaTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
@@ -101,9 +101,29 @@ export default KafkaTestFunction.make(
           return yield* HttpServerResponse.json(info);
         }
         if (url.pathname === "/topics") {
-          const page = yield* listTopics();
-          return yield* HttpServerResponse.json({
-            topics: (page.Topics ?? []).map((t) => t.TopicName),
+          // Like the roundtrip below, a typed rejection (topic APIs are not
+          // supported on serverless clusters: `ServerlessUnsupported`) is
+          // surfaced rather than thrown — an IAM gap is still a 500.
+          const result = yield* listTopics().pipe(
+            Effect.map((page) => ({
+              topics: (page.Topics ?? []).map((t) => t.TopicName),
+            })),
+            Effect.catchTag(["BadRequestException", "ServerlessUnsupported"], (e) =>
+              Effect.succeed({ error: e._tag }),
+            ),
+            // Any other failure is a real defect (e.g. an IAM gap): report it
+            // as a 500 whose body names the error so the test shows it.
+            Effect.catch((e) =>
+              Effect.succeed({
+                failed: true,
+                error: e._tag,
+                message: String(e),
+                detail: e._tag === "UnknownAwsError" ? e.errorTag : undefined,
+              }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result, {
+            status: "failed" in result ? 500 : 200,
           });
         }
         if (url.pathname === "/topics/roundtrip") {
@@ -129,7 +149,7 @@ export default KafkaTestFunction.make(
               ),
             ),
             Effect.catchTag(
-              ["BadRequestException", "TopicExistsException"],
+              ["BadRequestException", "ServerlessUnsupported", "TopicExistsException"],
               (e) => Effect.succeed({ created: false, error: e._tag }),
             ),
           );

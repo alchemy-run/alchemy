@@ -110,12 +110,8 @@ export const consumeInsightEvents = <StreamReq = never, Req = never>(
       ...(props.groupNames !== undefined || props.states !== undefined
         ? {
             detail: {
-              ...(props.groupNames !== undefined
-                ? { GroupName: [...props.groupNames] }
-                : {}),
-              ...(props.states !== undefined
-                ? { State: [...props.states] }
-                : {}),
+              ...(props.groupNames !== undefined ? { GroupName: [...props.groupNames] } : {}),
+              ...(props.states !== undefined ? { State: [...props.states] } : {}),
             },
           }
         : {}),

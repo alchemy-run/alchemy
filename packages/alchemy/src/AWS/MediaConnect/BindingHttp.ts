@@ -22,12 +22,7 @@ import type { Flow } from "./Flow.ts";
  * AND the entitlement, a sibling ARN not derived from the flow ARN), and
  * the runtime half injects the flow's ARN into every request as `FlowArn`.
  */
-export const makeMediaConnectFlowHttpBinding = <
-  I extends { FlowArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeMediaConnectFlowHttpBinding = <I extends { FlowArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.MediaConnect.StartFlow`. */
   tag: string;
   /** The distilled operation; `FlowArn` is injected from the flow. */

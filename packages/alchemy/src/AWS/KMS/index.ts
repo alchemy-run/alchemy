@@ -1,29 +1,15 @@
-export {
-  Alias,
-  AliasProvider,
-  type AliasArn,
-  type AliasName,
-} from "./Alias.ts";
+export { Alias, AliasProvider, type AliasArn, type AliasName } from "./Alias.ts";
 export { Decrypt, type DecryptRequest } from "./Decrypt.ts";
 export { DecryptHttp } from "./DecryptHttp.ts";
-export {
-  DeriveSharedSecret,
-  type DeriveSharedSecretRequest,
-} from "./DeriveSharedSecret.ts";
+export { DeriveSharedSecret, type DeriveSharedSecretRequest } from "./DeriveSharedSecret.ts";
 export { DeriveSharedSecretHttp } from "./DeriveSharedSecretHttp.ts";
 export { DescribeKey, type DescribeKeyRequest } from "./DescribeKey.ts";
 export { DescribeKeyHttp } from "./DescribeKeyHttp.ts";
 export { Encrypt, type EncryptRequest } from "./Encrypt.ts";
 export { EncryptHttp } from "./EncryptHttp.ts";
-export {
-  GenerateDataKey,
-  type GenerateDataKeyRequest,
-} from "./GenerateDataKey.ts";
+export { GenerateDataKey, type GenerateDataKeyRequest } from "./GenerateDataKey.ts";
 export { GenerateDataKeyHttp } from "./GenerateDataKeyHttp.ts";
-export {
-  GenerateDataKeyPair,
-  type GenerateDataKeyPairRequest,
-} from "./GenerateDataKeyPair.ts";
+export { GenerateDataKeyPair, type GenerateDataKeyPairRequest } from "./GenerateDataKeyPair.ts";
 export { GenerateDataKeyPairHttp } from "./GenerateDataKeyPairHttp.ts";
 export {
   GenerateDataKeyPairWithoutPlaintext,
@@ -37,10 +23,7 @@ export {
 export { GenerateDataKeyWithoutPlaintextHttp } from "./GenerateDataKeyWithoutPlaintextHttp.ts";
 export { GenerateMac, type GenerateMacRequest } from "./GenerateMac.ts";
 export { GenerateMacHttp } from "./GenerateMacHttp.ts";
-export {
-  GenerateRandom,
-  type GenerateRandomRequest,
-} from "./GenerateRandom.ts";
+export { GenerateRandom, type GenerateRandomRequest } from "./GenerateRandom.ts";
 export { GenerateRandomHttp } from "./GenerateRandomHttp.ts";
 export { GetPublicKey, type GetPublicKeyRequest } from "./GetPublicKey.ts";
 export { GetPublicKeyHttp } from "./GetPublicKeyHttp.ts";

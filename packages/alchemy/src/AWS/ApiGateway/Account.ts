@@ -66,11 +66,7 @@ export const AccountProvider = () =>
         read: Effect.fn(function* ({ output }) {
           const a = yield* ag
             .getAccount({})
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           return {
             cloudwatchRoleArn: a?.cloudwatchRoleArn,
             managesCloudwatchRoleArn: output?.managesCloudwatchRoleArn ?? false,
@@ -100,11 +96,7 @@ export const AccountProvider = () =>
           // region, so there is no `ensure` step: we always sync.
           const observed = yield* ag
             .getAccount({})
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           const observedRoleArn = observed?.cloudwatchRoleArn;
 
           // Sync the cloudwatchRoleArn — observed ↔ desired. We treat
@@ -143,13 +135,9 @@ export const AccountProvider = () =>
             yield* retryOnApiStatusUpdating(
               ag
                 .updateAccount({
-                  patchOperations: [
-                    { op: "remove", path: "/cloudwatchRoleArn" },
-                  ],
+                  patchOperations: [{ op: "remove", path: "/cloudwatchRoleArn" }],
                 })
-                .pipe(
-                  Effect.catchTag("BadRequestException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("BadRequestException", () => Effect.void)),
             );
             yield* session.note("Cleared API Gateway account CloudWatch role");
           }

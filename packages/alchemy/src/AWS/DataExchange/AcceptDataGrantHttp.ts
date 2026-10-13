@@ -1,7 +1,7 @@
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Layer from "effect/Layer";
-import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 import { AcceptDataGrant } from "./AcceptDataGrant.ts";
+import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 
 export const AcceptDataGrantHttp = Layer.effect(
   AcceptDataGrant,

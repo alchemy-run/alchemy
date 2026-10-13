@@ -169,6 +169,27 @@ yield* Cloudflare.Workers.WorkerRoute("ApiRoute", {
 Both `pattern` and `script` are mutable — changing either updates the
 same physical route in place. Changing `zoneId` triggers a replacement.
 
+## Split one hostname across Workers
+
+Routes win over custom domains, so one Worker can own a hostname while
+others claim paths under it:
+
+```typescript
+yield* Cloudflare.Worker("Home", {
+  main: "./src/home.ts",
+  domain: "api.example.com",
+});
+
+yield* Cloudflare.Worker("Orders", {
+  main: "./src/orders.ts",
+  routes: [{ pattern: "api.example.com/orders*" }],
+});
+```
+
+`alchemy dev` applies the same routing locally. See
+[Federated APIs](/cloudflare/networking/federated-apis) for the full
+pattern.
+
 ## DNS records for non-Worker targets
 
 Not everything on your zone is a Worker. `Cloudflare.DNS.Record`

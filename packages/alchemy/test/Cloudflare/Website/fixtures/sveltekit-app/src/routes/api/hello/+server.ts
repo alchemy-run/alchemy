@@ -1,5 +1,5 @@
-import { json } from "@sveltejs/kit";
 import { randomUUID } from "node:crypto";
+import { json } from "@sveltejs/kit";
 
 // Local Platform shape — see +page.server.ts.
 interface Platform {

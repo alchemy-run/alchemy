@@ -9,7 +9,7 @@
  * login UX stays uniform.
  */
 import * as Effect from "effect/Effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Interaction from "../Interaction.ts";
 import { CallbackServerStartError } from "./OAuthFlow.ts";
 
@@ -35,33 +35,31 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
   const openUrl = Effect.runPromiseWith(services);
   const openFailed = yield* Interaction.openUrl(options.url).pipe(
     Effect.as(false),
-    Effect.catch(() => Effect.succeed(true)),
+    Effect.orElseSucceed(() => true),
   );
   return yield* Effect.raceFirst(
     // A callback server that cannot start (e.g. the port is taken) must not
     // fail the race — warn and hang so manual code entry stays available.
     // Genuine OAuth failures delivered via the callback still fail fast.
     options.callback.pipe(
-      Effect.catch((e) =>
-        e instanceof CallbackServerStartError
-          ? Interaction.accessors.output
-              .warning(`${e.message} — paste the authorization code instead.`)
-              .pipe(Effect.andThen(Effect.never))
-          : Effect.fail(e),
+      Effect.catchIf(
+        (e): e is E1 & CallbackServerStartError => e instanceof CallbackServerStartError,
+        (e) =>
+          Interaction.accessors.output
+            .warning(`${e.message} — paste the authorization code instead.`)
+            .pipe(Effect.andThen(Effect.never)),
       ),
     ),
     (yield* Interaction.Interaction).prompt
       .awaitExternal({
         message: `${options.provider} authorization`,
         waitingLabel:
-          options.waitingLabel ??
-          "waiting for browser authorization (up to 5 minutes)…",
+          options.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)…",
         url: options.url,
         openFailed,
         onOpen: () => openUrl(Interaction.openUrl(options.url)),
         inputLabel: "Paste the authorization code or callback URL",
-        validate: (value) =>
-          value.trim().length > 0 ? undefined : "Paste a code or URL",
+        validate: (value) => (value.trim().length > 0 ? undefined : "Paste a code or URL"),
       })
       .pipe(Effect.flatMap(options.exchange)),
   );

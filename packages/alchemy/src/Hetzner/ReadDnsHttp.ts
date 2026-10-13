@@ -15,10 +15,7 @@ export const ReadDnsHttp = Layer.effect(
 );
 
 /** Build the read-only client over an injectable auth and zone id. */
-export const dnsReadClient = (
-  auth: DnsAuth,
-  zoneId: Effect.Effect<number>,
-): ReadDnsClient => {
+export const dnsReadClient = (auth: DnsAuth, zoneId: Effect.Effect<number>): ReadDnsClient => {
   const authorize = auth.authorize;
   return {
     getRecordSet: Effect.fn("Hetzner.DNS.getRecordSet")(function* (name, type) {
@@ -30,15 +27,13 @@ export const dnsReadClient = (
         }),
       );
     }),
-    listRecordSets: Effect.fn("Hetzner.DNS.listRecordSets")(
-      function* (request) {
-        return yield* authorize(
-          zoneRrsets.listZoneRrsets({
-            id_or_name: String(yield* zoneId),
-            ...request,
-          }),
-        );
-      },
-    ),
+    listRecordSets: Effect.fn("Hetzner.DNS.listRecordSets")(function* (request) {
+      return yield* authorize(
+        zoneRrsets.listZoneRrsets({
+          id_or_name: String(yield* zoneId),
+          ...request,
+        }),
+      );
+    }),
   };
 };

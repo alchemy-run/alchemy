@@ -125,16 +125,10 @@ export const ConnectionProvider = () =>
         id: string,
         props: { connectionName?: string | undefined },
       ) {
-        return (
-          props.connectionName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.connectionName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
-      const observe = Effect.fn(function* (
-        name: string,
-        catalogId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, catalogId: string | undefined) {
         return yield* glue
           .getConnection({
             Name: name,
@@ -143,9 +137,7 @@ export const ConnectionProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.Connection),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -163,10 +155,8 @@ export const ConnectionProvider = () =>
         PhysicalConnectionRequirements: props.physicalConnectionRequirements
           ? {
               SubnetId: props.physicalConnectionRequirements.subnetId,
-              SecurityGroupIdList:
-                props.physicalConnectionRequirements.securityGroupIdList,
-              AvailabilityZone:
-                props.physicalConnectionRequirements.availabilityZone,
+              SecurityGroupIdList: props.physicalConnectionRequirements.securityGroupIdList,
+              AvailabilityZone: props.physicalConnectionRequirements.availabilityZone,
             }
           : undefined,
       });
@@ -177,9 +167,7 @@ export const ConnectionProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* glue.getConnections
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* glue.getConnections.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.ConnectionList ?? [])
               .filter((c) => c.Name !== undefined)
@@ -194,8 +182,7 @@ export const ConnectionProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const catalogId = output?.catalogId ?? olds?.catalogId ?? accountId;
-          const name =
-            output?.connectionName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.connectionName ?? (yield* createName(id, olds ?? {}));
           const connection = yield* observe(name, catalogId);
           if (connection?.Name === undefined) return undefined;
           const arn = connectionArn(region, accountId, connection.Name);
@@ -240,9 +227,7 @@ export const ConnectionProvider = () =>
                 ConnectionInput: input,
                 Tags: desiredTags,
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
           } else {
             yield* glue.updateConnection({
               CatalogId: catalogId,
@@ -270,9 +255,7 @@ export const ConnectionProvider = () =>
               ConnectionName: output.connectionName,
               CatalogId: output.catalogId,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
         }),
       });
     }),

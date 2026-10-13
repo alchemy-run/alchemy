@@ -1,40 +1,46 @@
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import type { VpcId } from "@/AWS/EC2/Vpc.ts";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
 
-/**
- * Shared state of the process-wide provisioned-cache VPC. It lives apart from
- * `ProvisionedFixture.ts` so Lambda handlers can read the network without
- * bundling the test harness that deploys it.
- */
+// Lightweight half of ProvisionedFixture.ts: the shared-network handle that
+// Lambda fixtures read from their init effect. It must NOT import the test
+// harness (`@/Test/Core`) — anything imported here is bundled into the
+// fixture Lambda, and the harness drags in the bundler and engine (a ~19 MB
+// bundle that OOMs a 256 MB Lambda at cold start, surfacing as a 502).
+
 export interface ProvisionedNetwork {
   vpcId: VpcId;
-  privateSubnetIds: SubnetId[];
+  subnetIds: SubnetId[];
   securityGroupId: SecurityGroupId;
   subnetGroupName: string;
 }
 
-export const provisionedNetworkState = {
+/** Process-wide state, mutated by ProvisionedFixture.ts in the test process. */
+export const networkState = {
   ready: Deferred.makeUnsafe<ProvisionedNetwork, unknown>(),
   started: false,
 };
 
-// VPC placement is deploy-time configuration; a deployed function never reads it.
-const runtimeNetwork: ProvisionedNetwork = {
-  vpcId: "" as VpcId,
-  privateSubnetIds: [],
-  securityGroupId: "" as SecurityGroupId,
-  subnetGroupName: "",
-};
-
-/** Resolved IDs of the process-wide provisioned-cache VPC. */
+/**
+ * Resolved IDs of the process-wide provisioned-cache VPC.
+ *
+ * Inside a deployed Lambda fixture the init effect re-runs, but the shared
+ * network is test-process state that never exists there — and resource
+ * declarations ignore their props at runtime anyway. Hand back inert
+ * placeholders so the fixture's cold start does not die.
+ */
 export const getProvisionedNetwork = Effect.suspend(() =>
   globalThis.__ALCHEMY_RUNTIME__
-    ? Effect.succeed(runtimeNetwork)
-    : provisionedNetworkState.started
-      ? Deferred.await(provisionedNetworkState.ready).pipe(Effect.orDie)
+    ? Effect.succeed({
+        vpcId: "",
+        subnetIds: [],
+        securityGroupId: "",
+        subnetGroupName: "",
+      } as unknown as ProvisionedNetwork)
+    : networkState.started
+      ? Deferred.await(networkState.ready).pipe(Effect.orDie)
       : Effect.die(
           "provisioned network was not acquired; call shareProvisionedNetwork in the test file",
         ),

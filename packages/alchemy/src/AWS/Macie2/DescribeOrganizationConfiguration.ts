@@ -33,7 +33,6 @@ export interface DescribeOrganizationConfiguration extends Binding.Service<
     >
   >
 > {}
-export const DescribeOrganizationConfiguration =
-  Binding.Service<DescribeOrganizationConfiguration>(
-    "AWS.Macie2.DescribeOrganizationConfiguration",
-  );
+export const DescribeOrganizationConfiguration = Binding.Service<DescribeOrganizationConfiguration>(
+  "AWS.Macie2.DescribeOrganizationConfiguration",
+);

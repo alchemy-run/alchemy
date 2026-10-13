@@ -1,10 +1,8 @@
 import * as Effect from "effect/Effect";
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
@@ -12,10 +10,10 @@ import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
 import { isDurableObjectExport } from "../DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
+import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
+import type { WorkerExport } from "../WorkerRuntimeContext.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
-import type { WorkerExport } from "../WorkerRuntimeContext.ts";
-import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
 
 /**
  * Bundler options for a Worker: Rolldown input/output overrides and
@@ -88,14 +86,10 @@ const configureCloudflarePlugins = (
         const prefix = key.slice(0, wildcard);
         const suffix = key.slice(wildcard + 1);
         return (
-          id.length >= prefix.length + suffix.length &&
-          id.startsWith(prefix) &&
-          id.endsWith(suffix)
+          id.length >= prefix.length + suffix.length && id.startsWith(prefix) && id.endsWith(suffix)
         );
       }
-      return (
-        id === key || id.startsWith(`${key}/`) || id.startsWith(`${key}\\`)
-      );
+      return id === key || id.startsWith(`${key}/`) || id.startsWith(`${key}\\`);
     });
   return plugins.map((plugin) => {
     if (
@@ -105,15 +99,11 @@ const configureCloudflarePlugins = (
       plugin.name === "builtin:esm-external-require" &&
       "_options" in plugin
     ) {
-      const options = plugin._options as Parameters<
-        typeof esmExternalRequirePlugin
-      >[0];
+      const options = plugin._options as Parameters<typeof esmExternalRequirePlugin>[0];
       return esmExternalRequirePlugin(
         options && {
           ...options,
-          external: options.external.filter(
-            (id) => typeof id !== "string" || !isAliased(id),
-          ),
+          external: options.external.filter((id) => typeof id !== "string" || !isAliased(id)),
         },
       ) as rolldown.Plugin;
     }
@@ -139,27 +129,25 @@ const configureCloudflarePlugins = (
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-  const dotAlchemy = yield* dotAlchemyDirectory;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
     // command tree reaches this module) never loads rolldown's native
     // binding — only actually bundling a Worker does (#562).
-    const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
-      yield* Effect.promise(() =>
+    const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] = yield* Effect.promise(
+      () =>
         Promise.all([
           import("@alchemy.run/cloudflare-runtime/rolldown"),
           import("rolldown/plugins"),
         ]),
-      );
+    );
     const realMain = yield* sanitizeMain(options.main);
     const cwd = yield* findCwdForBundle(realMain).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find cwd for bundle: ${realMain}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find cwd for bundle: ${realMain}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );
@@ -205,11 +193,7 @@ export const WorkerBundle = Effect.gen(function* () {
         cloudflarePlugins(),
         workerModules,
         options.entry.kind === "effect"
-          ? [
-              virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
-              ),
-            ]
+          ? [virtualEntryPlugin(makeEffectVirtualEntry(options.entry.exports, options.stack))]
           : undefined,
       ],
       checks: {
@@ -234,7 +218,6 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      dir: path.join(dotAlchemy, "bundles", options.id),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
@@ -242,12 +225,11 @@ export const WorkerBundle = Effect.gen(function* () {
 
   const sanitizeMain = (main: string) =>
     resolveMainPath(main).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find real path for bundle: ${main}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        Bundle.BundleError.make({
+          message: `Failed to find real path for bundle: ${main}`,
+          cause,
+        }),
       ),
       Effect.provide(context),
     );
@@ -256,22 +238,14 @@ export const WorkerBundle = Effect.gen(function* () {
     build: flow(
       makeOptions,
       Effect.flatMap((resolved) =>
-        Bundle.build(
-          resolved.inputOptions,
-          resolved.outputOptions,
-          resolved.extraOptions,
-        ),
+        Bundle.build(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
       ),
     ),
     watch: flow(
       makeOptions,
       Stream.fromEffect,
       Stream.flatMap((resolved) =>
-        Bundle.watch(
-          resolved.inputOptions,
-          resolved.outputOptions,
-          resolved.extraOptions,
-        ),
+        Bundle.watch(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
       ),
     ),
   };
@@ -320,17 +294,13 @@ ${[
   ...(hasDoClasses
     ? [
         "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, meta);",
-        ...doClasses.map(
-          (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
-        ),
+        ...doClasses.map((id) => `export class ${id} extends DurableObjectBridge("${id}") {}`),
       ]
     : []),
   ...(hasWfClasses
     ? [
         "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, meta);",
-        ...wfClasses.map(
-          (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
-        ),
+        ...wfClasses.map((id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`),
       ]
     : []),
 ].join("\n")}
@@ -346,9 +316,7 @@ ${[
  * under the same key as `build()`, so a diff that had to build shares
  * its output with the reconcile in the same run.
  */
-export const makeRolldownSource = (options: {
-  main: string;
-}): SourceProvider => {
+export const makeRolldownSource = (options: { main: string }): SourceProvider => {
   const bundleOptions = (ctx: SourceContext): WorkerBundleOptions => ({
     id: ctx.id,
     main: options.main,

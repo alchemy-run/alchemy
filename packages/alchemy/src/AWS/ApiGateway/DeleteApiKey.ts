@@ -30,11 +30,7 @@ export interface DeleteApiKey extends Binding.Service<
   DeleteApiKey,
   "AWS.ApiGateway.DeleteApiKey",
   () => Effect.Effect<
-    (
-      request: DeleteApiKeyRequest,
-    ) => Effect.Effect<ag.DeleteApiKeyResponse, ag.DeleteApiKeyError>
+    (request: DeleteApiKeyRequest) => Effect.Effect<ag.DeleteApiKeyResponse, ag.DeleteApiKeyError>
   >
 > {}
-export const DeleteApiKey = Binding.Service<DeleteApiKey>(
-  "AWS.ApiGateway.DeleteApiKey",
-);
+export const DeleteApiKey = Binding.Service<DeleteApiKey>("AWS.ApiGateway.DeleteApiKey");

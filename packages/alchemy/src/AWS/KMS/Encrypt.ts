@@ -78,9 +78,7 @@ export interface Encrypt extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: EncryptRequest,
-    ) => Effect.Effect<kms.EncryptResponse, kms.EncryptError>
+    (request: EncryptRequest) => Effect.Effect<kms.EncryptResponse, kms.EncryptError>
   >
 > {}
 

@@ -32,12 +32,7 @@ export interface DescribeSchema extends Binding.Service<
     (request?: {
       /** The version of the schema to read. Defaults to the latest. */
       SchemaVersion?: string;
-    }) => Effect.Effect<
-      schemas.DescribeSchemaResponse,
-      schemas.DescribeSchemaError
-    >
+    }) => Effect.Effect<schemas.DescribeSchemaResponse, schemas.DescribeSchemaError>
   >
 > {}
-export const DescribeSchema = Binding.Service<DescribeSchema>(
-  "AWS.Schemas.DescribeSchema",
-);
+export const DescribeSchema = Binding.Service<DescribeSchema>("AWS.Schemas.DescribeSchema");

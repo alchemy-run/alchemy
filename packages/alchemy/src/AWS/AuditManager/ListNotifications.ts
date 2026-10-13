@@ -23,10 +23,7 @@ export interface ListNotifications extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.ListNotificationsRequest,
-    ) => Effect.Effect<
-      auditmanager.ListNotificationsResponse,
-      auditmanager.ListNotificationsError
-    >
+    ) => Effect.Effect<auditmanager.ListNotificationsResponse, auditmanager.ListNotificationsError>
   >
 > {}
 

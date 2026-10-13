@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
-import CjsDualPackageTaskLive, {
-  CjsDualPackageTask,
-} from "./fixtures/pg-task.ts";
+import CjsDualPackageTaskLive, { CjsDualPackageTask } from "./fixtures/pg-task.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,10 +19,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // exit 0. The unit-level pin is test/Bundle/ConditionNames.test.ts — this
 // is the same defect observed from the cloud.
 //
-// Docker + ECR + Fargate placement is minutes of wall clock, so like the
-// Task e2e smoke test it is gated out of the default sweep: run it
-// explicitly with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Docker + ECR + Fargate placement is ~1 minute of wall clock, so it is
+// skipped under --fast like the Task e2e smoke test.
+test.provider.skipIf(!!process.env.FAST)(
   "task importing a CJS dual-package consumer (pg) boots and exits 0",
   (stack) =>
     Effect.gen(function* () {
@@ -78,20 +75,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       const taskArn = started.tasks?.[0]?.taskArn;
       expect(taskArn).toBeTruthy();
 
-      const stopped = yield* ecs
-        .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
-        .pipe(
-          Effect.flatMap((result) => {
-            const task = result.tasks?.[0];
-            return task?.lastStatus === "STOPPED"
-              ? Effect.succeed(task)
-              : Effect.fail(
-                  new Error(`task not stopped yet: ${task?.lastStatus}`),
-                );
-          }),
-          Effect.tapError((error) => Effect.logInfo(String(error))),
-          Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
-        );
+      const stopped = yield* ecs.describeTasks({ cluster: clusterArn, tasks: [taskArn!] }).pipe(
+        Effect.flatMap((result) => {
+          const task = result.tasks?.[0];
+          return task?.lastStatus === "STOPPED"
+            ? Effect.succeed(task)
+            : Effect.fail(new Error(`task not stopped yet: ${task?.lastStatus}`));
+        }),
+        Effect.tapError((error) => Effect.logInfo(String(error))),
+        Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
+      );
 
       // Exit 0 = pg loaded, BoundPool constructed. A mis-resolved bundle
       // dies at module load and exits 1.

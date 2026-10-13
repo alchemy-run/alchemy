@@ -30,6 +30,4 @@ export interface ListRunTasks extends Binding.Service<
   >
 > {}
 
-export const ListRunTasks = Binding.Service<ListRunTasks>(
-  "AWS.Omics.ListRunTasks",
-);
+export const ListRunTasks = Binding.Service<ListRunTasks>("AWS.Omics.ListRunTasks");

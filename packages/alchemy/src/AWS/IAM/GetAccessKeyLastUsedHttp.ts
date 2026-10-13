@@ -21,26 +21,22 @@ export const GetAccessKeyLastUsedHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IAM.GetAccessKeyLastUsed(${accessKey}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["iam:GetAccessKeyLastUsed"],
-                  // The action is evaluated against the owning *user*, whose
-                  // path-qualified ARN is not derivable from the access key.
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.IAM.GetAccessKeyLastUsed(${accessKey}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["iam:GetAccessKeyLastUsed"],
+                // The action is evaluated against the owning *user*, whose
+                // path-qualified ARN is not derivable from the access key.
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.IAM.GetAccessKeyLastUsed(${accessKey.LogicalId})`)(
-        function* () {
-          return yield* op({ AccessKeyId: yield* AccessKeyId });
-        },
-      );
+      return Effect.fn(`AWS.IAM.GetAccessKeyLastUsed(${accessKey.LogicalId})`)(function* () {
+        return yield* op({ AccessKeyId: yield* AccessKeyId });
+      });
     });
   }),
 );

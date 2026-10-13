@@ -3,12 +3,10 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Astro build. */
-export const ASTRO_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/astro";
+export const ASTRO_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/astro";
 
 /** The AWS Lambda deploy target for the Astro build. */
-export const ASTRO_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/astro/aws";
+export const ASTRO_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astro/aws";
 
 export interface AstroProps extends FrameworkSiteProps {
   // Astro is configured in YOUR `astro.config.*`, which loads natively —
@@ -148,7 +146,6 @@ export const Astro = (id: string, props: InputProps<AstroProps> = {}) => {
     framework: ASTRO_FRAMEWORK_SPECIFIER,
     target: ASTRO_AWS_TARGET_SPECIFIER,
     options: { astro: { ...p.astro, output }, config: p.config },
-    static:
-      output === "static" ? { spa: p.spa, errorPage: p.errorPage } : undefined,
+    static: output === "static" ? { spa: p.spa, errorPage: p.errorPage } : undefined,
   }).pipe(Namespace.push(id));
 };

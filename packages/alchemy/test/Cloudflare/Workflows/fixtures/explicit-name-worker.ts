@@ -1,7 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 
 export const EXPLICIT_WORKFLOW_NAME = "alchemy-pr1460-effect-workflow";
 
@@ -40,7 +41,12 @@ export default class ExplicitNameWorkflowWorker extends Cloudflare.Worker<Explic
           return yield* HttpServerResponse.json(yield* instance.status());
         }
         return HttpServerResponse.text("ok");
-      }),
+      }).pipe(
+        // Surface the cause so a failed status read is diagnosable from the test.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }),
 ) {}

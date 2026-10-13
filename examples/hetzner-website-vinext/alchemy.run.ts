@@ -12,13 +12,7 @@ export default Alchemy.Stack(
     const site = yield* Hetzner.Website.Vinext("Vinext", {
       memo: {
         lockfile: true,
-        include: [
-          "app/**",
-          "public/**",
-          "package.json",
-          "vite.config.ts",
-          "tsconfig.json",
-        ],
+        include: ["app/**", "public/**", "package.json", "vite.config.ts", "tsconfig.json"],
       },
       env: {
         GREETING: "Hello from vinext on Hetzner!",

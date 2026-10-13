@@ -1,7 +1,7 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Certificate } from "./Certificate.ts";
@@ -73,22 +73,20 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ACM.${config.capability}(${certificate}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...config.iamActions],
-                  Resource: [certificate.certificateArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ACM.${config.capability}(${certificate}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...config.iamActions],
+                Resource: [certificate.certificateArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.ACM.${config.capability}(${certificate.LogicalId})`,
-      )(function* (request?: Omit<Req, "CertificateArn">) {
+      return Effect.fn(`AWS.ACM.${config.capability}(${certificate.LogicalId})`)(function* (
+        request?: Omit<Req, "CertificateArn">,
+      ) {
         // Sound: at instantiation `Req` always contains `CertificateArn: string`
         // (every certificate-scoped distilled request does), so
         // `Omit<Req, "CertificateArn"> & { CertificateArn: string }` is exactly
@@ -123,11 +121,7 @@ export interface AcmAccountHttpBindingConfig<Req extends object, Out, Err> {
   /**
    * The distilled ACM operation implementing the capability.
    */
-  operation: Effect.Effect<
-    (input: Req) => Effect.Effect<Out, Err>,
-    never,
-    AcmRequirements
-  >;
+  operation: Effect.Effect<(input: Req) => Effect.Effect<Out, Err>, never, AcmRequirements>;
 }
 
 /**
@@ -155,9 +149,7 @@ export const makeAcmAccountHttpBinding = <Req extends object, Out, Err>(
           });
         }
       }
-      return Effect.fn(`AWS.ACM.${config.capability}`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`AWS.ACM.${config.capability}`)(function* (request?: Req) {
         // Call-site pin — see makeAcmCertificateHttpBinding above.
         return yield* withAcmRegion(op(request ?? ({} as Req)));
       });

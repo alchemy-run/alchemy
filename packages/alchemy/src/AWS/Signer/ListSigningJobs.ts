@@ -27,12 +27,7 @@ export interface ListSigningJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: signer.ListSigningJobsRequest,
-    ) => Effect.Effect<
-      signer.ListSigningJobsResponse,
-      signer.ListSigningJobsError
-    >
+    ) => Effect.Effect<signer.ListSigningJobsResponse, signer.ListSigningJobsError>
   >
 > {}
-export const ListSigningJobs = Binding.Service<ListSigningJobs>(
-  "AWS.Signer.ListSigningJobs",
-);
+export const ListSigningJobs = Binding.Service<ListSigningJobs>("AWS.Signer.ListSigningJobs");

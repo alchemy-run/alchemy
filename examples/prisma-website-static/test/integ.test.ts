@@ -1,7 +1,7 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Prisma from "alchemy/Prisma";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";

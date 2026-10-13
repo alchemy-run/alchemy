@@ -3,7 +3,7 @@ title: MySQL
 description: SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — portable tagged-template queries with typed errors and one pool per execution.
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const deps = `@effect/sql-mysql2 mysql2`;
 
@@ -11,20 +11,7 @@ export const deps = `@effect/sql-mysql2 mysql2`;
 
 Install the optional MySQL driver:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${deps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${deps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${deps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${deps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={deps} />
 
 ## Connect
 
@@ -89,7 +76,7 @@ const rows = yield* sql`
 ```
 
 Rows are plain objects; supply a row type with `sql<Row>`. The
-[`effect/unstable/sql/Statement`](https://effect.website) API also provides
+[`effect/sql/Statement`](https://effect.website) API also provides
 fragments, `sql.csv`, `sql.and`, and identifier escaping (backticks on MySQL).
 
 ## Errors
@@ -123,7 +110,7 @@ yield* sql.withTransaction(
 Depend on the generic `SqlClient` tag, then provide the database layer:
 
 ```typescript
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 const makeUsers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

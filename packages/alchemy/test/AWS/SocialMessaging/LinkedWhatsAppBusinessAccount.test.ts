@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { LinkedWhatsAppBusinessAccount } from "@/AWS/SocialMessaging";
-import * as Test from "@/Test/Alchemy";
 import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { LinkedWhatsAppBusinessAccount } from "@/AWS/SocialMessaging";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,8 +17,7 @@ test.provider(
   "listLinkedWhatsAppBusinessAccounts succeeds (no onboarding required)",
   () =>
     Effect.gen(function* () {
-      const response =
-        yield* socialmessaging.listLinkedWhatsAppBusinessAccounts({});
+      const response = yield* socialmessaging.listLinkedWhatsAppBusinessAccounts({});
       expect(Array.isArray(response.linkedAccounts ?? [])).toBe(true);
     }),
   { tags: ["provider:aws", "provider:aws:socialmessaging", "live"] },
@@ -59,8 +58,7 @@ test.provider(
 // to run. NOTE: the final stack.destroy() disassociates the WABA from the
 // AWS account; re-running afterwards requires redoing the console signup.
 test.provider.skipIf(
-  !process.env.AWS_TEST_SOCIALMESSAGING ||
-    !process.env.AWS_TEST_SOCIALMESSAGING_WABA_ID,
+  !process.env.AWS_TEST_SOCIALMESSAGING || !process.env.AWS_TEST_SOCIALMESSAGING_WABA_ID,
 )(
   "adopt linked WABA, sync tags + event destinations, destroy",
   (stack) =>
@@ -85,13 +83,9 @@ test.provider.skipIf(
       expect(account.tags.fixture).toBe("socialmessaging");
 
       // Out-of-band verification via distilled.
-      const observed = yield* socialmessaging.getLinkedWhatsAppBusinessAccount({
-        id: wabaId,
-      });
+      const observed = yield* socialmessaging.getLinkedWhatsAppBusinessAccount({ id: wabaId });
       expect(observed.account?.id).toBe(wabaId);
-      const observedTags = yield* socialmessaging.listTagsForResource({
-        resourceArn: account.arn,
-      });
+      const observedTags = yield* socialmessaging.listTagsForResource({ resourceArn: account.arn });
       const tagMap = Object.fromEntries(
         (observedTags.tags ?? []).map((tag) => [tag.key, tag.value]),
       );
@@ -117,8 +111,5 @@ test.provider.skipIf(
       );
       expect(gone._tag).toBe("ResourceNotFoundException");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:socialmessaging", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:socialmessaging", "live"], timeout: 120_000 },
 );

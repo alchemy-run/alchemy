@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
 /** Request for {@link DescribeRegistries}. */
-export interface DescribeRegistriesRequest
-  extends ecrpublic.DescribeRegistriesRequest {}
+export interface DescribeRegistriesRequest extends ecrpublic.DescribeRegistriesRequest {}
 
 /**
  * Runtime binding for `ecr-public:DescribeRegistries`.
@@ -33,10 +32,7 @@ export interface DescribeRegistries extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeRegistriesRequest,
-    ) => Effect.Effect<
-      ecrpublic.DescribeRegistriesResponse,
-      ecrpublic.DescribeRegistriesError
-    >
+    ) => Effect.Effect<ecrpublic.DescribeRegistriesResponse, ecrpublic.DescribeRegistriesError>
   >
 > {}
 

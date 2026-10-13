@@ -73,9 +73,8 @@ export const makeDaxConnectHttpBinding = (options: {
               // Lambda environment variables are strings — stringify the port.
               [`${prefix}_PORT`]: Output.interpolate`${cluster.discoveryEndpointPort}`,
               [`${prefix}_URL`]: cluster.discoveryEndpointUrl,
-              [`${prefix}_TLS`]: Output.map(
-                cluster.clusterEndpointEncryptionType,
-                (encryption) => (encryption === "TLS" ? "true" : "false"),
+              [`${prefix}_TLS`]: Output.map(cluster.clusterEndpointEncryptionType, (encryption) =>
+                encryption === "TLS" ? "true" : "false",
               ),
             },
             policyStatements: [

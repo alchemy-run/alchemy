@@ -1,14 +1,14 @@
-import { Subnet, Vpc } from "@/AWS/EC2";
-import * as Lambda from "@/AWS/Lambda";
-import * as NetworkFirewall from "@/AWS/NetworkFirewall";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import * as Lambda from "@/AWS/Lambda";
+import * as NetworkFirewall from "@/AWS/NetworkFirewall";
 
 const main = path.resolve(import.meta.dirname, "firewall-handler.ts");
 
@@ -54,21 +54,24 @@ export default NetworkFirewallFirewallBindingsFunction.make(
       describeFirewall: yield* NetworkFirewall.DescribeFirewall(firewall),
       startFlowCapture: yield* NetworkFirewall.StartFlowCapture(firewall),
       startFlowFlush: yield* NetworkFirewall.StartFlowFlush(firewall),
-      describeFlowOperation:
-        yield* NetworkFirewall.DescribeFlowOperation(firewall),
+      describeFlowOperation: yield* NetworkFirewall.DescribeFlowOperation(firewall),
       listFlowOperations: yield* NetworkFirewall.ListFlowOperations(firewall),
-      listFlowOperationResults:
-        yield* NetworkFirewall.ListFlowOperationResults(firewall),
+      listFlowOperationResults: yield* NetworkFirewall.ListFlowOperationResults(firewall),
       startAnalysisReport: yield* NetworkFirewall.StartAnalysisReport(firewall),
       listAnalysisReports: yield* NetworkFirewall.ListAnalysisReports(firewall),
-      getAnalysisReportResults:
-        yield* NetworkFirewall.GetAnalysisReportResults(firewall),
+      getAnalysisReportResults: yield* NetworkFirewall.GetAnalysisReportResults(firewall),
     };
 
+    // Flow operations target exactly one firewall endpoint ("Exactly one of
+    // AvailabilityZone, AvailabilityZoneId, VpcEndpointId, or
+    // VpcEndpointAssociationArn must be set"). The firewall's sync states are
+    // keyed by the Availability Zone of each endpoint.
+    const firewallAz = bound
+      .describeFirewall()
+      .pipe(Effect.map((r) => Object.keys(r.FirewallStatus?.SyncStates ?? {})[0]));
+
     // A narrow filter so the capture/flush stays tiny.
-    const flowFilters = [
-      { SourceAddress: { AddressDefinition: "10.78.1.10/32" } },
-    ];
+    const flowFilters = [{ SourceAddress: { AddressDefinition: "10.78.1.10/32" } }];
 
     return {
       fetch: Effect.gen(function* () {
@@ -87,9 +90,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
           const response = yield* bound.describeFirewall();
           return yield* HttpServerResponse.json({
             status: response.FirewallStatus?.Status,
-            endpointCount: Object.keys(
-              response.FirewallStatus?.SyncStates ?? {},
-            ).length,
+            endpointCount: Object.keys(response.FirewallStatus?.SyncStates ?? {}).length,
           });
         }
 
@@ -98,8 +99,16 @@ export default NetworkFirewallFirewallBindingsFunction.make(
         // step reports its typed failure so a single grant gap is
         // diagnosable from the JSON instead of a generic 500.
         if (request.method === "GET" && pathname === "/flow") {
+          const az = yield* Effect.result(firewallAz);
+          if (Result.isFailure(az)) {
+            return yield* HttpServerResponse.json({
+              step: "describeFirewall",
+              tag: az.failure._tag,
+              error: String(az.failure),
+            });
+          }
           const started = yield* Effect.result(
-            bound.startFlowCapture({ FlowFilters: flowFilters }),
+            bound.startFlowCapture({ AvailabilityZone: az.success, FlowFilters: flowFilters }),
           );
           if (Result.isFailure(started)) {
             return yield* HttpServerResponse.json({
@@ -110,7 +119,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
           }
           const FlowOperationId = started.success.FlowOperationId!;
           const polled = yield* Effect.result(
-            bound.describeFlowOperation({ FlowOperationId }).pipe(
+            bound.describeFlowOperation({ AvailabilityZone: az.success, FlowOperationId }).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (r): boolean => r.FlowOperationStatus !== "IN_PROGRESS",
@@ -126,7 +135,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
             });
           }
           const listed = yield* Effect.result(
-            bound.listFlowOperations({ FlowOperationType: "FLOW_CAPTURE" }),
+            bound.listFlowOperations({
+              AvailabilityZone: az.success,
+              FlowOperationType: "FLOW_CAPTURE",
+            }),
           );
           if (Result.isFailure(listed)) {
             return yield* HttpServerResponse.json({
@@ -136,7 +148,7 @@ export default NetworkFirewallFirewallBindingsFunction.make(
             });
           }
           const results = yield* Effect.result(
-            bound.listFlowOperationResults({ FlowOperationId }),
+            bound.listFlowOperationResults({ AvailabilityZone: az.success, FlowOperationId }),
           );
           if (Result.isFailure(results)) {
             return yield* HttpServerResponse.json({
@@ -156,12 +168,13 @@ export default NetworkFirewallFirewallBindingsFunction.make(
 
         // Flush — success or any typed rejection proves the grant.
         if (request.method === "GET" && pathname === "/flush") {
-          const tag = yield* bound
-            .startFlowFlush({ FlowFilters: flowFilters })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+          const tag = yield* firewallAz.pipe(
+            Effect.flatMap((AvailabilityZone) =>
+              bound.startFlowFlush({ AvailabilityZone, FlowFilters: flowFilters }),
+            ),
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           return yield* HttpServerResponse.json({ tag });
         }
 
@@ -171,12 +184,10 @@ export default NetworkFirewallFirewallBindingsFunction.make(
         // gap would surface AccessDeniedException instead); the list is a
         // real (empty) read.
         if (request.method === "GET" && pathname === "/analysis") {
-          const startTag = yield* bound
-            .startAnalysisReport({ AnalysisType: "TLS_SNI" })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+          const startTag = yield* bound.startAnalysisReport({ AnalysisType: "TLS_SNI" }).pipe(
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           const listed = yield* Effect.result(bound.listAnalysisReports());
           if (Result.isFailure(listed)) {
             return yield* HttpServerResponse.json({

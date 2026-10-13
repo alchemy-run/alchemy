@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeAnomalyDetectorsRequest
-  extends cloudwatch.DescribeAnomalyDetectorsInput {}
+export interface DescribeAnomalyDetectorsRequest extends cloudwatch.DescribeAnomalyDetectorsInput {}
 
 /**
  * Runtime binding for `cloudwatch:DescribeAnomalyDetectors` — list the
@@ -40,7 +39,6 @@ export interface DescribeAnomalyDetectors extends Binding.Service<
   >
 > {}
 
-export const DescribeAnomalyDetectors =
-  Binding.Service<DescribeAnomalyDetectors>(
-    "AWS.CloudWatch.DescribeAnomalyDetectors",
-  );
+export const DescribeAnomalyDetectors = Binding.Service<DescribeAnomalyDetectors>(
+  "AWS.CloudWatch.DescribeAnomalyDetectors",
+);

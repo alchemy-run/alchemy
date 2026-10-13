@@ -41,7 +41,6 @@ export interface CreateStarterMappingTemplate extends Binding.Service<
     >
   >
 > {}
-export const CreateStarterMappingTemplate =
-  Binding.Service<CreateStarterMappingTemplate>(
-    "AWS.B2BI.CreateStarterMappingTemplate",
-  );
+export const CreateStarterMappingTemplate = Binding.Service<CreateStarterMappingTemplate>(
+  "AWS.B2BI.CreateStarterMappingTemplate",
+);

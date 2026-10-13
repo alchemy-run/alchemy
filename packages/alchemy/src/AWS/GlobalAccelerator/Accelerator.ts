@@ -151,9 +151,7 @@ export interface Accelerator extends Resource<
  *
  * @resource
  */
-export const Accelerator = Resource<Accelerator>(
-  "AWS.GlobalAccelerator.Accelerator",
-);
+export const Accelerator = Resource<Accelerator>("AWS.GlobalAccelerator.Accelerator");
 
 const createAcceleratorName = Effect.fn(function* (
   id: string,
@@ -181,13 +179,9 @@ const toAttributes = (
 });
 
 const describeAccelerator = Effect.fn(function* (acceleratorArn: string) {
-  return yield* withGaRegion(
-    ga.describeAccelerator({ AcceleratorArn: acceleratorArn }),
-  ).pipe(
+  return yield* withGaRegion(ga.describeAccelerator({ AcceleratorArn: acceleratorArn })).pipe(
     Effect.map((r) => r.Accelerator),
-    Effect.catchTag("AcceleratorNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
@@ -196,27 +190,19 @@ const describeFlowLogs = Effect.fn(function* (acceleratorArn: string) {
     ga.describeAcceleratorAttributes({ AcceleratorArn: acceleratorArn }),
   ).pipe(
     Effect.map((r) => r.AcceleratorAttributes),
-    Effect.catchTag("AcceleratorNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
 const findAcceleratorByName = Effect.fn(function* (name: string) {
-  const accelerators = yield* withGaRegion(
-    ga.listAccelerators.items({}).pipe(Stream.runCollect),
-  );
+  const accelerators = yield* withGaRegion(ga.listAccelerators.items({}).pipe(Stream.runCollect));
   return Array.from(accelerators).find((a) => a.Name === name);
 });
 
 const fetchTags = Effect.fn(function* (resourceArn: string) {
-  return yield* withGaRegion(
-    ga.listTagsForResource({ ResourceArn: resourceArn }),
-  ).pipe(
-    Effect.map((r) =>
-      Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-    ),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+  return yield* withGaRegion(ga.listTagsForResource({ ResourceArn: resourceArn })).pipe(
+    Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 });
 
@@ -229,14 +215,10 @@ const fetchTags = Effect.fn(function* (resourceArn: string) {
  */
 const deleteAcceleratorChildren = Effect.fn(function* (acceleratorArn: string) {
   const listeners = yield* withGaRegion(
-    ga.listListeners
-      .items({ AcceleratorArn: acceleratorArn })
-      .pipe(Stream.runCollect),
+    ga.listListeners.items({ AcceleratorArn: acceleratorArn }).pipe(Stream.runCollect),
   ).pipe(
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("AcceleratorNotFoundException", () =>
-      Effect.succeed([] as ga.Listener[]),
-    ),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed([] as ga.Listener[])),
   );
 
   // GA serializes mutations per accelerator. Keep this traversal sequential
@@ -247,9 +229,7 @@ const deleteAcceleratorChildren = Effect.fn(function* (acceleratorArn: string) {
       if (!listener.ListenerArn) return;
       const listenerArn = listener.ListenerArn;
       const endpointGroups = yield* withGaRegion(
-        ga.listEndpointGroups
-          .items({ ListenerArn: listenerArn })
-          .pipe(Stream.runCollect),
+        ga.listEndpointGroups.items({ ListenerArn: listenerArn }).pipe(Stream.runCollect),
       ).pipe(
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("ListenerNotFoundException", () =>
@@ -261,27 +241,26 @@ const deleteAcceleratorChildren = Effect.fn(function* (acceleratorArn: string) {
         endpointGroups,
         (group) =>
           group.EndpointGroupArn
-            ? retryGaDeletion(
-                withGaRegion(
-                  ga.deleteEndpointGroup({
-                    EndpointGroupArn: group.EndpointGroupArn,
-                  }),
-                ),
-              ).pipe(
-                Effect.catchTag(
-                  "EndpointGroupNotFoundException",
-                  () => Effect.void,
-                ),
-              )
+            ? ga
+                .deleteEndpointGroup({
+                  EndpointGroupArn: group.EndpointGroupArn,
+                })
+                .pipe(
+                  withGaRegion,
+                  retryGaDeletion,
+                  Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void),
+                )
             : Effect.void,
         { discard: true },
       );
 
       // Endpoint-group detachment is asynchronous. The same bounded retry
       // used by the child provider waits until the listener is deletable.
-      yield* retryUntilListenerDeletable(
-        withGaRegion(ga.deleteListener({ ListenerArn: listenerArn })),
-      ).pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
+      yield* ga.deleteListener({ ListenerArn: listenerArn }).pipe(
+        withGaRegion,
+        retryUntilListenerDeletable,
+        Effect.catchTag("ListenerNotFoundException", () => Effect.void),
+      );
     }),
     { discard: true },
   );
@@ -323,10 +302,7 @@ export const AcceleratorProvider = () =>
       // Static BYOIP addresses are the accelerator's identity — changing
       // them requires a replacement. Name, ipAddressType, and enabled are
       // all mutable via updateAccelerator.
-      if (
-        JSON.stringify(news.ipAddresses ?? []) !==
-        JSON.stringify(olds.ipAddresses ?? [])
-      ) {
+      if (JSON.stringify(news.ipAddresses ?? []) !== JSON.stringify(olds.ipAddresses ?? [])) {
         return { action: "replace" } as const;
       }
       const oldName = yield* createAcceleratorName(id, olds);
@@ -357,26 +333,26 @@ export const AcceleratorProvider = () =>
       // Ensure — create if missing. The idempotency token (derived from the
       // instance id) makes a crashed-and-retried create safe.
       if (!live?.AcceleratorArn) {
-        live = yield* retryGaTransaction(
-          withGaRegion(
-            ga.createAccelerator({
-              Name: name,
-              IpAddressType: news.ipAddressType,
-              IpAddresses: news.ipAddresses,
-              Enabled: desiredEnabled,
-              IdempotencyToken: instanceId,
-              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            }),
-          ),
-        ).pipe(Effect.map((r) => r.Accelerator));
+        live = yield* ga
+          .createAccelerator({
+            Name: name,
+            IpAddressType: news.ipAddressType,
+            IpAddresses: news.ipAddresses,
+            Enabled: desiredEnabled,
+            IdempotencyToken: instanceId,
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            withGaRegion,
+            retryGaTransaction,
+            Effect.map((r) => r.Accelerator),
+          );
       }
       if (!live?.AcceleratorArn) {
-        return yield* Effect.die(
-          new Error("CreateAccelerator returned no accelerator"),
-        );
+        return yield* Effect.die(new Error("CreateAccelerator returned no accelerator"));
       }
       const acceleratorArn = live.AcceleratorArn;
 
@@ -389,10 +365,7 @@ export const AcceleratorProvider = () =>
         update.Name = name;
         dirty = true;
       }
-      if (
-        news.ipAddressType !== undefined &&
-        live.IpAddressType !== news.ipAddressType
-      ) {
+      if (news.ipAddressType !== undefined && live.IpAddressType !== news.ipAddressType) {
         update.IpAddressType = news.ipAddressType;
         dirty = true;
       }
@@ -401,9 +374,11 @@ export const AcceleratorProvider = () =>
         dirty = true;
       }
       if (dirty) {
-        const updated = yield* retryGaTransaction(
-          withGaRegion(ga.updateAccelerator(update)),
-        ).pipe(Effect.map((r) => r.Accelerator));
+        const updated = yield* ga.updateAccelerator(update).pipe(
+          withGaRegion,
+          retryGaTransaction,
+          Effect.map((r) => r.Accelerator),
+        );
         if (updated) live = updated;
       }
 
@@ -418,34 +393,32 @@ export const AcceleratorProvider = () =>
             (news.flowLogs!.prefix !== undefined &&
               flowLogs?.FlowLogsS3Prefix !== news.flowLogs!.prefix)));
       if (flowLogsDrift) {
-        flowLogs = yield* retryGaTransaction(
-          withGaRegion(
-            ga.updateAcceleratorAttributes({
-              AcceleratorArn: acceleratorArn,
-              FlowLogsEnabled: desiredFlowLogsEnabled,
-              ...(desiredFlowLogsEnabled
-                ? {
-                    FlowLogsS3Bucket: news.flowLogs!.bucket,
-                    FlowLogsS3Prefix: news.flowLogs!.prefix,
-                  }
-                : {}),
-            }),
-          ),
-        ).pipe(Effect.map((r) => r.AcceleratorAttributes));
+        flowLogs = yield* ga
+          .updateAcceleratorAttributes({
+            AcceleratorArn: acceleratorArn,
+            FlowLogsEnabled: desiredFlowLogsEnabled,
+            ...(desiredFlowLogsEnabled
+              ? {
+                  FlowLogsS3Bucket: news.flowLogs!.bucket,
+                  FlowLogsS3Prefix: news.flowLogs!.prefix,
+                }
+              : {}),
+          })
+          .pipe(
+            withGaRegion,
+            retryGaTransaction,
+            Effect.map((r) => r.AcceleratorAttributes),
+          );
       }
 
       // Sync tags against OBSERVED cloud tags so adoption converges.
       const observedTags = yield* fetchTags(acceleratorArn);
       const { upsert, removed } = diffTags(observedTags, desiredTags);
       if (upsert.length > 0) {
-        yield* withGaRegion(
-          ga.tagResource({ ResourceArn: acceleratorArn, Tags: upsert }),
-        );
+        yield* withGaRegion(ga.tagResource({ ResourceArn: acceleratorArn, Tags: upsert }));
       }
       if (removed.length > 0) {
-        yield* withGaRegion(
-          ga.untagResource({ ResourceArn: acceleratorArn, TagKeys: removed }),
-        );
+        yield* withGaRegion(ga.untagResource({ ResourceArn: acceleratorArn, TagKeys: removed }));
       }
 
       yield* session.note(acceleratorArn);
@@ -454,32 +427,28 @@ export const AcceleratorProvider = () =>
     delete: Effect.fn(function* ({ output, session, force }) {
       const acceleratorArn = output.acceleratorArn;
       if (force) {
-        yield* session.note(
-          "deleting accelerator listeners and endpoint groups",
-        );
+        yield* session.note("deleting accelerator listeners and endpoint groups");
         yield* deleteAcceleratorChildren(acceleratorArn);
       }
       // An accelerator must be disabled before it can be deleted.
-      const exists = yield* retryGaTransaction(
-        withGaRegion(
-          ga.updateAccelerator({
-            AcceleratorArn: acceleratorArn,
-            Enabled: false,
-          }),
-        ),
-      ).pipe(
-        Effect.map(() => true),
-        Effect.catchTag("AcceleratorNotFoundException", () =>
-          Effect.succeed(false),
-        ),
-      );
+      const exists = yield* ga
+        .updateAccelerator({
+          AcceleratorArn: acceleratorArn,
+          Enabled: false,
+        })
+        .pipe(
+          withGaRegion,
+          retryGaTransaction,
+          Effect.map(() => true),
+          Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(false)),
+        );
       if (!exists) return;
       yield* session.note("waiting for accelerator to disable");
       // The disable propagates asynchronously; deleteAccelerator rejects with
       // AcceleratorNotDisabledException until it lands, so retry bounded.
-      yield* retryUntilAcceleratorDeletable(
-        withGaRegion(ga.deleteAccelerator({ AcceleratorArn: acceleratorArn })),
-      ).pipe(
+      yield* ga.deleteAccelerator({ AcceleratorArn: acceleratorArn }).pipe(
+        withGaRegion,
+        retryUntilAcceleratorDeletable,
         Effect.catchTag("AcceleratorNotFoundException", () => Effect.void),
       );
     }),

@@ -31,13 +31,8 @@ export interface ListBaselines extends Binding.Service<
   () => Effect.Effect<
     (
       request?: controltower.ListBaselinesInput,
-    ) => Effect.Effect<
-      controltower.ListBaselinesOutput,
-      controltower.ListBaselinesError
-    >
+    ) => Effect.Effect<controltower.ListBaselinesOutput, controltower.ListBaselinesError>
   >
 > {}
 
-export const ListBaselines = Binding.Service<ListBaselines>(
-  "AWS.ControlTower.ListBaselines",
-);
+export const ListBaselines = Binding.Service<ListBaselines>("AWS.ControlTower.ListBaselines");

@@ -70,12 +70,7 @@ export interface CreateChatToken extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateChatTokenRequest,
-    ) => Effect.Effect<
-      ivschat.CreateChatTokenResponse,
-      ivschat.CreateChatTokenError
-    >
+    ) => Effect.Effect<ivschat.CreateChatTokenResponse, ivschat.CreateChatTokenError>
   >
 > {}
-export const CreateChatToken = Binding.Service<CreateChatToken>(
-  "AWS.IVSChat.CreateChatToken",
-);
+export const CreateChatToken = Binding.Service<CreateChatToken>("AWS.IVSChat.CreateChatToken");

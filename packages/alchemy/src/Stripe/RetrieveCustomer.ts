@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Customer } from "./Customer.ts";
 
-export interface RetrieveCustomerRequest extends Omit<
-  GetCustomerRequest,
-  "customer"
-> {}
+export interface RetrieveCustomerRequest extends Omit<GetCustomerRequest, "customer"> {}
 
 /**
  * Retrieve a bound Stripe Customer over HTTP.
@@ -38,6 +35,4 @@ export interface RetrieveCustomer extends Binding.Service<
   >
 > {}
 
-export const RetrieveCustomer = Binding.Service<RetrieveCustomer>(
-  "Stripe.RetrieveCustomer",
-);
+export const RetrieveCustomer = Binding.Service<RetrieveCustomer>("Stripe.RetrieveCustomer");

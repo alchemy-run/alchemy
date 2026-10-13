@@ -127,6 +127,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Browser rendering](https://alchemy.run/cloudflare/compute/browser-rendering) — Attach Cloudflare Browser Rendering to a Worker — run quick actions like markdown and scrape, stream screenshots and PDFs, or drive the raw binding with puppeteer.
 - [Worker Loader](https://alchemy.run/cloudflare/compute/worker-loader) — Load and run ephemeral Workers at runtime from inline source — each in its own sandboxed isolate, with optional outbound-network control and typed RPC entrypoints.
 - [Workers for Platforms](https://alchemy.run/cloudflare/compute/workers-for-platforms) — Run your customers' Workers in your own account — create a dispatch namespace, upload user Workers into it, and route requests from a platform Worker with the Get binding.
+- [Container lifecycle](https://alchemy.run/cloudflare/compute/container-lifecycle) — Start, stop, wait for, and restore a Cloudflare Container from its Durable Object — and save its filesystem as a snapshot to restore later.
 - [Containers](https://alchemy.run/cloudflare/compute/containers) — Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
 - [Durable Objects](https://alchemy.run/cloudflare/compute/durable-objects) — Durable Objects are globally-unique stateful instances with transactional storage — define one as an Effect, persist state per key, expose typed RPC methods, and stream values back to the caller.
 - [Gradual deployments](https://alchemy.run/cloudflare/compute/gradual-deployments) — Roll out Worker deploys incrementally — upload preview versions, canary a percentage of live traffic, ramp to 100%, pin users to a version during the rollout, and verify which version served each request.
@@ -168,15 +169,20 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [D1](https://alchemy.run/cloudflare/data/d1) — Cloudflare D1 is serverless SQLite — create a database, apply migrations on deploy, and query it from a Worker through a typed binding.
 - [Drizzle on D1](https://alchemy.run/cloudflare/data/d1-drizzle) — Deploy committed SQLite migrations to D1 and query the database from a Worker with Drizzle.
 - [Hyperdrive](https://alchemy.run/cloudflare/data/hyperdrive) — Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
+- [Iceberg tables](https://alchemy.run/cloudflare/data/iceberg-tables) — Turn an R2 bucket into an Apache Iceberg warehouse with Cloudflare's catalog, manage tables with schema evolution and maintenance, and query them from Spark, DuckDB, or PyIceberg.
 - [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
+- [Pipelines](https://alchemy.run/cloudflare/data/pipelines) — Ingest events into R2 with Cloudflare Pipelines — a typed stream, a SQL pipeline, and a sink that writes JSON or Parquet files, or Apache Iceberg tables.
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
+- [Private database (Workers VPC)](https://alchemy.run/cloudflare/data/hyperdrive-private-database) — Connect Hyperdrive to a database inside a private network — such as Aurora in an AWS VPC — through a Cloudflare Tunnel and a Workers VPC Service, with no public endpoint.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+- [R2 presigned URLs](https://alchemy.run/cloudflare/data/r2-presigned-urls) — Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 
 ## Cloudflare — Messaging & events
 
 - [Scheduled jobs with Cron Triggers](https://alchemy.run/cloudflare/messaging/cron) — Run Worker code on a schedule — declare a cron expression with an Effect handler, deploy it, and prove the trigger fires with a bounded polling test.
 - [React to GitHub events from a Worker](https://alchemy.run/cloudflare/messaging/github-events) — Subscribe a Cloudflare Worker to GitHub repository webhooks with typed payloads — alchemy provisions the webhook and verifies delivery signatures.
+- [K2 streams](https://alchemy.run/cloudflare/messaging/k2) — Cloudflare K2 is a durable, replayable log. Produce records from Workers with the WriteStream binding, then consume them from a long-running host with consumeStreamRecords.
 - [Queues](https://alchemy.run/cloudflare/messaging/queues) — Cloudflare Queues give you reliable, at-least-once message delivery between Workers — a WriteQueue producer binding on one side and an Effect-style consumeQueueMessages handler with automatic ack/retry on the other.
 
 ## Cloudflare — Email
@@ -210,6 +216,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 ## Cloudflare — Networking
 
 - [Custom domains & routes](https://alchemy.run/cloudflare/networking/custom-domains) — Serve Workers from your own domain — create or adopt a Zone, attach custom domains, route hostname patterns, manage DNS records, and control the workers.dev subdomain.
+- [Federated APIs](https://alchemy.run/cloudflare/networking/federated-apis) — Serve one API at one URL from many Workers — each path handled by its own least-privilege Worker, routed by Cloudflare's zone routes with no gateway Worker, and emulated locally by alchemy dev.
 - [Expose private origins with Tunnel](https://alchemy.run/cloudflare/networking/tunnel) — Connect a private origin to Cloudflare's edge with a Tunnel, declare its ingress rules as a Configuration resource, and point DNS at it with a proxied CNAME.
 - [Domains & DNS](https://alchemy.run/cloudflare/networking/domains) — Manage Cloudflare zones, DNS records, DNSSEC, and zone settings as resources — and safely adopt the domains you already have.
 
@@ -267,7 +274,7 @@ A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and 
 The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.
 
 - [AWS](https://alchemy.run/aws) — Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
-- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, stored access keys, or CI environment credentials.
+- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — Lambda vs ECS vs EKS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
 
 ## AWS — tutorial
@@ -351,6 +358,17 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 - [Custom domains with Route53 + ACM](https://alchemy.run/aws/networking/custom-domains) — Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 alias records, and the domain prop on Website resources.
 - [VPC & networking](https://alchemy.run/aws/networking) — The Network helper for a production-shaped VPC in one call, and the full set of EC2 networking primitives — VPCs, subnets, gateways, routes, security groups, and endpoints — for explicit control.
+
+## GCP
+
+Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.
+
+- [GCP](https://alchemy.run/gcp) — Google Cloud in one Effect program — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, and Memorystore, with IAM granted by the bindings themselves.
+- [Setup](https://alchemy.run/gcp/setup) — Connect alchemy to Google Cloud — project, service-account key, the APIs to enable, and Docker.
+- [Serve an API on Cloud Run](https://alchemy.run/gcp/guides/cloud-run-api) — A link shortener on one Cloud Run service — Firestore for state, Secret Manager for the API key, and IAM granted by the bindings themselves.
+- [Ingest events into BigQuery](https://alchemy.run/gcp/guides/event-pipeline) — A Cloud Run service publishes to Pub/Sub, a Cloud Run Job drains the subscription into BigQuery, and one host triggers the other.
+- [Cache with Memorystore](https://alchemy.run/gcp/guides/memorystore) — Bind a Memorystore Redis instance to a Cloud Run service over Direct VPC egress, and what to expect from create and destroy times.
+- [How bindings grant IAM](https://alchemy.run/gcp/guides/bindings) — What a yield* of a GCP binding actually does — the per-host service account, the role it grants, and how removing a binding revokes it.
 
 ## Fly — start here
 
@@ -554,6 +572,30 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 - [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 - [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 
+## Kubernetes
+
+Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.
+
+- [Kubernetes](https://alchemy.run/kubernetes) — Run containers and Effect programs on any Kubernetes cluster with Alchemy. Declare Deployments, Jobs, raw manifests, and Helm charts in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
+- [Setup](https://alchemy.run/kubernetes/setup) — Install Alchemy and connect it to a Kubernetes cluster, whether a local cluster on your machine, any cluster in your kubeconfig, or an explicit connection for CI. Then add a registry for images built from your code.
+- [Part 1: Your First Deployment](https://alchemy.run/kubernetes/tutorial/part-1) — Create a Stack, start a Kubernetes cluster on your machine with Kubernetes.LocalCluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
+- [Part 2: Namespaces & Configuration](https://alchemy.run/kubernetes/tutorial/part-2) — Create a Namespace with Kubernetes.Manifest, move the Deployment into it, and configure the app with environment variables and resource limits.
+- [Part 3: Effect Jobs](https://alchemy.run/kubernetes/tutorial/part-3) — Write a smoke test as an Effect program, run it as a Kubernetes Job that Alchemy builds and pushes for you, watch it re-run when the program changes, and schedule it as a CronJob.
+- [Part 4: Install a Helm Chart](https://alchemy.run/kubernetes/tutorial/part-4) — Install metrics-server from its Helm chart with Kubernetes.HelmChart, pass chart values, and check pod metrics with kubectl top.
+- [Part 5: Deploy to Your Own Cluster](https://alchemy.run/kubernetes/tutorial/part-5) — Point the tutorial stack at a hosted Kubernetes cluster such as GKE, AKS, EKS, k3s, or anything in your kubeconfig. Keep the local cluster for development with stages, and clean up.
+- [Connecting to clusters](https://alchemy.run/kubernetes/clusters/connecting) — Point Kubernetes resources at any cluster with Kubernetes.KubeConfig, a raw Kubernetes.Connection (bearer token, client certificate, or exec plugin), or a cluster resource such as Kubernetes.LocalCluster.
+- [Container registries](https://alchemy.run/kubernetes/clusters/registries) — Give a Kubernetes connection a registry so Deployments and Jobs built from Effect programs or Dockerfiles are pushed where the cluster's nodes can pull them, such as GHCR, Docker Hub, Artifact Registry, ACR, or a registry of your own.
+- [Local clusters](https://alchemy.run/kubernetes/clusters/local) — Run a Kubernetes cluster on your machine with Kubernetes.LocalCluster. It is a kind cluster in Docker with an image registry wired into its nodes, so Effect programs and Dockerfiles deploy the same way they do on a hosted cluster.
+- [Amazon EKS](https://alchemy.run/kubernetes/clusters/eks) — Run Alchemy's Kubernetes resources on Amazon EKS. Find the guide for creating clusters, ECR images, Pod Identity, and load balancers.
+- [Cluster adapters](https://alchemy.run/kubernetes/clusters/cluster-adapters) — The extension point between Alchemy's cluster-agnostic Kubernetes resources and the platform a cluster runs on. Covers authentication, image registries, workload identity, load balancer defaults, and how to write your own.
+- [Deployments](https://alchemy.run/kubernetes/workloads/deployments) — Run a replicated server on any Kubernetes cluster with Kubernetes.Deployment. Covers names, namespaces, Service types and URLs, replicas, resources, labels, the pod template escape hatch, and Effect servers.
+- [Jobs & CronJobs](https://alchemy.run/kubernetes/workloads/jobs) — Run work to completion with Kubernetes.Job, as a container image or as an Effect program, and on a schedule as a CronJob. Covers how Job names, re-runs, retries, and cleanup work.
+- [Container images](https://alchemy.run/kubernetes/workloads/images) — Choose where a Deployment or Job's container image comes from and where built images are pushed. Sources are a registry reference, your own Dockerfile, or a bundled Effect program.
+- [Configuration & bindings](https://alchemy.run/kubernetes/workloads/bindings) — Pass configuration into Kubernetes workloads with env and Outputs, understand the variables Alchemy sets, keep secrets out of plain text, and use bindings.
+- [How objects are managed](https://alchemy.run/kubernetes/workloads/object-lifecycle) — How Alchemy applies, orders, prunes, and deletes Kubernetes objects, including server-side apply and field ownership, drift, replacement, unreachable clusters, and adoption.
+- [Manifests](https://alchemy.run/kubernetes/objects/manifests) — Apply any single Kubernetes object with Kubernetes.Manifest, including Namespaces, ConfigMaps, Secrets, StatefulSets, Ingresses, CRDs and custom resources, and order objects with Output references.
+- [Helm charts](https://alchemy.run/kubernetes/objects/helm-charts) — Install Helm charts with Kubernetes.HelmChart. Covers repository, OCI, and local charts, values, release names, namespaces, CRDs, hooks, and how Alchemy owns the rendered objects instead of a Helm release.
+
 ## SQL
 
 Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
@@ -585,4 +627,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~131 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~161 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -17,13 +16,7 @@ type TypeId = typeof TypeId;
 /**
  * Protocol a Load Balancing monitor probes origins with.
  */
-export type MonitorType =
-  | "http"
-  | "https"
-  | "tcp"
-  | "udp_icmp"
-  | "icmp_ping"
-  | "smtp";
+export type MonitorType = "http" | "https" | "tcp" | "udp_icmp" | "icmp_ping" | "smtp";
 
 export interface MonitorProps {
   /**
@@ -133,13 +126,7 @@ export interface MonitorAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Monitor = Resource<
-  TypeId,
-  MonitorProps,
-  MonitorAttributes,
-  never,
-  Providers
->;
+export type Monitor = Resource<TypeId, MonitorProps, MonitorAttributes, never, Providers>;
 
 /**
  * A Cloudflare Load Balancing monitor — an active health check (HTTP,
@@ -206,9 +193,7 @@ export const MonitorProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((monitor) =>
-              toAttributes(monitor, accountId),
-            ),
+            (page.result ?? []).map((monitor) => toAttributes(monitor, accountId)),
           ),
         ),
       );
@@ -287,10 +272,7 @@ export const MonitorProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "MonitorInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
           }),
           Effect.catchTag("MonitorNotFound", () => Effect.void),
         );
@@ -359,10 +341,7 @@ const buildBody = (news: MonitorProps, description: string) => ({
  * Compare desired (explicitly set) fields against observed cloud state.
  * Unset desired fields defer to whatever the cloud already has.
  */
-const monitorDirty = (
-  observed: ObservedMonitor,
-  body: ReturnType<typeof buildBody>,
-): boolean => {
+const monitorDirty = (observed: ObservedMonitor, body: ReturnType<typeof buildBody>): boolean => {
   const scalarDirty = (
     desired: string | number | boolean | undefined,
     actual: string | number | boolean | null | undefined,
@@ -388,10 +367,7 @@ const monitorDirty = (
   );
 };
 
-const toAttributes = (
-  monitor: ObservedMonitor,
-  accountId: string,
-): MonitorAttributes => ({
+const toAttributes = (monitor: ObservedMonitor, accountId: string): MonitorAttributes => ({
   monitorId: monitor.id ?? "",
   accountId,
   description: monitor.description ?? "",

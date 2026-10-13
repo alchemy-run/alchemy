@@ -26,6 +26,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "prisma": "catalog:"
+    "prisma": "catalog:",
+    "typescript": "catalog:"
   }
 }

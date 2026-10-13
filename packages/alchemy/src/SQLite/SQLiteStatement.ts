@@ -13,9 +13,7 @@ export interface SQLiteStatement<R = unknown> {
   /**
    * Execute the statement and return the first matching row.
    */
-  get<T = R>(
-    ...params: unknown[]
-  ): Effect.Effect<T | undefined, SQLiteErrorType>;
+  get<T = R>(...params: unknown[]): Effect.Effect<T | undefined, SQLiteErrorType>;
 
   /**
    * Execute the statement for its side effects (INSERT, UPDATE, DELETE).

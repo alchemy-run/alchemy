@@ -1,14 +1,14 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { State } from "@/State/State";
-import type { ScratchStack } from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Fly from "@/Fly";
+import { State } from "@/State/State";
+import type { ScratchStack } from "@/Test/Alchemy";
 import type { TransportEvent } from "./transport.ts";
 
 export const processDeathFile = "test/Fly/BlueGreen.test.ts";
@@ -60,16 +60,11 @@ export const Witness = Schema.Struct({
 export type Witness = typeof Witness.Type;
 
 // SDK transport failures can retain headers; never persist or print those objects.
-const read = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const read = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Retry.none,
     Effect.timeout("10 seconds"),
-    Effect.mapError(
-      (error) =>
-        new Error(`Process-death SDK observation failed (${error._tag})`),
-    ),
+    Effect.mapError((error) => new Error(`Process-death SDK observation failed (${error._tag})`)),
   );
 
 export const nowSeconds = Effect.sync(() => Math.floor(Date.now() / 1000));
@@ -78,13 +73,7 @@ export const evidencePaths = (stack: ScratchStack) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const cwd = yield* Effect.sync(() => process.cwd());
-    const directory = path.join(
-      cwd,
-      ".alchemy",
-      "fly-process-death",
-      stack.name,
-      stack.stage,
-    );
+    const directory = path.join(cwd, ".alchemy", "fly-process-death", stack.name, stack.stage);
     return {
       cwd,
       directory,
@@ -102,9 +91,7 @@ export const writeEvidence = (file: string, value: unknown) =>
     const directory = path.dirname(file);
     yield* fs.makeDirectory(directory, { recursive: true });
     const temporary = `${file}.tmp`;
-    const bytes = yield* Effect.sync(() =>
-      new TextEncoder().encode(JSON.stringify(value)),
-    );
+    const bytes = yield* Effect.sync(() => new TextEncoder().encode(JSON.stringify(value)));
     yield* Effect.gen(function* () {
       const handle = yield* fs.open(temporary, { flag: "w", mode: 0o600 });
       yield* handle.writeAll(bytes);
@@ -138,10 +125,7 @@ export const readWitness = (file: string) =>
 export const assertSingleRunner = Effect.gen(function* () {
   const args = yield* Effect.sync(() => process.argv.slice(2));
   // pnpm test adds this exclusion before the explicitly focused file.
-  const focused =
-    args[0] === "--exclude" && args[1] === "test/Railway"
-      ? args.slice(2)
-      : args;
+  const focused = args[0] === "--exclude" && args[1] === "test/Railway" ? args.slice(2) : args;
   expect(focused).toEqual([
     processDeathFile,
     "-t",
@@ -170,12 +154,8 @@ export const assertSingleRunner = Effect.gen(function* () {
     expect(source).not.toMatch(
       /(?:from\s+|import\s*(?:\(\s*)?|require\s*\()\s*["'](?:node:)?child_process["']/,
     );
-    expect(source).not.toMatch(
-      /\b(?:Bun|Deno)\s*\.\s*(?:spawn|spawnSync|Command)\s*\(/,
-    );
-    expect(source).not.toMatch(
-      /from\s+["'][^"']*(?:ChildProcess|CommandExecutor)[^"']*["']/,
-    );
+    expect(source).not.toMatch(/\b(?:Bun|Deno)\s*\.\s*(?:spawn|spawnSync|Command)\s*\(/);
+    expect(source).not.toMatch(/from\s+["'][^"']*(?:ChildProcess|CommandExecutor)[^"']*["']/);
   }
 });
 
@@ -257,9 +237,7 @@ export const persistedRow = (stack: ScratchStack, fqn: string) =>
     });
     if (!row || row.kind === "action") {
       return yield* Effect.fail(
-        new Error(
-          "Expected the original durable resource row; refusing to recreate evidence",
-        ),
+        new Error("Expected the original durable resource row; refusing to recreate evidence"),
       );
     }
     return { fqn: row.fqn, instanceId: row.instanceId, status: row.status };
@@ -293,9 +271,7 @@ const lease = (appName: string, machineId: string) =>
           present: !!value.data?.nonce,
           expiresAt: value.data?.expires_at ?? 0,
         })),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed({ present: false, expiresAt: 0 }),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed({ present: false, expiresAt: 0 })),
       ),
   );
 
@@ -304,9 +280,7 @@ export const heldLeases = (appName: string, ids: string[]) =>
     const leases = yield* Effect.forEach(
       ids,
       (machineId) =>
-        lease(appName, machineId).pipe(
-          Effect.map((value) => ({ machineId, ...value })),
-        ),
+        lease(appName, machineId).pipe(Effect.map((value) => ({ machineId, ...value }))),
       { concurrency: 2 },
     );
     const now = yield* nowSeconds;
@@ -332,9 +306,7 @@ export const observeLeaseExpiry = (witness: Witness) =>
           expect(observed.present).toBe(true);
           expect(observed.expiresAt).toBeGreaterThan(now);
           expect(observed.expiresAt).toBeGreaterThanOrEqual(held.expiresAt);
-          expect(observed.expiresAt).toBeLessThanOrEqual(
-            witness.recordedAt + 130,
-          );
+          expect(observed.expiresAt).toBeLessThanOrEqual(witness.recordedAt + 130);
           return { machineId: held.machineId, expiresAt: observed.expiresAt };
         }),
       { concurrency: 2 },
@@ -351,9 +323,7 @@ export const observeLeaseExpiry = (witness: Witness) =>
         Effect.gen(function* () {
           const value = yield* lease(witness.appName, held.machineId);
           const at = yield* nowSeconds;
-          yield* Effect.sync(() =>
-            samples.push({ machineId: held.machineId, ...value, at }),
-          );
+          yield* Effect.sync(() => samples.push({ machineId: held.machineId, ...value, at }));
           if (value.present) expect(value.expiresAt).toBe(held.expiresAt);
           if (!value.present) expect(at).toBeGreaterThanOrEqual(held.expiresAt);
           return !value.present;
@@ -397,20 +367,13 @@ export const assertBarrierInventory = (stack: ScratchStack, witness: Witness) =>
           : "active",
     );
     if (witness.phase !== "retirement") {
-      const predecessor = yield* machine(
-        witness.appName,
-        witness.predecessor.id,
-      );
+      const predecessor = yield* machine(witness.appName, witness.predecessor.id);
       expect(yield* identity(predecessor, stack)).toEqual(witness.predecessor);
       expect(predecessor.cordoned).toBe(false);
     }
   });
 
-export const assertConverged = (
-  stack: ScratchStack,
-  witness: Witness,
-  ids: string[],
-) =>
+export const assertConverged = (stack: ScratchStack, witness: Witness, ids: string[]) =>
   Effect.gen(function* () {
     expect(ids).toEqual([witness.candidate.id]);
     const live = yield* census(witness.appName);
@@ -422,9 +385,8 @@ export const assertConverged = (
         until: (value) =>
           value.state === "started" &&
           value.cordoned === false &&
-          value.checks?.some(
-            (check) => check.name === "ready" && check.status === "passing",
-          ) === true,
+          value.checks?.some((check) => check.name === "ready" && check.status === "passing") ===
+            true,
       }),
       Effect.timeout("60 seconds"),
     );
@@ -435,21 +397,14 @@ export const assertConverged = (
     expect(current.state).toBe("started");
     expect(current.cordoned).toBe(false);
     expect(current.config?.env?.VERSION).toBe("two");
-    const ready =
-      current.checks?.filter((check) => check.name === "ready") ?? [];
+    const ready = current.checks?.filter((check) => check.name === "ready") ?? [];
     expect(ready.length).toBeGreaterThan(0);
     expect(ready.every((check) => check.status === "passing")).toBe(true);
-    expect(current.config?.metadata?.["alchemy.checked-instance"]).toBe(
-      current.instance_id,
-    );
+    expect(current.config?.metadata?.["alchemy.checked-instance"]).toBe(current.instance_id);
     expect(current.instance_id).toBeDefined();
-    expect(current.config?.metadata?.["alchemy.predecessors"]).toBe(
-      witness.predecessor.id,
-    );
+    expect(current.config?.metadata?.["alchemy.predecessors"]).toBe(witness.predecessor.id);
     expect(
-      current.config?.metadata?.["alchemy.image"]?.endsWith(
-        `@${witness.candidate.digest}`,
-      ),
+      current.config?.metadata?.["alchemy.image"]?.endsWith(`@${witness.candidate.digest}`),
     ).toBe(true);
     const row = yield* persistedRow(stack, witness.row.fqn);
     expect(row.instanceId).toBe(witness.row.instanceId);
@@ -476,9 +431,7 @@ export const assertClean = (stack: ScratchStack, appName: string) =>
         .listMachines({ app_name: appName })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
     );
-    expect(
-      remaining.filter((value) => value.state !== "destroyed"),
-    ).toHaveLength(0);
+    expect(remaining.filter((value) => value.state !== "destroyed")).toHaveLength(0);
     const rows = yield* Effect.gen(function* () {
       const state = yield* yield* State;
       return yield* state.list({ stack: stack.name, stage: stack.stage });

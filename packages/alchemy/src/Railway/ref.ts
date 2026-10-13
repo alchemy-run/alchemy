@@ -24,8 +24,7 @@ const namespaceOf = (resource: VariableRefSource): string => {
     const trimmed = resource.trim();
     return trimmed.length > 0 ? trimmed : SHARED;
   }
-  const logical =
-    typeof resource.LogicalId === "string" ? resource.LogicalId.trim() : "";
+  const logical = typeof resource.LogicalId === "string" ? resource.LogicalId.trim() : "";
   return logical.length > 0 ? logical : SHARED;
 };
 

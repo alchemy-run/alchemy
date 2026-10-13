@@ -2,17 +2,13 @@ import type { LogEntry } from "./Model.ts";
 
 const CAPTURE_BYTES = 256 * 1024;
 const TOTAL_BYTES = 16 * 1024 * 1024;
-const TRUNCATED =
-  "[Earlier output omitted from preview; full output is in the run log.]";
+const TRUNCATED = "[Earlier output omitted from preview; full output is in the run log.]";
 
 /** Bounded live previews; every original entry is persisted before trimming. */
-export const makeCapture = (
-  limits = { capture: CAPTURE_BYTES, total: TOTAL_BYTES },
-) => {
+export const makeCapture = (limits = { capture: CAPTURE_BYTES, total: TOTAL_BYTES }) => {
   const buffers = new Map<Array<LogEntry>, number>();
   let total = 0;
-  const size = (entry: LogEntry) =>
-    Buffer.byteLength(entry.message, "utf8") + 64;
+  const size = (entry: LogEntry) => Buffer.byteLength(entry.message, "utf8") + 64;
   const release = (buffer: Array<LogEntry>) => {
     total -= buffers.get(buffer) ?? 0;
     buffers.delete(buffer);

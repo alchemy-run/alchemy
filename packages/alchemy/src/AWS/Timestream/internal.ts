@@ -35,11 +35,7 @@ const cache = new Map<Kind, CachedEndpoint>();
  */
 export const discover = <E, R>(
   kind: Kind,
-  describe: Effect.Effect<
-    { Endpoints: { Address: string; CachePeriodInMinutes: number }[] },
-    E,
-    R
-  >,
+  describe: Effect.Effect<{ Endpoints: { Address: string; CachePeriodInMinutes: number }[] }, E, R>,
 ): Effect.Effect<string, E, R> =>
   Effect.gen(function* () {
     const now = Date.now();
@@ -68,9 +64,7 @@ export const withEndpoint =
   ): Effect.Effect<A, E | EDisc, Exclude<R, Endpoint.Endpoint> | RDisc> =>
     discovered.pipe(
       Effect.flatMap((url) =>
-        effect.pipe(
-          Effect.provideService(Endpoint.Endpoint, Effect.succeed(url)),
-        ),
+        effect.pipe(Effect.provideService(Endpoint.Endpoint, Effect.succeed(url))),
       ),
     );
 
@@ -79,14 +73,10 @@ export const withEndpoint =
  * endpoint. Adds `DescribeEndpoints`'s error union (including the synthetic
  * `TimestreamNotOnboarded` tag) to the wrapped effect's errors.
  */
-export const withWriteEndpoint = withEndpoint(
-  discover("write", TSW.describeEndpoints({})),
-);
+export const withWriteEndpoint = withEndpoint(discover("write", TSW.describeEndpoints({})));
 
 /**
  * Route a distilled `timestream-query` effect through the discovered query
  * endpoint.
  */
-export const withQueryEndpoint = withEndpoint(
-  discover("query", TSQ.describeEndpoints({})),
-);
+export const withQueryEndpoint = withEndpoint(discover("query", TSQ.describeEndpoints({})));

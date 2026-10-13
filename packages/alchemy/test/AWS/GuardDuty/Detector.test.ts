@@ -1,10 +1,10 @@
+import * as guardduty from "@distilled.cloud/aws/guardduty";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Detector } from "@/AWS/GuardDuty/Detector.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as guardduty from "@distilled.cloud/aws/guardduty";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeGuardDutyTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({
@@ -15,9 +15,7 @@ const testLease = makeGuardDutyTestLease();
 beforeAll(testLease.acquire, { timeout: 240_000 });
 afterAll(testLease.release);
 
-const firstDetectorId = guardduty
-  .listDetectors({})
-  .pipe(Effect.map((r) => r.DetectorIds?.[0]));
+const firstDetectorId = guardduty.listDetectors({}).pipe(Effect.map((r) => r.DetectorIds?.[0]));
 
 // The GuardDuty detector is an account/region singleton. This test only runs
 // when the account has no detector — it must never disable a detector the user

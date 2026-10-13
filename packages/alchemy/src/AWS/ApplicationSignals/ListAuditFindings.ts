@@ -42,10 +42,7 @@ export interface ListAuditFindings extends Binding.Service<
   () => Effect.Effect<
     (
       request: appsignals.ListAuditFindingsInput,
-    ) => Effect.Effect<
-      appsignals.ListAuditFindingsOutput,
-      appsignals.ListAuditFindingsError
-    >
+    ) => Effect.Effect<appsignals.ListAuditFindingsOutput, appsignals.ListAuditFindingsError>
   >
 > {}
 

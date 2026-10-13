@@ -39,12 +39,7 @@ export interface CalculateRoutes extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoRoutes.CalculateRoutesRequest,
-    ) => Effect.Effect<
-      geoRoutes.CalculateRoutesResponse,
-      geoRoutes.CalculateRoutesError
-    >
+    ) => Effect.Effect<geoRoutes.CalculateRoutesResponse, geoRoutes.CalculateRoutesError>
   >
 > {}
-export const CalculateRoutes = Binding.Service<CalculateRoutes>(
-  "AWS.GeoRoutes.CalculateRoutes",
-);
+export const CalculateRoutes = Binding.Service<CalculateRoutes>("AWS.GeoRoutes.CalculateRoutes");

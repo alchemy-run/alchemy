@@ -57,10 +57,7 @@ export const hashMigrations = (migrationsDir: string) =>
     }),
   );
 
-export const hashImports = (
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-) =>
+export const hashImports = (importFiles: ReadonlyArray<string>, rootDir: string) =>
   Effect.gen(function* () {
     const hashes: Record<string, string> = {};
     for (const filePath of importFiles) {

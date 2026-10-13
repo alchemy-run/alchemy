@@ -27,10 +27,7 @@ export interface GetConfiguration extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetConfigurationRequest,
-    ) => Effect.Effect<
-      inspector2.GetConfigurationResponse,
-      inspector2.GetConfigurationError
-    >
+    ) => Effect.Effect<inspector2.GetConfigurationResponse, inspector2.GetConfigurationError>
   >
 > {}
 export const GetConfiguration = Binding.Service<GetConfiguration>(

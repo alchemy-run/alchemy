@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { Server } from "foldkit/experimental";
-
 import { Flags, init, view } from "./main.ts";
 
 // THE SERVER ENTRY — one Web Request in, one delivery result out. The Worker

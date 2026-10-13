@@ -9,11 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  configurationProfileArn,
-  readAppConfigTags,
-  syncAppConfigTags,
-} from "./internal.ts";
+import { configurationProfileArn, readAppConfigTags, syncAppConfigTags } from "./internal.ts";
 
 /**
  * A validator run against configuration data before it is deployed.
@@ -145,24 +141,15 @@ export const ConfigurationProfileProvider = () =>
             ApplicationId: applicationId,
             ConfigurationProfileId: configurationProfileId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const findByName = Effect.fn(function* (
-        applicationId: string,
-        name: string,
-      ) {
+      const findByName = Effect.fn(function* (applicationId: string, name: string) {
         const profiles = yield* appconfig.listConfigurationProfiles
           .pages({ ApplicationId: applicationId })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Items ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed([] as appconfig.ConfigurationProfileSummary[]),
             ),
@@ -183,23 +170,17 @@ export const ConfigurationProfileProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if ((olds?.applicationId ?? undefined) !== news?.applicationId) {
             return { action: "replace" } as const;
           }
           // LocationUri and Type are create-only.
-          if (
-            (olds?.locationUri ?? "hosted") !== (news?.locationUri ?? "hosted")
-          ) {
+          if ((olds?.locationUri ?? "hosted") !== (news?.locationUri ?? "hosted")) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.type ?? "AWS.Freeform") !== (news?.type ?? "AWS.Freeform")
-          ) {
+          if ((olds?.type ?? "AWS.Freeform") !== (news?.type ?? "AWS.Freeform")) {
             return { action: "replace" } as const;
           }
         }),
@@ -212,12 +193,7 @@ export const ConfigurationProfileProvider = () =>
             ? yield* readProfile(applicationId, output.configurationProfileId)
             : yield* findByName(applicationId, yield* toName(id, olds ?? {}));
           if (profile?.Id === undefined) return undefined;
-          const arn = configurationProfileArn(
-            region,
-            accountId,
-            applicationId,
-            profile.Id,
-          );
+          const arn = configurationProfileArn(region, accountId, applicationId, profile.Id);
           const attrs = {
             configurationProfileId: profile.Id,
             configurationProfileName: profile.Name!,
@@ -232,8 +208,7 @@ export const ConfigurationProfileProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const applicationId = news.applicationId;
-          const name =
-            output?.configurationProfileName ?? (yield* toName(id, news));
+          const name = output?.configurationProfileName ?? (yield* toName(id, news));
           const locationUri = news.locationUri ?? "hosted";
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -272,12 +247,7 @@ export const ConfigurationProfileProvider = () =>
             });
           }
 
-          const arn = configurationProfileArn(
-            region,
-            accountId,
-            applicationId,
-            observed.Id!,
-          );
+          const arn = configurationProfileArn(region, accountId, applicationId, observed.Id!);
 
           // 3b. Sync tags.
           yield* syncAppConfigTags(arn, desiredTags);
@@ -304,12 +274,8 @@ export const ConfigurationProfileProvider = () =>
             })
             .pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Items ?? []),
-              ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([]),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
             );
           for (const version of versions) {
             if (version.VersionNumber !== undefined) {
@@ -319,12 +285,7 @@ export const ConfigurationProfileProvider = () =>
                   ConfigurationProfileId: output.configurationProfileId,
                   VersionNumber: version.VersionNumber,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             }
           }
           yield* appconfig
@@ -332,9 +293,7 @@ export const ConfigurationProfileProvider = () =>
               ApplicationId: output.applicationId,
               ConfigurationProfileId: output.configurationProfileId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Configuration profiles are keyed under their parent application, so
@@ -346,9 +305,7 @@ export const ConfigurationProfileProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const apps = yield* appconfig.listApplications.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             );
             const results: {
               configurationProfileId: string;
@@ -363,14 +320,10 @@ export const ConfigurationProfileProvider = () =>
                 .pages({ ApplicationId: app.Id })
                 .pipe(
                   Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.Items ?? []),
-                  ),
+                  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
                   // The application may be deleted between the two calls.
                   Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(
-                      [] as appconfig.ConfigurationProfileSummary[],
-                    ),
+                    Effect.succeed([] as appconfig.ConfigurationProfileSummary[]),
                   ),
                 );
               for (const profile of profiles) {

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { PushDenied, RefConflict, RepoNotFound } from "./Api/Schema.ts";
@@ -38,13 +39,10 @@ import { sliceRandomAccess } from "./Store/PackSource.ts";
 
 const path = (repo: RepoMetaData) => ({ owner: repo.owner, repo: repo.name });
 
-const asStoreError = (error: {
-  readonly _tag: string;
-  readonly reason?: string;
-}) =>
-  error instanceof StoreError
+const asStoreError = (error: { readonly _tag: string; readonly reason?: string }) =>
+  Schema.is(StoreError)(error)
     ? error
-    : new StoreError({
+    : StoreError.make({
         reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
       });
 
@@ -60,9 +58,7 @@ const scopedMutation = <A, E, R>(
       }),
     );
     return Object.freeze({
-      updates: Object.freeze(
-        updates.map((update) => Object.freeze({ ...update })),
-      ),
+      updates: Object.freeze(updates.map((update) => Object.freeze({ ...update }))),
       commit: Effect.suspend<A, E | StoreError, R>(() => {
         if (!active) return Effect.fail(invalidPush());
         active = false;
@@ -86,16 +82,14 @@ const make = Effect.gen(function* () {
         repo: path.repo.toLowerCase().replace(/\.git$/, ""),
       };
       const entry = yield* operations.resolveCached(name.owner, name.repo);
-      if (entry === undefined || entry.deletedAt !== null)
-        return yield* new RepoNotFound(name);
+      if (entry === undefined || entry.deletedAt !== null) return yield* RepoNotFound.make(name);
       return yield* repos.getByName(entry.repoId).getRepoMeta();
     });
 
   const preparePush = (repo: RepoMetaData, input: PushInput) =>
     Effect.gen(function* () {
       const source = incomingStates.get(input);
-      if (source === undefined || !source.active || source.claimed)
-        return yield* invalidPush();
+      if (source === undefined || !source.active || source.claimed) return yield* invalidPush();
       source.claimed = true;
       const { feeder, receiving, packStart } = source;
       const stub = repos.getByName(repo.repoId);
@@ -115,13 +109,8 @@ const make = Effect.gen(function* () {
             yield* Fiber.interruptAll(staging.splice(0));
             if (committed) return;
             // Ask durable state before deleting bytes: an interrupted RPC may have committed.
-            const keys = [
-              parkedKey,
-              ...(ingest?.resolvedKey?.split(",") ?? []),
-            ].filter(Boolean);
-            const packIds = keys.map((key) =>
-              wirePackId(key.slice(key.lastIndexOf("/") + 1, -5)),
-            );
+            const keys = [parkedKey, ...(ingest?.resolvedKey?.split(",") ?? [])].filter(Boolean);
+            const packIds = keys.map((key) => wirePackId(key.slice(key.lastIndexOf("/") + 1, -5)));
             const aborted = yield* stub
               .abortPush(begun.pushId, packIds)
               .pipe(Effect.orElseSucceed(() => false));
@@ -131,46 +120,33 @@ const make = Effect.gen(function* () {
           }),
       );
       if (begun._tag === "denied")
-        return yield* new PushDenied({
+        return yield* PushDenied.make({
           ref: input.updates[0]?.ref ?? "",
           reason: begun.reason,
         });
       const pushId = begun.pushId;
       const permits = pushPermitsFor(source.declaredBytes);
       const acquired = yield* Effect.acquireRelease(
-        Semaphore.take(gate, permits).pipe(
-          Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
-        ),
-        (acquired) =>
-          Option.isSome(acquired)
-            ? Semaphore.release(gate, permits)
-            : Effect.void,
+        Semaphore.take(gate, permits).pipe(Effect.timeoutOption(PUSH_WAIT_TIMEOUT)),
+        (acquired) => (Option.isSome(acquired) ? Semaphore.release(gate, permits) : Effect.void),
       );
       if (Option.isNone(acquired))
-        return yield* new StoreError({ reason: "push admission timed out" });
+        return yield* StoreError.make({ reason: "push admission timed out" });
       const started = Date.now();
       const stageGate = yield* Semaphore.make(6);
-      const bases = new Map<
-        string,
-        Effect.Success<ReturnType<typeof stub.readPushBase>>
-      >();
+      const bases = new Map<string, Effect.Success<ReturnType<typeof stub.readPushBase>>>();
       const store: IngestStore = {
         insertStagedBatch: (id, objects) =>
           Effect.gen(function* () {
             const encoded = encodeStagedBatch(objects);
-            const fiber = yield* Effect.forkDetach(
-              Semaphore.withPermits(
-                stageGate,
-                1,
-              )(
-                stub
-                  .stagePush(id, encoded)
-                  .pipe(
-                    Effect.mapError(asStoreError),
-                    Effect.provide(RuntimeContext.phantom),
-                  ),
-              ),
-            );
+            const fiber = yield* stub
+              .stagePush(id, encoded)
+              .pipe(
+                Effect.mapError(asStoreError),
+                Effect.provide(RuntimeContext.phantom),
+                Semaphore.withPermits(stageGate, 1),
+                Effect.forkDetach,
+              );
             staging.push(fiber);
           }),
         settle: Effect.gen(function* () {
@@ -192,33 +168,28 @@ const make = Effect.gen(function* () {
       };
       const probe = yield* feeder.source.read(packStart, 12);
       if (probe.length > 0 && probe.length < 12) {
-        return yield* new StoreError({ reason: "truncated pack header" });
+        return yield* StoreError.make({ reason: "truncated pack header" });
       }
       const hasPack = probe.length === 12;
       if (hasPack) {
-        ingest = yield* ingestPackFrom(
-          sliceRandomAccess(feeder.source, packStart),
-          {
-            store,
-            pushId,
-            hasher,
-            spill: {
-              body: feeder.source,
-              feeder,
-              packStart,
-              blobs,
-              key: parkedKey,
-              packId: wirePackId(receiveId),
-              repoId: repo.repoId,
-              threshold: MAX_PACK_BYTES,
-            },
+        ingest = yield* ingestPackFrom(sliceRandomAccess(feeder.source, packStart), {
+          store,
+          pushId,
+          hasher,
+          spill: {
+            body: feeder.source,
+            feeder,
+            packStart,
+            blobs,
+            key: parkedKey,
+            packId: wirePackId(receiveId),
+            repoId: repo.repoId,
+            threshold: MAX_PACK_BYTES,
           },
-        );
+        });
       }
       if (store.settle) yield* store.settle;
-      const received = yield* Fiber.join(receiving).pipe(
-        Effect.flatMap(Effect.fromResult),
-      );
+      const received = yield* Fiber.join(receiving).pipe(Effect.flatMap(Effect.fromResult));
       const commitInput: CommitPushInput = {
         pushId,
         commands: input.updates,
@@ -244,9 +215,7 @@ const make = Effect.gen(function* () {
           Effect.suspend(() =>
             !active || !source.active
               ? Effect.fail(invalidPush())
-              : stub
-                  .readPreparedObject(pushId, oid, maxBytes)
-                  .pipe(Effect.mapError(asStoreError)),
+              : stub.readPreparedObject(pushId, oid, maxBytes).pipe(Effect.mapError(asStoreError)),
           ),
       });
       preparedStates.set(prepared, {
@@ -291,7 +260,7 @@ const make = Effect.gen(function* () {
         input.expectedOid !== undefined &&
         input.expectedOid !== (current === "0".repeat(40) ? null : current)
       )
-        return yield* new RefConflict({
+        return yield* RefConflict.make({
           ref: input.ref,
           currentOid: current as import("./Api.ts").Oid,
         });
@@ -312,7 +281,7 @@ const make = Effect.gen(function* () {
       const stub = repos.getByName(repo.repoId);
       const current = yield* stub.getRef(input.ref);
       if (input.expectedOid !== undefined && input.expectedOid !== current.oid)
-        return yield* new RefConflict({
+        return yield* RefConflict.make({
           ref: input.ref,
           currentOid: current.oid as import("./Api.ts").Oid,
         });
@@ -340,8 +309,7 @@ const make = Effect.gen(function* () {
         stub.mergePull({
           ...input,
           expectedBaseOid: pull.baseOid ?? "0".repeat(40),
-          expectedHeadOid:
-            input.expectedHeadOid ?? pull.headOid ?? "0".repeat(40),
+          expectedHeadOid: input.expectedHeadOid ?? pull.headOid ?? "0".repeat(40),
         }),
       );
     });
@@ -350,31 +318,24 @@ const make = Effect.gen(function* () {
   return {
     repositories: {
       get,
-      create: (
-        payload: Parameters<typeof operations.repos.create>[0]["payload"],
-      ) => operations.repos.create({ payload }),
+      create: (payload: Parameters<typeof operations.repos.create>[0]["payload"]) =>
+        operations.repos.create({ payload }),
       list: (query: Parameters<typeof operations.repos.list>[0]["query"]) =>
         operations.repos.list({ query }),
       update: (
         repo: RepoMetaData,
         payload: Parameters<typeof operations.repos.update>[0]["payload"],
       ) => operations.repos.update({ params: path(repo), payload }),
-      remove: (repo: RepoMetaData) =>
-        operations.repos.delete({ params: path(repo) }),
-      fork: (
-        repo: RepoMetaData,
-        payload: Parameters<typeof operations.repos.fork>[0]["payload"],
-      ) => operations.repos.fork({ params: path(repo), payload }),
-      import: (
-        payload: Parameters<typeof operations.repos.import>[0]["payload"],
-      ) => operations.repos.import({ payload }),
-      compact: (repo: RepoMetaData) =>
-        operations.repos.compact({ params: path(repo) }),
+      remove: (repo: RepoMetaData) => operations.repos.delete({ params: path(repo) }),
+      fork: (repo: RepoMetaData, payload: Parameters<typeof operations.repos.fork>[0]["payload"]) =>
+        operations.repos.fork({ params: path(repo), payload }),
+      import: (payload: Parameters<typeof operations.repos.import>[0]["payload"]) =>
+        operations.repos.import({ payload }),
+      compact: (repo: RepoMetaData) => operations.repos.compact({ params: path(repo) }),
     },
     refs: {
       list: (repo: RepoMetaData) => repos.getByName(repo.repoId).listRefs(),
-      get: (repo: RepoMetaData, name: string) =>
-        repos.getByName(repo.repoId).getRef(name),
+      get: (repo: RepoMetaData, name: string) => repos.getByName(repo.repoId).getRef(name),
       update: (
         repo: RepoMetaData,
         input: Parameters<ReturnType<typeof repos.getByName>["updateRef"]>[0],
@@ -389,18 +350,14 @@ const make = Effect.gen(function* () {
         repo: RepoMetaData,
         payload: Parameters<typeof operations.pulls.create>[0]["payload"],
       ) => operations.pulls.create({ params: path(repo), payload }),
-      list: (
-        repo: RepoMetaData,
-        query: Parameters<typeof operations.pulls.list>[0]["query"],
-      ) => operations.pulls.list({ params: path(repo), query }),
+      list: (repo: RepoMetaData, query: Parameters<typeof operations.pulls.list>[0]["query"]) =>
+        operations.pulls.list({ params: path(repo), query }),
       update: (
         repo: RepoMetaData,
         number: number,
         payload: Parameters<typeof operations.pulls.update>[0]["payload"],
-      ) =>
-        operations.pulls.update({ params: { ...path(repo), number }, payload }),
-      get: (repo: RepoMetaData, number: number) =>
-        repos.getByName(repo.repoId).getPull(number),
+      ) => operations.pulls.update({ params: { ...path(repo), number }, payload }),
+      get: (repo: RepoMetaData, number: number) => repos.getByName(repo.repoId).getPull(number),
       merge: (
         repo: RepoMetaData,
         input: Parameters<ReturnType<typeof repos.getByName>["mergePull"]>[0],
@@ -413,14 +370,10 @@ const make = Effect.gen(function* () {
         }),
       file: (
         repo: RepoMetaData,
-        input: Parameters<
-          ReturnType<typeof repos.getByName>["readFileAtPath"]
-        >[0],
+        input: Parameters<ReturnType<typeof repos.getByName>["readFileAtPath"]>[0],
       ) => repos.getByName(repo.repoId).readFileAtPath(input),
-      log: (
-        repo: RepoMetaData,
-        query: Parameters<typeof operations.objects.log>[0]["query"],
-      ) => operations.objects.log({ params: path(repo), query }),
+      log: (repo: RepoMetaData, query: Parameters<typeof operations.objects.log>[0]["query"]) =>
+        operations.objects.log({ params: path(repo), query }),
       tree: (
         repo: RepoMetaData,
         oid: Parameters<typeof operations.objects.tree>[0]["params"]["oid"],
@@ -433,8 +386,7 @@ const make = Effect.gen(function* () {
         repo: RepoMetaData,
         query: Parameters<typeof operations.objects.compare>[0]["query"],
       ) => operations.objects.compare({ params: path(repo), query }),
-      read: (repo: RepoMetaData, oid: string) =>
-        repos.getByName(repo.repoId).readPushBase(oid),
+      read: (repo: RepoMetaData, oid: string) => repos.getByName(repo.repoId).readPushBase(oid),
     },
     preparePush,
     commitPush,
@@ -445,10 +397,9 @@ const make = Effect.gen(function* () {
 });
 
 /** Git operations usable from HTTP handlers, jobs, and ordinary Effects. */
-export class Engine extends Context.Service<
-  Engine,
-  Effect.Success<typeof make>
->()("alchemy/Git/Engine") {}
+export class Engine extends Context.Service<Engine, Effect.Success<typeof make>>()(
+  "alchemy/Git/Engine",
+) {}
 
 /**
  * Provides the Git engine using the application's repository, registry, blob, and hasher layers.
@@ -456,6 +407,4 @@ export class Engine extends Context.Service<
  * @layer
  * @provides Git.Engine
  */
-export const EngineLive = Layer.effect(Engine, make).pipe(
-  Layer.provideMerge(OperationsLive),
-);
+export const EngineLive = Layer.effect(Engine, make).pipe(Layer.provideMerge(OperationsLive));

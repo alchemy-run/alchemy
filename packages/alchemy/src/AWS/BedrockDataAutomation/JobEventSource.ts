@@ -32,11 +32,7 @@ export interface DataAutomationJobEventDetail {
 export type DataAutomationJobEvent = EventRecord<DataAutomationJobEventDetail>;
 
 /** Which Bedrock Data Automation job state-change events to subscribe to. */
-export type DataAutomationJobEventKind =
-  | "created"
-  | "succeeded"
-  | "client-error"
-  | "service-error";
+export type DataAutomationJobEventKind = "created" | "succeeded" | "client-error" | "service-error";
 
 const DETAIL_TYPES: Record<DataAutomationJobEventKind, string> = {
   created: "Bedrock Data Automation Job Created",
@@ -106,8 +102,7 @@ export const consumeDataAutomationJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.bedrock"],
       "detail-type": (
-        props.kinds ??
-        (Object.keys(DETAIL_TYPES) as DataAutomationJobEventKind[])
+        props.kinds ?? (Object.keys(DETAIL_TYPES) as DataAutomationJobEventKind[])
       ).map((kind) => DETAIL_TYPES[kind]),
     },
     { description: props.description, state: props.state },

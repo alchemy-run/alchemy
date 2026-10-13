@@ -5,8 +5,9 @@ import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
-import type { ResourceBinding } from "../../Resource.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { localAccountId } from "../LocalAccount.ts";
@@ -16,7 +17,6 @@ import type {
   ContainerApplication,
   DevContainerImage,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   createContainerApplicationName,
   makeContainerEnv,
@@ -24,6 +24,12 @@ import {
   prepareContainerBuildContext,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
+import {
+  durableObjectPlaceholder,
+  hasImageSource,
+  isDurableObjectContainer,
+  validateContainerConfiguration,
+} from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
@@ -69,8 +75,7 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
-            const { context, dockerfile, hash } =
-              yield* prepareContainerBuildContext(id, news);
+            const { context, dockerfile, hash } = yield* prepareContainerBuildContext(id, news);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
@@ -92,10 +97,7 @@ export const LocalContainerProvider = () =>
           // Variant 3a — inline Dockerfile content: materialize into the
           // same stable generated context the live provider uses and point
           // the runtime's build at it.
-          if (
-            news.dockerfile !== undefined &&
-            isInlineDockerfile(news.dockerfile)
-          ) {
+          if (news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)) {
             const content = news.dockerfile.content;
             if (typeof content !== "string") {
               return yield* Effect.die(
@@ -104,10 +106,7 @@ export const LocalContainerProvider = () =>
                 ),
               );
             }
-            const { context } = yield* materializeInlineDockerfileContext(
-              id,
-              content,
-            );
+            const { context } = yield* materializeInlineDockerfileContext(id, content);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
@@ -146,12 +145,11 @@ export const LocalContainerProvider = () =>
        * still carry Outputs/Effects (the `.make` form's `exports` impl
        * Effect never resolves at all) without disabling the content check.
        */
-      const resolvedImageInputs = (
-        input: unknown,
-      ): AnyContainerApplicationProps | undefined => {
+      const resolvedImageInputs = (input: unknown): AnyContainerApplicationProps | undefined => {
         if (typeof input !== "object" || input === null) return undefined;
         const news = input as AnyContainerApplicationProps;
         const picked = {
+          schedulingPolicy: news.schedulingPolicy,
           main: news.main,
           image: news.image,
           dockerfile: news.dockerfile,
@@ -165,6 +163,7 @@ export const LocalContainerProvider = () =>
         };
         if (!isResolved(picked)) return undefined;
         if (
+          picked.schedulingPolicy !== "durable_object" &&
           !picked.main &&
           !picked.image &&
           !picked.dockerfile &&
@@ -213,7 +212,27 @@ export const LocalContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         output: ContainerApplication["Attributes"] | undefined;
       }) {
+        yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
+        if (isDurableObjectContainer(news)) {
+          const attributes = durableObjectPlaceholder({
+            applicationId: output?.applicationId ?? generateLocalId(),
+            applicationName: yield* createContainerApplicationName(id, undefined),
+            accountId,
+            createdAt: output?.createdAt ?? new Date().toISOString(),
+            observability: news.observability,
+          });
+          if (!hasImageSource(news)) return attributes;
+          const { dev, hash } = yield* prepareImage(id, news);
+          return {
+            ...attributes,
+            // workerd resolves each image by its key in the class's image
+            // map, so locally the image reference is the Container's id.
+            image: id,
+            dev,
+            hash: { image: hash },
+          } satisfies ContainerApplication["Attributes"];
+        }
         const env = makeContainerEnv(news, accountId, bindings);
         const { dev, hash } = yield* prepareImage(id, news);
         return {
@@ -237,6 +256,9 @@ export const LocalContainerProvider = () =>
       return {
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
+          if (isResolved(news)) {
+            yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          }
           if (!output) return { action: "update" };
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
@@ -248,6 +270,9 @@ export const LocalContainerProvider = () =>
           // disabled this check for every effectful container.
           const imageInputs = resolvedImageInputs(news);
           if (imageInputs !== undefined) {
+            if (isDurableObjectContainer(imageInputs) && !hasImageSource(imageInputs)) {
+              return output.image !== undefined ? { action: "update" } : undefined;
+            }
             // Recompute fresh on every plan. `prepareImage` is memoized so
             // a plan's diff→precreate→reconcile chain bundles once — but
             // this provider runs in the RPC sidecar, whose `ArtifactStore`

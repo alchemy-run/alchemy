@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * Durable Object for `DurableObjectAbort.test.ts`.
@@ -16,10 +16,7 @@ export class Task extends Cloudflare.DurableObject<Task>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "abort fixture: constructor started",
-        state.id.toString(),
-      );
+      yield* Effect.logInfo("abort fixture: constructor started", state.id.toString());
       const boots = ((yield* state.storage.get<number>("boots")) ?? 0) + 1;
       yield* state.storage.put("boots", boots);
       yield* Effect.logInfo("abort fixture: constructor completed", { boots });
@@ -31,9 +28,7 @@ export class Task extends Cloudflare.DurableObject<Task>()(
             if (fail) {
               failedPings++;
               return yield* Effect.die(
-                new Error(
-                  "internal error; reference = application-ping-failure",
-                ),
+                new Error("internal error; reference = application-ping-failure"),
               );
             }
             return { boots, failedPings, ok: true as const };
@@ -49,6 +44,10 @@ export class Task extends Cloudflare.DurableObject<Task>()(
 
 /**
  * Fixture worker for `DurableObjectAbort.test.ts`.
+ *
+ * Every route addresses the object named by the `name` query parameter, so
+ * each test attempt can use a fresh object with its own `boots` storage and
+ * in-memory `failedPings` counter.
  *
  * `GET /ping` reports constructor-run count. `GET /fail-ping` throws an
  * application error over native RPC without resetting the object. `GET /abort` invokes
@@ -68,31 +67,25 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
             name: error.name,
             message: error.message,
             ownProperties: Object.getOwnPropertyDescriptors(error),
-            prototypeProperties: Object.getOwnPropertyNames(
-              Object.getPrototypeOf(error),
-            ),
+            prototypeProperties: Object.getOwnPropertyNames(Object.getPrototypeOf(error)),
           }
         : { value: String(error) };
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
-        const task = tasks.getByName("default");
+        const task = tasks.getByName(url.searchParams.get("name") ?? "default");
 
         if (url.pathname === "/ping" || url.pathname === "/fail-ping") {
           return yield* task.ping(url.pathname === "/fail-ping").pipe(
             Effect.flatMap((result) => HttpServerResponse.json(result)),
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause);
-              const native =
-                error instanceof Cloudflare.RpcCallError
-                  ? error.cause
-                  : undefined;
+              const native = error instanceof Cloudflare.RpcCallError ? error.cause : undefined;
               const methodUnavailable =
                 native instanceof Error &&
                 native.name === "TypeError" &&
-                native.message ===
-                  'The RPC receiver does not implement the method "ping".';
+                native.message === 'The RPC receiver does not implement the method "ping".';
               const readinessRetry =
                 url.pathname === "/ping" &&
                 native instanceof Error &&

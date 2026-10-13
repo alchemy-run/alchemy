@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
 import * as organizations from "@distilled.cloud/aws/organizations";
-import * as Provider from "@/Provider";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Provider from "@/Provider";
 import * as OrganizationLease from "./OrganizationLease.ts";
 
 // Exclusive: the local lifecycle creates and deletes the account's single
 // organization, so no other organization suite may hold it meanwhile.
-const { test } = OrganizationLease.make(
-  { providers: AWS.providers() },
-  "exclusive",
-);
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "exclusive");
 
 // Account singleton: an AWS Organization has no list API. `list()` calls
 // `describeOrganization` and returns the single org as a one-element array, or
@@ -22,9 +19,7 @@ test.provider(
   "list returns the organization singleton",
   (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        AWS.Organizations.Organization,
-      );
+      const provider = yield* Provider.findProvider(AWS.Organizations.Organization);
       const all = yield* provider.list();
 
       // 0 (account is not a management account) or 1 (it is) — never more.
@@ -37,9 +32,7 @@ test.provider(
         expect(typeof org.organizationId).toBe("string");
         expect(org.organizationId.length).toBeGreaterThan(0);
         expect(typeof org.organizationArn).toBe("string");
-        expect(org.organizationArn.startsWith("arn:aws:organizations::")).toBe(
-          true,
-        );
+        expect(org.organizationArn.startsWith("arn:aws:organizations::")).toBe(true);
         expect(Array.isArray(org.availablePolicyTypes)).toBe(true);
         if (org.managementAccountEmail != null) {
           expect(typeof org.managementAccountEmail).toBe("string");
@@ -77,20 +70,15 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
       const resources = (phase: string) =>
         Effect.gen(function* () {
           yield* organization();
-          const root = yield* AWS.Organizations.Root("Root", {
-            tags: { phase },
-          });
+          const root = yield* AWS.Organizations.Root("Root", { tags: { phase } });
           const unit = yield* AWS.Organizations.OrganizationalUnit("Unit", {
             parentId: root.rootId,
             tags: { phase },
           });
-          const enabled = yield* AWS.Organizations.RootPolicyType(
-            "PolicyType",
-            {
-              rootId: root.rootId,
-              policyType: "TAG_POLICY",
-            },
-          );
+          const enabled = yield* AWS.Organizations.RootPolicyType("PolicyType", {
+            rootId: root.rootId,
+            policyType: "TAG_POLICY",
+          });
           const policy = yield* AWS.Organizations.Policy("Policy", {
             type: enabled.policyType,
             description: phase,
@@ -101,37 +89,33 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
             policyId: policy.policyId,
             targetId: unit.ouId,
           });
-          const trusted = yield* AWS.Organizations.TrustedServiceAccess(
-            "Trusted",
-            {
-              servicePrincipal: "cloudtrail.amazonaws.com",
-            },
-          );
+          const trusted = yield* AWS.Organizations.TrustedServiceAccess("Trusted", {
+            servicePrincipal: "cloudtrail.amazonaws.com",
+          });
           yield* AWS.Organizations.DelegatedAdministrator("Administrator", {
             accountId: accountId!,
             servicePrincipal: trusted.servicePrincipal,
           });
-          const resourcePolicy =
-            yield* AWS.Organizations.OrganizationResourcePolicy(
-              "ResourcePolicy",
-              {
-                document: {
-                  Version: "2012-10-17",
-                  Statement: [
-                    {
-                      Effect: "Allow",
-                      Principal: { AWS: accountId! },
-                      Action: [
-                        phase === "created"
-                          ? "organizations:DescribeOrganization"
-                          : "organizations:ListAccounts",
-                      ],
-                      Resource: "*",
-                    },
-                  ],
-                },
+          const resourcePolicy = yield* AWS.Organizations.OrganizationResourcePolicy(
+            "ResourcePolicy",
+            {
+              document: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { AWS: accountId! },
+                    Action: [
+                      phase === "created"
+                        ? "organizations:DescribeOrganization"
+                        : "organizations:ListAccounts",
+                    ],
+                    Resource: "*",
+                  },
+                ],
               },
-            );
+            },
+          );
           return { root, unit, policy, resourcePolicy };
         });
 
@@ -140,28 +124,20 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
         const updated = yield* stack.deploy(resources("updated"));
         expect(updated.unit.ouId).toBe(first.unit.ouId);
         expect(updated.policy.policyId).toBe(first.policy.policyId);
-        const tags = yield* organizations.listTagsForResource({
-          ResourceId: updated.unit.ouId,
-        });
+        const tags = yield* organizations.listTagsForResource({ ResourceId: updated.unit.ouId });
         expect(tags.Tags).toContainEqual({ Key: "phase", Value: "updated" });
-        const policy = yield* organizations.describePolicy({
-          PolicyId: updated.policy.policyId,
-        });
+        const policy = yield* organizations.describePolicy({ PolicyId: updated.policy.policyId });
         expect(policy.Policy?.PolicySummary?.Description).toBe("updated");
         const attachment = yield* organizations.listTargetsForPolicy({
           PolicyId: updated.policy.policyId,
         });
-        expect(attachment.Targets?.map((target) => target.TargetId)).toContain(
-          updated.unit.ouId,
+        expect(attachment.Targets?.map((target) => target.TargetId)).toContain(updated.unit.ouId);
+        const administrators = yield* organizations.listDelegatedAdministrators({
+          ServicePrincipal: "cloudtrail.amazonaws.com",
+        });
+        expect(administrators.DelegatedAdministrators?.map((admin) => admin.Id)).toContain(
+          accountId,
         );
-        const administrators = yield* organizations.listDelegatedAdministrators(
-          {
-            ServicePrincipal: "cloudtrail.amazonaws.com",
-          },
-        );
-        expect(
-          administrators.DelegatedAdministrators?.map((admin) => admin.Id),
-        ).toContain(accountId);
         const observed = yield* organizations.describeResourcePolicy({});
         expect(JSON.parse(observed.ResourcePolicy!.Content!)).toEqual(
           updated.resourcePolicy.document,
@@ -171,18 +147,14 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
           Effect.gen(function* () {
             // Remove dependent resources before the member and organization.
             yield* stack.deploy(organization());
-            yield* organizations.removeAccountFromOrganization({
-              AccountId: accountId!,
-            });
+            yield* organizations.removeAccountFromOrganization({ AccountId: accountId! });
             yield* stack.destroy();
           }).pipe(Effect.orDie),
         ),
       );
       const removed = yield* organizations.describeOrganization({}).pipe(
         Effect.map(() => false),
-        Effect.catchTag("AWSOrganizationsNotInUseException", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(true)),
       );
       expect(removed).toBe(true);
     }),

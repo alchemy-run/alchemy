@@ -1,5 +1,16 @@
-import * as GitHub from "@/GitHub/index.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { layer } from "alchemy-test";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
 import { fromToken } from "@/GitHub/Credentials.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import type { WikiPage, WikiPageProps } from "@/GitHub/WikiPage.ts";
 import { WikiPageProvider } from "@/GitHub/WikiPage.ts";
 import {
@@ -9,32 +20,17 @@ import {
   wikiRepository,
   type WikiRepository,
 } from "@/GitHub/WikiPage.ts";
-import * as Provider from "@/Provider.ts";
-import { exec } from "@/Util/exec.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { layer } from "alchemy-test";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as Output from "@/Output.ts";
+import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { exec } from "@/Util/exec.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
-  throw new Error(
-    "GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2",
-  );
+  throw new Error("GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2");
 }
 
-const { test } = Test.make({
-  providers: GitHub.providers({ baseUrl: "github.com" }),
-});
+const { test } = Test.make({ providers: GitHub.providers({ baseUrl: "github.com" }) });
 
 // Repositories are retained because the testing token lacks delete_repo.
 const fixture = (suffix: string) =>
@@ -65,9 +61,7 @@ const git = Effect.fn(
       { concurrency: 3 },
     );
     if (exitCode !== 0) {
-      return yield* Effect.fail(
-        new Error(`git ${args[0]} exited ${exitCode}: ${stderr}`),
-      );
+      return yield* Effect.fail(new Error(`git ${args[0]} exited ${exitCode}: ${stderr}`));
     }
     return stdout;
   },
@@ -81,10 +75,7 @@ const getPage = (repository: string, title: string, extension = "md") =>
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const cwd = yield* Effect.sync(() => process.cwd());
-    const directory = yield* fs.makeTempDirectoryScoped({
-      directory: cwd,
-      prefix: ".wiki-test-",
-    });
+    const directory = yield* fs.makeTempDirectoryScoped({ directory: cwd, prefix: ".wiki-test-" });
     yield* git(
       directory,
       "clone",
@@ -101,7 +92,9 @@ const getPage = (repository: string, title: string, extension = "md") =>
     };
   }).pipe(Effect.scoped);
 
-test.provider(
+// TODO: GitHub requires the first wiki page to be saved in its web UI.
+// Repository hasWiki/autoInit cannot bootstrap the separate wiki Git repository.
+test.provider.todo(
   "create and update wiki page",
   (stack) =>
     Effect.gen(function* () {
@@ -127,33 +120,26 @@ test.provider(
       expect(created.page.htmlUrl).toBe(
         `https://github.com/${owner}/alchemy-pr-1578-wiki-lifecycle/wiki/Home`,
       );
-      expect(
-        (yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home"))?.content,
-      ).toBe("Welcome to the wiki!");
+      expect((yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home"))?.content).toBe(
+        "Welcome to the wiki!",
+      );
 
       const updated = yield* deploy("# Updated Content\n\nThis is updated!");
       expect(updated.page.sha).not.toBe(created.page.sha);
-      expect(
-        (yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home"))?.content,
-      ).toBe("# Updated Content\n\nThis is updated!");
+      expect((yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home"))?.content).toBe(
+        "# Updated Content\n\nThis is updated!",
+      );
 
       yield* stack.destroy();
-      expect(
-        yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home"),
-      ).toBeUndefined();
+      expect(yield* getPage("alchemy-pr-1578-wiki-lifecycle", "Home")).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:wikipage",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:repository", "provider:github:wikipage", "live"],
     timeout: 120_000,
   },
 );
 
-test.provider(
+test.provider.todo(
   "create page with custom format",
   (stack) =>
     Effect.gen(function* () {
@@ -181,33 +167,20 @@ test.provider(
       expect(result.title).toBe("API Documentation");
       expect(result.pageName).toBe("API-Documentation");
       expect(
-        (yield* getPage(
-          "alchemy-pr-1578-wiki-format",
-          "API Documentation",
-          "asciidoc",
-        ))?.content,
+        (yield* getPage("alchemy-pr-1578-wiki-format", "API Documentation", "asciidoc"))?.content,
       ).toBe("= API Documentation\n\n== Overview\n\nThe API provides...");
       yield* stack.destroy();
       expect(
-        yield* getPage(
-          "alchemy-pr-1578-wiki-format",
-          "API Documentation",
-          "asciidoc",
-        ),
+        yield* getPage("alchemy-pr-1578-wiki-format", "API Documentation", "asciidoc"),
       ).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:wikipage",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:repository", "provider:github:wikipage", "live"],
     timeout: 120_000,
   },
 );
 
-test.provider(
+test.provider.todo(
   "preserve page when allowDelete is false (default)",
   (stack) =>
     Effect.gen(function* () {
@@ -227,34 +200,22 @@ test.provider(
         );
       const created = yield* deploy();
       yield* stack.destroy();
-      const retained = yield* getPage(
-        "alchemy-pr-1578-wiki-preserve",
-        "Documentation",
-      );
+      const retained = yield* getPage("alchemy-pr-1578-wiki-preserve", "Documentation");
       expect(retained?.sha).toBe(created.sha);
-      expect(retained?.content).toBe(
-        "Important documentation that should be preserved",
-      );
+      expect(retained?.content).toBe("Important documentation that should be preserved");
 
       // Re-manage the retained page with deletion enabled to verify cleanup.
       yield* deploy(true);
       yield* stack.destroy();
-      expect(
-        yield* getPage("alchemy-pr-1578-wiki-preserve", "Documentation"),
-      ).toBeUndefined();
+      expect(yield* getPage("alchemy-pr-1578-wiki-preserve", "Documentation")).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:wikipage",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:repository", "provider:github:wikipage", "live"],
     timeout: 120_000,
   },
 );
 
-test.provider(
+test.provider.todo(
   "replace page when title changes",
   (stack) =>
     Effect.gen(function* () {
@@ -274,31 +235,18 @@ test.provider(
         );
       const created = yield* deploy("Getting Started", "Original guide");
       expect(created.title).toBe("Getting Started");
-      const replaced = yield* deploy(
-        "Quick Start",
-        "New guide with different title",
-      );
+      const replaced = yield* deploy("Quick Start", "New guide with different title");
       expect(replaced.title).toBe("Quick Start");
       expect(replaced.pageName).toBe("Quick-Start");
-      expect(
-        yield* getPage("alchemy-pr-1578-wiki-replace", "Getting Started"),
-      ).toBeUndefined();
-      expect(
-        (yield* getPage("alchemy-pr-1578-wiki-replace", "Quick Start"))
-          ?.content,
-      ).toBe("New guide with different title");
+      expect(yield* getPage("alchemy-pr-1578-wiki-replace", "Getting Started")).toBeUndefined();
+      expect((yield* getPage("alchemy-pr-1578-wiki-replace", "Quick Start"))?.content).toBe(
+        "New guide with different title",
+      );
       yield* stack.destroy();
-      expect(
-        yield* getPage("alchemy-pr-1578-wiki-replace", "Quick Start"),
-      ).toBeUndefined();
+      expect(yield* getPage("alchemy-pr-1578-wiki-replace", "Quick Start")).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:wikipage",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:repository", "provider:github:wikipage", "live"],
     timeout: 120_000,
   },
 );
@@ -326,9 +274,7 @@ const fixtureGit = Effect.fn(
       GIT_COMMITTER_NAME: "Wiki fixture",
       GIT_COMMITTER_EMAIL: "wiki-fixture@example.com",
     }));
-    const result = yield* exec(
-      ChildProcess.make("git", args, { cwd, env, extendEnv: false }),
-    );
+    const result = yield* exec(ChildProcess.make("git", args, { cwd, env, extendEnv: false }));
     expect(result.exitCode).toBe(0);
     return result.stdout;
   },
@@ -339,23 +285,12 @@ const fixtureGit = Effect.fn(
 const gitFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const directory = yield* fs.makeTempDirectoryScoped({
-    prefix: "alchemy-wiki-fixture-",
-  });
+  const directory = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-wiki-fixture-" });
   const remote = path.join(directory, "fixture.wiki.git");
   const seed = path.join(directory, "seed");
-  yield* fixtureGit(
-    directory,
-    "init",
-    "--bare",
-    "--initial-branch=main",
-    remote,
-  );
+  yield* fixtureGit(directory, "init", "--bare", "--initial-branch=main", remote);
   yield* fixtureGit(directory, "clone", remote, seed);
-  yield* fs.writeFileString(
-    path.join(seed, "Bootstrap.md"),
-    "Unmanaged bootstrap page",
-  );
+  yield* fs.writeFileString(path.join(seed, "Bootstrap.md"), "Unmanaged bootstrap page");
   yield* fixtureGit(seed, "add", "Bootstrap.md");
   yield* fixtureGit(seed, "commit", "-m", "Bootstrap wiki");
   yield* fixtureGit(seed, "push", "origin", "HEAD");
@@ -382,27 +317,20 @@ describe("WikiPage Git fixtures", (it) => {
             command._tag === "StandardCommand"
               ? ChildProcess.make(
                   command.command,
-                  command.args.map((arg) =>
-                    arg === remote ? repository.remote : arg,
-                  ),
+                  command.args.map((arg) => (arg === remote ? repository.remote : arg)),
                   command.options,
                 )
               : command,
           ),
         );
         yield* Effect.gen(function* () {
-          const provider =
-            yield* Provider.Provider<WikiPage>("GitHub.WikiPage");
+          const provider = yield* Provider.Provider<WikiPage>("GitHub.WikiPage");
           const context = {
             id: "Page",
             fqn: "Page",
             instanceId: "fixture",
             bindings: [],
-            session: {
-              emit: () => Effect.void,
-              done: () => Effect.void,
-              note: () => Effect.void,
-            },
+            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
           };
           const created = yield* provider.reconcile({
             ...context,
@@ -410,13 +338,9 @@ describe("WikiPage Git fixtures", (it) => {
             olds: undefined,
             output: undefined,
           });
-          expect(
-            yield* provider.read!({
-              ...context,
-              olds: props,
-              output: undefined,
-            }),
-          ).toEqual(created);
+          expect(yield* provider.read!({ ...context, olds: props, output: undefined })).toEqual(
+            created,
+          );
           const adopted = yield* provider.reconcile({
             ...context,
             news: props,
@@ -437,13 +361,9 @@ describe("WikiPage Git fixtures", (it) => {
             olds: { ...news, allowDelete: undefined },
             output: updated,
           });
-          expect(
-            yield* provider.read!({
-              ...context,
-              olds: news,
-              output: undefined,
-            }),
-          ).toEqual(updated);
+          expect(yield* provider.read!({ ...context, olds: news, output: undefined })).toEqual(
+            updated,
+          );
           const renamed = { ...news, title: "Quick Start" };
           const replacement = yield* provider.reconcile({
             ...context,
@@ -453,36 +373,17 @@ describe("WikiPage Git fixtures", (it) => {
           });
           yield* provider.delete({ ...context, olds: news, output: updated });
           expect(
-            yield* provider.read!({
-              ...context,
-              olds: news,
-              output: undefined,
-            }),
+            yield* provider.read!({ ...context, olds: news, output: undefined }),
           ).toBeUndefined();
-          expect(
-            yield* provider.read!({
-              ...context,
-              olds: renamed,
-              output: undefined,
-            }),
-          ).toEqual(replacement);
-          yield* provider.delete({
-            ...context,
-            olds: renamed,
-            output: replacement,
-          });
-          yield* provider.delete({
-            ...context,
-            olds: renamed,
-            output: replacement,
-          });
+          expect(yield* provider.read!({ ...context, olds: renamed, output: undefined })).toEqual(
+            replacement,
+          );
+          yield* provider.delete({ ...context, olds: renamed, output: replacement });
+          yield* provider.delete({ ...context, olds: renamed, output: replacement });
         }).pipe(
           Effect.provide(WikiPageProvider()),
           Effect.provide(fromToken(token)),
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            localTransport,
-          ),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, localTransport),
         );
       }).pipe(Effect.scoped),
     { tags: ["provider:github", "provider:github:wikipage", "local"] },
@@ -527,13 +428,7 @@ describe("WikiPage Git fixtures", (it) => {
         yield* deleteWikiPage(repository, props);
         expect(yield* readWikiPage(repository, props)).toBeUndefined();
         expect(
-          yield* fixtureGit(
-            directory,
-            "--git-dir",
-            repository.remote,
-            "show",
-            "HEAD:Bootstrap.md",
-          ),
+          yield* fixtureGit(directory, "--git-dir", repository.remote, "show", "HEAD:Bootstrap.md"),
         ).toBe("Unmanaged bootstrap page");
         expect(
           (yield* fixtureGit(
@@ -581,9 +476,7 @@ describe("WikiPage Git fixtures", (it) => {
           rest: "rst",
           textile: "textile",
         } as const;
-        for (const format of Object.keys(formats) as Array<
-          keyof typeof formats
-        >) {
+        for (const format of Object.keys(formats) as Array<keyof typeof formats>) {
           const next = { ...props, format };
           const page = yield* syncWikiPage(repository, next);
           expect(yield* readWikiPage(repository, props)).toEqual(page);
@@ -611,10 +504,7 @@ describe("WikiPage Git fixtures", (it) => {
     () =>
       Effect.gen(function* () {
         const { fs, path, directory, seed, repository } = yield* gitFixture;
-        yield* fs.writeFileString(
-          path.join(seed, "Getting-Started.markdown"),
-          "Existing page",
-        );
+        yield* fs.writeFileString(path.join(seed, "Getting-Started.markdown"), "Existing page");
         const outside = path.join(directory, "outside");
         yield* fs.writeFileString(outside, "Do not overwrite");
         yield* fs.symlink(outside, path.join(seed, "Linked.md"));
@@ -660,9 +550,7 @@ describe("WikiPage Git fixtures", (it) => {
           { concurrency: 3 },
         );
         for (const title of titles)
-          expect(
-            yield* readWikiPage(repository, { ...props, title }),
-          ).toBeDefined();
+          expect(yield* readWikiPage(repository, { ...props, title })).toBeDefined();
       }).pipe(Effect.scoped),
     { tags: ["provider:github", "provider:github:wikipage", "local"] },
   );
@@ -672,17 +560,12 @@ describe("WikiPage Git fixtures", (it) => {
     () =>
       Effect.gen(function* () {
         const { directory, path, repository } = yield* gitFixture;
-        const missing = {
-          ...repository,
-          remote: path.join(directory, "uninitialized.wiki.git"),
-        };
+        const missing = { ...repository, remote: path.join(directory, "uninitialized.wiki.git") };
         const result = yield* Effect.result(syncWikiPage(missing, props));
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure._tag).toBe("WikiRepositoryUnavailable");
-          expect(result.failure.message).toContain(
-            "first page in the GitHub web UI",
-          );
+          expect(result.failure.message).toContain("first page in the GitHub web UI");
           expect(result.failure.message).not.toContain(token);
         }
         expect(yield* readWikiPage(missing, props)).toBeUndefined();
@@ -704,9 +587,7 @@ describe("WikiPage Git fixtures", (it) => {
               expect(command.args.join(" ")).not.toContain(token);
               expect(command.options.extendEnv).toBe(false);
               const env = command.options.env!;
-              expect(env.GIT_CONFIG_KEY_0).toBe(
-                `http.${repository.remote}.extraHeader`,
-              );
+              expect(env.GIT_CONFIG_KEY_0).toBe(`http.${repository.remote}.extraHeader`);
               expect(env.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
               expect(env.GIT_TRACE).toBeUndefined();
               directories.add(env.HOME!);
@@ -716,14 +597,10 @@ describe("WikiPage Git fixtures", (it) => {
           }),
         );
         yield* syncWikiPage(repository, props).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            safeSpawner,
-          ),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, safeSpawner),
         );
         expect(directories.size).toBe(1);
-        for (const directory of directories)
-          expect(yield* fs.exists(directory)).toBe(false);
+        for (const directory of directories) expect(yield* fs.exists(directory)).toBe(false);
       }).pipe(Effect.scoped),
     { tags: ["provider:github", "provider:github:wikipage", "local"] },
   );
@@ -733,26 +610,12 @@ describe("WikiPage Git fixtures", (it) => {
     () =>
       Effect.gen(function* () {
         const { repository } = yield* gitFixture;
-        for (const title of [
-          "../escape",
-          "a/b",
-          "a\\b",
-          "",
-          "..",
-          " line",
-          "line\nbreak",
-        ]) {
-          const result = yield* Effect.result(
-            syncWikiPage(repository, { ...props, title }),
-          );
+        for (const title of ["../escape", "a/b", "a\\b", "", "..", " line", "line\nbreak"]) {
+          const result = yield* Effect.result(syncWikiPage(repository, { ...props, title }));
           expect(Result.isFailure(result)).toBe(true);
-          if (Result.isFailure(result))
-            expect(result.failure._tag).toBe("InvalidWikiPage");
+          if (Result.isFailure(result)) expect(result.failure._tag).toBe("InvalidWikiPage");
         }
-        const page = yield* syncWikiPage(repository, {
-          ...props,
-          title: "API #1?",
-        });
+        const page = yield* syncWikiPage(repository, { ...props, title: "API #1?" });
         expect(page.htmlUrl).toBe(`${repository.htmlUrl}/API-%231%3F`);
       }).pipe(Effect.scoped),
     { tags: ["unit", "provider:github", "provider:github:wikipage", "local"] },
@@ -765,28 +628,19 @@ describe("WikiPage Git fixtures", (it) => {
         const cases = [
           [undefined, "https://enterprise.example.com"],
           ["github.com", "https://github.com"],
-          [
-            "https://wiki.example.com:8443/api/v3",
-            "https://wiki.example.com:8443",
-          ],
+          ["https://wiki.example.com:8443/api/v3", "https://wiki.example.com:8443"],
           ["https://api.acme.ghe.com", "https://acme.ghe.com"],
         ] as const;
         for (const [baseUrl, origin] of cases) {
           const repository = yield* wikiRepository({ ...props, baseUrl });
-          expect(repository.remote).toBe(
-            `${origin}/${props.owner}/${props.repository}.wiki.git`,
-          );
-          expect(repository.htmlUrl).toBe(
-            `${origin}/${props.owner}/${props.repository}/wiki`,
-          );
+          expect(repository.remote).toBe(`${origin}/${props.owner}/${props.repository}.wiki.git`);
+          expect(repository.htmlUrl).toBe(`${origin}/${props.owner}/${props.repository}/wiki`);
         }
         const insecure = yield* Effect.result(
           wikiRepository({ ...props, baseUrl: "http://wiki.example.com" }),
         );
         expect(Result.isFailure(insecure)).toBe(true);
-      }).pipe(
-        Effect.provide(fromToken(token, { baseUrl: "enterprise.example.com" })),
-      ),
+      }).pipe(Effect.provide(fromToken(token, { baseUrl: "enterprise.example.com" }))),
     { tags: ["unit", "provider:github", "provider:github:wikipage", "local"] },
   );
 
@@ -814,16 +668,9 @@ describe("WikiPage Git fixtures", (it) => {
         ])
           expect(yield* diff(news)).toEqual({ action: "replace" });
         expect(yield* diff({ ...props, format: "asciidoc" })).toBeUndefined();
-        expect(
-          yield* diff({ ...props, title: "Getting-Started" }),
-        ).toBeUndefined();
-        expect(
-          yield* diff({ ...props, baseUrl: "https://api.github.com" }),
-        ).toBeUndefined();
-      }).pipe(
-        Effect.provide(WikiPageProvider()),
-        Effect.provide(fromToken(token)),
-      ),
+        expect(yield* diff({ ...props, title: "Getting-Started" })).toBeUndefined();
+        expect(yield* diff({ ...props, baseUrl: "https://api.github.com" })).toBeUndefined();
+      }).pipe(Effect.provide(WikiPageProvider()), Effect.provide(fromToken(token))),
     { tags: ["unit", "provider:github", "provider:github:wikipage", "local"] },
   );
 });

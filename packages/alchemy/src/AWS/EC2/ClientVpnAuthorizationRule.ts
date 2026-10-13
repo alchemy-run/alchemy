@@ -96,37 +96,31 @@ export const ClientVpnAuthorizationRule = Resource<ClientVpnAuthorizationRule>(
   "AWS.EC2.ClientVpnAuthorizationRule",
 );
 
-class ClientVpnAuthorizationPending extends Data.TaggedError(
-  "ClientVpnAuthorizationPending",
-)<{ message: string }> {}
+class ClientVpnAuthorizationPending extends Data.TaggedError("ClientVpnAuthorizationPending")<{
+  message: string;
+}> {}
 
-class ClientVpnAuthorizationFailed extends Data.TaggedError(
-  "ClientVpnAuthorizationFailed",
-)<{ message: string }> {}
+class ClientVpnAuthorizationFailed extends Data.TaggedError("ClientVpnAuthorizationFailed")<{
+  message: string;
+}> {}
 
 const rules = (clientVpnEndpointId: ClientVpnEndpointId) =>
-  ec2.describeClientVpnAuthorizationRules
-    .items({ ClientVpnEndpointId: clientVpnEndpointId })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((items) =>
-        items.filter((rule) => rule.Status?.Code !== "revoked"),
-      ),
-      Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
-        Effect.succeed([] as ec2.AuthorizationRule[]),
-      ),
-    );
+  ec2.describeClientVpnAuthorizationRules.items({ ClientVpnEndpointId: clientVpnEndpointId }).pipe(
+    Stream.runCollect,
+    Effect.map((items) => items.filter((rule) => rule.Status?.Code !== "revoked")),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
+      Effect.succeed([] as ec2.AuthorizationRule[]),
+    ),
+  );
 
 const findRule = (props: ClientVpnAuthorizationRuleProps) =>
   rules(props.clientVpnEndpointId).pipe(
     Effect.map((items) =>
       items.find(
         (rule) =>
-          canonicalCidr(rule.DestinationCidr) ===
-            canonicalCidr(props.targetNetworkCidr) &&
+          canonicalCidr(rule.DestinationCidr) === canonicalCidr(props.targetNetworkCidr) &&
           (rule.AccessAll ?? false) === (props.authorizeAllGroups ?? false) &&
-          (props.authorizeAllGroups === true ||
-            rule.GroupId === props.accessGroupId),
+          (props.authorizeAllGroups === true || rule.GroupId === props.accessGroupId),
       ),
     ),
   );
@@ -144,10 +138,7 @@ const toAttributes = (
   statusMessage: rule.Status?.Message,
 });
 
-const waitForRule = (
-  props: ClientVpnAuthorizationRuleProps,
-  deleted: boolean,
-) =>
+const waitForRule = (props: ClientVpnAuthorizationRuleProps, deleted: boolean) =>
   Effect.gen(function* () {
     const rule = yield* findRule(props);
     if (deleted && !rule) return undefined;
@@ -161,15 +152,10 @@ const waitForRule = (
       message: `Client VPN authorization for ${props.targetNetworkCidr} is ${rule?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "revocation" : "active"}`,
     });
   }).pipe((effect) =>
-    retryClientVpn(
-      effect,
-      (error) => error._tag === "ClientVpnAuthorizationPending",
-    ),
+    retryClientVpn(effect, (error) => error._tag === "ClientVpnAuthorizationPending"),
   );
 
-const removeRule = Effect.fn(function* (
-  props: ClientVpnAuthorizationRuleProps,
-) {
+const removeRule = Effect.fn(function* (props: ClientVpnAuthorizationRuleProps) {
   const rule = yield* findRule(props);
   if (!rule) return;
   if (rule.Status?.Code !== "revoking") {
@@ -177,9 +163,7 @@ const removeRule = Effect.fn(function* (
       .revokeClientVpnIngress({
         ClientVpnEndpointId: props.clientVpnEndpointId,
         TargetNetworkCidr: canonicalCidr(props.targetNetworkCidr),
-        AccessGroupId: props.authorizeAllGroups
-          ? undefined
-          : props.accessGroupId,
+        AccessGroupId: props.authorizeAllGroups ? undefined : props.accessGroupId,
         RevokeAllGroups: props.authorizeAllGroups ?? false,
       })
       .pipe(
@@ -190,8 +174,7 @@ const removeRule = Effect.fn(function* (
           ],
           () => Effect.void,
         ),
-        (effect) =>
-          retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
+        (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
       );
   }
   yield* waitForRule(props, true);
@@ -211,17 +194,12 @@ export const ClientVpnAuthorizationRuleProvider = () =>
         ],
         nuke: { dependsOn: ["AWS.EC2.ClientVpnEndpoint"] },
         list: Effect.fn(function* () {
-          const endpoints = yield* ec2.describeClientVpnEndpoints
-            .items({})
-            .pipe(Stream.runCollect);
+          const endpoints = yield* ec2.describeClientVpnEndpoints.items({}).pipe(Stream.runCollect);
           const items = yield* Effect.forEach(endpoints, (endpoint) =>
             rules(endpoint.ClientVpnEndpointId as ClientVpnEndpointId).pipe(
               Effect.map((items) =>
                 items.map((rule) =>
-                  toAttributes(
-                    endpoint.ClientVpnEndpointId as ClientVpnEndpointId,
-                    rule,
-                  ),
+                  toAttributes(endpoint.ClientVpnEndpointId as ClientVpnEndpointId, rule),
                 ),
               ),
             ),
@@ -240,11 +218,9 @@ export const ClientVpnAuthorizationRuleProvider = () =>
           }
           const sameKey =
             news.clientVpnEndpointId === olds.clientVpnEndpointId &&
-            canonicalCidr(news.targetNetworkCidr) ===
-              canonicalCidr(olds.targetNetworkCidr) &&
+            canonicalCidr(news.targetNetworkCidr) === canonicalCidr(olds.targetNetworkCidr) &&
             news.accessGroupId === olds.accessGroupId &&
-            (news.authorizeAllGroups ?? false) ===
-              (olds.authorizeAllGroups ?? false);
+            (news.authorizeAllGroups ?? false) === (olds.authorizeAllGroups ?? false);
           if (
             !sameKey ||
             news.targetNetworkCidr !== olds.targetNetworkCidr ||
@@ -265,13 +241,11 @@ export const ClientVpnAuthorizationRuleProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news }) {
           if (
-            (news.authorizeAllGroups === true) ===
-              (news.accessGroupId !== undefined) ||
+            (news.authorizeAllGroups === true) === (news.accessGroupId !== undefined) ||
             news.accessGroupId === ""
           ) {
             return yield* new ClientVpnAuthorizationFailed({
-              message:
-                "Specify exactly one of accessGroupId or authorizeAllGroups: true.",
+              message: "Specify exactly one of accessGroupId or authorizeAllGroups: true.",
             });
           }
           let rule = yield* findRule(news);
@@ -296,15 +270,8 @@ export const ClientVpnAuthorizationRuleProvider = () =>
                 ClientToken: clientToken,
               })
               .pipe(
-                Effect.catchTag(
-                  "InvalidClientVpnDuplicateAuthorizationRule",
-                  () => Effect.void,
-                ),
-                (effect) =>
-                  retryClientVpn(
-                    effect,
-                    (error) => error._tag === "IncorrectState",
-                  ),
+                Effect.catchTag("InvalidClientVpnDuplicateAuthorizationRule", () => Effect.void),
+                (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
               );
           }
           const active = yield* waitForRule(news, false);

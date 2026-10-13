@@ -1,5 +1,5 @@
-import { Function } from "@/Neon/Function";
 import * as Effect from "effect/Effect";
+import { Function } from "@/Neon/Function";
 import { ConnectProject } from "./connect-database.ts";
 import { connectHandler } from "./connect-handler.ts";
 

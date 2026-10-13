@@ -27,9 +27,7 @@ export const retryClientVpn = <A, E, R>(
     return yield* effect.pipe(
       Effect.retry({
         while: whilePending,
-        schedule: Schedule.spaced("5 seconds").pipe(
-          Schedule.upTo({ duration }),
-        ),
+        schedule: Schedule.spaced("5 seconds").pipe(Schedule.upTo({ duration })),
       }),
     );
   });

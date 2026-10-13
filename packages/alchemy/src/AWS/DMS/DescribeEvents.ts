@@ -34,6 +34,4 @@ export interface DescribeEvents extends Binding.Service<
   >
 > {}
 
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.DMS.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DMS.DescribeEvents");

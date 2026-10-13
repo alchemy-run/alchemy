@@ -27,7 +27,4 @@ import { WriteTunnel, writeClient } from "./WriteTunnel.ts";
  * );
  * ```
  */
-export const WriteTunnelLocal = Layer.effect(
-  WriteTunnel,
-  makeLocalTunnelClient(writeClient),
-);
+export const WriteTunnelLocal = Layer.effect(WriteTunnel, makeLocalTunnelClient(writeClient));

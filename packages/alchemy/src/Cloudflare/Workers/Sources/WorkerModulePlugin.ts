@@ -49,9 +49,7 @@ export const workerModulePlugin = (options: {
           inlineDynamicImports: true,
           sourcemap: false,
         });
-        const chunk = output.find(
-          (item) => item.type === "chunk" && item.isEntry,
-        );
+        const chunk = output.find((item) => item.type === "chunk" && item.isEntry);
         if (chunk === undefined || chunk.type !== "chunk") {
           throw new Error(`worker module ${entry}: no entry chunk produced`);
         }

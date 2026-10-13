@@ -1,15 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import TranscribeTestFunctionLive, { TranscribeTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -45,19 +45,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -82,9 +77,7 @@ const getJson = (path: string) =>
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(
     Effect.flatMap((r) => r.json),
     Effect.map((r) => r as RouteResult),
@@ -117,9 +110,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Transcribe test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Transcribe test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Transcribe test setup: deploying fixture");
@@ -138,15 +129,10 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -181,8 +167,7 @@ describe.sequential(
             // + grant end-to-end — an IAM gap would be AccessDeniedException.
             const scribe = yield* getJson("/scribeJobs");
             expect(
-              scribe.error === undefined ||
-                scribe.error === "BadRequestException",
+              scribe.error === undefined || scribe.error === "BadRequestException",
               `/scribeJobs: ${scribe.error}`,
             ).toBe(true);
           }),
@@ -265,18 +250,13 @@ describe.sequential(
               "/medicalVocabulary/create",
               "/languageModel/create",
             ]) {
-              const body = yield* untilAuthorized(
-                postJson(path, { name: BOGUS }),
-              );
+              const body = yield* untilAuthorized(postJson(path, { name: BOGUS }));
               expect(body.ok, path).toBe(false);
               expect(body.error, path).toBe("BadRequestException");
             }
 
             // Updating a nonexistent vocabulary surfaces its typed tag.
-            for (const path of [
-              "/vocabulary/update",
-              "/medicalVocabulary/update",
-            ]) {
+            for (const path of ["/vocabulary/update", "/medicalVocabulary/update"]) {
               const body = yield* postJson(path, { name: BOGUS });
               expect(NOT_FOUND_TAGS, path).toContain(body.error);
             }
@@ -293,9 +273,7 @@ describe.sequential(
             // Cleanup leftovers from a crashed prior run (typed tag ignored).
             yield* postJson("/filter/delete", { name: FILTER_NAME });
 
-            const created = yield* postJson("/filter/create", {
-              name: FILTER_NAME,
-            });
+            const created = yield* postJson("/filter/create", { name: FILTER_NAME });
             expect(created.error).toBeUndefined();
             expect(created.name).toBe(FILTER_NAME);
 
@@ -304,9 +282,7 @@ describe.sequential(
             expect(got.name).toBe(FILTER_NAME);
             expect(got.downloadUri).toBeTruthy();
 
-            const updated = yield* postJson("/filter/update", {
-              name: FILTER_NAME,
-            });
+            const updated = yield* postJson("/filter/update", { name: FILTER_NAME });
             expect(updated.error).toBeUndefined();
 
             // Tag ops address Transcribe resources by ARN.
@@ -324,9 +300,7 @@ describe.sequential(
             const untagged = yield* postJson("/untag", { arn });
             expect(untagged.error).toBeUndefined();
 
-            const deleted = yield* postJson("/filter/delete", {
-              name: FILTER_NAME,
-            });
+            const deleted = yield* postJson("/filter/delete", { name: FILTER_NAME });
             expect(deleted.error).toBeUndefined();
 
             // Wait until it is really gone (typed tag on the get).
@@ -351,9 +325,7 @@ describe.sequential(
             // Cleanup leftovers from a crashed prior run (typed tag ignored).
             yield* postJson("/category/delete", { name: CATEGORY_NAME });
 
-            const created = yield* postJson("/category/create", {
-              name: CATEGORY_NAME,
-            });
+            const created = yield* postJson("/category/create", { name: CATEGORY_NAME });
             expect(created.error).toBeUndefined();
             expect(created.name).toBe(CATEGORY_NAME);
 
@@ -361,14 +333,10 @@ describe.sequential(
             expect(got.error).toBeUndefined();
             expect(got.rules).toBe(1);
 
-            const updated = yield* postJson("/category/update", {
-              name: CATEGORY_NAME,
-            });
+            const updated = yield* postJson("/category/update", { name: CATEGORY_NAME });
             expect(updated.error).toBeUndefined();
 
-            const deleted = yield* postJson("/category/delete", {
-              name: CATEGORY_NAME,
-            });
+            const deleted = yield* postJson("/category/delete", { name: CATEGORY_NAME });
             expect(deleted.error).toBeUndefined();
 
             const gone = yield* getJson(`/category?name=${CATEGORY_NAME}`).pipe(
@@ -384,38 +352,30 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeTranscriptionJobEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "created the EventBridge rule for Transcribe job state changes",
-          () =>
-            Effect.gen(function* () {
-              // The rule's physical name embeds the event-source id
-              // (`TranscribeJobEvents`); find it on the default bus with bounded
-              // manual pagination.
-              let rule: eventbridge.Rule | undefined;
-              let nextToken: string | undefined;
-              for (let page = 0; page < 10 && !rule; page++) {
-                const result = yield* eventbridge.listRules({
-                  NextToken: nextToken,
-                });
-                rule = (result.Rules ?? []).find((candidate) =>
-                  candidate.Name?.includes("TranscribeJobEvents"),
-                );
-                nextToken = result.NextToken;
-                if (!nextToken) break;
-              }
-              expect(rule).toBeDefined();
-              expect(rule?.EventPattern).toContain("aws.transcribe");
-              expect(rule?.EventPattern).toContain(
-                "Transcribe Job State Change",
+    describe("consumeTranscriptionJobEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider(
+        "created the EventBridge rule for Transcribe job state changes",
+        () =>
+          Effect.gen(function* () {
+            // The rule's physical name embeds the event-source id
+            // (`TranscribeJobEvents`); find it on the default bus with bounded
+            // manual pagination.
+            let rule: eventbridge.Rule | undefined;
+            let nextToken: string | undefined;
+            for (let page = 0; page < 10 && !rule; page++) {
+              const result = yield* eventbridge.listRules({ NextToken: nextToken });
+              rule = (result.Rules ?? []).find((candidate) =>
+                candidate.Name?.includes("TranscribeJobEvents"),
               );
-            }),
-          { timeout: 60_000 },
-        );
-      },
-    );
+              nextToken = result.NextToken;
+              if (!nextToken) break;
+            }
+            expect(rule).toBeDefined();
+            expect(rule?.EventPattern).toContain("aws.transcribe");
+            expect(rule?.EventPattern).toContain("Transcribe Job State Change");
+          }),
+        { timeout: 60_000 },
+      );
+    });
   },
 );

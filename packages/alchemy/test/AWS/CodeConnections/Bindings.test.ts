@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CodeConnectionsTestFunctionLive, {
   CodeConnectionsTestFunction,
   fixtureConnectionName,
@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "CodeConnectionsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -40,19 +37,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -70,9 +62,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "CodeConnections test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("CodeConnections test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("CodeConnections test setup: deploying fixture");
@@ -86,16 +76,12 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `CodeConnections test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`CodeConnections test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -113,9 +99,9 @@ describe.sequential(
     describe("binding registration", () => {
       test.provider("all capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/bindings`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).bound).toHaveLength(4);
         }),
       );
@@ -124,9 +110,9 @@ describe.sequential(
     describe("GetConnection", () => {
       test.provider("reads the fixture connection's live state", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/connection`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/connection`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).name).toBe(fixtureConnectionName);
           // The OAuth handshake is a manual console step, so the fixture
           // connection stays PENDING.
@@ -137,15 +123,13 @@ describe.sequential(
     });
 
     describe("ListConnections", () => {
-      test.provider(
-        "lists the fixture connection among the account's connections",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/connections`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect((response as any).names).toContain(fixtureConnectionName);
-          }),
+      test.provider("lists the fixture connection among the account's connections", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/connections`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
+          expect((response as any).names).toContain(fixtureConnectionName);
+        }),
       );
     });
 
@@ -154,9 +138,9 @@ describe.sequential(
         "enumerates the account's hosts (empty unless a self-managed provider is registered)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/hosts`),
-            ).pipe(Effect.flatMap((r) => r.json));
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/hosts`)).pipe(
+              Effect.flatMap((r) => r.json),
+            );
             expect(Array.isArray((response as any).names)).toBe(true);
           }),
       );
@@ -167,9 +151,9 @@ describe.sequential(
         "enumerates the account's repository links (empty unless Git sync is configured)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/repository-links`),
-            ).pipe(Effect.flatMap((r) => r.json));
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/repository-links`)).pipe(
+              Effect.flatMap((r) => r.json),
+            );
             expect(Array.isArray((response as any).repositories)).toBe(true);
           }),
       );

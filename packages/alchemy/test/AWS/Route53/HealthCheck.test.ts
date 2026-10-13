@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { HealthCheck } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { HealthCheck } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,10 +14,7 @@ const assertCheckGone = (id: string) =>
     Effect.catchTag("NoSuchHealthCheck", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -85,9 +82,7 @@ test.provider(
         HealthCheckId: check.id,
       });
       expect(observed2.HealthCheck.HealthCheckConfig.FailureThreshold).toBe(5);
-      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe(
-        "/health",
-      );
+      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/health");
 
       const tags2 = yield* route53.listTagsForResource({
         ResourceType: "healthcheck",

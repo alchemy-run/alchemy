@@ -14,13 +14,7 @@ export default Alchemy.Stack(
       // skip the vinext build (and the deploy) entirely.
       memo: {
         lockfile: true,
-        include: [
-          "app/**",
-          "public/**",
-          "package.json",
-          "vite.config.ts",
-          "tsconfig.json",
-        ],
+        include: ["app/**", "public/**", "package.json", "vite.config.ts", "tsconfig.json"],
       },
       forceDestroy: true,
       env: {

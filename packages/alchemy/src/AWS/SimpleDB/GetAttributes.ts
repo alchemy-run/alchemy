@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface GetAttributesRequest extends Omit<
-  sdb.GetAttributesRequest,
-  "DomainName"
-> {}
+export interface GetAttributesRequest extends Omit<sdb.GetAttributesRequest, "DomainName"> {}
 
 /**
  * Runtime binding for `sdb:GetAttributes`.
@@ -36,13 +33,7 @@ export interface GetAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAttributesRequest,
-    ) => Effect.Effect<
-      sdb.GetAttributesResponse,
-      sdb.GetAttributesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.GetAttributesResponse, sdb.GetAttributesError, RuntimeContext>
   >
 > {}
-export const GetAttributes = Binding.Service<GetAttributes>(
-  "AWS.SimpleDB.GetAttributes",
-);
+export const GetAttributes = Binding.Service<GetAttributes>("AWS.SimpleDB.GetAttributes");

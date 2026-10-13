@@ -59,9 +59,7 @@ export interface GroupMembership extends Resource<
  *
  * @resource
  */
-export const GroupMembership = Resource<GroupMembership>(
-  "AWS.IAM.GroupMembership",
-);
+export const GroupMembership = Resource<GroupMembership>("AWS.IAM.GroupMembership");
 
 export const GroupMembershipProvider = () =>
   Provider.succeed(GroupMembership, {
@@ -80,11 +78,7 @@ export const GroupMembershipProvider = () =>
         .getGroup({
           GroupName: output.groupName,
         })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       if (!response?.Group?.GroupName) {
         return undefined;
       }
@@ -92,9 +86,7 @@ export const GroupMembershipProvider = () =>
         groupName: response.Group.GroupName,
         userNames: (response.Users ?? [])
           .map((user) => user.UserName)
-          .filter(
-            (userName): userName is string => typeof userName === "string",
-          ),
+          .filter((userName): userName is string => typeof userName === "string"),
       };
     }),
     reconcile: Effect.fn(function* ({ news, session }) {
@@ -106,11 +98,7 @@ export const GroupMembershipProvider = () =>
       // in a single call.
       const response = yield* iam
         .getGroup({ GroupName: groupName })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       const observedUsers = (response?.Users ?? [])
         .map((user) => user.UserName)
         .filter((userName): userName is string => typeof userName === "string");
@@ -150,9 +138,7 @@ export const GroupMembershipProvider = () =>
       // shape `read` produces.
       const groups = yield* iam.listGroups.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.Groups ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Groups ?? [])),
       );
       const rows = yield* Effect.forEach(
         groups,
@@ -164,21 +150,15 @@ export const GroupMembershipProvider = () =>
               userNames: Array.from(chunk)
                 .flatMap((page) => page.Users ?? [])
                 .map((user) => user.UserName)
-                .filter(
-                  (userName): userName is string =>
-                    typeof userName === "string",
-                ),
+                .filter((userName): userName is string => typeof userName === "string"),
             })),
             // The group may be deleted between listGroups and getGroup.
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is { groupName: string; userNames: string[] } =>
-          row !== undefined,
+        (row): row is { groupName: string; userNames: string[] } => row !== undefined,
       );
     }),
     delete: Effect.fn(function* ({ output }) {

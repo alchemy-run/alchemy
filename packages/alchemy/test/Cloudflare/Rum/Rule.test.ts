@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rum from "@distilled.cloud/cloudflare/rum";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Use a different zone than Site.test.ts — both suites manage zone-scoped
 // Web Analytics sites, and Cloudflare keys those to the zone, so running
@@ -47,9 +44,7 @@ const listRules = (accountId: string, rulesetId: string) =>
 
 const findRule = (accountId: string, rulesetId: string, ruleId: string) =>
   listRules(accountId, rulesetId).pipe(
-    Effect.map((response) =>
-      (response.rules ?? []).find((rule) => rule.id === ruleId),
-    ),
+    Effect.map((response) => (response.rules ?? []).find((rule) => rule.id === ruleId)),
   );
 
 // A deleted rule disappears from the ruleset's rule list; once the parent
@@ -61,9 +56,7 @@ const findRule = (accountId: string, rulesetId: string, ruleId: string) =>
 const expectGone = (accountId: string, rulesetId: string, ruleId: string) =>
   findRule(accountId, rulesetId, ruleId).pipe(
     Effect.flatMap((rule) =>
-      rule === undefined
-        ? Effect.void
-        : Effect.fail({ _tag: "RuleNotDeleted", ruleId } as const),
+      rule === undefined ? Effect.void : Effect.fail({ _tag: "RuleNotDeleted", ruleId } as const),
     ),
     Effect.catchTag("RulesetNotFound", () => Effect.void),
     Effect.retry({
@@ -128,14 +121,9 @@ const cleanupLeftoverSites = (accountId: string, zoneTag: string) =>
 // ruleset) and the rule under it. The rule's `rulesetId` references the
 // site's output, so the engine orders rule-last on deploy (and first on
 // destroy).
-const program = (
-  zoneId: string,
-  rule: Omit<Cloudflare.Rum.RuleProps, "rulesetId">,
-) =>
+const program = (zoneId: string, rule: Omit<Cloudflare.Rum.RuleProps, "rulesetId">) =>
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Rum.Site("RuleSite", {
-      zoneTag: zoneId,
-    });
+    const site = yield* Cloudflare.Rum.Site("RuleSite", { zoneTag: zoneId });
     const ruleResource = yield* Cloudflare.Rum.Rule("Rule", {
       rulesetId: site.rulesetId.as<string>(),
       ...rule,
@@ -147,36 +135,21 @@ const program = (
 // ruleset on `alchemy-test-3.us`, so they must not run concurrently.
 describe.sequential(
   "Rule",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:rum",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:rum", "provider:cloudflare:zone", "live"] },
   () => {
     test.provider("create, update in place, and delete a rule", (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const zone = yield* findZoneByName({ accountId, name: zoneName });
         if (!zone) {
-          return yield* Effect.die(
-            new Error(`zone "${zoneName}" not found in account`),
-          );
+          return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
         }
 
         yield* stack.destroy();
         yield* cleanupLeftoverSites(accountId, zone.id);
 
         const initial = yield* retryingQuota(
-          stack.deploy(
-            program(zone.id, {
-              host: zoneName,
-              paths: ["/blog/*"],
-              inclusive: false,
-            }),
-          ),
+          stack.deploy(program(zone.id, { host: zoneName, paths: ["/blog/*"], inclusive: false })),
         );
         if (initial === undefined) return yield* quotaExhausted(stack);
 
@@ -190,11 +163,7 @@ describe.sequential(
         expect(initial.rule.isPaused).toEqual(false);
 
         // Verify out-of-band against the live API.
-        const live = yield* findRule(
-          accountId,
-          initial.rule.rulesetId,
-          initial.rule.id,
-        );
+        const live = yield* findRule(accountId, initial.rule.rulesetId, initial.rule.id);
         expect(live).toBeDefined();
         expect(live?.host).toEqual(zoneName);
         expect(live?.paths).toEqual(["/blog/*"]);
@@ -213,11 +182,7 @@ describe.sequential(
         expect(updated.rule.paths).toEqual(["/blog/*", "/admin/*"]);
         expect(updated.rule.isPaused).toEqual(true);
 
-        const liveUpdated = yield* findRule(
-          accountId,
-          updated.rule.rulesetId,
-          updated.rule.id,
-        );
+        const liveUpdated = yield* findRule(accountId, updated.rule.rulesetId, updated.rule.id);
         expect(liveUpdated?.paths).toEqual(["/blog/*", "/admin/*"]);
         expect(liveUpdated?.isPaused).toEqual(true);
 
@@ -249,9 +214,7 @@ describe.sequential(
         const { accountId } = yield* yield* CloudflareEnvironment;
         const zone = yield* findZoneByName({ accountId, name: zoneName });
         if (!zone) {
-          return yield* Effect.die(
-            new Error(`zone "${zoneName}" not found in account`),
-          );
+          return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
         }
 
         yield* stack.destroy();
@@ -259,11 +222,7 @@ describe.sequential(
 
         const deployed = yield* retryingQuota(
           stack.deploy(
-            program(zone.id, {
-              host: zoneName,
-              paths: ["/list-test/*"],
-              inclusive: false,
-            }),
+            program(zone.id, { host: zoneName, paths: ["/list-test/*"], inclusive: false }),
           ),
         );
         if (deployed === undefined) return yield* quotaExhausted(stack);
@@ -272,11 +231,7 @@ describe.sequential(
         const all = yield* provider.list();
 
         expect(
-          all.some(
-            (r) =>
-              r.id === deployed.rule.id &&
-              r.rulesetId === deployed.rule.rulesetId,
-          ),
+          all.some((r) => r.id === deployed.rule.id && r.rulesetId === deployed.rule.rulesetId),
         ).toBe(true);
 
         yield* stack.destroy();
@@ -288,22 +243,14 @@ describe.sequential(
         const { accountId } = yield* yield* CloudflareEnvironment;
         const zone = yield* findZoneByName({ accountId, name: zoneName });
         if (!zone) {
-          return yield* Effect.die(
-            new Error(`zone "${zoneName}" not found in account`),
-          );
+          return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
         }
 
         yield* stack.destroy();
         yield* cleanupLeftoverSites(accountId, zone.id);
 
         const initial = yield* retryingQuota(
-          stack.deploy(
-            program(zone.id, {
-              host: zoneName,
-              paths: ["/heal/*"],
-              inclusive: false,
-            }),
-          ),
+          stack.deploy(program(zone.id, { host: zoneName, paths: ["/heal/*"], inclusive: false })),
         );
         if (initial === undefined) return yield* quotaExhausted(stack);
 
@@ -311,11 +258,7 @@ describe.sequential(
         // planner no-op, so change a prop to force reconcile — it must observe
         // the rule as missing and recreate it instead of failing.
         yield* rum
-          .deleteRule({
-            accountId,
-            rulesetId: initial.rule.rulesetId,
-            ruleId: initial.rule.id,
-          })
+          .deleteRule({ accountId, rulesetId: initial.rule.rulesetId, ruleId: initial.rule.id })
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
@@ -326,11 +269,7 @@ describe.sequential(
 
         const healed = yield* retryingQuota(
           stack.deploy(
-            program(zone.id, {
-              host: zoneName,
-              paths: ["/heal-v2/*"],
-              inclusive: false,
-            }),
+            program(zone.id, { host: zoneName, paths: ["/heal-v2/*"], inclusive: false }),
           ),
         );
         if (healed === undefined) return yield* quotaExhausted(stack);
@@ -338,11 +277,7 @@ describe.sequential(
         expect(healed.rule.id).not.toEqual(initial.rule.id);
         expect(healed.rule.paths).toEqual(["/heal-v2/*"]);
 
-        const live = yield* findRule(
-          accountId,
-          healed.rule.rulesetId,
-          healed.rule.id,
-        );
+        const live = yield* findRule(accountId, healed.rule.rulesetId, healed.rule.id);
         expect(live?.paths).toEqual(["/heal-v2/*"]);
 
         const rulesetId = healed.rule.rulesetId;

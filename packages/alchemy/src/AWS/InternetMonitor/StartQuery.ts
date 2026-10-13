@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface StartQueryRequest extends Omit<
-  im.StartQueryInput,
-  "MonitorName"
-> {}
+export interface StartQueryRequest extends Omit<im.StartQueryInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:StartQuery` — start a query against
@@ -37,12 +34,8 @@ export interface StartQuery extends Binding.Service<
   (
     monitor: Monitor,
   ) => Effect.Effect<
-    (
-      request: StartQueryRequest,
-    ) => Effect.Effect<im.StartQueryOutput, im.StartQueryError>
+    (request: StartQueryRequest) => Effect.Effect<im.StartQueryOutput, im.StartQueryError>
   >
 > {}
 
-export const StartQuery = Binding.Service<StartQuery>(
-  "AWS.InternetMonitor.StartQuery",
-);
+export const StartQuery = Binding.Service<StartQuery>("AWS.InternetMonitor.StartQuery");

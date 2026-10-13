@@ -28,12 +28,7 @@ export interface CreateCampaign extends Binding.Service<
   () => Effect.Effect<
     (
       request: personalize.CreateCampaignRequest,
-    ) => Effect.Effect<
-      personalize.CreateCampaignResponse,
-      personalize.CreateCampaignError
-    >
+    ) => Effect.Effect<personalize.CreateCampaignResponse, personalize.CreateCampaignError>
   >
 > {}
-export const CreateCampaign = Binding.Service<CreateCampaign>(
-  "AWS.Personalize.CreateCampaign",
-);
+export const CreateCampaign = Binding.Service<CreateCampaign>("AWS.Personalize.CreateCampaign");

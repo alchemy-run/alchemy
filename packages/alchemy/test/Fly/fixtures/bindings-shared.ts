@@ -1,5 +1,5 @@
-import * as Fly from "@/Fly";
 import * as Redacted from "effect/Redacted";
+import * as Fly from "@/Fly";
 
 export const API_PORT = 3000;
 export const SECRET_NAME = "FLY_BINDINGS_MARKER";

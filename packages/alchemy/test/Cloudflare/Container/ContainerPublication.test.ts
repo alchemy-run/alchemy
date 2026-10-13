@@ -1,13 +1,10 @@
-import { retryContainerPublication } from "@/Cloudflare/Containers/ContainerPublication.ts";
-import {
-  DockerRegistryBlobUnknown,
-  DockerRegistryUnavailable,
-} from "@/Docker/RegistryError.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { PlatformError, SystemError } from "effect/PlatformError";
 import * as TestClock from "effect/testing/TestClock";
+import { retryContainerPublication } from "@/Cloudflare/Containers/ContainerPublication.ts";
+import { DockerRegistryBlobUnknown, DockerRegistryUnavailable } from "@/Docker/RegistryError.ts";
 
 const cause = new PlatformError(
   new SystemError({
@@ -21,12 +18,7 @@ const cause = new PlatformError(
 describe(
   "container publication retries",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:container",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:container", "local"],
   },
   () => {
     for (const error of [

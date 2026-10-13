@@ -1,22 +1,16 @@
-import * as AWS from "@/AWS";
-import { HealthCheck, HostedZone, Record } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { HealthCheck, HostedZone, Record } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
-const findSet = (
-  sets: route53.ResourceRecordSet[],
-  name: string,
-  setId: string,
-) =>
-  sets.find(
-    (s) => s.Name === name && s.SetIdentifier === setId && s.Type === "A",
-  );
+const findSet = (sets: route53.ResourceRecordSet[], name: string, setId: string) =>
+  sets.find((s) => s.Name === name && s.SetIdentifier === setId && s.Type === "A");
 
 const zoneName = "alchemy-route53-routing.alchemy.";
 

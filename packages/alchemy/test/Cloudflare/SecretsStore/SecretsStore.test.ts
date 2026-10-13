@@ -1,17 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import {
-  Credentials,
-  apiTokenCredentials,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Redacted from "effect/Redacted";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -38,8 +36,7 @@ const harness = (response: Response) => {
   const client = HttpClient.make((request) =>
     Effect.sync(() => {
       const body = request.body as HttpBody.HttpBody;
-      const bodyText =
-        body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
+      const bodyText = body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
       captured = {
         url: request.url,
         method: request.method,
@@ -54,7 +51,7 @@ const harness = (response: Response) => {
     Layer.succeed(HttpClient.HttpClient, client),
     Layer.succeed(
       Credentials,
-      Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+      Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
     ),
   );
   return { layer, get: () => captured! };
@@ -76,14 +73,11 @@ const successResponse = () =>
     { status: 200, headers: { "content-type": "application/json" } },
   );
 
-const errorResponse = (
-  status: number,
-  errors: Array<{ code: number; message: string }>,
-) =>
-  new Response(
-    JSON.stringify({ success: false, errors, messages: [], result: null }),
-    { status, headers: { "content-type": "application/json" } },
-  );
+const errorResponse = (status: number, errors: Array<{ code: number; message: string }>) =>
+  new Response(JSON.stringify({ success: false, errors, messages: [], result: null }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 
 it.live(
   "createStore POSTs a single JSON object body (regression: invalid_json_body)",
@@ -93,10 +87,7 @@ it.live(
 
       const result = yield* Effect.gen(function* () {
         const create = yield* secretsStore.createStore;
-        return yield* create({
-          accountId: "acct-abc",
-          name: "default_secrets_store",
-        });
+        return yield* create({ accountId: "acct-abc", name: "default_secrets_store" });
       }).pipe(Effect.provide(layer));
 
       expect(result.id).toBe("store-id-123");
@@ -117,14 +108,7 @@ it.live(
       expect(sent.bodyJson).toEqual({ name: "default_secrets_store" });
       expect(Array.isArray(sent.bodyJson)).toBe(false);
     }),
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:secretsstore",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:secretsstore", "local"] },
 );
 
 it.live(
@@ -132,9 +116,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const { layer } = harness(
-        errorResponse(409, [
-          { code: 1003, message: "maximum_stores_exceeded" },
-        ]),
+        errorResponse(409, [{ code: 1003, message: "maximum_stores_exceeded" }]),
       );
 
       const result = yield* Effect.gen(function* () {
@@ -153,14 +135,7 @@ it.live(
       expect(err.code).toBe(1003);
       expect(err.message).toBe("maximum_stores_exceeded");
     }),
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:secretsstore",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:secretsstore", "local"] },
 );
 
 // Canonical `list()` test (account-scoped collection). Deploy/adopt the
@@ -181,9 +156,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.SecretsStore.Store,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.SecretsStore.Store);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

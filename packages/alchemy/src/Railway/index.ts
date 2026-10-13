@@ -32,18 +32,10 @@ export {
 } from "./ConnectPostgres.ts";
 export * from "./ConnectPostgresHttp.ts";
 export * from "./MySQL.ts";
-export {
-  ConnectMySQL,
-  MySQLUrlMissing,
-  type ConnectMySQLClient,
-} from "./ConnectMySQL.ts";
+export { ConnectMySQL, MySQLUrlMissing, type ConnectMySQLClient } from "./ConnectMySQL.ts";
 export * from "./ConnectMySQLHttp.ts";
 export * from "./Mongo.ts";
-export {
-  ConnectMongo,
-  MongoUrlMissing,
-  type ConnectMongoClient,
-} from "./ConnectMongo.ts";
+export { ConnectMongo, MongoUrlMissing, type ConnectMongoClient } from "./ConnectMongo.ts";
 export * from "./ConnectMongoHttp.ts";
 export * from "./ref.ts";
 export * from "./Project.ts";

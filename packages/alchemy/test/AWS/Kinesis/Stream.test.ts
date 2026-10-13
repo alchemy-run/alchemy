@@ -1,14 +1,14 @@
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Stream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Kinesis from "@distilled.cloud/aws/kinesis";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,13 +33,10 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamStatus,
-          ).toEqual("ACTIVE");
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamModeDetails
-              ?.StreamMode,
-          ).toEqual("ON_DEMAND");
+          expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+          expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+            "ON_DEMAND",
+          );
 
           yield* stack.destroy();
 
@@ -65,25 +62,15 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamStatus,
-          ).toEqual("ACTIVE");
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamModeDetails
-              ?.StreamMode,
-          ).toEqual("ON_DEMAND");
-          expect(
-            streamDescription.StreamDescriptionSummary.RetentionPeriodHours,
-          ).toEqual(24);
+          expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+          expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+            "ON_DEMAND",
+          );
+          expect(streamDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(24);
 
           // Verify tags
-          const tagging = yield* Kinesis.listTagsForStream({
-            StreamName: stream.streamName,
-          });
-          expect(tagging.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "test",
-          });
+          const tagging = yield* Kinesis.listTagsForStream({ StreamName: stream.streamName });
+          expect(tagging.Tags).toContainEqual({ Key: "Environment", Value: "test" });
 
           // Update the stream - increase retention period and update tags
           yield* stack.deploy(
@@ -100,22 +87,14 @@ describe.skipIf(!!process.env.FAST)(
           const updatedDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            updatedDescription.StreamDescriptionSummary.RetentionPeriodHours,
-          ).toEqual(48);
+          expect(updatedDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(48);
 
           // Verify tags were updated
           const updatedTagging = yield* Kinesis.listTagsForStream({
             StreamName: stream.streamName,
           });
-          expect(updatedTagging.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "production",
-          });
-          expect(updatedTagging.Tags).toContainEqual({
-            Key: "Team",
-            Value: "platform",
-          });
+          expect(updatedTagging.Tags).toContainEqual({ Key: "Environment", Value: "production" });
+          expect(updatedTagging.Tags).toContainEqual({ Key: "Team", Value: "platform" });
 
           yield* stack.destroy();
 
@@ -141,16 +120,11 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamStatus,
-          ).toEqual("ACTIVE");
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamModeDetails
-              ?.StreamMode,
-          ).toEqual("PROVISIONED");
-          expect(
-            streamDescription.StreamDescriptionSummary.OpenShardCount,
-          ).toEqual(2);
+          expect(streamDescription.StreamDescriptionSummary.StreamStatus).toEqual("ACTIVE");
+          expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+            "PROVISIONED",
+          );
+          expect(streamDescription.StreamDescriptionSummary.OpenShardCount).toEqual(2);
 
           yield* stack.destroy();
 
@@ -165,10 +139,7 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const stream = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("ShardStream", {
-                streamMode: "PROVISIONED",
-                shardCount: 1,
-              });
+              return yield* Stream("ShardStream", { streamMode: "PROVISIONED", shardCount: 1 });
             }),
           );
 
@@ -176,17 +147,12 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.OpenShardCount,
-          ).toEqual(1);
+          expect(streamDescription.StreamDescriptionSummary.OpenShardCount).toEqual(1);
 
           // Update shard count
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("ShardStream", {
-                streamMode: "PROVISIONED",
-                shardCount: 2,
-              });
+              return yield* Stream("ShardStream", { streamMode: "PROVISIONED", shardCount: 2 });
             }),
           );
 
@@ -194,9 +160,7 @@ describe.skipIf(!!process.env.FAST)(
           const updatedDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            updatedDescription.StreamDescriptionSummary.OpenShardCount,
-          ).toEqual(2);
+          expect(updatedDescription.StreamDescriptionSummary.OpenShardCount).toEqual(2);
 
           yield* stack.destroy();
 
@@ -213,9 +177,7 @@ describe.skipIf(!!process.env.FAST)(
 
           const stream = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("CustomNameStream", {
-                streamName: customName,
-              });
+              return yield* Stream("CustomNameStream", { streamName: customName });
             }),
           );
 
@@ -226,9 +188,7 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: customName,
           });
-          expect(streamDescription.StreamDescriptionSummary.StreamName).toEqual(
-            customName,
-          );
+          expect(streamDescription.StreamDescriptionSummary.StreamName).toEqual(customName);
 
           yield* stack.destroy();
 
@@ -243,9 +203,7 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const stream = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("EncryptedStream", {
-                encryption: true,
-              });
+              return yield* Stream("EncryptedStream", { encryption: true });
             }),
           );
 
@@ -253,16 +211,12 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.EncryptionType,
-          ).toEqual("KMS");
+          expect(streamDescription.StreamDescriptionSummary.EncryptionType).toEqual("KMS");
 
           // Update to disable encryption
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("EncryptedStream", {
-                encryption: false,
-              });
+              return yield* Stream("EncryptedStream", { encryption: false });
             }),
           );
 
@@ -270,9 +224,7 @@ describe.skipIf(!!process.env.FAST)(
           const updatedDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            updatedDescription.StreamDescriptionSummary.EncryptionType,
-          ).toEqual("NONE");
+          expect(updatedDescription.StreamDescriptionSummary.EncryptionType).toEqual("NONE");
 
           yield* stack.destroy();
 
@@ -298,8 +250,8 @@ describe.skipIf(!!process.env.FAST)(
             StreamName: stream.streamName,
           });
           const metrics =
-            streamDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]
-              ?.ShardLevelMetrics ?? [];
+            streamDescription.StreamDescriptionSummary.EnhancedMonitoring?.[0]?.ShardLevelMetrics ??
+            [];
           expect(metrics).toContain("IncomingBytes");
           expect(metrics).toContain("OutgoingRecords");
 
@@ -307,11 +259,7 @@ describe.skipIf(!!process.env.FAST)(
           yield* stack.deploy(
             Effect.gen(function* () {
               return yield* Stream("MonitoredStream", {
-                shardLevelMetrics: [
-                  "IncomingBytes",
-                  "IncomingRecords",
-                  "IteratorAgeMilliseconds",
-                ],
+                shardLevelMetrics: ["IncomingBytes", "IncomingRecords", "IteratorAgeMilliseconds"],
               });
             }),
           );
@@ -379,17 +327,14 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.StreamModeDetails
-              ?.StreamMode,
-          ).toEqual("PROVISIONED");
+          expect(streamDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+            "PROVISIONED",
+          );
 
           // Update to on-demand mode
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("ModeChangeStream", {
-                streamMode: "ON_DEMAND",
-              });
+              return yield* Stream("ModeChangeStream", { streamMode: "ON_DEMAND" });
             }),
           );
 
@@ -397,10 +342,9 @@ describe.skipIf(!!process.env.FAST)(
           const updatedDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            updatedDescription.StreamDescriptionSummary.StreamModeDetails
-              ?.StreamMode,
-          ).toEqual("ON_DEMAND");
+          expect(updatedDescription.StreamDescriptionSummary.StreamModeDetails?.StreamMode).toEqual(
+            "ON_DEMAND",
+          );
 
           yield* stack.destroy();
 
@@ -415,9 +359,7 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const stream = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("RetentionStream", {
-                retentionPeriod: "48 hours",
-              });
+              return yield* Stream("RetentionStream", { retentionPeriod: "48 hours" });
             }),
           );
 
@@ -425,16 +367,12 @@ describe.skipIf(!!process.env.FAST)(
           const streamDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            streamDescription.StreamDescriptionSummary.RetentionPeriodHours,
-          ).toEqual(48);
+          expect(streamDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(48);
 
           // Decrease retention period back to default
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("RetentionStream", {
-                retentionPeriod: "24 hours",
-              });
+              return yield* Stream("RetentionStream", { retentionPeriod: "24 hours" });
             }),
           );
 
@@ -442,9 +380,7 @@ describe.skipIf(!!process.env.FAST)(
           const updatedDescription = yield* Kinesis.describeStreamSummary({
             StreamName: stream.streamName,
           });
-          expect(
-            updatedDescription.StreamDescriptionSummary.RetentionPeriodHours,
-          ).toEqual(24);
+          expect(updatedDescription.StreamDescriptionSummary.RetentionPeriodHours).toEqual(24);
 
           yield* stack.destroy();
 
@@ -459,10 +395,7 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const stream = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("PolicyStream", {
-                streamMode: "PROVISIONED",
-                shardCount: 1,
-              });
+              return yield* Stream("PolicyStream", { streamMode: "PROVISIONED", shardCount: 1 });
             }),
           );
 
@@ -472,9 +405,7 @@ describe.skipIf(!!process.env.FAST)(
               {
                 Sid: "AllowSameAccountDescribe",
                 Effect: "Allow",
-                Principal: {
-                  AWS: `arn:aws:iam::${stream.streamArn.split(":")[4]}:root`,
-                },
+                Principal: { AWS: `arn:aws:iam::${stream.streamArn.split(":")[4]}:root` },
                 Action: ["kinesis:DescribeStreamSummary"],
                 Resource: stream.streamArn,
               },
@@ -500,12 +431,8 @@ describe.skipIf(!!process.env.FAST)(
           });
           expect(policyResponse.Policy).toContain("AllowSameAccountDescribe");
 
-          const summary = yield* Kinesis.describeStreamSummary({
-            StreamName: stream.streamName,
-          });
-          expect(summary.StreamDescriptionSummary.MaxRecordSizeInKiB).toEqual(
-            2048,
-          );
+          const summary = yield* Kinesis.describeStreamSummary({ StreamName: stream.streamName });
+          expect(summary.StreamDescriptionSummary.MaxRecordSizeInKiB).toEqual(2048);
 
           yield* stack.destroy();
           yield* assertStreamDeleted(stream.streamName);
@@ -518,9 +445,7 @@ describe.skipIf(!!process.env.FAST)(
       (stack) =>
         Effect.gen(function* () {
           const accountSettings = yield* Kinesis.describeAccountSettings({});
-          const status =
-            accountSettings.MinimumThroughputBillingCommitment?.Status ??
-            "DISABLED";
+          const status = accountSettings.MinimumThroughputBillingCommitment?.Status ?? "DISABLED";
 
           if (status === "DISABLED") {
             return;
@@ -534,20 +459,14 @@ describe.skipIf(!!process.env.FAST)(
 
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Stream("WarmThroughputStream", {
-                warmThroughputMiBps: 10,
-              });
+              return yield* Stream("WarmThroughputStream", { warmThroughputMiBps: 10 });
             }),
           );
 
           expect(updated.warmThroughput?.targetMiBps).toEqual(10);
 
-          const summary = yield* Kinesis.describeStreamSummary({
-            StreamName: stream.streamName,
-          });
-          expect(
-            summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps,
-          ).toEqual(10);
+          const summary = yield* Kinesis.describeStreamSummary({ StreamName: stream.streamName });
+          expect(summary.StreamDescriptionSummary.WarmThroughput?.TargetMiBps).toEqual(10);
 
           yield* stack.destroy();
           yield* assertStreamDeleted(stream.streamName);
@@ -629,11 +548,7 @@ describe.skipIf(!!process.env.FAST)(
 
             yield* Effect.gen(function* () {
               const state = yield* yield* State;
-              yield* state.delete({
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "Original",
-              });
+              yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Original" });
             }).pipe(Effect.provide(stack.state));
 
             const takenOver = yield* stack
@@ -651,10 +566,7 @@ describe.skipIf(!!process.env.FAST)(
             });
             const tagMap = Object.fromEntries(
               (tagsResp.Tags ?? [])
-                .filter(
-                  (t): t is { Key: string; Value: string } =>
-                    typeof t.Value === "string",
-                )
+                .filter((t): t is { Key: string; Value: string } => typeof t.Value === "string")
                 .map((t) => [t.Key, t.Value]),
             );
             expect(tagMap["alchemy::id"]).toEqual("Different");
@@ -708,14 +620,9 @@ describe.skipIf(!!process.env.FAST)(
     // cleanup failure is never silent. Error channel is `never` so it can be
     // used as an `Effect.ensuring` finalizer.
     const deleteStreamIfExists = Effect.fn(function* (streamName: string) {
-      yield* Kinesis.deleteStream({
-        StreamName: streamName,
-        EnforceConsumerDeletion: true,
-      }).pipe(
+      yield* Kinesis.deleteStream({ StreamName: streamName, EnforceConsumerDeletion: true }).pipe(
         Effect.retry({
-          while: (e) =>
-            e._tag === "ResourceInUseException" ||
-            e._tag === "LimitExceededException",
+          while: (e) => e._tag === "ResourceInUseException" || e._tag === "LimitExceededException",
           schedule: Schedule.spaced("5 seconds"),
           times: 8,
         }),
@@ -727,19 +634,14 @@ describe.skipIf(!!process.env.FAST)(
     class StreamStillExists extends Data.TaggedError("StreamStillExists") {}
 
     const assertStreamDeleted = Effect.fn(function* (streamName: string) {
-      yield* Kinesis.describeStreamSummary({
-        StreamName: streamName,
-      }).pipe(
+      yield* Kinesis.describeStreamSummary({ StreamName: streamName }).pipe(
         Effect.flatMap(() => Effect.fail(new StreamStillExists())),
         Effect.retry({
           while: (e: { _tag: string }) =>
             e._tag === "StreamStillExists" ||
             // During stream deletion, AWS may return incomplete responses that fail parsing
             e._tag === "ParseError",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       );

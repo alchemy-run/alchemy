@@ -41,10 +41,7 @@ export interface CancelFlowExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: CancelFlowExecutionsRequest,
-    ) => Effect.Effect<
-      appflow.CancelFlowExecutionsResponse,
-      appflow.CancelFlowExecutionsError
-    >
+    ) => Effect.Effect<appflow.CancelFlowExecutionsResponse, appflow.CancelFlowExecutionsError>
   >
 > {}
 

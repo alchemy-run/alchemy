@@ -35,7 +35,6 @@ export interface DescribeCreateAccountStatus extends Binding.Service<
     >
   >
 > {}
-export const DescribeCreateAccountStatus =
-  Binding.Service<DescribeCreateAccountStatus>(
-    "AWS.Organizations.DescribeCreateAccountStatus",
-  );
+export const DescribeCreateAccountStatus = Binding.Service<DescribeCreateAccountStatus>(
+  "AWS.Organizations.DescribeCreateAccountStatus",
+);

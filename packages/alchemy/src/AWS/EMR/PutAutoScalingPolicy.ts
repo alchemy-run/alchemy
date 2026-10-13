@@ -29,10 +29,7 @@ export interface PutAutoScalingPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.PutAutoScalingPolicyInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.PutAutoScalingPolicyOutput,
-      SVC.PutAutoScalingPolicyError
-    >
+    ) => Effect.Effect<SVC.PutAutoScalingPolicyOutput, SVC.PutAutoScalingPolicyError>
   >
 > {}
 export const PutAutoScalingPolicy = Binding.Service<PutAutoScalingPolicy>(

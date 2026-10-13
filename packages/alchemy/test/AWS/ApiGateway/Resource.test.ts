@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -37,9 +37,7 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(remote.pathPart).toEqual("items");
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.GatewayResource,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.GatewayResource);
       const all = yield* provider.list();
       expect(all.some((r) => r.resourceId === res.resourceId)).toBe(true);
 

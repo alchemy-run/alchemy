@@ -31,7 +31,6 @@ export interface UpdateMicrovmImageVersion extends Binding.Service<
     >
   >
 > {}
-export const UpdateMicrovmImageVersion =
-  Binding.Service<UpdateMicrovmImageVersion>(
-    "AWS.Lambda.UpdateMicrovmImageVersion",
-  );
+export const UpdateMicrovmImageVersion = Binding.Service<UpdateMicrovmImageVersion>(
+  "AWS.Lambda.UpdateMicrovmImageVersion",
+);

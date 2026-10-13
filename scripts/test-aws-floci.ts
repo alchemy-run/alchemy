@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
@@ -16,14 +18,9 @@
  * provisioned in Floci before the run and removed after it.
  */
 import { Glob } from "bun";
-import {
-  provisionFlociStandingFixtures,
-  type FlociStandingFixtures,
-} from "./floci-fixtures.ts";
+import { provisionFlociStandingFixtures, type FlociStandingFixtures } from "./floci-fixtures.ts";
 import { preferLocalFlociImage } from "./floci-image.ts";
 import { resolveFlociDefaultNetwork } from "./floci-network.ts";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const alchemyRoot = join(repoRoot, "packages/alchemy");
@@ -149,11 +146,7 @@ for (let i = 0; i < args.length; i++) {
   }
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (
-      flagsWithValue.has(arg) &&
-      args[i + 1] &&
-      !args[i + 1]!.startsWith("-")
-    ) {
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
       flags.push(args[++i]!);
     }
     continue;
@@ -170,8 +163,7 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots =
-  paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {
@@ -224,9 +216,7 @@ if (
 }
 
 const hasFlag = (...names: string[]) =>
-  flags.some((flag) =>
-    names.some((name) => flag === name || flag.startsWith(`${name}=`)),
-  );
+  flags.some((flag) => names.some((name) => flag === name || flag.startsWith(`${name}=`)));
 if (!hasFlag("--profile")) flags.unshift("--profile", "testing");
 if (!hasFlag("--concurrency", "-c")) flags.unshift("--concurrency", "4");
 const command = ["bun", "alchemy-test", ...new Set(files.sort()), ...flags];
@@ -254,9 +244,7 @@ for (const [name, value] of Object.entries(flociFixedValues)) {
 }
 if (external) {
   process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
-  console.log(
-    "test:aws:floci: using the existing Floci server (no Docker fallback)",
-  );
+  console.log("test:aws:floci: using the existing Floci server (no Docker fallback)");
 } else {
   preferLocalFlociImage("test:aws:floci");
 }
@@ -271,8 +259,7 @@ if (
   try {
     const network = await resolveFlociDefaultNetwork(external);
     process.env.AWS_TEST_SUBNET_IDS ??= network.subnetIds.join(",");
-    process.env.AWS_TEST_SECURITY_GROUP_IDS ??=
-      network.securityGroupIds.join(",");
+    process.env.AWS_TEST_SECURITY_GROUP_IDS ??= network.securityGroupIds.join(",");
   } catch (error) {
     fail(
       `could not resolve the emulator's default VPC network: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
@@ -286,10 +273,7 @@ if (resetShared) {
       method: "POST",
       signal: AbortSignal.timeout(5_000),
     });
-    if (!res.ok)
-      fail(
-        `emulator state reset returned ${res.status}; tests were not started`,
-      );
+    if (!res.ok) fail(`emulator state reset returned ${res.status}; tests were not started`);
     console.log("test:aws:floci: reset shared emulator state");
   } catch (error) {
     fail(

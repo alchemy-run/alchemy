@@ -41,12 +41,7 @@ export interface SnapToRoads extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoRoutes.SnapToRoadsRequest,
-    ) => Effect.Effect<
-      geoRoutes.SnapToRoadsResponse,
-      geoRoutes.SnapToRoadsError
-    >
+    ) => Effect.Effect<geoRoutes.SnapToRoadsResponse, geoRoutes.SnapToRoadsError>
   >
 > {}
-export const SnapToRoads = Binding.Service<SnapToRoads>(
-  "AWS.GeoRoutes.SnapToRoads",
-);
+export const SnapToRoads = Binding.Service<SnapToRoads>("AWS.GeoRoutes.SnapToRoads");

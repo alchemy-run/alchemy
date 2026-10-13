@@ -28,10 +28,7 @@ export interface GetAccountInformation extends Binding.Service<
   () => Effect.Effect<
     (
       request?: account.GetAccountInformationRequest,
-    ) => Effect.Effect<
-      account.GetAccountInformationResponse,
-      account.GetAccountInformationError
-    >
+    ) => Effect.Effect<account.GetAccountInformationResponse, account.GetAccountInformationError>
   >
 > {}
 export const GetAccountInformation = Binding.Service<GetAccountInformation>(

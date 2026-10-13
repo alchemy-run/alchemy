@@ -44,6 +44,4 @@ export interface DeleteSession extends Binding.Service<
   >
 > {}
 
-export const DeleteSession = Binding.Service<DeleteSession>(
-  "AWS.LexV2.DeleteSession",
-);
+export const DeleteSession = Binding.Service<DeleteSession>("AWS.LexV2.DeleteSession");

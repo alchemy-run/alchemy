@@ -1,8 +1,9 @@
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { dispatchByMode } from "../LocalGateway.ts";
+import type { InstantNamespace } from "./InstantNamespace.ts";
 import { makeProxyKVNamespaceHelpers } from "./LocalKVGateway.ts";
 import type { Namespace } from "./Namespace.ts";
 import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
@@ -31,9 +32,7 @@ import type { KVAuth } from "./NamespaceHttp.ts";
  */
 export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
   makeHttpClient: (auth: KVAuth, namespaceId: Effect.Effect<string>) => Client;
-  makeNativeClient: (
-    helpers: ReturnType<typeof makeKVNamespaceHelpers>,
-  ) => Client;
+  makeNativeClient: (helpers: ReturnType<typeof makeKVNamespaceHelpers>) => Client;
 }) =>
   Effect.gen(function* () {
     // Capture the account resolver without authenticating. Only the HTTP
@@ -42,16 +41,14 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
     // providers layer). Capture the full context so KV HTTP ops can run with
     // the current credentials — no `host.bind`, no minted token.
     const environment = yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services and the Cloudflare
     // environment, all present during stack-eval but not statically
     // enumerable here.
     const ambient = yield* Effect.context<never>();
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: Namespace | InstantNamespace) {
       // Deferred accessor — resolves the namespaceId against the tracker at
       // apply time (in an Action, that's the engine's resolve context).
       const namespaceId = yield* namespace.namespaceId;

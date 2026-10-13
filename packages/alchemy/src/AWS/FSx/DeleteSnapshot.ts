@@ -32,6 +32,4 @@ export interface DeleteSnapshot extends Binding.Service<
     ) => Effect.Effect<fsx.DeleteSnapshotResponse, fsx.DeleteSnapshotError>
   >
 > {}
-export const DeleteSnapshot = Binding.Service<DeleteSnapshot>(
-  "AWS.FSx.DeleteSnapshot",
-);
+export const DeleteSnapshot = Binding.Service<DeleteSnapshot>("AWS.FSx.DeleteSnapshot");

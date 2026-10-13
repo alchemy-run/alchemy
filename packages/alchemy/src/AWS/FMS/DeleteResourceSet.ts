@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteResourceSet}.
  */
-export interface DeleteResourceSetRequest
-  extends fms.DeleteResourceSetRequest {}
+export interface DeleteResourceSetRequest extends fms.DeleteResourceSetRequest {}
 
 /**
  * Runtime binding for `fms:DeleteResourceSet`.
@@ -31,13 +30,8 @@ export interface DeleteResourceSet extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteResourceSetRequest,
-    ) => Effect.Effect<
-      fms.DeleteResourceSetResponse,
-      fms.DeleteResourceSetError
-    >
+    ) => Effect.Effect<fms.DeleteResourceSetResponse, fms.DeleteResourceSetError>
   >
 > {}
 
-export const DeleteResourceSet = Binding.Service<DeleteResourceSet>(
-  "AWS.FMS.DeleteResourceSet",
-);
+export const DeleteResourceSet = Binding.Service<DeleteResourceSet>("AWS.FMS.DeleteResourceSet");

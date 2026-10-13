@@ -35,6 +35,4 @@ export interface GetMembers extends Binding.Service<
     ) => Effect.Effect<guardduty.GetMembersResponse, guardduty.GetMembersError>
   >
 > {}
-export const GetMembers = Binding.Service<GetMembers>(
-  "AWS.GuardDuty.GetMembers",
-);
+export const GetMembers = Binding.Service<GetMembers>("AWS.GuardDuty.GetMembers");

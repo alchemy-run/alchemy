@@ -35,6 +35,4 @@ export interface GetProtocolsList extends Binding.Service<
   >
 > {}
 
-export const GetProtocolsList = Binding.Service<GetProtocolsList>(
-  "AWS.FMS.GetProtocolsList",
-);
+export const GetProtocolsList = Binding.Service<GetProtocolsList>("AWS.FMS.GetProtocolsList");

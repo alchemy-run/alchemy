@@ -38,7 +38,6 @@ export interface BatchGetApplicationRevisions extends Binding.Service<
     >
   >
 > {}
-export const BatchGetApplicationRevisions =
-  Binding.Service<BatchGetApplicationRevisions>(
-    "AWS.CodeDeploy.BatchGetApplicationRevisions",
-  );
+export const BatchGetApplicationRevisions = Binding.Service<BatchGetApplicationRevisions>(
+  "AWS.CodeDeploy.BatchGetApplicationRevisions",
+);

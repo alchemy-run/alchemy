@@ -44,9 +44,7 @@ export interface QuerySearch extends Binding.Service<
   (instance: SearchInstance) => Effect.Effect<QuerySearchClient>
 > {}
 
-export const QuerySearch = Binding.Service<QuerySearch>(
-  "Cloudflare.AI.QuerySearch",
-);
+export const QuerySearch = Binding.Service<QuerySearch>("Cloudflare.AI.QuerySearch");
 
 /**
  * Error raised by AI Search runtime binding operations.
@@ -90,40 +88,23 @@ export interface QuerySearchClient {
    */
   chatCompletions(
     params: runtime.AiSearchChatCompletionsRequest,
-  ): Effect.Effect<
-    runtime.AiSearchChatCompletionsResponse,
-    SearchError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<runtime.AiSearchChatCompletionsResponse, SearchError, RuntimeContext>;
   /**
    * Metadata about this instance (id, models, source, status, …).
    */
-  info(): Effect.Effect<
-    runtime.AiSearchInstanceInfo,
-    SearchError,
-    RuntimeContext
-  >;
+  info(): Effect.Effect<runtime.AiSearchInstanceInfo, SearchError, RuntimeContext>;
   /**
    * Indexing statistics (item counts per status, last activity, engine).
    */
-  stats(): Effect.Effect<
-    runtime.AiSearchStatsResponse,
-    SearchError,
-    RuntimeContext
-  >;
+  stats(): Effect.Effect<runtime.AiSearchStatsResponse, SearchError, RuntimeContext>;
 }
 
-export const tryAiSearch = <A>(
-  fn: () => Promise<A>,
-): Effect.Effect<A, SearchError> =>
+export const tryAiSearch = <A>(fn: () => Promise<A>): Effect.Effect<A, SearchError> =>
   Effect.tryPromise({
     try: fn,
     catch: (cause) =>
       new SearchError({
-        message:
-          cause instanceof Error
-            ? cause.message
-            : "Unknown AI Search runtime error",
+        message: cause instanceof Error ? cause.message : "Unknown AI Search runtime error",
         cause,
       }),
   });
@@ -132,9 +113,7 @@ export const tryAiSearch = <A>(
  * Build a {@link QuerySearchClient} from an Effect that lazily resolves the raw
  * `SearchInstance` runtime binding.
  */
-export const makeClient = (
-  rawEff: Effect.Effect<runtime.AiSearchInstance>,
-): QuerySearchClient => {
+export const makeClient = (rawEff: Effect.Effect<runtime.AiSearchInstance>): QuerySearchClient => {
   const use = <A>(fn: (raw: runtime.AiSearchInstance) => Promise<A>) =>
     Effect.flatMap(rawEff, (raw) => tryAiSearch(() => fn(raw)));
   return {

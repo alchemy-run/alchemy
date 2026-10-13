@@ -1,15 +1,11 @@
-import * as AWS from "@/AWS";
-import { Vpc } from "@/AWS/EC2";
-import {
-  HostedZone,
-  VpcAssociationAuthorization,
-  ZoneVpcAssociation,
-} from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Vpc } from "@/AWS/EC2";
+import { HostedZone, VpcAssociationAuthorization, ZoneVpcAssociation } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,10 +17,7 @@ const assertZoneGone = (id: string) =>
     Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -58,14 +51,11 @@ test.provider(
             vpcId: secondary.vpcId,
             vpcRegion: VPC_REGION,
           });
-          const authorization = yield* VpcAssociationAuthorization(
-            "SecondaryAuth",
-            {
-              hostedZoneId: zone.id,
-              vpcId: secondary.vpcId,
-              vpcRegion: VPC_REGION,
-            },
-          );
+          const authorization = yield* VpcAssociationAuthorization("SecondaryAuth", {
+            hostedZoneId: zone.id,
+            vpcId: secondary.vpcId,
+            vpcRegion: VPC_REGION,
+          });
           return { zone, association, authorization, secondary };
         }),
       );
@@ -118,10 +108,9 @@ test.provider(
       expect(vpcIdsAfter).not.toContain(remaining.secondary.vpcId);
       expect(vpcIdsAfter).toHaveLength(1);
 
-      const authorizationsAfter =
-        yield* route53.listVPCAssociationAuthorizations({
-          HostedZoneId: remaining.zone.id,
-        });
+      const authorizationsAfter = yield* route53.listVPCAssociationAuthorizations({
+        HostedZoneId: remaining.zone.id,
+      });
       expect(authorizationsAfter.VPCs ?? []).toHaveLength(0);
 
       yield* stack.destroy();

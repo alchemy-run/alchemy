@@ -29,8 +29,7 @@ export const fromDatabase = (db: Database): SQLiteConnection => ({
   prepare: <R>(sql: string) =>
     Effect.try({
       try: () => wrapStatement<R>(db.prepare(sql)),
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Failed to prepare statement: ${e}`, e),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to prepare statement: ${e}`, e),
     }),
 
   exec: (sql: string) =>
@@ -38,31 +37,22 @@ export const fromDatabase = (db: Database): SQLiteConnection => ({
       try: () => {
         db.exec(sql);
       },
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Failed to execute SQL: ${e}`, e),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute SQL: ${e}`, e),
     }),
 
-  transaction: <A, E>(
-    fn: (conn: SQLiteConnection) => Effect.Effect<A, E, never>,
-  ) => {
+  transaction: <A, E>(fn: (conn: SQLiteConnection) => Effect.Effect<A, E, never>) => {
     // For Bun's synchronous SQLite, we can use the same connection
     // since everything runs synchronously within the transaction
     const conn = fromDatabase(db);
     return Effect.flatMap(
       Effect.try({
         try: () => db.transaction(() => Effect.runSync(fn(conn))),
-        catch: (e) =>
-          parseError(
-            extractErrorCode(e),
-            `Failed to create transaction: ${e}`,
-            e,
-          ),
+        catch: (e) => parseError(extractErrorCode(e), `Failed to create transaction: ${e}`, e),
       }),
       (txFn) =>
         Effect.try({
           try: () => txFn(),
-          catch: (e) =>
-            parseError(extractErrorCode(e), `Transaction failed:`, e),
+          catch: (e) => parseError(extractErrorCode(e), `Transaction failed:`, e),
         }),
     );
   },
@@ -78,8 +68,7 @@ export const fromDatabase = (db: Database): SQLiteConnection => ({
           }
         })();
       },
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Batch execution failed: ${e}`, e),
+      catch: (e) => parseError(extractErrorCode(e), `Batch execution failed: ${e}`, e),
     }),
 });
 
@@ -90,23 +79,13 @@ const wrapStatement = <R>(stmt: Statement): SQLiteStatement<R> => ({
   all: <T = R>(...params: unknown[]) =>
     Effect.try({
       try: () => stmt.all(...params) as T[],
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.all: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.all: ${e}`, e),
     }),
 
   get: <T = R>(...params: unknown[]) =>
     Effect.try({
       try: () => stmt.get(...params) as T | undefined,
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.get: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.get: ${e}`, e),
     }),
 
   run: (...params: unknown[]) =>
@@ -114,12 +93,7 @@ const wrapStatement = <R>(stmt: Statement): SQLiteStatement<R> => ({
       try: () => {
         stmt.run(...params);
       },
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.run: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.run: ${e}`, e),
     }),
 });
 

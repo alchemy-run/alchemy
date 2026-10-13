@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
-import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
+import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,27 +39,23 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
-// Deploy-backed list test. Gated behind AWS_TEST_RDS_DBSUBNETGROUP=1 because a
-// DB subnet group requires subnets in >= 2 distinct AZs, which the shared
-// testing account cannot provide (no default VPC, at the VPC limit, only one
-// available subnet in one AZ). On an account that has multi-AZ subnets, this
-// reuses an existing VPC's subnets (subnets don't count against the VPC limit),
-// deploys a subnet group, resolves the provider via the typed
-// `Provider.findProvider(DBSubnetGroup)`, lists, and asserts presence — all
-// bracketed by `stack.destroy()` at start and end.
-test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
+// Deploy-backed list test. A DB subnet group requires subnets in >= 2
+// distinct AZs; the account's DEFAULT VPC provides one default subnet per AZ
+// (subnets don't count against the VPC limit, and the default VPC is never
+// torn down by a concurrent suite). Deploys a subnet group over two of them,
+// resolves the provider via the typed `Provider.findProvider(DBSubnetGroup)`,
+// lists, and asserts presence — bracketed by `stack.destroy()`.
+test.provider(
   "list enumerates the deployed DB subnet group",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const subnetsResult = yield* EC2.describeSubnets({});
+      const subnetsResult = yield* EC2.describeSubnets({
+        Filters: [{ Name: "default-for-az", Values: ["true"] }],
+      });
       const available = (subnetsResult.Subnets ?? []).filter(
-        (s) =>
-          s.State === "available" &&
-          !!s.SubnetId &&
-          !!s.VpcId &&
-          !!s.AvailabilityZone,
+        (s) => s.State === "available" && !!s.SubnetId && !!s.VpcId && !!s.AvailabilityZone,
       );
 
       // Group available subnets by VPC, keeping one subnet per AZ, then pick a
@@ -86,11 +82,9 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
 
       if (!chosen) {
         // Exact reason for a clean skip:
-        // "no existing VPC has available subnets in >= 2 distinct AZs".
+        // "the default VPC has no available subnets in >= 2 distinct AZs".
         return yield* Effect.fail(
-          new Error(
-            "no existing VPC has available subnets in >= 2 distinct AZs",
-          ),
+          new Error("the default VPC has no available subnets in >= 2 distinct AZs"),
         );
       }
 
@@ -99,7 +93,6 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
       const group = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* DBSubnetGroup("ListDBSubnetGroup", {
-            dbSubnetGroupName: "alchemy-test-dbsng-list",
             description: "Alchemy list() test subnet group",
             subnetIds,
           });
@@ -110,9 +103,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
-      expect(
-        all.some((g) => g.dbSubnetGroupName === group.dbSubnetGroupName),
-      ).toBe(true);
+      expect(all.some((g) => g.dbSubnetGroupName === group.dbSubnetGroupName)).toBe(true);
 
       yield* stack.destroy();
     }),

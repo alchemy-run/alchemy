@@ -5,8 +5,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 
 /** The Node container deploy target for the Waku build. */
-export const WAKU_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/waku/node";
+export const WAKU_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/node";
 
 const wakuOptions = (props: WakuProps) =>
   props.waku !== undefined ? { waku: props.waku } : undefined;

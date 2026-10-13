@@ -35,6 +35,4 @@ export interface CreateKxVolume extends Binding.Service<
     ) => Effect.Effect<SVC.CreateKxVolumeResponse, SVC.CreateKxVolumeError>
   >
 > {}
-export const CreateKxVolume = Binding.Service<CreateKxVolume>(
-  "AWS.FinSpace.CreateKxVolume",
-);
+export const CreateKxVolume = Binding.Service<CreateKxVolume>("AWS.FinSpace.CreateKxVolume");

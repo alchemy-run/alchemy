@@ -28,23 +28,17 @@ const encodeLength = (n: number): Uint8Array => {
 export const tlv = (tag: number, body: Uint8Array): Uint8Array =>
   concat(Uint8Array.of(tag), encodeLength(body.length), body);
 
-export const sequence = (...items: ReadonlyArray<Uint8Array>) =>
-  tlv(0x30, concat(...items));
-export const set = (...items: ReadonlyArray<Uint8Array>) =>
-  tlv(0x31, concat(...items));
+export const sequence = (...items: ReadonlyArray<Uint8Array>) => tlv(0x30, concat(...items));
+export const set = (...items: ReadonlyArray<Uint8Array>) => tlv(0x31, concat(...items));
 export const octetString = (body: Uint8Array) => tlv(0x04, body);
-export const bitString = (body: Uint8Array) =>
-  tlv(0x03, concat(Uint8Array.of(0), body));
+export const bitString = (body: Uint8Array) => tlv(0x03, concat(Uint8Array.of(0), body));
 export const nullValue = () => Uint8Array.of(0x05, 0x00);
-export const ia5String = (text: string) =>
-  tlv(0x16, new TextEncoder().encode(text));
-export const utf8String = (text: string) =>
-  tlv(0x0c, new TextEncoder().encode(text));
+export const ia5String = (text: string) => tlv(0x16, new TextEncoder().encode(text));
+export const utf8String = (text: string) => tlv(0x0c, new TextEncoder().encode(text));
 /** Context-specific constructed tag `[n]` (implicit or explicit, caller's choice of body). */
 export const contextTag = (n: number, body: Uint8Array) => tlv(0xa0 | n, body);
 /** Context-specific primitive tag `[n]` (e.g. GeneralName dNSName is `[2]`). */
-export const contextPrimitive = (n: number, body: Uint8Array) =>
-  tlv(0x80 | n, body);
+export const contextPrimitive = (n: number, body: Uint8Array) => tlv(0x80 | n, body);
 
 /** INTEGER from a non-negative number or big-endian magnitude bytes. */
 export const integer = (value: number | Uint8Array): Uint8Array => {
@@ -62,10 +56,7 @@ export const integer = (value: number | Uint8Array): Uint8Array => {
   let start = 0;
   while (start < value.length - 1 && value[start] === 0) start++;
   const magnitude = value.subarray(start);
-  return tlv(
-    0x02,
-    magnitude[0]! & 0x80 ? concat(Uint8Array.of(0), magnitude) : magnitude,
-  );
+  return tlv(0x02, magnitude[0]! & 0x80 ? concat(Uint8Array.of(0), magnitude) : magnitude);
 };
 
 /** OBJECT IDENTIFIER from dotted notation. */
@@ -121,8 +112,7 @@ export const children = (node: Node): Node[] => {
   return out;
 };
 
-export const content = (node: Node): Uint8Array =>
-  node.bytes.subarray(node.start, node.end);
+export const content = (node: Node): Uint8Array => node.bytes.subarray(node.start, node.end);
 
 export const decodeOid = (node: Node): string => {
   const body = content(node);

@@ -54,9 +54,7 @@ export interface Publish extends Binding.Service<
   (
     topic: Topic,
   ) => Effect.Effect<
-    (
-      request: PublishRequest,
-    ) => Effect.Effect<sns.PublishResponse, sns.PublishError>
+    (request: PublishRequest) => Effect.Effect<sns.PublishResponse, sns.PublishError>
   >
 > {}
 

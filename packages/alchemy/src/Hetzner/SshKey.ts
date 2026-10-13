@@ -11,7 +11,6 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,
@@ -87,9 +86,7 @@ export type SshKey = Resource<
  */
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
-export class SshKeyNotResolved extends Data.TaggedError(
-  "Hetzner.SshKeyNotResolved",
-)<{
+export class SshKeyNotResolved extends Data.TaggedError("Hetzner.SshKeyNotResolved")<{
   name: string;
 }> {}
 
@@ -99,9 +96,7 @@ const userLabels = (
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 64 }));
   });
 
 const toAttrs = (key: GetSshKeyResponseSshKey) => ({
@@ -117,9 +112,7 @@ const fingerprintOf = (publicKey: string) =>
   Effect.sync(() => {
     const b64 = publicKey.trim().split(/\s+/)[1];
     if (b64 === undefined) return undefined;
-    const hex = createHash("md5")
-      .update(Buffer.from(b64, "base64"))
-      .digest("hex");
+    const hex = createHash("md5").update(Buffer.from(b64, "base64")).digest("hex");
     return hex.match(/.{2}/g)?.join(":");
   });
 
@@ -132,20 +125,14 @@ const getById = (id: number) =>
 const findByName = (name: string) =>
   Hetzner.sshKeys
     .listSshKeys({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)),
-    );
+    .pipe(Effect.map(({ ssh_keys }) => ssh_keys.find((key) => key.name === name)));
 
 const findByFingerprint = (fingerprint: string) =>
   Hetzner.sshKeys
     .listSshKeys({ fingerprint, per_page: 50 })
     .pipe(Effect.map(({ ssh_keys }) => ssh_keys[0]));
 
-const observe = Effect.fn(function* (input: {
-  id?: number;
-  name: string;
-  publicKey: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: number; name: string; publicKey: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -185,9 +172,7 @@ export const SshKeyProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>

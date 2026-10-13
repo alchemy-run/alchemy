@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./defaultVpcScope.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import {
   declaredSecurityGroupRuleIds,
@@ -29,13 +30,11 @@ import {
 import type { VpcId } from "./Vpc.ts";
 
 export type SecurityGroupId<ID extends string = string> = `sg-${ID}`;
-export const SecurityGroupId = <ID extends string>(
-  id: ID,
-): ID & SecurityGroupId<ID> => `sg-${id}` as ID & SecurityGroupId<ID>;
+export const SecurityGroupId = <ID extends string>(id: ID): ID & SecurityGroupId<ID> =>
+  `sg-${id}` as ID & SecurityGroupId<ID>;
 
-export type SecurityGroupArn<
-  GroupId extends SecurityGroupId = SecurityGroupId,
-> = `arn:aws:ec2:${RegionID}:${AccountID}:security-group/${GroupId}`;
+export type SecurityGroupArn<GroupId extends SecurityGroupId = SecurityGroupId> =
+  `arn:aws:ec2:${RegionID}:${AccountID}:security-group/${GroupId}`;
 
 /**
  * Ingress or egress rule for a security group.
@@ -434,16 +433,12 @@ export interface SecurityGroup extends Resource<
  */
 export const SecurityGroup = Resource<SecurityGroup>("AWS.EC2.SecurityGroup");
 
-class InvalidSecurityGroupRules extends Data.TaggedError(
-  "InvalidSecurityGroupRules",
-)<{
+class InvalidSecurityGroupRules extends Data.TaggedError("InvalidSecurityGroupRules")<{
   groupId: string;
   message: string;
 }> {}
 
-class SecurityGroupRulesNotSettled extends Data.TaggedError(
-  "SecurityGroupRulesNotSettled",
-)<{
+class SecurityGroupRulesNotSettled extends Data.TaggedError("SecurityGroupRulesNotSettled")<{
   groupId: string;
 }> {}
 
@@ -451,10 +446,7 @@ export const SecurityGroupProvider = () =>
   Provider.effect(
     SecurityGroup,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -472,17 +464,11 @@ export const SecurityGroupProvider = () =>
         ec2.describeSecurityGroups({ GroupIds: [groupId] }).pipe(
           Effect.map((r) => r.SecurityGroups?.[0]),
           Effect.flatMap((sg) =>
-            sg
-              ? Effect.succeed(sg)
-              : Effect.fail(new Error(`Security Group ${groupId} not found`)),
+            sg ? Effect.succeed(sg) : Effect.fail(new Error(`Security Group ${groupId} not found`)),
           ),
         );
 
-      const findOwnedGroup = Effect.fn(function* (
-        id: string,
-        groupName: string,
-        vpcId?: VpcId,
-      ) {
+      const findOwnedGroup = Effect.fn(function* (id: string, groupName: string, vpcId?: VpcId) {
         return (yield* ec2.describeSecurityGroups({
           Filters: [
             { Name: "group-name", Values: [groupName] },
@@ -502,19 +488,11 @@ export const SecurityGroupProvider = () =>
             Effect.map((chunk) => Array.from(chunk)),
           );
 
-      const rulesMatch = (
-        observed: ec2.SecurityGroupRule[],
-        desired: SecurityGroupRuleData[],
-      ) =>
+      const rulesMatch = (observed: ec2.SecurityGroupRule[], desired: SecurityGroupRuleData[]) =>
         JSON.stringify(observed.map(observedSecurityGroupRuleKey).sort()) ===
-        JSON.stringify(
-          expandSecurityGroupRules(desired).map(securityGroupRuleKey).sort(),
-        );
+        JSON.stringify(expandSecurityGroupRules(desired).map(securityGroupRuleKey).sort());
 
-      const toAttrs = Effect.fn(function* (
-        sg: ec2.SecurityGroup,
-        rules: ec2.SecurityGroupRule[],
-      ) {
+      const toAttrs = Effect.fn(function* (sg: ec2.SecurityGroup, rules: ec2.SecurityGroupRule[]) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           groupId: sg.GroupId as SecurityGroupId,
@@ -555,9 +533,7 @@ export const SecurityGroupProvider = () =>
         } satisfies SecurityGroup["Attributes"];
       });
 
-      const toIpPermission = (
-        rule: SecurityGroupRuleData,
-      ): ec2.IpPermission => ({
+      const toIpPermission = (rule: SecurityGroupRuleData): ec2.IpPermission => ({
         IpProtocol: rule.ipProtocol,
         FromPort: rule.fromPort,
         ToPort: rule.toPort,
@@ -594,12 +570,9 @@ export const SecurityGroupProvider = () =>
       ) {
         if (
           desired.some((rule) =>
-            [
-              rule.cidrIpv4,
-              rule.cidrIpv6,
-              rule.referencedGroupId,
-              rule.prefixListId,
-            ].every((source) => !source),
+            [rule.cidrIpv4, rule.cidrIpv6, rule.referencedGroupId, rule.prefixListId].every(
+              (source) => !source,
+            ),
           )
         ) {
           return yield* new InvalidSecurityGroupRules({
@@ -613,8 +586,7 @@ export const SecurityGroupProvider = () =>
           if (!rule.ipProtocol || desiredByKey.has(key)) {
             return yield* new InvalidSecurityGroupRules({
               groupId,
-              message:
-                "Inline rules must have a protocol, a source, and distinct identities.",
+              message: "Inline rules must have a protocol, a source, and distinct identities.",
             });
           }
           desiredByKey.set(key, rule);
@@ -630,10 +602,7 @@ export const SecurityGroupProvider = () =>
             ...rule,
             Description: undefined,
           });
-          if (
-            rule.IpProtocol === undefined ||
-            rule.SecurityGroupRuleId === undefined
-          ) {
+          if (rule.IpProtocol === undefined || rule.SecurityGroupRuleId === undefined) {
             return yield* new InvalidSecurityGroupRules({
               groupId,
               message: "EC2 returned a rule without its identity or source.",
@@ -653,10 +622,7 @@ export const SecurityGroupProvider = () =>
                 .revokeSecurityGroupEgress(request)
                 .pipe(
                   Effect.catchTag(
-                    [
-                      "InvalidPermission.NotFound",
-                      "InvalidSecurityGroupRuleId.NotFound",
-                    ],
+                    ["InvalidPermission.NotFound", "InvalidSecurityGroupRuleId.NotFound"],
                     () => Effect.void,
                   ),
                 )
@@ -664,18 +630,14 @@ export const SecurityGroupProvider = () =>
                 .revokeSecurityGroupIngress(request)
                 .pipe(
                   Effect.catchTag(
-                    [
-                      "InvalidPermission.NotFound",
-                      "InvalidSecurityGroupRuleId.NotFound",
-                    ],
+                    ["InvalidPermission.NotFound", "InvalidSecurityGroupRuleId.NotFound"],
                     () => Effect.void,
                   ),
                 );
         }
         const descriptions = current.flatMap(({ key, id, rule }) => {
           const desired = desiredByKey.get(key);
-          return desired === undefined ||
-            (desired.description ?? "") === (rule.Description ?? "")
+          return desired === undefined || (desired.description ?? "") === (rule.Description ?? "")
             ? []
             : [
                 {
@@ -712,9 +674,7 @@ export const SecurityGroupProvider = () =>
             DryRun: false,
           });
         }
-        yield* session.note(
-          `Reconciled ${isEgress ? "egress" : "ingress"} rules`,
-        );
+        yield* session.note(`Reconciled ${isEgress ? "egress" : "ingress"} rules`);
       });
 
       return {
@@ -723,15 +683,9 @@ export const SecurityGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const sg = output
             ? yield* describeSecurityGroup(output.groupId).pipe(
-                Effect.catchTag("InvalidGroup.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* findOwnedGroup(
-                id,
-                yield* createGroupName(id, olds?.groupName),
-                olds?.vpcId,
-              );
+            : yield* findOwnedGroup(id, yield* createGroupName(id, olds?.groupName), olds?.vpcId);
           if (!sg?.GroupId) return undefined;
           const rules = yield* describeSecurityGroupRules(sg.GroupId);
           return yield* toAttrs(sg, rules);
@@ -739,6 +693,8 @@ export const SecurityGroupProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
+            const defaultVpc = yield* getDefaultVpcScope;
+            const emrManaged = yield* getDefaultVpcEmrManagedSecurityGroupIds(defaultVpc.vpcId);
             const groups = yield* ec2.describeSecurityGroups.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -748,7 +704,9 @@ export const SecurityGroupProvider = () =>
                       sg.GroupId != null &&
                       // Every VPC's `default` group is AWS-managed and can
                       // never be deleted (CannotDelete) — don't enumerate it.
-                      sg.GroupName !== "default",
+                      sg.GroupName !== "default" &&
+                      // EMR's shared default-VPC groups (see helper).
+                      !emrManaged.has(sg.GroupId),
                   ),
                 ),
               ),
@@ -772,8 +730,7 @@ export const SecurityGroupProvider = () =>
           }
 
           // Group name change requires replacement
-          const oldGroupName =
-            output?.groupName ?? (yield* createGroupName(id, olds.groupName));
+          const oldGroupName = output?.groupName ?? (yield* createGroupName(id, olds.groupName));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
@@ -784,15 +741,13 @@ export const SecurityGroupProvider = () =>
 
           if (output) {
             const group = yield* describeSecurityGroup(output.groupId).pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
             );
             if (group === undefined) return { action: "update", stables: [] };
             const owned = yield* declaredSecurityGroupRuleIds(output.groupId);
-            const observed = (yield* describeSecurityGroupRules(
-              output.groupId,
-            )).filter((rule) => !owned.has(rule.SecurityGroupRuleId!));
+            const observed = (yield* describeSecurityGroupRules(output.groupId)).filter(
+              (rule) => !owned.has(rule.SecurityGroupRuleId!),
+            );
             if (
               !rulesMatch(
                 observed.filter((rule) => !rule.IsEgress),
@@ -813,8 +768,7 @@ export const SecurityGroupProvider = () =>
           // resource if the generator's output for this id ever drifts. (An
           // explicit groupName change arrives here as a fresh replacement
           // instance with no output.)
-          const groupName =
-            output?.groupName ?? (yield* createGroupName(id, news.groupName));
+          const groupName = output?.groupName ?? (yield* createGroupName(id, news.groupName));
           const desiredTags = yield* createTags(id, news.tags);
 
           // Observe — find the SG via cached id, else fall through to create.
@@ -871,10 +825,7 @@ export const SecurityGroupProvider = () =>
           const currentTags = Object.fromEntries(
             (sg.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
-          const { removed: removedTags, upsert: upsertTags } = diffTags(
-            currentTags,
-            desiredTags,
-          );
+          const { removed: removedTags, upsert: upsertTags } = diffTags(currentTags, desiredTags);
           if (removedTags.length > 0) {
             yield* ec2.deleteTags({
               Resources: [groupId],
@@ -917,9 +868,7 @@ export const SecurityGroupProvider = () =>
           // Re-read final state.
           const finalSg = yield* describeSecurityGroup(groupId);
           const matches = (rules: ec2.SecurityGroupRule[]) => {
-            const inline = rules.filter(
-              (rule) => !owned.has(rule.SecurityGroupRuleId!),
-            );
+            const inline = rules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!));
             return (
               rulesMatch(
                 inline.filter((rule) => !rule.IsEgress),
@@ -939,9 +888,7 @@ export const SecurityGroupProvider = () =>
             }),
           );
           if (!matches(finalRules)) {
-            return yield* Effect.fail(
-              new SecurityGroupRulesNotSettled({ groupId }),
-            );
+            return yield* new SecurityGroupRulesNotSettled({ groupId });
           }
           return yield* toAttrs(finalSg, finalRules);
         }),
@@ -962,9 +909,7 @@ export const SecurityGroupProvider = () =>
                 GroupId: groupId,
                 DryRun: false,
               })
-              .pipe(
-                Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("InvalidGroup.NotFound", () => Effect.void)),
             {
               scope: { name: "group-id", value: groupId },
               isDependencyViolation: (e) =>

@@ -86,7 +86,6 @@ export interface BatchPutAssetPropertyValue extends Binding.Service<
     >
   >
 > {}
-export const BatchPutAssetPropertyValue =
-  Binding.Service<BatchPutAssetPropertyValue>(
-    "AWS.IoTSiteWise.BatchPutAssetPropertyValue",
-  );
+export const BatchPutAssetPropertyValue = Binding.Service<BatchPutAssetPropertyValue>(
+  "AWS.IoTSiteWise.BatchPutAssetPropertyValue",
+);

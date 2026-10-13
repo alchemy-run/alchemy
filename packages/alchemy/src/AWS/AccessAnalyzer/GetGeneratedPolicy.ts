@@ -23,10 +23,7 @@ export interface GetGeneratedPolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: aa.GetGeneratedPolicyRequest,
-    ) => Effect.Effect<
-      aa.GetGeneratedPolicyResponse,
-      aa.GetGeneratedPolicyError
-    >
+    ) => Effect.Effect<aa.GetGeneratedPolicyResponse, aa.GetGeneratedPolicyError>
   >
 > {}
 

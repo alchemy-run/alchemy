@@ -34,7 +34,6 @@ export interface ListEntitiesDetectionV2Jobs extends Binding.Service<
     >
   >
 > {}
-export const ListEntitiesDetectionV2Jobs =
-  Binding.Service<ListEntitiesDetectionV2Jobs>(
-    "AWS.ComprehendMedical.ListEntitiesDetectionV2Jobs",
-  );
+export const ListEntitiesDetectionV2Jobs = Binding.Service<ListEntitiesDetectionV2Jobs>(
+  "AWS.ComprehendMedical.ListEntitiesDetectionV2Jobs",
+);

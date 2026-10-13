@@ -35,7 +35,6 @@ export interface DescribeStandardsControls extends Binding.Service<
     >
   >
 > {}
-export const DescribeStandardsControls =
-  Binding.Service<DescribeStandardsControls>(
-    "AWS.SecurityHub.DescribeStandardsControls",
-  );
+export const DescribeStandardsControls = Binding.Service<DescribeStandardsControls>(
+  "AWS.SecurityHub.DescribeStandardsControls",
+);

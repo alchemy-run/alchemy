@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { SamplingRule } from "@/AWS/XRay";
-import * as Test from "@/Test/Alchemy";
 import * as xray from "@distilled.cloud/aws/xray";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { SamplingRule } from "@/AWS/XRay";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,16 +18,14 @@ const findRule = (ruleName: string) =>
     Effect.map((record) => Option.getOrUndefined(record)?.SamplingRule),
   );
 
-class SamplingRuleStillExists extends Data.TaggedError(
-  "SamplingRuleStillExists",
-)<{ readonly ruleName: string }> {}
+class SamplingRuleStillExists extends Data.TaggedError("SamplingRuleStillExists")<{
+  readonly ruleName: string;
+}> {}
 
 const assertRuleDeleted = (ruleName: string) =>
   findRule(ruleName).pipe(
     Effect.flatMap((rule) =>
-      rule === undefined
-        ? Effect.void
-        : Effect.fail(new SamplingRuleStillExists({ ruleName })),
+      rule === undefined ? Effect.void : Effect.fail(new SamplingRuleStillExists({ ruleName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "SamplingRuleStillExists",
@@ -65,11 +63,7 @@ test.provider(
       expect(created?.ServiceType).toBe("*");
       const tags = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestRule");
 
@@ -98,11 +92,7 @@ test.provider(
       expect(afterUpdate?.Attributes).toEqual({ tier: "premium" });
       const updatedTags = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.Extra).toBe("1");
 
       // remove a tag — converges via untagResource
@@ -121,11 +111,7 @@ test.provider(
       );
       const afterTagRemoval = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(afterTagRemoval.Extra).toBeUndefined();
       expect(afterTagRemoval.Environment).toBe("test");
 

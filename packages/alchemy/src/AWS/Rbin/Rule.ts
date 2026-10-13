@@ -195,14 +195,13 @@ export const Rule = Resource<Rule>("AWS.Rbin.Rule");
  * `excludeResourceTags`. Recycle Bin only supports locking Region-level
  * retention rules that have no exclusion tags.
  */
-export class RbinLockUnsupported extends Data.TaggedError(
-  "RbinLockUnsupported",
-)<{ message: string }> {}
+export class RbinLockUnsupported extends Data.TaggedError("RbinLockUnsupported")<{
+  message: string;
+}> {}
 
 const validateLock = (props: RuleProps) =>
   props.lockConfiguration !== undefined &&
-  ((props.resourceTags?.length ?? 0) > 0 ||
-    (props.excludeResourceTags?.length ?? 0) > 0)
+  ((props.resourceTags?.length ?? 0) > 0 || (props.excludeResourceTags?.length ?? 0) > 0)
     ? Effect.fail(
         new RbinLockUnsupported({
           message:
@@ -212,11 +211,7 @@ const validateLock = (props: RuleProps) =>
     : Effect.void;
 
 /** All resource types a retention rule can cover — used to enumerate rules. */
-const RULE_RESOURCE_TYPES = [
-  "EBS_SNAPSHOT",
-  "EC2_IMAGE",
-  "EBS_VOLUME",
-] as const;
+const RULE_RESOURCE_TYPES = ["EBS_SNAPSHOT", "EC2_IMAGE", "EBS_VOLUME"] as const;
 
 const toRetentionPeriod = (p: Duration.Input): rbin.RetentionPeriod => ({
   // The wire unit is whole days (`DAYS` is the only supported unit).
@@ -224,17 +219,13 @@ const toRetentionPeriod = (p: Duration.Input): rbin.RetentionPeriod => ({
   RetentionPeriodUnit: "DAYS",
 });
 
-const toResourceTags = (
-  tags: RuleResourceTag[] | undefined,
-): rbin.ResourceTag[] =>
+const toResourceTags = (tags: RuleResourceTag[] | undefined): rbin.ResourceTag[] =>
   (tags ?? []).map((t) => ({
     ResourceTagKey: t.key,
     ...(t.value !== undefined ? { ResourceTagValue: t.value } : {}),
   }));
 
-const toLockConfiguration = (
-  lock: RuleLockConfiguration,
-): rbin.LockConfiguration => ({
+const toLockConfiguration = (lock: RuleLockConfiguration): rbin.LockConfiguration => ({
   UnlockDelay: {
     // The wire unit is whole days (`DAYS` is the only supported unit).
     UnlockDelayValue: toWireDays(lock.unlockDelay)!,
@@ -262,11 +253,7 @@ const toAttributes = (live: rbin.GetRuleResponse): Rule["Attributes"] => ({
 const readRule = (identifier: string) =>
   rbin
     .getRule({ Identifier: identifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 /** Observed tags on the rule itself (empty on a NotFound race). */
 const readRuleTags = (ruleArn: string) =>
@@ -283,9 +270,7 @@ const listRuleSummaries = (resourceType: rbin.ResourceType) =>
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     // Tolerate a resource type the Region/partition doesn't support yet.
-    Effect.catchTag("ValidationException", () =>
-      Effect.succeed([] as rbin.RuleSummary[]),
-    ),
+    Effect.catchTag("ValidationException", () => Effect.succeed([] as rbin.RuleSummary[])),
   );
 
 class RuleStillPending extends Data.TaggedError("RuleStillPending")<{
@@ -352,15 +337,11 @@ export const RuleProvider = () =>
               summaries.filter((s) => s.Identifier !== undefined),
               (summary) =>
                 readRule(summary.Identifier!).pipe(
-                  Effect.map((live) =>
-                    live === undefined ? undefined : toAttributes(live),
-                  ),
+                  Effect.map((live) => (live === undefined ? undefined : toAttributes(live))),
                 ),
               { concurrency: 5 },
             );
-            return items.filter(
-              (item): item is Rule["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is Rule["Attributes"] => item !== undefined);
           }),
 
         // Rule identifiers are server-generated, so without a cached output
@@ -373,9 +354,7 @@ export const RuleProvider = () =>
             const tags = yield* readRuleTags(attrs.ruleArn);
             return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
           }
-          const resourceTypes = olds?.resourceType
-            ? [olds.resourceType]
-            : RULE_RESOURCE_TYPES;
+          const resourceTypes = olds?.resourceType ? [olds.resourceType] : RULE_RESOURCE_TYPES;
           for (const resourceType of resourceTypes) {
             const summaries = yield* listRuleSummaries(resourceType);
             for (const summary of summaries) {
@@ -409,9 +388,7 @@ export const RuleProvider = () =>
 
           // OBSERVE — `output.identifier` is only a cache; a rule deleted
           // out-of-band falls through to create.
-          let live = output?.identifier
-            ? yield* readRule(output.identifier)
-            : undefined;
+          let live = output?.identifier ? yield* readRule(output.identifier) : undefined;
 
           // ENSURE — create if missing, then wait out the transient
           // `pending` status so downstream sync reads settled state.
@@ -420,21 +397,15 @@ export const RuleProvider = () =>
               ResourceType: news.resourceType,
               RetentionPeriod: toRetentionPeriod(news.retentionPeriod),
               Description: news.description,
-              ...(news.resourceTags
-                ? { ResourceTags: toResourceTags(news.resourceTags) }
-                : {}),
+              ...(news.resourceTags ? { ResourceTags: toResourceTags(news.resourceTags) } : {}),
               ...(news.excludeResourceTags
                 ? {
-                    ExcludeResourceTags: toResourceTags(
-                      news.excludeResourceTags,
-                    ),
+                    ExcludeResourceTags: toResourceTags(news.excludeResourceTags),
                   }
                 : {}),
               ...(news.lockConfiguration
                 ? {
-                    LockConfiguration: toLockConfiguration(
-                      news.lockConfiguration,
-                    ),
+                    LockConfiguration: toLockConfiguration(news.lockConfiguration),
                   }
                 : {}),
               Tags: createTagsList(desiredTags),
@@ -452,38 +423,20 @@ export const RuleProvider = () =>
           const desiredResourceTags = toResourceTags(news.resourceTags);
           const desiredExcludeTags = toResourceTags(news.excludeResourceTags);
           const retentionChanged =
-            live.RetentionPeriod?.RetentionPeriodValue !==
-              desiredRetention.RetentionPeriodValue ||
-            live.RetentionPeriod?.RetentionPeriodUnit !==
-              desiredRetention.RetentionPeriodUnit;
-          const descriptionChanged =
-            (live.Description ?? "") !== (news.description ?? "");
+            live.RetentionPeriod?.RetentionPeriodValue !== desiredRetention.RetentionPeriodValue ||
+            live.RetentionPeriod?.RetentionPeriodUnit !== desiredRetention.RetentionPeriodUnit;
+          const descriptionChanged = (live.Description ?? "") !== (news.description ?? "");
           const resourceTagsChanged =
-            resourceTagsKey(live.ResourceTags) !==
-            resourceTagsKey(desiredResourceTags);
+            resourceTagsKey(live.ResourceTags) !== resourceTagsKey(desiredResourceTags);
           const excludeTagsChanged =
-            resourceTagsKey(live.ExcludeResourceTags) !==
-            resourceTagsKey(desiredExcludeTags);
-          if (
-            retentionChanged ||
-            descriptionChanged ||
-            resourceTagsChanged ||
-            excludeTagsChanged
-          ) {
+            resourceTagsKey(live.ExcludeResourceTags) !== resourceTagsKey(desiredExcludeTags);
+          if (retentionChanged || descriptionChanged || resourceTagsChanged || excludeTagsChanged) {
             yield* rbin.updateRule({
               Identifier: identifier,
-              ...(retentionChanged
-                ? { RetentionPeriod: desiredRetention }
-                : {}),
-              ...(descriptionChanged
-                ? { Description: news.description ?? "" }
-                : {}),
-              ...(resourceTagsChanged
-                ? { ResourceTags: desiredResourceTags }
-                : {}),
-              ...(excludeTagsChanged
-                ? { ExcludeResourceTags: desiredExcludeTags }
-                : {}),
+              ...(retentionChanged ? { RetentionPeriod: desiredRetention } : {}),
+              ...(descriptionChanged ? { Description: news.description ?? "" } : {}),
+              ...(resourceTagsChanged ? { ResourceTags: desiredResourceTags } : {}),
+              ...(excludeTagsChanged ? { ExcludeResourceTags: desiredExcludeTags } : {}),
             });
             live = yield* waitForRuleAvailable(identifier);
           }
@@ -539,9 +492,7 @@ export const RuleProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* rbin
             .deleteRule({ Identifier: output.identifier })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion is near-immediate, but confirm the rule is gone so
           // dependents (and re-creates of the same logical id) never observe
           // a half-deleted rule.

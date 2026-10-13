@@ -10,8 +10,7 @@ export const ResetEnabledControlHttp = Layer.effect(
     capability: "ResetEnabledControl",
     iamActions: ["controltower:ResetEnabledControl"],
     requestKey: "enabledControlIdentifier",
-    identifier: (enabledControl: EnabledControl) =>
-      enabledControl.enabledControlArn,
+    identifier: (enabledControl: EnabledControl) => enabledControl.enabledControlArn,
     operation: controltower.resetEnabledControl,
   }),
 );

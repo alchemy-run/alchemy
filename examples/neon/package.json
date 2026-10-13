@@ -39,9 +39,11 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "@vercel/nft": "catalog:",
-    "typescript": "catalog:",
     "neonctl": "4.21.1",
+    "typescript": "catalog:",
     "vite": "catalog:"
   },
-  "engines": { "node": ">=24" }
+  "engines": {
+    "node": ">=24"
+  }
 }

@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { PlanetscaleHostRole } from "./db.ts";
 
 class PlanetscaleHostContainer extends Cloudflare.Container<PlanetscaleHostContainer>()(
@@ -23,13 +23,14 @@ export class PlanetscaleHostContainerObject extends Cloudflare.DurableObject<Pla
     const container = yield* PlanetscaleHostContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       const get = (path: string) =>
         Effect.gen(function* () {
-          const response = yield* fetch(
-            HttpClientRequest.get(`http://container${path}`),
-          );
+          yield* start;
+          const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return yield* response.text;
         });
 
@@ -38,11 +39,5 @@ export class PlanetscaleHostContainerObject extends Cloudflare.DurableObject<Pla
         getProbe: () => get("/probe"),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(PlanetscaleHostContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

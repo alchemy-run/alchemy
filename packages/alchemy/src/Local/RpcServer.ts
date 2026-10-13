@@ -4,20 +4,16 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
-import {
-  platformLayer,
-  PlatformServices,
-  runMain,
-} from "../Util/PlatformServices.ts";
+import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
+import { platformLayer, PlatformServices, runMain } from "../Util/PlatformServices.ts";
 import * as RpcSerialization from "./RpcSerialization.ts";
 import * as RpcServerEnvironment from "./RpcServerEnvironment.ts";
 import type { SessionEnvironment } from "./RpcServerEnvironment.ts";
@@ -31,9 +27,7 @@ import {
  * A service that exposes one or more resource providers over RPC.
  * This returns `never` because it is meant to be used with `Layer.launch` (see {@link launch}).
  */
-export class RpcServer extends Context.Service<RpcServer, never>()(
-  "alchemy/Local/RpcServer",
-) {}
+export class RpcServer extends Context.Service<RpcServer, never>()("alchemy/Local/RpcServer") {}
 
 /**
  * The provider shape served over RPC. The `mode`/`modes` variant machinery
@@ -41,10 +35,7 @@ export class RpcServer extends Context.Service<RpcServer, never>()(
  * cannot cross the RPC boundary — the sidecar serves the concrete provider
  * implementation, never the mode-dispatching wrapper.
  */
-export type RpcProviderService<R extends ResourceLike> = Omit<
-  ProviderService<R>,
-  "mode" | "modes"
->;
+export type RpcProviderService<R extends ResourceLike> = Omit<ProviderService<R>, "mode" | "modes">;
 
 /**
  * The RPC API that is implemented by the server and consumed by {@link RpcProviderProxy}.
@@ -95,9 +86,7 @@ export type ProviderLayer = Layer.Layer<
  * Resolves a provider group to its layer. Receives the `group` the client
  * passed to {@link RpcProxyApi.getProvider}.
  */
-export type ProviderGroupLoader = (
-  group: string,
-) => Effect.Effect<ProviderLayer, unknown>;
+export type ProviderGroupLoader = (group: string) => Effect.Effect<ProviderLayer, unknown>;
 
 const serverPlatformLayer = platformLayer({
   bun: async () => {
@@ -121,10 +110,7 @@ interface SessionContext {
   readonly scope: Scope.Closeable;
   readonly resources: Scope.Closeable;
   readonly artifacts: ArtifactStore["Service"];
-  readonly builds: Map<
-    string,
-    { pending: Promise<Context.Context<any>>; ready: boolean }
-  >;
+  readonly builds: Map<string, { pending: Promise<Context.Context<any>>; ready: boolean }>;
 }
 
 /** Each provider group is built with its own MemoMap and session scope. */
@@ -148,13 +134,8 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const ambient = Context.omit(Scope.Scope)(yield* Effect.context<never>());
-      const base = yield* RpcServerEnvironment.fromProcessEnv.pipe(
-        Effect.orDie,
-      );
-      const sessions = new Map<
-        string | undefined | SessionLease,
-        SessionContext
-      >();
+      const base = yield* RpcServerEnvironment.fromProcessEnv.pipe(Effect.orDie);
+      const sessions = new Map<string | undefined | SessionLease, SessionContext>();
 
       const contextFor = (
         sessionEnv: string | undefined,
@@ -246,8 +227,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
             build.ready = true;
           },
           () => {
-            if (current.builds.get(group) === build)
-              current.builds.delete(group);
+            if (current.builds.get(group) === build) current.builds.delete(group);
           },
         );
         return pending;
@@ -291,13 +271,9 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
         get: async (sessionEnv, type, group, lease) => {
           const context = await contextFor(sessionEnv, group, lease);
           if (lease?.closed) throw new Error("Test RPC session is closed");
-          const provider = context.mapUnsafe.get(type) as
-            | ProviderService<any>
-            | undefined;
+          const provider = context.mapUnsafe.get(type) as ProviderService<any> | undefined;
           if (!provider) {
-            throw new Error(
-              `Provider "${type}" not found in provider group ${group}`,
-            );
+            throw new Error(`Provider "${type}" not found in provider group ${group}`);
           }
           const { mode: _mode, modes: _modes, ...serializable } = provider;
           const registerCall =
@@ -306,8 +282,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
               : Effect.acquireRelease(
                   Effect.withFiber((fiber) =>
                     Effect.sync(() => {
-                      if (lease.closed)
-                        throw new Error("Test RPC session is closed");
+                      if (lease.closed) throw new Error("Test RPC session is closed");
                       lease.calls.add(fiber);
                       return fiber;
                     }),
@@ -354,9 +329,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
 export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
   serverPlatformLayer.pipe(
     Layer.provide(
-      sessionProviders(
-        Layer.isLayer(providers) ? () => Effect.succeed(providers) : providers,
-      ),
+      sessionProviders(Layer.isLayer(providers) ? () => Effect.succeed(providers) : providers),
     ),
     Layer.provide(Layer.mergeAll(PlatformServices, FetchHttpClient.layer)),
     // Sidecar stdio is piped, so effect's default pretty logger disables
@@ -364,9 +337,7 @@ export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
     // FORCE_COLOR exactly when the destination terminal supports color —
     // honor it here so sidecar log lines match the rest of the dev output.
     Layer.provide(
-      process.env.FORCE_COLOR
-        ? Logger.layer([makePlainConsoleSink(true)])
-        : Layer.empty,
+      process.env.FORCE_COLOR ? Logger.layer([makePlainConsoleSink(true)]) : Layer.empty,
     ),
     Layer.launch,
     Effect.scoped,
@@ -412,12 +383,7 @@ export const layerServer = (
               owned = false,
             ) => {
               testOwned ||= owned;
-              return providers.get(
-                sessionEnv,
-                type,
-                group,
-                testOwned ? lease : undefined,
-              );
+              return providers.get(sessionEnv, type, group, testOwned ? lease : undefined);
             }) as RpcProxyApi["getProvider"],
             releaseSession: () => providers.release(lease),
             getDiagnostics: () => Promise.resolve(providers.diagnostics()),
@@ -436,8 +402,7 @@ export const layerServer = (
           return session;
         },
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),
-        parentDisconnected: () =>
-          Deferred.doneUnsafe(disconnected, Effect.void),
+        parentDisconnected: () => Deferred.doneUnsafe(disconnected, Effect.void),
       });
       yield* Console.log(`<ALCHEMY_RPC_ADDRESS>${url}</ALCHEMY_RPC_ADDRESS>`);
       yield* Deferred.await(connected).pipe(Effect.timeout("10 seconds")); // TODO(john): should the timeout be shorter?

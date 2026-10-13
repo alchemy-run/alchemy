@@ -7,10 +7,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
  * Request for {@link DeleteQueuedMessages}. The bound device's id is
  * injected automatically. Pass `MessageId: "*"` to purge the whole queue.
  */
-export interface DeleteQueuedMessagesRequest extends Omit<
-  iotw.DeleteQueuedMessagesRequest,
-  "Id"
-> {}
+export interface DeleteQueuedMessagesRequest extends Omit<iotw.DeleteQueuedMessagesRequest, "Id"> {}
 
 /**
  * Runtime binding for `iotwireless:DeleteQueuedMessages` — delete queued
@@ -43,10 +40,7 @@ export interface DeleteQueuedMessages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteQueuedMessagesRequest,
-    ) => Effect.Effect<
-      iotw.DeleteQueuedMessagesResponse,
-      iotw.DeleteQueuedMessagesError
-    >
+    ) => Effect.Effect<iotw.DeleteQueuedMessagesResponse, iotw.DeleteQueuedMessagesError>
   >
 > {}
 export const DeleteQueuedMessages = Binding.Service<DeleteQueuedMessages>(

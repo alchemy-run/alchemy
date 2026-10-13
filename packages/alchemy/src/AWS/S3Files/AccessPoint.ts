@@ -160,11 +160,7 @@ export const AccessPointProvider = () =>
       const observe = (accessPointId: string) =>
         s3files
           .getAccessPoint({ accessPointId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const toAttributes = (ap: s3files.GetAccessPointResponse) => ({
         accessPointId: ap.accessPointId,
@@ -175,25 +171,17 @@ export const AccessPointProvider = () =>
 
       // State-loss / conflict fallback: scan the parent file system's access
       // points for the one carrying this logical id's Alchemy tags.
-      const findByAlchemyTags = Effect.fn(function* (
-        id: string,
-        fileSystemId: string,
-      ) {
-        const accessPoints = yield* s3files.listAccessPoints
-          .items({ fileSystemId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((c) => Array.from(c)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([] as s3files.ListAccessPointsDescription[]),
-            ),
-          );
+      const findByAlchemyTags = Effect.fn(function* (id: string, fileSystemId: string) {
+        const accessPoints = yield* s3files.listAccessPoints.items({ fileSystemId }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed([] as s3files.ListAccessPointsDescription[]),
+          ),
+        );
         for (const item of accessPoints) {
           const ap = yield* observe(item.accessPointId);
-          if (
-            ap !== undefined &&
-            (yield* hasAlchemyTags(id, toTagRecord(ap.tags)))
-          ) {
+          if (ap !== undefined && (yield* hasAlchemyTags(id, toTagRecord(ap.tags)))) {
             return ap;
           }
         }
@@ -265,9 +253,7 @@ export const AccessPointProvider = () =>
                 : undefined;
           if (found === undefined) return undefined;
           const attrs = toAttributes(found);
-          return (yield* hasAlchemyTags(id, toTagRecord(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -301,23 +287,17 @@ export const AccessPointProvider = () =>
                 clientToken,
                 tags: toTagList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             live =
               created !== undefined
                 ? yield* observe(created.accessPointId)
                 : yield* findByAlchemyTags(id, news.fileSystemId);
           }
           if (live === undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: `access point on ${news.fileSystemId}`,
-                status: undefined,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: `access point on ${news.fileSystemId}`,
+              status: undefined,
+            });
           }
           const accessPointId = live.accessPointId;
 
@@ -327,21 +307,15 @@ export const AccessPointProvider = () =>
             (ap) => ap === undefined || ap.status !== "creating",
           );
           if (settled === undefined || settled.status !== "available") {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: accessPointId,
-                status: settled?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: accessPointId,
+              status: settled?.status,
+            });
           }
 
           // 3. SYNC TAGS — diff against observed cloud tags so adoption and
           //    drift converge (create-time tags only apply on first create).
-          yield* syncTags(
-            accessPointId,
-            toTagRecord(settled.tags),
-            desiredTags,
-          );
+          yield* syncTags(accessPointId, toTagRecord(settled.tags), desiredTags);
 
           // 4. RETURN fresh attributes.
           yield* session.note(accessPointId);
@@ -350,20 +324,14 @@ export const AccessPointProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: gone or already deleting counts as success.
           const live = yield* observe(output.accessPointId);
-          if (
-            live === undefined ||
-            live.status === "deleting" ||
-            live.status === "deleted"
-          ) {
+          if (live === undefined || live.status === "deleting" || live.status === "deleted") {
             return;
           }
           yield* retryWhileConflict(
             s3files.deleteAccessPoint({
               accessPointId: output.accessPointId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

@@ -1,3 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { EdgeSessionError } from "@/Cloudflare/EdgeSession.ts";
 import {
   isTransientBootstrapWriteError,
@@ -5,12 +11,6 @@ import {
 } from "@/Cloudflare/StateStore/State.ts";
 import { makeHttpStateStore } from "@/State/HttpStateStore.ts";
 import type { StateStoreError } from "@/State/State.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 /**
  * Predicate coverage for the retry policies added in response to
@@ -31,16 +31,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
  */
 
 /** Minimal fetch signature — Bun's `typeof fetch` also demands `preconnect`. */
-type FetchStub = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+type FetchStub = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 const stubHttpClient = (stub: FetchStub) =>
   FetchHttpClient.layer.pipe(
-    Layer.provide(
-      Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch),
-    ),
+    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch)),
   );
 
 /** Run a state-store write against a stubbed transport, return its failure. */
@@ -52,40 +47,22 @@ const failingWrite = (stub: FetchStub): Effect.Effect<StateStoreError> =>
       id: "test-http",
     });
     return yield* store
-      .set({
-        stack: "s",
-        stage: "dev",
-        fqn: "stack/scope/a",
-        value: { hello: "world" } as never,
-      })
+      .set({ stack: "s", stage: "dev", fqn: "stack/scope/a", value: { hello: "world" } as never })
       .pipe(Effect.flip);
   }).pipe(Effect.provide(stubHttpClient(stub)), Effect.orDie);
 
 describe(
   "isTransientBootstrapWriteError",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:statestore",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
   () => {
-    it.effect(
-      "retries 401 Unauthorized (token-binding propagation) but not other 4xx",
-      () =>
-        Effect.gen(function* () {
-          const unauthorized = yield* failingWrite(
-            async () => new Response(null, { status: 401 }),
-          );
-          expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
+    it.effect("retries 401 Unauthorized (token-binding propagation) but not other 4xx", () =>
+      Effect.gen(function* () {
+        const unauthorized = yield* failingWrite(async () => new Response(null, { status: 401 }));
+        expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
 
-          const badRequest = yield* failingWrite(
-            async () => new Response("no", { status: 400 }),
-          );
-          expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
-        }),
+        const badRequest = yield* failingWrite(async () => new Response("no", { status: 400 }));
+        expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
+      }),
     );
 
     it.effect(
@@ -116,14 +93,7 @@ describe(
 
 describe(
   "isTransientEdgeSessionError",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:statestore",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
   () => {
     it("retries non-200 secret-probe responses (Cloudflare HTML error pages)", () => {
       const error = new EdgeSessionError({

@@ -1,3 +1,7 @@
+import * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Detector } from "@/AWS/GuardDuty/Detector.ts";
 import { Filter } from "@/AWS/GuardDuty/Filter.ts";
@@ -5,10 +9,6 @@ import { IPSet } from "@/AWS/GuardDuty/IPSet.ts";
 import { ThreatIntelSet } from "@/AWS/GuardDuty/ThreatIntelSet.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Test from "@/Test/Alchemy";
-import * as guardduty from "@distilled.cloud/aws/guardduty";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeGuardDutyTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({
@@ -162,9 +162,7 @@ test.provider(
       });
       expect(afterUpdate.Action).toBe("ARCHIVE");
       expect(afterUpdate.Rank).toBe(1);
-      expect(afterUpdate.Description).toBe(
-        "auto-archive high severity findings",
-      );
+      expect(afterUpdate.Description).toBe("auto-archive high severity findings");
 
       // Destroy — everything (including the detector singleton) is gone.
       yield* stack.destroy();

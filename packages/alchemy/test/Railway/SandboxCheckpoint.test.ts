@@ -1,38 +1,61 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import {
+  Railway as RailwayApi,
+  type SandboxCheckpoint as RailwaySandboxCheckpoint,
+} from "@distilled.cloud/railway";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { State, type UpdatingReourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
 const Base = Effect.gen(function* () {
   const { environment } = yield* suitePartition;
-  const box = yield* Railway.Sandbox("Source", {
-    environment,
-    idleTimeoutMinutes: 5,
-  });
+  const box = yield* Railway.Sandbox("Source", { environment, idleTimeoutMinutes: 5 });
   return { environment, box };
 });
 
-const listLive = (environmentId: string) =>
-  railway.sandboxCheckpoints(
-    { environmentId },
-    { id: true, key: true, createdAt: true, environmentId: true },
-  );
+const listLive = Query.fn((environmentId: string) =>
+  RailwayApi.sandboxCheckpoints({ environmentId }).pipe(
+    Query.map((checkpoint) => ({
+      id: checkpoint.id,
+      key: checkpoint.key,
+      createdAt: checkpoint.createdAt,
+      environmentId: checkpoint.environmentId,
+    })),
+  ),
+);
+
+const checkpointFields = <E>(checkpoint: Query<RailwaySandboxCheckpoint, E>) => ({
+  id: checkpoint.id,
+  key: checkpoint.key,
+  createdAt: checkpoint.createdAt,
+});
+
+const renameSandboxCheckpoint = Query.fn(
+  (input: { environmentId: string; id: string; name: string }) =>
+    checkpointFields(RailwayApi.sandboxCheckpointRename(input)),
+);
+
+const createSandboxCheckpoint = Query.fn(
+  (input: { environmentId: string; sandboxId: string; name: string }) =>
+    checkpointFields(RailwayApi.sandboxCheckpointCreate(input)),
+);
+
+const deleteSandboxCheckpoint = Query.fn((input: { environmentId: string; id: string }) =>
+  RailwayApi.sandboxCheckpointDelete(input),
+);
 
 const Snapshot = (name?: string, restore = false) =>
   Effect.gen(function* () {
     const { environment, box } = yield* Base;
-    const checkpoint = yield* Railway.SandboxCheckpoint("Snapshot", {
-      sandbox: box,
-      name,
-    });
+    const checkpoint = yield* Railway.SandboxCheckpoint("Snapshot", { sandbox: box, name });
     const restored = restore
       ? yield* Railway.Sandbox("Restored", {
           environment,
@@ -63,9 +86,7 @@ test.provider(
       expect(original.key).toBe(original.name);
       expect(original.name.length).toBeGreaterThan(0);
       const live = yield* listLive(base.box.environmentId);
-      expect(
-        live.find((item) => item.id === original.sandboxCheckpointId),
-      ).toEqual({
+      expect(live.find((item) => item.id === original.sandboxCheckpointId)).toEqual({
         id: original.sandboxCheckpointId,
         key: original.key,
         createdAt: original.createdAt,
@@ -82,16 +103,14 @@ test.provider(
 
       const unchanged = yield* stack.deploy(Snapshot());
       expect(unchanged.checkpoint).toEqual(original);
-      const renamed = yield* stack.deploy(
-        Snapshot("restorable-checkpoint", true),
-      );
+      const renamed = yield* stack.deploy(Snapshot("restorable-checkpoint", true));
       expect(renamed.checkpoint.name).toBe("restorable-checkpoint");
       expect(renamed.checkpoint.createdAt).toBe(original.createdAt);
       const renamedLive = yield* listLive(base.box.environmentId);
       expect(renamedLive.some((item) => item.key === original.key)).toBe(false);
-      expect(
-        renamedLive.find((item) => item.key === renamed.checkpoint.key)?.id,
-      ).toBe(renamed.checkpoint.sandboxCheckpointId);
+      expect(renamedLive.find((item) => item.key === renamed.checkpoint.key)?.id).toBe(
+        renamed.checkpoint.sandboxCheckpointId,
+      );
       expect(renamed.restored).toBeDefined();
       const restored = yield* Railway.execSandbox({
         sandboxId: renamed.restored!.sandboxId,
@@ -131,10 +150,7 @@ test.provider(
       const program = (second: boolean) =>
         Effect.gen(function* () {
           const { environment, box } = yield* Base;
-          const other = yield* Railway.Sandbox("Other", {
-            environment,
-            idleTimeoutMinutes: 5,
-          });
+          const other = yield* Railway.Sandbox("Other", { environment, idleTimeoutMinutes: 5 });
           const checkpoint = yield* Railway.SandboxCheckpoint("Snapshot", {
             sandbox: second ? other : box,
             name: "replace-source-checkpoint",
@@ -178,19 +194,11 @@ test.provider(
       for (const recapture of [false, true]) {
         const created = yield* stack.deploy(Snapshot("before-rename"));
         const persisted = yield* state.get(key);
-        if (
-          persisted?.status !== "created" &&
-          persisted?.status !== "updated"
-        ) {
-          return yield* Effect.fail(
-            new Error("Expected a stable checkpoint row"),
-          );
+        if (persisted?.status !== "created" && persisted?.status !== "updated") {
+          return yield* Effect.fail(new Error("Expected a stable checkpoint row"));
         }
         const attempted: Railway.SandboxCheckpointProps = {
-          sandbox: {
-            sandboxId: created.box.sandboxId,
-            environmentId: created.box.environmentId,
-          },
+          sandbox: { sandboxId: created.box.sandboxId, environmentId: created.box.environmentId },
           name: "attempted-rename",
         };
         // Apply commits attempted props before invoking the rename mutation.
@@ -203,29 +211,23 @@ test.provider(
             old: persisted,
           } satisfies UpdatingReourceState,
         });
-        const renamed = yield* railway.renameSandboxCheckpoint(
-          {
-            environmentId: created.box.environmentId,
-            id: created.checkpoint.sandboxCheckpointId,
-            name: attempted.name!,
-          },
-          { id: true, key: true, createdAt: true },
-        );
+        const renamed = yield* renameSandboxCheckpoint({
+          environmentId: created.box.environmentId,
+          id: created.checkpoint.sandboxCheckpointId,
+          name: attempted.name!,
+        });
         expect(renamed.createdAt).toBe(created.checkpoint.createdAt);
         let live = renamed;
         if (recapture) {
-          yield* railway.deleteSandboxCheckpoint({
+          yield* deleteSandboxCheckpoint({
             environmentId: created.box.environmentId,
             id: renamed.id,
           });
-          live = yield* railway.createSandboxCheckpoint(
-            {
-              environmentId: created.box.environmentId,
-              sandboxId: created.box.sandboxId,
-              name: attempted.name!,
-            },
-            { id: true, key: true, createdAt: true },
-          );
+          live = yield* createSandboxCheckpoint({
+            environmentId: created.box.environmentId,
+            sandboxId: created.box.sandboxId,
+            name: attempted.name!,
+          });
           expect(live.createdAt).not.toBe(created.checkpoint.createdAt);
         }
         // The successful rename's returned attributes were never persisted.
@@ -260,10 +262,7 @@ test.provider(
           expect(remaining).toHaveLength(1);
           expect(remaining[0]?.id).toBe(live.id);
           expect(remaining[0]?.createdAt).toBe(live.createdAt);
-          yield* railway.deleteSandboxCheckpoint({
-            environmentId: created.box.environmentId,
-            id: live.id,
-          });
+          yield* deleteSandboxCheckpoint({ environmentId: created.box.environmentId, id: live.id });
         } else {
           expect(remaining).toEqual([]);
         }
@@ -290,71 +289,51 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const base = yield* stack.deploy(Base);
-      const foreign = yield* railway.createSandboxCheckpoint(
-        {
-          environmentId: base.box.environmentId,
-          sandboxId: base.box.sandboxId,
-          name: "foreign-checkpoint",
-        },
-        { id: true, createdAt: true },
-      );
+      const foreign = yield* createSandboxCheckpoint({
+        environmentId: base.box.environmentId,
+        sandboxId: base.box.sandboxId,
+        name: "foreign-checkpoint",
+      });
       const program = (allowAdoption: boolean, name = "foreign-checkpoint") =>
         Effect.gen(function* () {
           const { box } = yield* Base;
-          return yield* Railway.SandboxCheckpoint("Snapshot", {
-            sandbox: box,
-            name,
-          }).pipe(adopt(allowAdoption));
+          return yield* Railway.SandboxCheckpoint("Snapshot", { sandbox: box, name }).pipe(
+            adopt(allowAdoption),
+          );
         });
       const denied = yield* Effect.result(stack.deploy(program(false)));
       expect(Result.isFailure(denied)).toBe(true);
       if (Result.isFailure(denied)) {
         expect(denied.failure).toBeInstanceOf(OwnedBySomeoneElse);
       }
-      expect((yield* listLive(base.box.environmentId))[0]?.createdAt).toBe(
-        foreign.createdAt,
-      );
+      expect((yield* listLive(base.box.environmentId))[0]?.createdAt).toBe(foreign.createdAt);
 
       const adopted = yield* stack.deploy(program(true));
       expect(adopted.sandboxCheckpointId).toBe(foreign.id);
       expect(adopted.createdAt).toBe(foreign.createdAt);
-      const occupied = yield* railway.createSandboxCheckpoint(
-        {
-          environmentId: base.box.environmentId,
-          sandboxId: base.box.sandboxId,
-          name: "occupied-checkpoint",
-        },
-        { id: true, createdAt: true },
-      );
-      const collision = yield* Effect.result(
-        stack.deploy(program(false, "occupied-checkpoint")),
-      );
+      const occupied = yield* createSandboxCheckpoint({
+        environmentId: base.box.environmentId,
+        sandboxId: base.box.sandboxId,
+        name: "occupied-checkpoint",
+      });
+      const collision = yield* Effect.result(stack.deploy(program(false, "occupied-checkpoint")));
       expect(Result.isFailure(collision)).toBe(true);
       const afterCollision = yield* listLive(base.box.environmentId);
       expect(afterCollision).toHaveLength(2);
-      expect(
-        afterCollision.find((item) => item.id === occupied.id)?.createdAt,
-      ).toBe(occupied.createdAt);
-      expect(
-        afterCollision.find((item) => item.id === foreign.id)?.createdAt,
-      ).toBe(foreign.createdAt);
-      yield* railway.deleteSandboxCheckpoint({
-        environmentId: base.box.environmentId,
-        id: occupied.id,
-      });
-      yield* stack.deploy(program(false));
-      yield* railway.deleteSandboxCheckpoint({
-        environmentId: base.box.environmentId,
-        id: foreign.id,
-      });
-      const replacement = yield* railway.createSandboxCheckpoint(
-        {
-          environmentId: base.box.environmentId,
-          sandboxId: base.box.sandboxId,
-          name: "foreign-checkpoint",
-        },
-        { id: true, createdAt: true },
+      expect(afterCollision.find((item) => item.id === occupied.id)?.createdAt).toBe(
+        occupied.createdAt,
       );
+      expect(afterCollision.find((item) => item.id === foreign.id)?.createdAt).toBe(
+        foreign.createdAt,
+      );
+      yield* deleteSandboxCheckpoint({ environmentId: base.box.environmentId, id: occupied.id });
+      yield* stack.deploy(program(false));
+      yield* deleteSandboxCheckpoint({ environmentId: base.box.environmentId, id: foreign.id });
+      const replacement = yield* createSandboxCheckpoint({
+        environmentId: base.box.environmentId,
+        sandboxId: base.box.sandboxId,
+        name: "foreign-checkpoint",
+      });
       expect(replacement.createdAt).not.toBe(adopted.createdAt);
       const provider = yield* Provider.findProvider(Railway.SandboxCheckpoint);
       const read = yield* Effect.result(
@@ -363,10 +342,7 @@ test.provider(
           fqn: "Snapshot",
           instanceId: "unused",
           olds: {
-            sandbox: {
-              sandboxId: base.box.sandboxId,
-              environmentId: base.box.environmentId,
-            },
+            sandbox: { sandboxId: base.box.sandboxId, environmentId: base.box.environmentId },
             name: "foreign-checkpoint",
           },
           output: adopted,
@@ -382,10 +358,7 @@ test.provider(
       expect(preserved).toHaveLength(1);
       expect(preserved[0]?.id).toBe(replacement.id);
       expect(preserved[0]?.createdAt).toBe(replacement.createdAt);
-      yield* railway.deleteSandboxCheckpoint({
-        environmentId: base.box.environmentId,
-        id: replacement.id,
-      });
+      yield* deleteSandboxCheckpoint({ environmentId: base.box.environmentId, id: replacement.id });
       expect(yield* listLive(base.box.environmentId)).toEqual([]);
       yield* stack.destroy();
     }),

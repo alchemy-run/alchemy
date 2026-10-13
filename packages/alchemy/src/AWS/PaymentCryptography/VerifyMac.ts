@@ -44,6 +44,4 @@ export interface VerifyMac extends Binding.Service<
   >
 > {}
 
-export const VerifyMac = Binding.Service<VerifyMac>(
-  "AWS.PaymentCryptography.VerifyMac",
-);
+export const VerifyMac = Binding.Service<VerifyMac>("AWS.PaymentCryptography.VerifyMac");

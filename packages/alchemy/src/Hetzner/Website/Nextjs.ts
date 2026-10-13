@@ -6,8 +6,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * `next({ dev: false })` serve entry. This module IS the Node pipeline
  * (not OpenNext).
  */
-export const NEXTJS_NODE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nextjs/node";
+export const NEXTJS_NODE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/node";
 
 export interface NextjsProps extends FrameworkSiteProps {}
 

@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { IPSet } from "./IPSet.ts";
 import { retryOptimisticLock, withWafScope } from "./internal.ts";
+import type { IPSet } from "./IPSet.ts";
 import { UpdateIPSet, type UpdateIPSetRequest } from "./UpdateIPSet.ts";
 
 /**

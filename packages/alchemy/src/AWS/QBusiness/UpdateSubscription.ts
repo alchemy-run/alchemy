@@ -37,10 +37,7 @@ export interface UpdateSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateSubscriptionRequest,
-    ) => Effect.Effect<
-      qbusiness.UpdateSubscriptionResponse,
-      qbusiness.UpdateSubscriptionError
-    >
+    ) => Effect.Effect<qbusiness.UpdateSubscriptionResponse, qbusiness.UpdateSubscriptionError>
   >
 > {}
 export const UpdateSubscription = Binding.Service<UpdateSubscription>(

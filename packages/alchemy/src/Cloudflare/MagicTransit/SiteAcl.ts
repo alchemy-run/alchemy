@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -107,7 +106,8 @@ export type MagicSiteAcl = Resource<
  * denied by default).
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * `siteId` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
@@ -170,9 +170,7 @@ export const MagicSiteAclProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const siteId =
-        output?.siteId ??
-        (typeof olds?.siteId === "string" ? olds.siteId : undefined);
+      const siteId = output?.siteId ?? (typeof olds?.siteId === "string" ? olds.siteId : undefined);
       if (!siteId) return undefined;
 
       if (output?.aclId) {
@@ -198,9 +196,7 @@ export const MagicSiteAclProvider = () =>
       const lan2 = toLanRequest(news.lan2);
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
-      let observed = output?.aclId
-        ? yield* getAcl(accountId, siteId, output.aclId)
-        : undefined;
+      let observed = output?.aclId ? yield* getAcl(accountId, siteId, output.aclId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, news.name);
       }
@@ -231,8 +227,7 @@ export const MagicSiteAclProvider = () =>
           (observed.forwardLocally ?? false) !== news.forwardLocally) ||
         (news.unidirectional !== undefined &&
           (observed.unidirectional ?? false) !== news.unidirectional) ||
-        (news.protocols !== undefined &&
-          !sameList(observed.protocols, news.protocols)) ||
+        (news.protocols !== undefined && !sameList(observed.protocols, news.protocols)) ||
         lanDirty(observed.lan_1, lan1) ||
         lanDirty(observed.lan_2, lan2);
       if (dirty) {
@@ -280,7 +275,7 @@ export const MagicSiteAclProvider = () =>
             (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
           ),
         ),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
           Effect.succeed([] as string[]),
         ),
       );
@@ -292,13 +287,11 @@ export const MagicSiteAclProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((acl) =>
-                  toAttributes(acl, siteId, accountId),
-                ),
+                (page.result ?? []).map((acl) => toAttributes(acl, siteId, accountId)),
               ),
             ),
             // Site vanished or became inaccessible mid-enumeration — skip it.
-            Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+            Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
               Effect.succeed([] as MagicSiteAclAttributes[]),
             ),
           ),
@@ -372,19 +365,13 @@ const toLanRequest = (lan: MagicSiteAclLan): AclLanRequest => ({
 const sameList = (
   a: readonly (string | number)[] | null | undefined,
   b: readonly (string | number)[] | undefined,
-): boolean =>
-  [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
+): boolean => [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
 
-const lanDirty = (
-  observed: ObservedAclLan | null | undefined,
-  desired: AclLanRequest,
-): boolean =>
+const lanDirty = (observed: ObservedAclLan | null | undefined, desired: AclLanRequest): boolean =>
   (observed?.lanId ?? undefined) !== desired.lanId ||
   (desired.ports !== undefined && !sameList(observed?.ports, desired.ports)) ||
-  (desired.portRanges !== undefined &&
-    !sameList(observed?.portRanges, desired.portRanges)) ||
-  (desired.subnets !== undefined &&
-    !sameList(observed?.subnets, desired.subnets));
+  (desired.portRanges !== undefined && !sameList(observed?.portRanges, desired.portRanges)) ||
+  (desired.subnets !== undefined && !sameList(observed?.subnets, desired.subnets));
 
 const toAttributes = (
   acl: ObservedAcl,
@@ -397,8 +384,6 @@ const toAttributes = (
   name: acl.name ?? "",
   description: acl.description ?? undefined,
   forwardLocally: acl.forwardLocally ?? undefined,
-  protocols: acl.protocols
-    ? acl.protocols.map((p) => p as MagicSiteAclProtocol)
-    : undefined,
+  protocols: acl.protocols ? acl.protocols.map((p) => p as MagicSiteAclProtocol) : undefined,
   unidirectional: acl.unidirectional ?? undefined,
 });

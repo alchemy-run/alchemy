@@ -9,8 +9,6 @@ import * as Data from "effect/Data";
  * would make the adoption and uniqueness guards mint duplicates or miss live
  * resources.
  */
-export class PrismaPaginationError extends Data.TaggedError(
-  "PrismaPaginationError",
-)<{
+export class PrismaPaginationError extends Data.TaggedError("PrismaPaginationError")<{
   message: string;
 }> {}

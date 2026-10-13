@@ -1,13 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = OrganizationLease.make(
-  { providers: AWS.providers() },
-  "shared",
-);
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 // `Root` is import-only and there is exactly one organization root per
 // management account. `list()` enumerates roots via `listRoots` (paginated) and

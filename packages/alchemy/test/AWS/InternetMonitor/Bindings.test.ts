@@ -1,19 +1,17 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import InternetMonitorBindingsFunctionLive, {
-  InternetMonitorBindingsFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import InternetMonitorBindingsFunctionLive, { InternetMonitorBindingsFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -21,10 +19,7 @@ const sharedStack = Core.scratchStack(testOptions, "InternetMonitorBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -46,14 +41,10 @@ const listStackMonitors = aws(
         (monitor) =>
           im.getMonitor({ MonitorName: monitor.MonitorName }).pipe(
             Effect.map((r) =>
-              r.Tags?.["alchemy::stack"] === sharedStack.name
-                ? [monitor.MonitorName]
-                : [],
+              r.Tags?.["alchemy::stack"] === sharedStack.name ? [monitor.MonitorName] : [],
             ),
             // Tolerate delete races between list and get.
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([] as string[]),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
           ),
         { concurrency: 4 },
       ),
@@ -76,43 +67,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "InternetMonitor Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:internetmonitor",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:internetmonitor", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "InternetMonitor test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("InternetMonitor test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("InternetMonitor test setup: deploying fixture");
@@ -127,16 +102,12 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `InternetMonitor test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`InternetMonitor test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -164,14 +135,8 @@ describe.sequential(
         const remainingLogGroups = yield* aws(
           Effect.forEach(owned, (name) =>
             logs
-              .describeLogGroups({
-                logGroupNamePrefix: `/aws/internet-monitor/${name}`,
-              })
-              .pipe(
-                Effect.map((r) =>
-                  (r.logGroups ?? []).map((g) => g.logGroupName),
-                ),
-              ),
+              .describeLogGroups({ logGroupNamePrefix: `/aws/internet-monitor/${name}` })
+              .pipe(Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName))),
           ),
         );
         expect(remainingLogGroups.flat()).toEqual([]);
@@ -192,58 +157,42 @@ describe.sequential(
     });
 
     describe("ListHealthEvents", () => {
-      test.provider(
-        "lists health events on the bound monitor (name injected)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/health-events")) as {
-              count: number;
-            };
-            // A fresh empty monitor has no health events; a zero count still
-            // proves the grant + monitor-name injection round-tripped.
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("lists health events on the bound monitor (name injected)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/health-events")) as { count: number };
+          // A fresh empty monitor has no health events; a zero count still
+          // proves the grant + monitor-name injection round-tripped.
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
     describe("GetHealthEvent", () => {
-      test.provider(
-        "typed rejection for a nonexistent event id (grant proven)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/health-events/typed-probe")) as {
-              tag: string;
-            };
-            // Any typed tag except AccessDenied proves the IAM grant reached
-            // the monitor-scoped API.
-            expect(response.tag).not.toBe("AccessDeniedException");
-          }),
+      test.provider("typed rejection for a nonexistent event id (grant proven)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/health-events/typed-probe")) as { tag: string };
+          // Any typed tag except AccessDenied proves the IAM grant reached
+          // the monitor-scoped API.
+          expect(response.tag).not.toBe("AccessDeniedException");
+        }),
       );
     });
 
     describe("ListInternetEvents", () => {
       test.provider("lists global internet events (account-level)", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/internet-events")) as {
-            count: number;
-          };
+          const response = (yield* getJson("/internet-events")) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       );
     });
 
     describe("GetInternetEvent", () => {
-      test.provider(
-        "typed rejection for a nonexistent event id (grant proven)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson(
-              "/internet-event/typed-probe",
-            )) as {
-              tag: string;
-            };
-            expect(response.tag).not.toBe("AccessDeniedException");
-          }),
+      test.provider("typed rejection for a nonexistent event id (grant proven)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/internet-event/typed-probe")) as { tag: string };
+          expect(response.tag).not.toBe("AccessDeniedException");
+        }),
       );
     });
 
@@ -276,15 +225,11 @@ describe.sequential(
             );
             // On a step failure the route reports { step, tag, error } — log
             // the full payload so the exact typed failure is never elided.
-            yield* Effect.logInfo(
-              `/query response: ${JSON.stringify(response)}`,
-            );
+            yield* Effect.logInfo(`/query response: ${JSON.stringify(response)}`);
             expect(response).toMatchObject({ step: "ok" });
             expect(response.queryId).toBeTruthy();
             // An empty monitor's query still runs to a terminal state.
-            expect(["SUCCEEDED", "FAILED", "CANCELED"]).toContain(
-              response.status,
-            );
+            expect(["SUCCEEDED", "FAILED", "CANCELED"]).toContain(response.status);
             expect(response.rows).toBeGreaterThanOrEqual(0);
             expect(response.stopTag).not.toBe("AccessDeniedException");
           }),
@@ -292,24 +237,18 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeHealthEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          (_stack) =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeHealthEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeHealthEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeHealthEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

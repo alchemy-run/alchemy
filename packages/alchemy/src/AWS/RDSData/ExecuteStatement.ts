@@ -91,6 +91,4 @@ export interface ExecuteStatement extends Binding.Service<
   >
 > {}
 
-export const ExecuteStatement = Binding.Service<ExecuteStatement>(
-  "AWS.RDSData.ExecuteStatement",
-);
+export const ExecuteStatement = Binding.Service<ExecuteStatement>("AWS.RDSData.ExecuteStatement");

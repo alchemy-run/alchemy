@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AccountConfiguration } from "@/AWS/ACM/AccountConfiguration.ts";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AccountConfiguration } from "@/AWS/ACM/AccountConfiguration.ts";
+import * as Test from "@/Test/Alchemy";
 
 // The AccountConfiguration provider pins its calls to us-east-1; every
 // out-of-band ACM call in this file must target the same region.
@@ -17,9 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getDays = withUsEast1(
   acm
     .getAccountConfiguration({})
-    .pipe(
-      Effect.map((response) => response.ExpiryEvents?.DaysBeforeExpiry ?? 45),
-    ),
+    .pipe(Effect.map((response) => response.ExpiryEvents?.DaysBeforeExpiry ?? 45)),
 );
 
 // PutAccountConfiguration is heavily rate-limited and may report a typed
@@ -33,12 +31,8 @@ const putDays = (days: number, tokenSeed: string) =>
       })
       .pipe(
         Effect.retry({
-          while: (e): boolean =>
-            e._tag === "ConflictException" || e._tag === "ThrottlingException",
-          schedule: Schedule.max([
-            Schedule.exponential("1 second"),
-            Schedule.recurs(8),
-          ]),
+          while: (e): boolean => e._tag === "ConflictException" || e._tag === "ThrottlingException",
+          schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
         }),
       ),
   );

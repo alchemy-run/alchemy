@@ -1,14 +1,11 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
-const { test } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
+const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 test.provider(
   "diff replaces a context when name changes",
@@ -23,12 +20,7 @@ test.provider(
         news: { name: "new-context", description: "old" },
         oldBindings: [],
         newBindings: [],
-        output: {
-          id: "old-context",
-          name: "old-context",
-          description: "old",
-          docker: undefined,
-        },
+        output: { id: "old-context", name: "old-context", description: "old", docker: undefined },
       });
       expect(contextDiff).toEqual({ action: "replace", deleteFirst: true });
     }),
@@ -82,10 +74,7 @@ test.provider(
           description: "dev context",
           docker: "host=ssh://user@example.com",
         },
-        news: {
-          name: "build-context",
-          description: "dev context",
-        },
+        news: { name: "build-context", description: "dev context" },
         oldBindings: [],
         newBindings: [],
         output: {
@@ -102,11 +91,23 @@ test.provider(
 
 describe(
   "Docker.Context",
-  {
-    tags: ["provider:docker", "provider:docker:context", "local"],
-    concurrent: false,
-  },
+  { tags: ["provider:docker", "provider:docker:context", "local"], concurrent: false },
   () => {
+    // Every prop is optional: `Docker.Context("ctx")` must plan, deploy,
+    // redeploy in place, and destroy without a props object.
+    test.provider("deploys a context declared without props", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Docker.Context("bare-context"));
+        const second = yield* stack.deploy(Docker.Context("bare-context"));
+        expect(second.id).toBe(first.id);
+        yield* stack.destroy();
+        const gone = yield* docker.context.inspect(first.name).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
     test.provider("creates a context with description and endpoint", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
@@ -127,9 +128,7 @@ describe(
         expect(context.name).toBe(contextName);
         expect(context.id).toBe(contextName);
         expect(context.description).toBe("created by alchemy tests");
-        expect(extractDockerHost(context.docker)).toBe(
-          "unix:///var/run/docker.sock",
-        );
+        expect(extractDockerHost(context.docker)).toBe("unix:///var/run/docker.sock");
       }),
     );
 
@@ -156,9 +155,7 @@ describe(
         expect(second.id).toBe(first.id);
         expect(second.name).toBe(first.name);
         expect(second.description).toBe("v2");
-        expect(extractDockerHost(second.docker)).toBe(
-          "unix:///var/run/docker.sock",
-        );
+        expect(extractDockerHost(second.docker)).toBe("unix:///var/run/docker.sock");
       }),
     );
 
@@ -169,15 +166,11 @@ describe(
           docker: "host=ssh://user@example.com",
         });
 
-        const changed = Docker.Context("planned-context", {
-          description: "with endpoint",
-        });
+        const changed = Docker.Context("planned-context", { description: "with endpoint" });
 
         yield* stack.deploy(base);
         const plan = yield* stack.plan(changed);
-        expect(plan.resources["planned-context"]).toMatchObject({
-          action: "replace",
-        });
+        expect(plan.resources["planned-context"]).toMatchObject({ action: "replace" });
       }),
     );
   },

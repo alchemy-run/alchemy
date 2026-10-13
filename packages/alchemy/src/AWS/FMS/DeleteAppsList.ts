@@ -34,6 +34,4 @@ export interface DeleteAppsList extends Binding.Service<
   >
 > {}
 
-export const DeleteAppsList = Binding.Service<DeleteAppsList>(
-  "AWS.FMS.DeleteAppsList",
-);
+export const DeleteAppsList = Binding.Service<DeleteAppsList>("AWS.FMS.DeleteAppsList");

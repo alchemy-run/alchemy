@@ -1,26 +1,19 @@
-import * as AWS from "@/AWS";
-import { AccountName } from "@/AWS/Account";
 import * as account from "@distilled.cloud/aws/account";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AccountName } from "@/AWS/Account";
 import * as OrganizationLease from "../Organizations/OrganizationLease.ts";
 
 // Shared organization lease: Floci reports the management account's name from
 // the organization when one exists, so the organization must not be created or
 // deleted while this test captures and restores the name.
-const { test } = OrganizationLease.make(
-  { providers: AWS.providers() },
-  "shared",
-);
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const TEST_NAME = "alchemy-test-account-name";
 

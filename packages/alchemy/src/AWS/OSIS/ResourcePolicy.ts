@@ -14,8 +14,10 @@ export interface ResourcePolicyProps {
   resourceArn: string;
   /**
    * The IAM resource-based policy document (JSON) that grants other
-   * principals or accounts access to the resource (e.g. `osis:Ingest`,
-   * `osis:CreatePipelineEndpoint`). Updated in place.
+   * accounts access to the resource. OSIS only accepts
+   * `osis:CreatePipelineEndpoint` grants whose principals are 12-digit
+   * account IDs (ARN principals are rejected as "Invalid resource policy.").
+   * Updated in place.
    */
   policy: string;
 }
@@ -39,23 +41,23 @@ export interface ResourcePolicy extends Resource<
 
 /**
  * The resource-based policy of an Amazon OpenSearch Ingestion (OSIS)
- * pipeline — grants cross-account principals access to the pipeline, e.g.
- * `osis:Ingest` for cross-account ingestion or
- * `osis:CreatePipelineEndpoint` so another account can attach a VPC
- * endpoint. A resource has at most one.
+ * VPC pipeline — grants other accounts `osis:CreatePipelineEndpoint` so they
+ * can attach a pipeline endpoint from their own VPC (cross-account
+ * ingestion). Principals must be 12-digit account IDs, not ARNs. A resource
+ * has at most one.
  *
  * ### Creating a Resource Policy
- * **Example:** Allow Another Account to Ingest
+ * **Example:** Allow Another Account to Attach a Pipeline Endpoint
  * ```typescript
- * const policy = yield* OSIS.ResourcePolicy("CrossAccountIngest", {
+ * const policy = yield* OSIS.ResourcePolicy("CrossAccountEndpoint", {
  *   resourceArn: pipeline.pipelineArn,
  *   policy: Output.interpolate`{
  *     "Version": "2012-10-17",
  *     "Statement": [
  *       {
  *         "Effect": "Allow",
- *         "Principal": { "AWS": "arn:aws:iam::123456789012:root" },
- *         "Action": ["osis:Ingest"],
+ *         "Principal": { "AWS": ["123456789012"] },
+ *         "Action": "osis:CreatePipelineEndpoint",
  *         "Resource": "${pipeline.pipelineArn}"
  *       }
  *     ]
@@ -65,9 +67,7 @@ export interface ResourcePolicy extends Resource<
  *
  * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.OSIS.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.OSIS.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -99,17 +99,11 @@ export const ResourcePolicyProvider = () =>
        * `undefined`.
        */
       const getPolicy = Effect.fn(function* (resourceArn: string) {
-        const policy = yield* osis
-          .getResourcePolicy({ ResourceArn: resourceArn })
-          .pipe(
-            Effect.map((response) => response.Policy),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return policy === undefined || canonicalJson(policy) === "{}"
-          ? undefined
-          : policy;
+        const policy = yield* osis.getResourcePolicy({ ResourceArn: resourceArn }).pipe(
+          Effect.map((response) => response.Policy),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+        return policy === undefined || canonicalJson(policy) === "{}" ? undefined : policy;
       });
 
       return {
@@ -140,10 +134,7 @@ export const ResourcePolicyProvider = () =>
 
           // 2/3. Ensure + sync — `putResourcePolicy` is a true upsert;
           // call it only when the canonical document drifts.
-          if (
-            observed === undefined ||
-            canonicalJson(observed) !== canonicalJson(news!.policy)
-          ) {
+          if (observed === undefined || canonicalJson(observed) !== canonicalJson(news!.policy)) {
             yield* osis.putResourcePolicy({
               ResourceArn: resourceArn,
               Policy: news!.policy,
@@ -157,9 +148,7 @@ export const ResourcePolicyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* osis
             .deleteResourcePolicy({ ResourceArn: output.resourceArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Singleton sub-resource keyed by its parent resource ARN.

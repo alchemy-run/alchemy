@@ -47,6 +47,4 @@ export interface PutKeyword extends Binding.Service<
     ) => Effect.Effect<smsvoice.PutKeywordResult, smsvoice.PutKeywordError>
   >
 > {}
-export const PutKeyword = Binding.Service<PutKeyword>(
-  "AWS.PinpointSMSVoiceV2.PutKeyword",
-);
+export const PutKeyword = Binding.Service<PutKeyword>("AWS.PinpointSMSVoiceV2.PutKeyword");

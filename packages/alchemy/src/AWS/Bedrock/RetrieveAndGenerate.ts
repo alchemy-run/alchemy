@@ -10,8 +10,7 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
  * binding scopes IAM to the bound knowledge base and the bound generation
  * models.
  */
-export interface RetrieveAndGenerateRequest
-  extends bedrock.RetrieveAndGenerateRequest {}
+export interface RetrieveAndGenerateRequest extends bedrock.RetrieveAndGenerateRequest {}
 
 /**
  * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerate` — the fully
@@ -59,10 +58,7 @@ export interface RetrieveAndGenerate extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RetrieveAndGenerateRequest,
-    ) => Effect.Effect<
-      bedrock.RetrieveAndGenerateResponse,
-      bedrock.RetrieveAndGenerateError
-    >
+    ) => Effect.Effect<bedrock.RetrieveAndGenerateResponse, bedrock.RetrieveAndGenerateError>
   >
 > {}
 export const RetrieveAndGenerate = Binding.Service<RetrieveAndGenerate>(

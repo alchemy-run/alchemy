@@ -5,19 +5,12 @@ import type { Table } from "./Table.ts";
 
 export type BatchExecuteStatementTables = [Table, ...Table[]];
 
-export const sortBatchExecuteStatementTables = (
-  tables: BatchExecuteStatementTables,
-) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+export const sortBatchExecuteStatementTables = (tables: BatchExecuteStatementTables) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as BatchExecuteStatementTables;
 
-export interface BatchExecuteStatementRequest
-  extends DynamoDB.BatchExecuteStatementInput {}
+export interface BatchExecuteStatementRequest extends DynamoDB.BatchExecuteStatementInput {}
 
 /**
  * Runtime binding for DynamoDB PartiQL `BatchExecuteStatement`.
@@ -52,10 +45,7 @@ export interface BatchExecuteStatement extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchExecuteStatementRequest,
-    ) => Effect.Effect<
-      DynamoDB.BatchExecuteStatementOutput,
-      DynamoDB.BatchExecuteStatementError
-    >
+    ) => Effect.Effect<DynamoDB.BatchExecuteStatementOutput, DynamoDB.BatchExecuteStatementError>
   >
 > {}
 

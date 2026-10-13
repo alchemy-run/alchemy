@@ -34,10 +34,7 @@ export interface FailoverDBCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptune.FailoverDBClusterMessage, "DBClusterIdentifier">,
-    ) => Effect.Effect<
-      neptune.FailoverDBClusterResult,
-      neptune.FailoverDBClusterError
-    >
+    ) => Effect.Effect<neptune.FailoverDBClusterResult, neptune.FailoverDBClusterError>
   >
 > {}
 export const FailoverDBCluster = Binding.Service<FailoverDBCluster>(

@@ -35,7 +35,6 @@ export interface EnableImportFindingsForProduct extends Binding.Service<
     >
   >
 > {}
-export const EnableImportFindingsForProduct =
-  Binding.Service<EnableImportFindingsForProduct>(
-    "AWS.SecurityHub.EnableImportFindingsForProduct",
-  );
+export const EnableImportFindingsForProduct = Binding.Service<EnableImportFindingsForProduct>(
+  "AWS.SecurityHub.EnableImportFindingsForProduct",
+);

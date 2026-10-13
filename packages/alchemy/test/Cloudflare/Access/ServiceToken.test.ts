@@ -1,22 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
-});
+const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update duration, and delete service token",
@@ -51,17 +45,13 @@ test.provider(
       // the previously captured secret.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.ServiceToken("BasicToken", {
-            duration: "17520h",
-          });
+          return yield* Cloudflare.Access.ServiceToken("BasicToken", { duration: "17520h" });
         }),
       );
       expect(updated.serviceTokenId).toEqual(token.serviceTokenId);
       expect(updated.duration).toEqual("17520h");
       expect(updated.clientSecret).toBeDefined();
-      expect(Redacted.value(updated.clientSecret!)).toEqual(
-        Redacted.value(token.clientSecret!),
-      );
+      expect(Redacted.value(updated.clientSecret!)).toEqual(Redacted.value(token.clientSecret!));
 
       const afterUpdate = yield* zeroTrust.getAccessServiceTokenForAccount({
         accountId,
@@ -72,15 +62,8 @@ test.provider(
       yield* stack.destroy();
 
       const afterDestroy = yield* zeroTrust
-        .getAccessServiceTokenForAccount({
-          accountId,
-          serviceTokenId: token.serviceTokenId,
-        })
-        .pipe(
-          Effect.catchTag("AccessServiceTokenNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .getAccessServiceTokenForAccount({ accountId, serviceTokenId: token.serviceTokenId })
+        .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.id ?? undefined).toBeUndefined();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
@@ -98,14 +81,10 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.ServiceToken,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.ServiceToken);
       const all = yield* provider.list();
 
-      expect(all.some((t) => t.serviceTokenId === token.serviceTokenId)).toBe(
-        true,
-      );
+      expect(all.some((t) => t.serviceTokenId === token.serviceTokenId)).toBe(true);
       // Enumeration never exposes the one-time secret — it matches read.
       const found = all.find((t) => t.serviceTokenId === token.serviceTokenId);
       expect(found?.clientId).toEqual(token.clientId);
@@ -134,9 +113,7 @@ test.provider(
 
       const rotated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.ServiceToken("RotateToken", {
-            clientSecretVersion: 2,
-          });
+          return yield* Cloudflare.Access.ServiceToken("RotateToken", { clientSecretVersion: 2 });
         }),
       );
       expect(rotated.serviceTokenId).toEqual(token.serviceTokenId);
@@ -150,15 +127,11 @@ test.provider(
       // Re-deploying the same version must NOT rotate again.
       const stable = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.ServiceToken("RotateToken", {
-            clientSecretVersion: 2,
-          });
+          return yield* Cloudflare.Access.ServiceToken("RotateToken", { clientSecretVersion: 2 });
         }),
       );
       expect(stable.serviceTokenId).toEqual(token.serviceTokenId);
-      expect(Redacted.value(stable.clientSecret!)).toEqual(
-        Redacted.value(rotated.clientSecret!),
-      );
+      expect(Redacted.value(stable.clientSecret!)).toEqual(Redacted.value(rotated.clientSecret!));
 
       const actual = yield* zeroTrust.getAccessServiceTokenForAccount({
         accountId,

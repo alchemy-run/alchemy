@@ -30,10 +30,7 @@ export type Message = typeof Message.Type;
 
 // UPDATE
 
-export const update = (
-  model: Model,
-  message: Message,
-): Update.Return<Model, Message> =>
+export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
   M.value(message).pipe(
     M.withReturnType<Update.Return<Model, Message>>(),
     M.tagsExhaustive({

@@ -1,6 +1,3 @@
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
-import { Stack, type StackSpec } from "@/Stack";
-import * as Core from "@/Test/Core.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -8,18 +5,15 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
+import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
+import { Stack, type StackSpec } from "@/Stack";
+import * as Core from "@/Test/Core.ts";
 import type { EchoClient } from "./fixtures/rpc-echo.ts";
 
 const options = { providers: Layer.empty, dev: true, sidecar: true };
-const COMMAND_LOCAL = import.meta.resolve(
-  "../../src/Command/Local.ts",
-  import.meta.url,
-);
+const COMMAND_LOCAL = import.meta.resolve("../../src/Command/Local.ts", import.meta.url);
 const ECHO = new URL("./fixtures/rpc-server-entry.ts", import.meta.url).href;
-const BLOCKED_ECHO = new URL(
-  "./fixtures/rpc-blocked-provider.ts",
-  import.meta.url,
-).href;
+const BLOCKED_ECHO = new URL("./fixtures/rpc-blocked-provider.ts", import.meta.url).href;
 type StackShape = Omit<StackSpec, "output">;
 type Handle = NonNullable<ReturnType<typeof Core.makeSidecarHandle>>;
 const dummyStack = (name: string): StackShape => ({
@@ -30,17 +24,11 @@ const dummyStack = (name: string): StackShape => ({
   actions: {},
 });
 
-const runAsFile = <A, E, R>(
-  handle: Handle,
-  stackName: string,
-  body: Effect.Effect<A, E, R>,
-) =>
+const runAsFile = <A, E, R>(handle: Handle, stackName: string, body: Effect.Effect<A, E, R>) =>
   Effect.suspend(() => {
     const sharedScope = Scope.makeUnsafe("sequential");
     return Core.toEffect(
-      body.pipe(
-        Effect.provideService(Stack, dummyStack(stackName)),
-      ) as Core.TestEffect<A>,
+      body.pipe(Effect.provideService(Stack, dummyStack(stackName))) as Core.TestEffect<A>,
       options,
       sharedScope,
       handle,
@@ -74,9 +62,7 @@ it.live(
           stackName,
           Effect.gen(function* () {
             const proxy = yield* RpcProviderProxy;
-            expect(
-              yield* proxy.get(COMMAND_LOCAL, "Command.Dev"),
-            ).toBeDefined();
+            expect(yield* proxy.get(COMMAND_LOCAL, "Command.Dev")).toBeDefined();
           }),
         );
       }
@@ -126,9 +112,7 @@ it.live(
       const before = yield* a.stats();
       expect(before.active).toBe(1);
       expect(before.built).toBe(1);
-      expect((yield* Core.sidecarDiagnostics).sessions).toBe(
-        baseline.sessions + 1,
-      );
+      expect((yield* Core.sidecarDiagnostics).sessions).toBe(baseline.sessions + 1);
       expect((yield* Core.sidecarDiagnostics).owners).toBe(baseline.owners + 2);
       yield* first.close;
       expect(yield* b.echo("still owned")).toBe("echo:still owned");
@@ -179,10 +163,7 @@ it.live(
         second,
         name,
         Effect.gen(function* () {
-          return yield* (yield* RpcProviderProxy).get(
-            BLOCKED_ECHO,
-            "Test.Echo",
-          );
+          return yield* (yield* RpcProviderProxy).get(BLOCKED_ECHO, "Test.Echo");
         }),
       ).pipe(Effect.forkChild);
       const building = yield* inspect.pipe(
@@ -194,9 +175,7 @@ it.live(
       );
       expect(building?.building).toBe(baseline!.building + 1);
       yield* Fiber.interrupt(pending);
-      expect(yield* provider.echo("after cancellation")).toBe(
-        "echo:after cancellation",
-      );
+      expect(yield* provider.echo("after cancellation")).toBe("echo:after cancellation");
       expect(yield* provider.artifactCount()).toBe(1);
       expect((yield* provider.stats()).finalized).toBe(initial.finalized);
 
@@ -209,9 +188,7 @@ it.live(
       ).pipe(Effect.exit);
       expect(rejected._tag).toBe("Failure");
       yield* second.close;
-      expect(yield* provider.echo("after rejected lookup")).toBe(
-        "echo:after rejected lookup",
-      );
+      expect(yield* provider.echo("after rejected lookup")).toBe("echo:after rejected lookup");
       expect(yield* provider.artifactCount()).toBe(1);
       expect((yield* provider.stats()).finalized).toBe(initial.finalized);
       expect((yield* inspect)?.contexts).toBe(baseline!.contexts);
@@ -229,9 +206,7 @@ it.live(
       const original = yield* echo(handle, name);
       const pid = yield* original.processId();
       yield* Effect.sync(() => process.kill(pid, "SIGKILL"));
-      expect(
-        (yield* original.echo("dead transport").pipe(Effect.exit))._tag,
-      ).toBe("Failure");
+      expect((yield* original.echo("dead transport").pipe(Effect.exit))._tag).toBe("Failure");
       const recovered = yield* echo(handle, name).pipe(
         Effect.exit,
         Effect.repeat({
@@ -241,11 +216,8 @@ it.live(
         }),
       );
       expect(recovered._tag).toBe("Success");
-      if (Exit.isFailure(recovered))
-        return yield* Effect.failCause(recovered.cause);
-      expect(yield* recovered.value.echo("reconnected")).toBe(
-        "echo:reconnected",
-      );
+      if (Exit.isFailure(recovered)) return yield* Effect.failCause(recovered.cause);
+      expect(yield* recovered.value.echo("reconnected")).toBe("echo:reconnected");
       expect(yield* recovered.value.processId()).not.toBe(pid);
       yield* handle.close;
     }).pipe(Effect.scoped),
@@ -273,10 +245,7 @@ it.live(
         first,
         "pending-build-stack",
         Effect.gen(function* () {
-          return yield* (yield* RpcProviderProxy).get(
-            BLOCKED_ECHO,
-            "Test.Echo",
-          );
+          return yield* (yield* RpcProviderProxy).get(BLOCKED_ECHO, "Test.Echo");
         }),
       ).pipe(Effect.forkChild);
       const building = yield* inspect.pipe(

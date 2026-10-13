@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -97,10 +92,7 @@ export interface Tracker extends Resource<
  */
 export const Tracker = Resource<Tracker>("AWS.Location.Tracker");
 
-const createTrackerName = (
-  id: string,
-  props: { trackerName?: string | undefined },
-) =>
+const createTrackerName = (id: string, props: { trackerName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.trackerName) return props.trackerName;
     return yield* createPhysicalName({ id, maxLength: 100 });
@@ -109,11 +101,7 @@ const createTrackerName = (
 const readTracker = Effect.fn(function* (trackerName: string) {
   const found = yield* location
     .describeTracker({ TrackerName: trackerName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     trackerName: found.TrackerName,
@@ -142,23 +130,16 @@ export const TrackerProvider = () =>
                 ),
               ),
             );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readTracker(name),
-              { concurrency: 10 },
-            );
-            return hydrated.filter(
-              (attrs): attrs is Tracker["Attributes"] => attrs !== undefined,
-            );
+            const hydrated = yield* Effect.forEach(names, (name) => readTracker(name), {
+              concurrency: 10,
+            });
+            return hydrated.filter((attrs): attrs is Tracker["Attributes"] => attrs !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const trackerName =
-            output?.trackerName ?? (yield* createTrackerName(id, olds ?? {}));
+          const trackerName = output?.trackerName ?? (yield* createTrackerName(id, olds ?? {}));
           const state = yield* readTracker(trackerName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return;
@@ -169,8 +150,7 @@ export const TrackerProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const trackerName =
-            output?.trackerName ?? (yield* createTrackerName(id, news));
+          const trackerName = output?.trackerName ?? (yield* createTrackerName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -189,9 +169,7 @@ export const TrackerProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readTracker(trackerName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created tracker ${trackerName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created tracker ${trackerName}`));
             }
           }
 
@@ -237,9 +215,7 @@ export const TrackerProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* location
             .deleteTracker({ TrackerName: output.trackerName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

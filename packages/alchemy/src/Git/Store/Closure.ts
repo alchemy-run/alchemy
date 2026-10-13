@@ -56,10 +56,10 @@ export const MANIFEST_CAP = 1_000_000;
  * `StoreError` by {@link makeClosureSource} for callers that only speak the
  * narrow `ClosureSource` contract.
  */
-export class ManifestTooLarge extends Schema.TaggedError<ManifestTooLarge>()(
-  "ManifestTooLarge",
-  { count: Schema.Number, cap: Schema.Number },
-) {}
+export class ManifestTooLarge extends Schema.TaggedError<ManifestTooLarge>()("ManifestTooLarge", {
+  count: Schema.Number,
+  cap: Schema.Number,
+}) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Options
@@ -150,8 +150,7 @@ const loadParents = (
       return map;
     }
     const rows = yield* sql.inChunks<ParentRow>(
-      (ph) =>
-        `SELECT oid, parent, ord FROM commit_parents WHERE oid IN (${ph})`,
+      (ph) => `SELECT oid, parent, ord FROM commit_parents WHERE oid IN (${ph})`,
       oids,
     );
     const grouped = new Map<Oid, Array<ParentRow>>();
@@ -177,8 +176,7 @@ const loadParents = (
 // Closure computation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const dedup = (oids: ReadonlyArray<Oid>): Array<Oid> =>
-  Array.from(new Set(oids));
+const dedup = (oids: ReadonlyArray<Oid>): Array<Oid> => Array.from(new Set(oids));
 
 /** Maximum tag→target indirections tolerated before declaring corruption. */
 const MAX_TAG_CHAIN = 16;
@@ -207,9 +205,7 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const want of wants) {
       const wantMeta = wantMetas.get(want);
       if (wantMeta === undefined) {
-        return yield* Effect.fail(
-          new StoreError({ reason: `want not found: ${want}` }),
-        );
+        return yield* StoreError.make({ reason: `want not found: ${want}` });
       }
       let meta: ObjectMeta = wantMeta;
       let hops = 0;
@@ -231,9 +227,7 @@ export const computeClosure = (options: ClosureOptions) =>
           case 4: {
             hops += 1;
             if (hops > MAX_TAG_CHAIN) {
-              return yield* Effect.fail(
-                new StoreError({ reason: `tag chain too deep at ${meta.oid}` }),
-              );
+              return yield* StoreError.make({ reason: `tag chain too deep at ${meta.oid}` });
             }
             if (!tagSet.has(meta.oid)) {
               tagSet.add(meta.oid);
@@ -241,22 +235,17 @@ export const computeClosure = (options: ClosureOptions) =>
             }
             const content: Uint8Array = yield* objects.readContent(meta.oid);
             const parsed: ParsedTag = yield* parseTag(content).pipe(
-              Effect.mapError(
-                (error) =>
-                  new StoreError({
-                    reason: `bad tag ${meta.oid}: ${error.reason}`,
-                  }),
+              Effect.mapError((error) =>
+                StoreError.make({
+                  reason: `bad tag ${meta.oid}: ${error.reason}`,
+                }),
               ),
             );
-            const target: ObjectMeta | undefined = yield* objects.getMeta(
-              parsed.object,
-            );
+            const target: ObjectMeta | undefined = yield* objects.getMeta(parsed.object);
             if (target === undefined) {
-              return yield* Effect.fail(
-                new StoreError({
-                  reason: `tag ${meta.oid} targets missing object ${parsed.object}`,
-                }),
-              );
+              return yield* StoreError.make({
+                reason: `tag ${meta.oid} targets missing object ${parsed.object}`,
+              });
             }
             meta = target;
             break;
@@ -290,11 +279,8 @@ export const computeClosure = (options: ClosureOptions) =>
     // commits BEHIND those tips. Such seeds are walked through (so their
     // ancestors enter the manifest) but stay excluded from the output via
     // the common set.
-    const walkThroughHave = (oid: Oid): boolean =>
-      depth !== undefined && clientShallowSet.has(oid);
-    let frontier = dedup(commitSeeds).filter(
-      (oid) => !haveSet.has(oid) || walkThroughHave(oid),
-    );
+    const walkThroughHave = (oid: Oid): boolean => depth !== undefined && clientShallowSet.has(oid);
+    let frontier = dedup(commitSeeds).filter((oid) => !haveSet.has(oid) || walkThroughHave(oid));
     const visited = new Set<Oid>(frontier);
     for (const oid of frontier) {
       depthOf.set(oid, 1);
@@ -306,9 +292,7 @@ export const computeClosure = (options: ClosureOptions) =>
       for (const oid of frontier) {
         const node = nodes.get(oid);
         if (node === undefined) {
-          return yield* Effect.fail(
-            new StoreError({ reason: `commit graph missing commit ${oid}` }),
-          );
+          return yield* StoreError.make({ reason: `commit graph missing commit ${oid}` });
         }
         candidateOrder.push(node);
         candidateSet.add(oid);
@@ -338,9 +322,7 @@ export const computeClosure = (options: ClosureOptions) =>
         }
       }
       if (candidateOrder.length > cap) {
-        return yield* Effect.fail(
-          new ManifestTooLarge({ count: candidateOrder.length, cap }),
-        );
+        return yield* ManifestTooLarge.make({ count: candidateOrder.length, cap });
       }
       frontier = next;
     }
@@ -351,9 +333,7 @@ export const computeClosure = (options: ClosureOptions) =>
       // Client-shallow haves contribute themselves to `common` but NOT
       // their ancestry — the client does not hold anything behind its
       // shallow boundary (that is what a deepen fetches).
-      let hFrontier = Array.from(haveSet).filter(
-        (oid) => !clientShallowSet.has(oid),
-      );
+      let hFrontier = Array.from(haveSet).filter((oid) => !clientShallowSet.has(oid));
       while (hFrontier.length > 0) {
         const parents = yield* loadParents(sql, hFrontier);
         const discovered: Array<Oid> = [];
@@ -384,18 +364,11 @@ export const computeClosure = (options: ClosureOptions) =>
 
     const shallow: Array<Oid> = [];
     const shallowSet = new Set<Oid>();
-    if (
-      depth !== undefined ||
-      clientShallowSet.size > 0 ||
-      repoShallowSet.size > 0
-    ) {
+    if (depth !== undefined || clientShallowSet.size > 0 || repoShallowSet.size > 0) {
       for (const commit of newCommits) {
         const ps = parentsOf.get(commit.oid) ?? [];
         const cut = ps.some(
-          (parent) =>
-            !included.has(parent) &&
-            !common.has(parent) &&
-            !clientShallowSet.has(parent),
+          (parent) => !included.has(parent) && !common.has(parent) && !clientShallowSet.has(parent),
         );
         if (cut) {
           shallow.push(commit.oid);
@@ -407,8 +380,7 @@ export const computeClosure = (options: ClosureOptions) =>
     // new commit OR as a walked-through common have) and it is no longer a
     // boundary.
     const unshallow = Array.from(clientShallowSet).filter(
-      (oid) =>
-        (included.has(oid) || candidateSet.has(oid)) && !shallowSet.has(oid),
+      (oid) => (included.has(oid) || candidateSet.has(oid)) && !shallowSet.has(oid),
     );
 
     // ── 6. Tree/blob closure (shared visited set — the v1 fat) ──────────────
@@ -418,9 +390,7 @@ export const computeClosure = (options: ClosureOptions) =>
     let total = newCommits.length + tagOrder.length;
 
     const failIfOverCap = (count: number) =>
-      count > cap
-        ? Effect.fail(new ManifestTooLarge({ count, cap }))
-        : Effect.void;
+      count > cap ? Effect.fail(ManifestTooLarge.make({ count, cap })) : Effect.void;
 
     for (const blob of wantBlobs) {
       if (!visitedObjects.has(blob)) {
@@ -459,14 +429,11 @@ export const computeClosure = (options: ClosureOptions) =>
       for (const tree of batch) {
         const content = contents.get(tree);
         if (content === undefined) {
-          return yield* Effect.fail(
-            new StoreError({ reason: `tree ${tree} vanished during closure` }),
-          );
+          return yield* StoreError.make({ reason: `tree ${tree} vanished during closure` });
         }
         const entries = yield* parseTree(content).pipe(
-          Effect.mapError(
-            (error) =>
-              new StoreError({ reason: `bad tree ${tree}: ${error.reason}` }),
+          Effect.mapError((error) =>
+            StoreError.make({ reason: `bad tree ${tree}: ${error.reason}` }),
           ),
         );
         for (const entry of entries) {
@@ -505,9 +472,7 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const oid of orderedOids) {
       const meta = metas.get(oid);
       if (meta === undefined) {
-        return yield* Effect.fail(
-          new StoreError({ reason: `object ${oid} vanished during closure` }),
-        );
+        return yield* StoreError.make({ reason: `object ${oid} vanished during closure` });
       }
       entries.push(meta);
     }
@@ -529,7 +494,7 @@ export const makeClosureSource = (options: ClosureOptions): ClosureSource => {
       compute(request).pipe(
         Effect.catchTag("ManifestTooLarge", (error) =>
           Effect.fail(
-            new StoreError({
+            StoreError.make({
               reason: `manifest exceeds ${error.cap} objects (v1 cap; got ${error.count})`,
             }),
           ),

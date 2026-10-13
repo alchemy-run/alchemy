@@ -9,10 +9,7 @@ import type { Providers } from "../Providers.ts";
 /**
  * How frequently Amazon Macie publishes updated policy findings.
  */
-export type FindingPublishingFrequency =
-  | "FIFTEEN_MINUTES"
-  | "ONE_HOUR"
-  | "SIX_HOURS";
+export type FindingPublishingFrequency = "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
 
 /**
  * The Macie enablement status. `ENABLED` runs Macie; `PAUSED` suspends it
@@ -87,8 +84,10 @@ export { SessionResource as Session };
 // right after enablement — both mean "no session", so collapse to `undefined`.
 const getSession = macie2.getMacieSession({}).pipe(
   Effect.map((s) => s as macie2.GetMacieSessionResponse | undefined),
-  Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTags({
+    AccessDeniedException: () => Effect.succeed(undefined),
+    ResourceNotFoundException: () => Effect.succeed(undefined),
+  }),
 );
 
 const buildAttrs = (accountId: string, s: macie2.GetMacieSessionResponse) => ({
@@ -107,8 +106,7 @@ export const SessionProvider = () =>
         read: Effect.fn(function* ({ output }) {
           const session = yield* getSession;
           if (!session) return undefined;
-          const accountId =
-            output?.accountId ?? (yield* AWSEnvironment.current).accountId;
+          const accountId = output?.accountId ?? (yield* AWSEnvironment.current).accountId;
           const attrs = buildAttrs(accountId, session);
           // Macie has no session-level tags, so ownership cannot be verified
           // from the cloud. If we have no prior state (`output` absent) but a
@@ -144,8 +142,7 @@ export const SessionProvider = () =>
             const statusChanged = live.status !== desiredStatus;
             const freqChanged =
               news.findingPublishingFrequency !== undefined &&
-              news.findingPublishingFrequency !==
-                live.findingPublishingFrequency;
+              news.findingPublishingFrequency !== live.findingPublishingFrequency;
             if (statusChanged || freqChanged) {
               yield* macie2.updateMacieSession({
                 status: desiredStatus,
@@ -162,8 +159,10 @@ export const SessionProvider = () =>
 
         delete: Effect.fn(function* () {
           yield* macie2.disableMacie({}).pipe(
-            Effect.catchTag("AccessDeniedException", () => Effect.void),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.catchTags({
+              AccessDeniedException: () => Effect.void,
+              ResourceNotFoundException: () => Effect.void,
+            }),
           );
         }),
       };

@@ -33,10 +33,7 @@ export interface DescribePermissionSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssoAdmin.DescribePermissionSetRequest, "InstanceArn">,
-    ) => Effect.Effect<
-      ssoAdmin.DescribePermissionSetResponse,
-      ssoAdmin.DescribePermissionSetError
-    >
+    ) => Effect.Effect<ssoAdmin.DescribePermissionSetResponse, ssoAdmin.DescribePermissionSetError>
   >
 > {}
 export const DescribePermissionSet = Binding.Service<DescribePermissionSet>(

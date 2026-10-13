@@ -1,3 +1,4 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 /**
  * Standing prerequisites for the Floci-gated AWS suites (EKS, AMP scraper,
  * SageMaker HyperPod and endpoints, RDS proxy, ECS capacity providers, Flink,
@@ -12,12 +13,11 @@
  * `ALCHEMY_TEST_DEV=1`. The OAM sink lives in a second emulator account,
  * selected by a 12-digit access key (Floci core/common/AccountResolver.java).
  */
-import * as Floci from "../packages/floci/src/index.ts";
-import * as BunServices from "@effect/platform-bun/BunServices";
+import * as Floci from "@alchemy.run/floci";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as controltower from "@distilled.cloud/aws/controltower";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as eks from "@distilled.cloud/aws/eks";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -32,21 +32,21 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as ssm from "@distilled.cloud/aws/ssm";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { FetchHttpClient } from "effect/http";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/unstable/http";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 export interface FlociStandingFixtures {
   readonly env: Record<string, string>;
@@ -76,8 +76,7 @@ const LANDING_ZONE_VERSION = "3.3";
 const CONTROL_ARN = `arn:aws:controltower:${REGION}::control/AWS-GR_ENCRYPTED_VOLUMES`;
 // Floci accepts 3.0/4.0/5.0 for AWSControlTowerBaseline; 4.0 pairs with landing zone 3.3.
 const BASELINE_VERSION = "4.0";
-const FLINK_JAR_KEY =
-  "flink/flink-examples-streaming-1.20.0-TopSpeedWindowing.jar";
+const FLINK_JAR_KEY = "flink/flink-examples-streaming-1.20.0-TopSpeedWindowing.jar";
 const FLINK_JAR_URL =
   "https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming/1.20.0/flink-examples-streaming-1.20.0-TopSpeedWindowing.jar";
 const FLINK_JAR_SHA1 = "a9466bf8f379dce881d06236c752b84374abc54a";
@@ -129,11 +128,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
     "DBPROXY_SECRET_ARN",
   ],
   ecsAsg: ["TEST_ASG_ARN"],
-  flink: [
-    "AWS_TEST_FLINK_START",
-    "AWS_TEST_FLINK_JAR_BUCKET_ARN",
-    "AWS_TEST_FLINK_JAR_KEY",
-  ],
+  flink: ["AWS_TEST_FLINK_START", "AWS_TEST_FLINK_JAR_BUCKET_ARN", "AWS_TEST_FLINK_JAR_KEY"],
   domain: [
     "AWS_TEST_DOMAIN",
     "AWS_TEST_APIGATEWAY_DOMAIN",
@@ -155,10 +150,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
     "AWS_TEST_SES_VDM",
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
-  sagemakerEndpoint: [
-    "AWS_TEST_SAGEMAKER_ENDPOINT",
-    "AWS_TEST_SAGEMAKER_IMAGE",
-  ],
+  sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
   controlTower: [
     "AWS_TEST_CONTROLTOWER",
     "AWS_TEST_CONTROLTOWER_CONTROL",
@@ -177,19 +169,13 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
     "EKS/PodIdentityAssociation.test.ts",
   ],
   amp: ["AMP/Scraper.test.ts"],
-  hyperpod: [
-    "SageMaker/ClusterSchedulerConfig.test.ts",
-    "SageMaker/ComputeQuota.test.ts",
-  ],
+  hyperpod: ["SageMaker/ClusterSchedulerConfig.test.ts", "SageMaker/ComputeQuota.test.ts"],
   rdsProxy: [
     "RDS/DBProxy.test.ts",
     "RDS/DBProxyEndpoint.test.ts",
     "RDS/DBProxyTargetGroup.test.ts",
   ],
-  ecsAsg: [
-    "ECS/CapacityProvider.test.ts",
-    "ECS/CapacityProvider.smoke.test.ts",
-  ],
+  ecsAsg: ["ECS/CapacityProvider.test.ts", "ECS/CapacityProvider.smoke.test.ts"],
   flink: ["KinesisAnalyticsV2/ApplicationSnapshot.test.ts"],
   domain: [
     "ApiGateway/BasePathMapping.test.ts",
@@ -206,10 +192,7 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
     "SES/CustomVerificationEmailTemplate.test.ts",
   ],
   oam: ["OAM/Sink.test.ts"],
-  sagemakerEndpoint: [
-    "SageMaker/Endpoint.test.ts",
-    "SageMaker/EndpointBindings.test.ts",
-  ],
+  sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
 };
 
@@ -217,8 +200,7 @@ class FixtureError extends Data.TaggedError("FlociFixtureError")<{
   readonly message: string;
 }> {}
 
-const fixtureError = (message: string) =>
-  Effect.fail(new FixtureError({ message }));
+const fixtureError = (message: string) => Effect.fail(new FixtureError({ message }));
 
 const credentialsFor = (accessKeyId: string) =>
   Layer.succeed(
@@ -268,9 +250,7 @@ const runCleanups = (ledger: Array<Cleanup>) =>
       }
     }
     if (failures.length > 0) {
-      return yield* fixtureError(
-        `could not remove standing fixtures:\n${failures.join("\n")}`,
-      );
+      return yield* fixtureError(`could not remove standing fixtures:\n${failures.join("\n")}`);
     }
   });
 
@@ -281,9 +261,7 @@ const toPromise = <A>(
   Effect.runPromiseExit(effect.pipe(Effect.provide(fixtureLayer)), {
     signal,
   }).then((exit) =>
-    Exit.isSuccess(exit)
-      ? exit.value
-      : Promise.reject(new Error(Cause.pretty(exit.cause))),
+    Exit.isSuccess(exit) ? exit.value : Promise.reject(new Error(Cause.pretty(exit.cause))),
   );
 
 // ─── EC2 ─────────────────────────────────────────────────────────────────────
@@ -337,12 +315,7 @@ const ensureVpc = (ledger: Array<Cleanup>) =>
     return id;
   });
 
-const ensurePrivateSubnet = (
-  ledger: Array<Cleanup>,
-  vpcId: string,
-  index: number,
-  zone: string,
-) =>
+const ensurePrivateSubnet = (ledger: Array<Cleanup>, vpcId: string, index: number, zone: string) =>
   Effect.gen(function* () {
     const name = `${NAME}-private-${index + 1}`;
     const cidr = `10.250.${index + 1}.0/24`;
@@ -424,9 +397,7 @@ const ensureNetwork = (ledger: Array<Cleanup>) =>
 const trustPolicy = (service: string, actions: ReadonlyArray<string>) =>
   JSON.stringify({
     Version: "2012-10-17",
-    Statement: [
-      { Effect: "Allow", Principal: { Service: service }, Action: actions },
-    ],
+    Statement: [{ Effect: "Allow", Principal: { Service: service }, Action: actions }],
   });
 
 const deleteRole = (roleName: string) =>
@@ -512,17 +483,11 @@ const deleteEksCluster = Effect.gen(function* () {
     }),
   );
   if (remaining !== undefined) {
-    return yield* fixtureError(
-      `EKS cluster ${NAME} is still ${remaining.status} after deletion`,
-    );
+    return yield* fixtureError(`EKS cluster ${NAME} is still ${remaining.status} after deletion`);
   }
 });
 
-const ensureEksCluster = (
-  ledger: Array<Cleanup>,
-  network: Network,
-  roleArn: string,
-) =>
+const ensureEksCluster = (ledger: Array<Cleanup>, network: Network, roleArn: string) =>
   Effect.gen(function* () {
     const existing = yield* findEksCluster;
     const reusable =
@@ -627,9 +592,7 @@ const ensureHyperPodCluster = (
 ) =>
   Effect.gen(function* () {
     if (eksCluster.securityGroupId === undefined) {
-      return yield* fixtureError(
-        `EKS cluster ${NAME} reports no cluster security group`,
-      );
+      return yield* fixtureError(`EKS cluster ${NAME} reports no cluster security group`);
     }
     const existing = yield* findHyperPodCluster;
     yield* register(ledger, {
@@ -641,9 +604,7 @@ const ensureHyperPodCluster = (
       !eksCluster.created &&
       !["Failed", "Deleting", "RollingBack"].includes(existing.ClusterStatus);
     if (existing !== undefined && !reusable) {
-      yield* log(
-        `replacing HyperPod cluster ${NAME} (${existing.ClusterStatus})`,
-      );
+      yield* log(`replacing HyperPod cluster ${NAME} (${existing.ClusterStatus})`);
       yield* deleteHyperPodCluster;
     }
     if (!reusable) {
@@ -675,8 +636,7 @@ const ensureHyperPodCluster = (
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
         until: (cluster): boolean =>
-          cluster?.ClusterStatus !== "Creating" &&
-          cluster?.ClusterStatus !== "Updating",
+          cluster?.ClusterStatus !== "Creating" && cluster?.ClusterStatus !== "Updating",
         times: 40,
       }),
     );
@@ -694,9 +654,7 @@ const RDS_PROXY_SECRET = `${NAME}-rds-proxy`;
 
 const ensureRdsProxySecret = (ledger: Array<Cleanup>) =>
   Effect.gen(function* () {
-    const password = yield* Effect.sync(() =>
-      randomBytes(24).toString("base64url"),
-    );
+    const password = yield* Effect.sync(() => randomBytes(24).toString("base64url"));
     const arn = yield* secretsmanager
       .createSecret({
         Name: RDS_PROXY_SECRET,
@@ -772,17 +730,14 @@ const deleteAutoScalingGroup = Effect.gen(function* () {
 
 const deleteLaunchConfiguration = Effect.gen(function* () {
   if ((yield* findLaunchConfiguration) === undefined) return;
-  yield* autoscaling
-    .deleteLaunchConfiguration({ LaunchConfigurationName: ECS_ASG })
-    .pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "ResourceInUseFault" ||
-          error._tag === "ResourceContentionFault",
-        schedule: Schedule.spaced("5 seconds"),
-        times: 12,
-      }),
-    );
+  yield* autoscaling.deleteLaunchConfiguration({ LaunchConfigurationName: ECS_ASG }).pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "ResourceInUseFault" || error._tag === "ResourceContentionFault",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 12,
+    }),
+  );
 });
 
 const ensureEcsAutoScalingGroup = (ledger: Array<Cleanup>, network: Network) =>
@@ -842,28 +797,22 @@ const ensureEcsAutoScalingGroup = (ledger: Array<Cleanup>, network: Network) =>
 
 const VPC_LINK_NLB = `${NAME}-nlb`;
 
-const findLoadBalancer = elbv2
-  .describeLoadBalancers({ Names: [VPC_LINK_NLB] })
-  .pipe(
-    Effect.map((response) => response.LoadBalancers?.[0]),
-    Effect.catchTag("LoadBalancerNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+const findLoadBalancer = elbv2.describeLoadBalancers({ Names: [VPC_LINK_NLB] }).pipe(
+  Effect.map((response) => response.LoadBalancers?.[0]),
+  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+);
 
 const deleteLoadBalancer = Effect.gen(function* () {
   const existing = yield* findLoadBalancer;
   if (existing?.LoadBalancerArn === undefined) return;
-  yield* elbv2
-    .deleteLoadBalancer({ LoadBalancerArn: existing.LoadBalancerArn })
-    .pipe(
-      Effect.retry({
-        while: (error) => error._tag === "ResourceInUseException",
-        schedule: Schedule.spaced("5 seconds"),
-        times: 12,
-      }),
-      Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
-    );
+  yield* elbv2.deleteLoadBalancer({ LoadBalancerArn: existing.LoadBalancerArn }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "ResourceInUseException",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 12,
+    }),
+    Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
+  );
   const remaining = yield* findLoadBalancer.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
@@ -895,10 +844,7 @@ const ensureVpcLinkLoadBalancer = (ledger: Array<Cleanup>, network: Network) =>
         })
         .pipe(
           Effect.map((response) => response.LoadBalancers?.[0]),
-          Effect.catchTag(
-            "DuplicateLoadBalancerNameException",
-            () => findLoadBalancer,
-          ),
+          Effect.catchTag("DuplicateLoadBalancerNameException", () => findLoadBalancer),
         ));
     if (balancer?.LoadBalancerArn === undefined) {
       return yield* fixtureError(`load balancer ${VPC_LINK_NLB} has no ARN`);
@@ -937,17 +883,11 @@ const downloadFlinkJar = Effect.gen(function* () {
   const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
   const response = yield* client
     .get(FLINK_JAR_URL)
-    .pipe(
-      Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }),
-    );
+    .pipe(Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }));
   const bytes = new Uint8Array(yield* response.arrayBuffer);
-  const sha1 = yield* Effect.sync(() =>
-    createHash("sha1").update(bytes).digest("hex"),
-  );
+  const sha1 = yield* Effect.sync(() => createHash("sha1").update(bytes).digest("hex"));
   if (sha1 !== FLINK_JAR_SHA1) {
-    return yield* fixtureError(
-      `${FLINK_JAR_URL} has sha1 ${sha1}, expected ${FLINK_JAR_SHA1}`,
-    );
+    return yield* fixtureError(`${FLINK_JAR_URL} has sha1 ${sha1}, expected ${FLINK_JAR_SHA1}`);
   }
   return bytes;
 }).pipe(
@@ -962,9 +902,7 @@ const ensureFlinkJar = (ledger: Array<Cleanup>) =>
     const jar = yield* downloadFlinkJar;
     const exists = yield* s3.headBucket({ Bucket: FLINK_BUCKET }).pipe(
       Effect.as(true),
-      Effect.catchTag(["NotFound", "NoSuchBucket"], () =>
-        Effect.succeed(false),
-      ),
+      Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
     );
     yield* register(ledger, {
       label: `S3 bucket ${FLINK_BUCKET}`,
@@ -1028,10 +966,7 @@ const deleteZone = (zoneId: string, name: string) =>
   Effect.gen(function* () {
     const doomed = (yield* listRecordSets(zoneId)).filter(
       (record) =>
-        !(
-          trimDot(record.Name) === name &&
-          (record.Type === "SOA" || record.Type === "NS")
-        ),
+        !(trimDot(record.Name) === name && (record.Type === "SOA" || record.Type === "NS")),
     );
     if (doomed.length > 0) {
       yield* route53.changeResourceRecordSets({
@@ -1095,25 +1030,18 @@ const describeCertificate = (arn: string) =>
     .describeCertificate({ CertificateArn: arn })
     .pipe(Effect.map((response) => response.Certificate));
 
-const ensureZoneCertificate = (
-  ledger: Array<Cleanup>,
-  zoneId: string,
-  zone: string,
-) =>
+const ensureZoneCertificate = (ledger: Array<Cleanup>, zoneId: string, zone: string) =>
   Effect.gen(function* () {
     const wildcard = `*.${zone}`;
     const summaries = yield* acm.listCertificates.pages({}).pipe(
       Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.CertificateSummaryList ?? []),
-      ),
+      Effect.map((pages) => Array.from(pages).flatMap((page) => page.CertificateSummaryList ?? [])),
     );
     const existing = summaries.find(
       (summary) =>
         summary.DomainName === zone &&
         (summary.SubjectAlternativeNameSummaries ?? []).includes(wildcard) &&
-        (summary.Status === "ISSUED" ||
-          summary.Status === "PENDING_VALIDATION"),
+        (summary.Status === "ISSUED" || summary.Status === "PENDING_VALIDATION"),
     );
     const arn =
       existing?.CertificateArn ??
@@ -1126,9 +1054,7 @@ const ensureZoneCertificate = (
         })
         .pipe(Effect.map((response) => response.CertificateArn)));
     if (arn === undefined) {
-      return yield* fixtureError(
-        `RequestCertificate for ${zone} returned no ARN`,
-      );
+      return yield* fixtureError(`RequestCertificate for ${zone} returned no ARN`);
     }
     const certificateArn = arn;
     yield* register(ledger, {
@@ -1176,8 +1102,7 @@ const ensureZoneCertificate = (
     const issued = yield* describeCertificate(certificateArn).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
-        until: (certificate): boolean =>
-          certificate?.Status !== "PENDING_VALIDATION",
+        until: (certificate): boolean => certificate?.Status !== "PENDING_VALIDATION",
         times: 40,
       }),
     );
@@ -1192,8 +1117,7 @@ const ensureZoneCertificate = (
 // ─── SES ─────────────────────────────────────────────────────────────────────
 
 // v1 DeleteIdentity is idempotent for missing identities.
-const deleteSesIdentity = (identity: string) =>
-  ses.deleteIdentity({ Identity: identity });
+const deleteSesIdentity = (identity: string) => ses.deleteIdentity({ Identity: identity });
 
 /** A v1-verified email address (Floci verifies without the email round trip). */
 const ensureVerifiedAddress = (ledger: Array<Cleanup>, address: string) =>
@@ -1205,11 +1129,7 @@ const ensureVerifiedAddress = (ledger: Array<Cleanup>, address: string) =>
     yield* ses.verifyEmailIdentity({ EmailAddress: address });
   });
 
-const ensureDkimVerifiedDomain = (
-  ledger: Array<Cleanup>,
-  zoneId: string,
-  domain: string,
-) =>
+const ensureDkimVerifiedDomain = (ledger: Array<Cleanup>, zoneId: string, domain: string) =>
   Effect.gen(function* () {
     yield* register(ledger, {
       label: `SES identity ${domain}`,
@@ -1238,8 +1158,7 @@ const ensureDkimVerifiedDomain = (
     const verified = yield* getIdentity.pipe(
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
-        until: (observed): boolean =>
-          observed.VerifiedForSendingStatus === true,
+        until: (observed): boolean => observed.VerifiedForSendingStatus === true,
         times: 20,
       }),
     );
@@ -1322,20 +1241,14 @@ const ensureSesFixtures = (ledger: Array<Cleanup>) =>
 
 // ─── OAM (second account) ────────────────────────────────────────────────────
 
-const OAM_RESOURCE_TYPES = [
-  "AWS::CloudWatch::Metric",
-  "AWS::Logs::LogGroup",
-  "AWS::XRay::Trace",
-];
+const OAM_RESOURCE_TYPES = ["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup", "AWS::XRay::Trace"];
 
 const findSink = asSinkAccount(
   oam
     .listSinks({})
     .pipe(
       Effect.map(
-        (response) =>
-          response.Items.find((sink) => sink.Name === NAME) ??
-          response.Items[0],
+        (response) => response.Items.find((sink) => sink.Name === NAME) ?? response.Items[0],
       ),
     ),
 );
@@ -1412,11 +1325,11 @@ const buildSageMakerServeImage = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const result = yield* spawner
     .spawn(
-      ChildProcess.make(
-        "docker",
-        ["build", "--tag", SAGEMAKER_SERVE_IMAGE, context],
-        { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-      ),
+      ChildProcess.make("docker", ["build", "--tag", SAGEMAKER_SERVE_IMAGE, context], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
     )
     .pipe(
       Effect.flatMap((child) =>
@@ -1440,9 +1353,7 @@ const buildSageMakerServeImage = Effect.gen(function* () {
 }).pipe(
   Effect.catchTags({
     PlatformError: (error) =>
-      fixtureError(
-        `could not run docker build for ${SAGEMAKER_SERVE_IMAGE}: ${error.message}`,
-      ),
+      fixtureError(`could not run docker build for ${SAGEMAKER_SERVE_IMAGE}: ${error.message}`),
   }),
 );
 
@@ -1491,9 +1402,7 @@ const ensureLandingZone = (ledger: Array<Cleanup>) =>
         label: `landing zone ${arn}`,
         run: controltower
           .deleteLandingZone({ landingZoneIdentifier: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       });
       landingZoneArn = arn;
     } else {
@@ -1521,8 +1430,7 @@ const ensureLandingZone = (ledger: Array<Cleanup>) =>
 const matchesSuite = (file: string, suite: string) =>
   file.replaceAll("\\", "/").endsWith(`AWS/${suite}`);
 
-const allVarsSet = (group: Group) =>
-  groupVars[group].every((name) => !!process.env[name]);
+const allVarsSet = (group: Group) => groupVars[group].every((name) => !!process.env[name]);
 
 const selectGroups = (files: ReadonlyArray<string> | undefined) =>
   Effect.gen(function* () {
@@ -1530,9 +1438,7 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
     for (const group of Object.keys(groupVars) as Array<Group>) {
       const wanted =
         files === undefined ||
-        files.some((file) =>
-          groupSuites[group].some((suite) => matchesSuite(file, suite)),
-        );
+        files.some((file) => groupSuites[group].some((suite) => matchesSuite(file, suite)));
       if (!wanted) continue;
       if (allVarsSet(group)) {
         yield* log(`fixtures: ${group} uses the caller's env vars`);
@@ -1543,19 +1449,14 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
     return selected;
   });
 
-const provision = (
-  external: boolean,
-  groups: ReadonlySet<Group>,
-  ledger: Array<Cleanup>,
-) =>
+const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<Cleanup>) =>
   Effect.gen(function* () {
     yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
     yield* log(`fixtures: provisioning ${[...groups].join(", ")}`);
     const env: Record<string, string> = {};
     // Shared by every group that needs subnets; cleanups register once.
     const network = yield* Effect.cached(ensureNetwork(ledger));
-    const needsEksCluster =
-      groups.has("eksCluster") || groups.has("amp") || groups.has("hyperpod");
+    const needsEksCluster = groups.has("eksCluster") || groups.has("amp") || groups.has("hyperpod");
 
     if (needsEksCluster || groups.has("eksRole")) {
       const { subnetIds } = yield* network;
@@ -1573,11 +1474,7 @@ const provision = (
       }
 
       if (needsEksCluster) {
-        const cluster = yield* ensureEksCluster(
-          ledger,
-          yield* network,
-          clusterRoleArn,
-        );
+        const cluster = yield* ensureEksCluster(ledger, yield* network, clusterRoleArn);
         if (groups.has("eksCluster")) {
           env.AWS_TEST_EKS_NODE_ROLE_ARN = yield* ensureRole(
             ledger,
@@ -1620,13 +1517,12 @@ const provision = (
             ["sts:AssumeRole"],
             ["AmazonSageMakerClusterInstanceRolePolicy"],
           );
-          env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN =
-            yield* ensureHyperPodCluster(
-              ledger,
-              cluster,
-              subnetIds,
-              executionRoleArn,
-            );
+          env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN = yield* ensureHyperPodCluster(
+            ledger,
+            cluster,
+            subnetIds,
+            executionRoleArn,
+          );
         }
       }
     }
@@ -1648,10 +1544,7 @@ const provision = (
     }
 
     if (groups.has("ecsAsg")) {
-      env.TEST_ASG_ARN = yield* ensureEcsAutoScalingGroup(
-        ledger,
-        yield* network,
-      );
+      env.TEST_ASG_ARN = yield* ensureEcsAutoScalingGroup(ledger, yield* network);
     }
 
     if (groups.has("vpcLink")) {
@@ -1669,11 +1562,7 @@ const provision = (
 
     if (groups.has("domain")) {
       const zoneId = yield* ensurePublicZone(ledger, DOMAIN_ZONE);
-      const certificateArn = yield* ensureZoneCertificate(
-        ledger,
-        zoneId,
-        DOMAIN_ZONE,
-      );
+      const certificateArn = yield* ensureZoneCertificate(ledger, zoneId, DOMAIN_ZONE);
       env.AWS_TEST_DOMAIN = DOMAIN_ZONE;
       env.AWS_TEST_HOSTED_ZONE = DOMAIN_ZONE;
       env.AWS_TEST_APIGATEWAY_DOMAIN = `apigw-bpm.${DOMAIN_ZONE}`;
@@ -1723,15 +1612,12 @@ export const provisionFlociStandingFixtures = async (
 ): Promise<FlociStandingFixtures> => {
   const ledger: Array<Cleanup> = [];
   const groups = await toPromise(selectGroups(options.files));
-  const teardown = () =>
-    ledger.length === 0 ? Promise.resolve() : toPromise(runCleanups(ledger));
+  const teardown = () => (ledger.length === 0 ? Promise.resolve() : toPromise(runCleanups(ledger)));
   if (groups.size === 0) return { env: {}, teardown };
   const env = await toPromise(
     provision(external, groups, ledger).pipe(
       Effect.onError(() =>
-        runCleanups(ledger).pipe(
-          Effect.catch((error) => Console.error(String(error.message))),
-        ),
+        runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
       ),
     ),
     options.signal,

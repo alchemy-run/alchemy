@@ -1,10 +1,10 @@
-import { rewriteEmittedTypes, runPrismaCli } from "@/Prisma/ORM/internal.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import { rewriteEmittedTypes, runPrismaCli } from "@/Prisma/ORM/internal.ts";
 
 const describe = layer(NodeServices.layer);
 
@@ -12,9 +12,7 @@ const writeDts = (contents: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectory({
-      prefix: "alchemy-prisma-rewrite-",
-    });
+    const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-rewrite-" });
     const dtsPath = path.join(dir, "contract.d.ts");
     yield* fs.writeFileString(dtsPath, contents);
     return dtsPath;
@@ -27,9 +25,7 @@ describe("runPrismaCli", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const cwd = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-prisma-cli-",
-        });
+        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-cli-" });
         const result = yield* Effect.result(
           runPrismaCli(
             [
@@ -45,9 +41,7 @@ describe("runPrismaCli", (it) => {
         );
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
-          expect(JSON.stringify(result.failure)).not.toContain(
-            "private-test-password",
-          );
+          expect(JSON.stringify(result.failure)).not.toContain("private-test-password");
           expect(result.failure.message).toContain("prisma db verify failed");
         }
       }).pipe(Effect.scoped),

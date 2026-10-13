@@ -1,6 +1,6 @@
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
-import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
@@ -8,19 +8,13 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -28,8 +22,7 @@ import type { RegionID } from "../Region.ts";
 
 export type TableName = string;
 
-export type TableArn =
-  `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
+export type TableArn = `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
 
 export type TableRecord<Data> = Omit<lambda.DynamoDBRecord, "dynamodb"> & {
   dynamodb: Omit<lambda.StreamRecord, "NewImage" | "OldImage"> & {
@@ -218,6 +211,8 @@ export interface Table extends Resource<
     tableName: TableName;
     /** The ARN of the table. */
     tableArn: TableArn;
+    /** The AWS region the table lives in. */
+    region: RegionID;
     /** The partition (hash) key attribute name. */
     partitionKey: string;
     /** The sort (range) key attribute name, if defined. */
@@ -227,17 +222,11 @@ export interface Table extends Resource<
     /** The current stream configuration (when streams are enabled). */
     streamSpecification: DynamoDB.StreamSpecification | undefined;
     /** Descriptions of the table's local secondary indexes. */
-    localSecondaryIndexes:
-      | DynamoDB.LocalSecondaryIndexDescription[]
-      | undefined;
+    localSecondaryIndexes: DynamoDB.LocalSecondaryIndexDescription[] | undefined;
     /** Descriptions of the table's global secondary indexes. */
-    globalSecondaryIndexes:
-      | DynamoDB.GlobalSecondaryIndexDescription[]
-      | undefined;
+    globalSecondaryIndexes: DynamoDB.GlobalSecondaryIndexDescription[] | undefined;
     /** The point-in-time recovery status of the table. */
-    pointInTimeRecoveryDescription:
-      | DynamoDB.PointInTimeRecoveryDescription
-      | undefined;
+    pointInTimeRecoveryDescription: DynamoDB.PointInTimeRecoveryDescription | undefined;
     /** The tags attached to the table. */
     tags: Record<string, string> | undefined;
   },
@@ -368,6 +357,39 @@ export interface Table extends Resource<
  * };
  * ```
  *
+ * **Example:** Read and write items from a Cloudflare Worker
+ *
+ * The `*Http` layers also run on a Cloudflare Worker. Alchemy creates an
+ * IAM user, access key, and least-privilege role for the Worker, binds the
+ * key onto it, and signs each request with the assumed role in the table's
+ * region. The Stack needs both provider sets:
+ * `Layer.mergeAll(Cloudflare.providers(), AWS.providers())`.
+ * ```typescript
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const table = yield* AWS.DynamoDB.Table("Links", {
+ *       partitionKey: "id",
+ *       attributes: { id: "S" },
+ *     });
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
+ *     const putItem = yield* AWS.DynamoDB.PutItem(table);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* putItem({ Item: { id: { S: "a" }, url: { S: "https://alchemy.run" } } });
+ *         const { Item } = yield* getItem({ Key: { id: { S: "a" } } });
+ *         return yield* HttpServerResponse.json(Item);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp),
+ *     ),
+ *   ),
+ * ) {}
+ * ```
+ *
  * ### Table Features
  * **Example:** Resource Policy
  * ```typescript
@@ -435,10 +457,7 @@ export const TableProvider = () =>
   Provider.effect(
     Table,
     Effect.gen(function* () {
-      const createTableName = (
-        id: string,
-        props: Input.ResolveProps<TableProps>,
-      ) =>
+      const createTableName = (id: string, props: Input.ResolveProps<TableProps>) =>
         Effect.gen(function* () {
           return (
             props.tableName ??
@@ -490,9 +509,7 @@ export const TableProvider = () =>
       // shape ({ IndexName, KeySchema, ... }). Tolerate it when converting
       // `olds` so upgrading alchemy never plans a spurious table
       // replacement over a shape-only difference.
-      const isLegacyWireIndex = (
-        index: unknown,
-      ): index is DynamoDB.GlobalSecondaryIndex =>
+      const isLegacyWireIndex = (index: unknown): index is DynamoDB.GlobalSecondaryIndex =>
         typeof index === "object" && index !== null && "KeySchema" in index;
 
       const toWireGlobalSecondaryIndex = (
@@ -534,13 +551,9 @@ export const TableProvider = () =>
       ) =>
         indexes === undefined || indexes.length === 0
           ? undefined
-          : indexes.map((index) =>
-              toWireLocalSecondaryIndex(tablePartitionKey, index),
-            );
+          : indexes.map((index) => toWireLocalSecondaryIndex(tablePartitionKey, index));
 
-      const toAttributeDefinitions = (
-        attrs: Record<string, ScalarAttributeType>,
-      ) =>
+      const toAttributeDefinitions = (attrs: Record<string, ScalarAttributeType>) =>
         Object.entries(attrs)
           .map(([name, type]) => ({
             AttributeName: name,
@@ -552,14 +565,9 @@ export const TableProvider = () =>
         // The engine has cleared us via `read` (foreign-tagged tables are
         // surfaced as `Unowned`). On a race between read and create, just
         // describe the existing table and continue.
-        dynamodb
-          .describeTable({ TableName: tableName })
-          .pipe(Effect.map((r) => r.Table!));
+        dynamodb.describeTable({ TableName: tableName }).pipe(Effect.map((r) => r.Table!));
 
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           ...(yield* createInternalTags(id)),
           ...tags,
@@ -582,21 +590,14 @@ export const TableProvider = () =>
         Effect.gen(function* () {
           const requested = bindings
             .flatMap((binding) =>
-              (binding as { data?: TableBinding }).data?.streamSpecification
-                ?.StreamEnabled === true
+              (binding as { data?: TableBinding }).data?.streamSpecification?.StreamEnabled === true
                 ? [
                     normalizeStreamSpecification(
-                      (binding as { data?: TableBinding }).data
-                        ?.streamSpecification,
+                      (binding as { data?: TableBinding }).data?.streamSpecification,
                     ),
                   ]
-                : (binding as TableBinding).streamSpecification
-                      ?.StreamEnabled === true
-                  ? [
-                      normalizeStreamSpecification(
-                        (binding as TableBinding).streamSpecification,
-                      ),
-                    ]
+                : (binding as TableBinding).streamSpecification?.StreamEnabled === true
+                  ? [normalizeStreamSpecification((binding as TableBinding).streamSpecification)]
                   : [],
             )
             .filter((spec) => spec !== undefined);
@@ -607,16 +608,14 @@ export const TableProvider = () =>
 
           const [first, ...rest] = requested;
           if (!first?.StreamViewType) {
-            return yield* Effect.fail(new MissingStreamViewType());
+            return yield* new MissingStreamViewType();
           }
 
           for (const spec of rest) {
             if (spec.StreamViewType !== first.StreamViewType) {
-              return yield* Effect.fail(
-                new ConflictingStreamViewTypes({
-                  requested: requested.map((item) => item.StreamViewType),
-                }),
-              );
+              return yield* new ConflictingStreamViewTypes({
+                requested: requested.map((item) => item.StreamViewType),
+              });
             }
           }
 
@@ -656,13 +655,10 @@ export const TableProvider = () =>
         Schedule.recurs(90),
       ]);
 
-      const formatPollingElapsed = (elapsedSeconds: number) =>
-        `${elapsedSeconds}s elapsed`;
+      const formatPollingElapsed = (elapsedSeconds: number) => `${elapsedSeconds}s elapsed`;
 
       const formatGlobalSecondaryIndexStatuses = (
-        indexes:
-          | readonly DynamoDB.GlobalSecondaryIndexDescription[]
-          | undefined,
+        indexes: readonly DynamoDB.GlobalSecondaryIndexDescription[] | undefined,
       ) =>
         JSON.stringify(
           (indexes ?? []).map((index) => ({
@@ -684,10 +680,7 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(100),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
             }),
           );
 
@@ -705,10 +698,7 @@ export const TableProvider = () =>
               while: (e) =>
                 e._tag === "ContinuousBackupsUnavailableException" ||
                 isRetryableControlPlaneError(e),
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
             }),
           );
 
@@ -727,40 +717,27 @@ export const TableProvider = () =>
       const readTableResourcePolicy = (tableArn: string) =>
         dynamodb.getResourcePolicy({ ResourceArn: tableArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag("PolicyNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
           Effect.retry({
             while: isRetryableControlPlaneError,
-            schedule: Schedule.max([
-              Schedule.exponential(250),
-              Schedule.recurs(15),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
           }),
         );
 
       const putTableResourcePolicy = (tableArn: string, policy: string) =>
-        dynamodb
-          .putResourcePolicy({ ResourceArn: tableArn, Policy: policy })
-          .pipe(
-            Effect.retry({
-              while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(15),
-              ]),
-            }),
-          );
+        dynamodb.putResourcePolicy({ ResourceArn: tableArn, Policy: policy }).pipe(
+          Effect.retry({
+            while: isRetryableControlPlaneError,
+            schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
+          }),
+        );
 
       const deleteTableResourcePolicy = (tableArn: string) =>
         dynamodb.deleteResourcePolicy({ ResourceArn: tableArn }).pipe(
           Effect.catchTag("PolicyNotFoundException", () => Effect.void),
           Effect.retry({
             while: isRetryableControlPlaneError,
-            schedule: Schedule.max([
-              Schedule.exponential(250),
-              Schedule.recurs(15),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
           }),
         );
 
@@ -792,14 +769,13 @@ export const TableProvider = () =>
           });
           const destinations = response.KinesisDataStreamDestinations ?? [];
           if (destinations.some(isKinesisDestinationTransitioning)) {
-            return yield* Effect.fail(new KinesisDestinationNotSettled());
+            return yield* new KinesisDestinationNotSettled();
           }
           return destinations;
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "KinesisDestinationNotSettled" ||
-              isRetryableControlPlaneError(error),
+              error._tag === "KinesisDestinationNotSettled" || isRetryableControlPlaneError(error),
             schedule: waitForKinesisDestinationsConvergence.pipe(
               Schedule.tap(({ attempt }) => {
                 elapsedSeconds = (attempt + 1) * 5;
@@ -812,10 +788,7 @@ export const TableProvider = () =>
         );
       };
 
-      const disableKinesisDestination = (
-        tableName: string,
-        streamArn: string,
-      ) =>
+      const disableKinesisDestination = (tableName: string, streamArn: string) =>
         dynamodb
           .disableKinesisStreamingDestination({
             TableName: tableName,
@@ -824,10 +797,7 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
             }),
           );
 
@@ -850,10 +820,7 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
             }),
           );
 
@@ -873,10 +840,7 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
             }),
           );
 
@@ -896,18 +860,14 @@ export const TableProvider = () =>
           });
           const status = response.ContributorInsightsStatus ?? "DISABLED";
           if (status === "ENABLING" || status === "DISABLING") {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
           return status;
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "ContributorInsightsNotSettled" ||
-              isRetryableControlPlaneError(error),
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(45),
-            ]).pipe(
+              error._tag === "ContributorInsightsNotSettled" || isRetryableControlPlaneError(error),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(45)]).pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
                   `DynamoDB Table provider: waiting for Contributor Insights on ${tableName} to settle (${formatPollingElapsed((attempt + 1) * 2)})`,
@@ -954,17 +914,13 @@ export const TableProvider = () =>
         Effect.gen(function* () {
           const remaining = yield* listContributorInsightsRules(tableName);
           if (remaining.length > 0) {
-            return yield* Effect.fail(new ContributorInsightsNotSettled());
+            return yield* new ContributorInsightsNotSettled();
           }
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "ContributorInsightsNotSettled" ||
-              isRetryableControlPlaneError(error),
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(20),
-            ]).pipe(
+              error._tag === "ContributorInsightsNotSettled" || isRetryableControlPlaneError(error),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]).pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
                   `DynamoDB Table provider: waiting for Contributor Insights rules of ${tableName} to be cleaned up (${formatPollingElapsed((attempt + 1) * 2)})`,
@@ -983,10 +939,7 @@ export const TableProvider = () =>
           ),
         );
 
-      const updateTableContributorInsights = (
-        tableName: string,
-        enabled: boolean,
-      ) =>
+      const updateTableContributorInsights = (tableName: string, enabled: boolean) =>
         dynamodb
           .updateContributorInsights({
             TableName: tableName,
@@ -995,10 +948,7 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
             }),
           );
 
@@ -1017,7 +967,7 @@ export const TableProvider = () =>
           });
           if (response.Table?.TableStatus !== "ACTIVE") {
             progressMessage = `DynamoDB Table provider: table ${tableName} not active yet (status=${response.Table?.TableStatus ?? "undefined"} gsiStatuses=${formatGlobalSecondaryIndexStatuses(response.Table?.GlobalSecondaryIndexes)})`;
-            return yield* Effect.fail(new TableNotActive());
+            return yield* new TableNotActive();
           }
           yield* session.note(
             `DynamoDB Table provider: table ${tableName} is ACTIVE (${formatPollingElapsed(elapsedSeconds)})`,
@@ -1026,14 +976,11 @@ export const TableProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "TableNotActive" ||
-              isRetryableControlPlaneError(error),
+              error._tag === "TableNotActive" || isRetryableControlPlaneError(error),
             schedule: waitForTableActivationConvergence.pipe(
               Schedule.tap(({ attempt }) => {
                 elapsedSeconds = attempt * 10;
-                return session.note(
-                  `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
-                );
+                return session.note(`${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`);
               }),
             ),
           }),
@@ -1063,12 +1010,9 @@ export const TableProvider = () =>
             (index) => index.IndexStatus === "ACTIVE",
           );
 
-          if (
-            JSON.stringify(actualIndexNames) !== JSON.stringify(expected) ||
-            !allActive
-          ) {
+          if (JSON.stringify(actualIndexNames) !== JSON.stringify(expected) || !allActive) {
             progressMessage = `DynamoDB Table provider: GSIs for ${tableName} not stable yet (expected=${JSON.stringify(expected)} actual=${JSON.stringify(actualIndexNames)} statuses=${JSON.stringify((table?.GlobalSecondaryIndexes ?? []).map((index) => ({ name: index.IndexName, status: index.IndexStatus })))} tableStatus=${table?.TableStatus ?? "undefined"})`;
-            return yield* Effect.fail(new TableIndexesNotStable());
+            return yield* new TableIndexesNotStable();
           }
 
           yield* session.note(
@@ -1078,14 +1022,11 @@ export const TableProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "TableIndexesNotStable" ||
-              isRetryableControlPlaneError(error),
+              error._tag === "TableIndexesNotStable" || isRetryableControlPlaneError(error),
             schedule: waitForGlobalSecondaryIndexesConvergence.pipe(
               Schedule.tap(({ attempt }) => {
                 elapsedSeconds = attempt * 10;
-                return session.note(
-                  `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
-                );
+                return session.note(`${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`);
               }),
             ),
           }),
@@ -1106,23 +1047,20 @@ export const TableProvider = () =>
             TableName: tableName,
           });
           progressMessage = `DynamoDB Table provider: table ${tableName} still deleting (status=${response.Table?.TableStatus ?? "undefined"})`;
-          return yield* Effect.fail(new TableStillDeleting());
+          return yield* new TableStillDeleting();
         }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => {
-            return session.note(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            session.note(
               `DynamoDB Table provider: table ${tableName} deletion confirmed (${formatPollingElapsed(elapsedSeconds)})`,
-            );
-          }),
+            ),
+          ),
           Effect.retry({
             while: (error) =>
-              error._tag === "TableStillDeleting" ||
-              isRetryableControlPlaneError(error),
+              error._tag === "TableStillDeleting" || isRetryableControlPlaneError(error),
             schedule: waitForDeletionConvergence.pipe(
               Schedule.tap(({ attempt }) => {
                 elapsedSeconds = attempt;
-                return session.note(
-                  `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
-                );
+                return session.note(`${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`);
               }),
             ),
           }),
@@ -1165,11 +1103,7 @@ export const TableProvider = () =>
             `DynamoDB Table provider: deleting GSIs before deleting table ${tableName} (${indexNames.join(", ")})`,
           );
 
-          yield* waitForGlobalSecondaryIndexesStable(
-            session,
-            tableName,
-            indexNames,
-          );
+          yield* waitForGlobalSecondaryIndexesStable(session, tableName, indexNames);
 
           const remainingIndexNames = [...indexNames];
           for (const indexName of indexNames) {
@@ -1228,16 +1162,9 @@ export const TableProvider = () =>
                 }),
               );
 
-            remainingIndexNames.splice(
-              remainingIndexNames.indexOf(indexName),
-              1,
-            );
+            remainingIndexNames.splice(remainingIndexNames.indexOf(indexName), 1);
 
-            yield* waitForGlobalSecondaryIndexesStable(
-              session,
-              tableName,
-              remainingIndexNames,
-            );
+            yield* waitForGlobalSecondaryIndexesStable(session, tableName, remainingIndexNames);
           }
         });
 
@@ -1262,67 +1189,52 @@ export const TableProvider = () =>
             .pipe(
               Effect.retry({
                 while: isRetryableReadError,
-                schedule: Schedule.max([
-                  Schedule.exponential(250),
-                  Schedule.recurs(30),
-                ]),
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
               }),
             );
           const table = response.Table;
           if (!table?.TableArn) {
-            return yield* Effect.fail(
-              new Error(`Table ${tableName} not found`),
-            );
+            return yield* Effect.fail(new Error(`Table ${tableName} not found`));
           }
 
-          const [tagsResult, continuousBackupsResult, ttlResult] =
-            yield* Effect.all([
-              dynamodb
-                .listTagsOfResource({
-                  ResourceArn: table.TableArn,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: isRetryableReadError,
-                    schedule: Schedule.max([
-                      Schedule.exponential(250),
-                      Schedule.recurs(30),
-                    ]),
-                  }),
+          const [tagsResult, continuousBackupsResult, ttlResult] = yield* Effect.all([
+            dynamodb
+              .listTagsOfResource({
+                ResourceArn: table.TableArn,
+              })
+              .pipe(
+                Effect.retry({
+                  while: isRetryableReadError,
+                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+                }),
+              ),
+            dynamodb
+              .describeContinuousBackups({
+                TableName: tableName,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "InternalServerError",
+                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+                }),
+                Effect.catchTag("TableNotFoundException", () =>
+                  Effect.succeed({ ContinuousBackupsDescription: undefined }),
                 ),
-              dynamodb
-                .describeContinuousBackups({
-                  TableName: tableName,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: (e) => e._tag === "InternalServerError",
-                    schedule: Schedule.max([
-                      Schedule.exponential(250),
-                      Schedule.recurs(30),
-                    ]),
-                  }),
-                  Effect.catchTag("TableNotFoundException", () =>
-                    Effect.succeed({ ContinuousBackupsDescription: undefined }),
-                  ),
+              ),
+            dynamodb
+              .describeTimeToLive({
+                TableName: tableName,
+              })
+              .pipe(
+                Effect.retry({
+                  while: isRetryableReadError,
+                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+                }),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed({ TimeToLiveDescription: undefined }),
                 ),
-              dynamodb
-                .describeTimeToLive({
-                  TableName: tableName,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: isRetryableReadError,
-                    schedule: Schedule.max([
-                      Schedule.exponential(250),
-                      Schedule.recurs(30),
-                    ]),
-                  }),
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed({ TimeToLiveDescription: undefined }),
-                  ),
-                ),
-            ]);
+              ),
+          ]);
 
           return {
             table,
@@ -1330,31 +1242,23 @@ export const TableProvider = () =>
               (tagsResult.Tags ?? []).map((tag) => [tag.Key!, tag.Value!]),
             ) as Record<string, string>,
             pointInTimeRecoveryDescription:
-              continuousBackupsResult.ContinuousBackupsDescription
-                ?.PointInTimeRecoveryDescription,
+              continuousBackupsResult.ContinuousBackupsDescription?.PointInTimeRecoveryDescription,
             timeToLiveDescription: ttlResult.TimeToLiveDescription,
           };
-        }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const toAttrs = (state: {
         table: DynamoDB.TableDescription;
         tags: Record<string, string>;
-        pointInTimeRecoveryDescription:
-          | DynamoDB.PointInTimeRecoveryDescription
-          | undefined;
+        pointInTimeRecoveryDescription: DynamoDB.PointInTimeRecoveryDescription | undefined;
       }) => ({
         tableId: state.table.TableId!,
         tableName: state.table.TableName!,
         tableArn: state.table.TableArn! as TableArn,
+        region: state.table.TableArn!.split(":")[3] as RegionID,
         partitionKey:
-          state.table.KeySchema?.find((key) => key.KeyType === "HASH")
-            ?.AttributeName ?? "",
-        sortKey: state.table.KeySchema?.find((key) => key.KeyType === "RANGE")
-          ?.AttributeName,
+          state.table.KeySchema?.find((key) => key.KeyType === "HASH")?.AttributeName ?? "",
+        sortKey: state.table.KeySchema?.find((key) => key.KeyType === "RANGE")?.AttributeName,
         latestStreamArn: state.table.LatestStreamArn,
         streamSpecification: state.table.StreamSpecification,
         localSecondaryIndexes: state.table.LocalSecondaryIndexes,
@@ -1363,12 +1267,11 @@ export const TableProvider = () =>
         tags: state.tags,
       });
 
-      const indexesByName = <T extends { IndexName?: string }>(
-        indexes: readonly T[] | undefined,
-      ) =>
-        Object.fromEntries(
-          (indexes ?? []).map((index) => [index.IndexName!, index]),
-        ) as Record<string, T>;
+      const indexesByName = <T extends { IndexName?: string }>(indexes: readonly T[] | undefined) =>
+        Object.fromEntries((indexes ?? []).map((index) => [index.IndexName!, index])) as Record<
+          string,
+          T
+        >;
 
       // KeySchema order is significant with multi-attribute keys: partition
       // attributes are hashed together in declaration order and sort key
@@ -1377,9 +1280,7 @@ export const TableProvider = () =>
       // elements regardless of how the request interleaved them); the relative
       // order within each group must be preserved — reordering attributes
       // defines a different index.
-      const normalizeKeySchema = (
-        keySchema: readonly DynamoDB.KeySchemaElement[] | undefined,
-      ) => {
+      const normalizeKeySchema = (keySchema: readonly DynamoDB.KeySchemaElement[] | undefined) => {
         const elements = (keySchema ?? []).map((element) => ({
           AttributeName: element.AttributeName,
           KeyType: element.KeyType,
@@ -1390,9 +1291,7 @@ export const TableProvider = () =>
         ];
       };
 
-      const normalizeProjection = (
-        projection: DynamoDB.Projection | undefined,
-      ) => ({
+      const normalizeProjection = (projection: DynamoDB.Projection | undefined) => ({
         ...projection,
         NonKeyAttributes: [...(projection?.NonKeyAttributes ?? [])].sort(),
       });
@@ -1414,15 +1313,9 @@ export const TableProvider = () =>
       // `ProvisionedThroughput: undefined` (which AWS rejects with
       // ValidationException).
       const normalizeProvisioned = (
-        pt:
-          | { ReadCapacityUnits?: number; WriteCapacityUnits?: number }
-          | undefined,
+        pt: { ReadCapacityUnits?: number; WriteCapacityUnits?: number } | undefined,
       ) => {
-        if (
-          !pt ||
-          ((pt.ReadCapacityUnits ?? 0) === 0 &&
-            (pt.WriteCapacityUnits ?? 0) === 0)
-        ) {
+        if (!pt || ((pt.ReadCapacityUnits ?? 0) === 0 && (pt.WriteCapacityUnits ?? 0) === 0)) {
           return undefined;
         }
         return {
@@ -1439,11 +1332,7 @@ export const TableProvider = () =>
             }
           | undefined,
       ) => {
-        if (
-          !od ||
-          ((od.MaxReadRequestUnits ?? -1) < 0 &&
-            (od.MaxWriteRequestUnits ?? -1) < 0)
-        ) {
+        if (!od || ((od.MaxReadRequestUnits ?? -1) < 0 && (od.MaxWriteRequestUnits ?? -1) < 0)) {
           return undefined;
         }
         return {
@@ -1453,15 +1342,9 @@ export const TableProvider = () =>
       };
 
       const normalizeWarm = (
-        wt:
-          | { ReadUnitsPerSecond?: number; WriteUnitsPerSecond?: number }
-          | undefined,
+        wt: { ReadUnitsPerSecond?: number; WriteUnitsPerSecond?: number } | undefined,
       ) => {
-        if (
-          !wt ||
-          ((wt.ReadUnitsPerSecond ?? 0) === 0 &&
-            (wt.WriteUnitsPerSecond ?? 0) === 0)
-        ) {
+        if (!wt || ((wt.ReadUnitsPerSecond ?? 0) === 0 && (wt.WriteUnitsPerSecond ?? 0) === 0)) {
           return undefined;
         }
         return {
@@ -1502,12 +1385,8 @@ export const TableProvider = () =>
           // updates against an undefined desired value.
           const provDiff =
             newIndex.ProvisionedThroughput !== undefined &&
-            JSON.stringify(
-              normalizeProvisioned(oldIndex.ProvisionedThroughput),
-            ) !==
-              JSON.stringify(
-                normalizeProvisioned(newIndex.ProvisionedThroughput),
-              );
+            JSON.stringify(normalizeProvisioned(oldIndex.ProvisionedThroughput)) !==
+              JSON.stringify(normalizeProvisioned(newIndex.ProvisionedThroughput));
           const odDiff =
             newIndex.OnDemandThroughput !== undefined &&
             JSON.stringify(normalizeOnDemand(oldIndex.OnDemandThroughput)) !==
@@ -1550,7 +1429,7 @@ export const TableProvider = () =>
       };
 
       return Table.Provider.of({
-        stables: ["tableName", "tableId", "tableArn"],
+        stables: ["tableName", "tableId", "tableArn", "region"],
         // Enumerate every table in the ambient account/region. `listTables`
         // returns only names, so each is hydrated to the full Attributes shape
         // via the same multi-API read helper (`readTableState`) `read` uses.
@@ -1572,8 +1451,7 @@ export const TableProvider = () =>
                   // converge so a table that *is* ours still hydrates fully.
                   Effect.retry({
                     while: (e) =>
-                      e._tag === "ThrottlingException" ||
-                      e._tag === "ValidationException",
+                      e._tag === "ThrottlingException" || e._tag === "ValidationException",
                     schedule: Schedule.max([
                       Schedule.exponential(250).pipe(Schedule.jittered),
                       Schedule.recurs(12),
@@ -1605,25 +1483,18 @@ export const TableProvider = () =>
                 ),
               { concurrency: 8 },
             );
-            return states
-              .filter((state) => state !== undefined)
-              .map((state) => toAttrs(state));
+            return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const tableName =
-            output?.tableName ??
-            (olds ? yield* createTableName(id, olds) : undefined);
+            output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
           const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           if (!state) return undefined;
           const attrs = toAttrs(state);
-          return (yield* hasAlchemyTags(id, state.tags as any))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, state.tags as any)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -1645,10 +1516,7 @@ export const TableProvider = () =>
             news.tableName !== undefined
               ? ({ action: "replace", deleteFirst: true } as const)
               : ({ action: "replace" } as const);
-          if (
-            olds.partitionKey !== news.partitionKey ||
-            olds.sortKey !== news.sortKey
-          ) {
+          if (olds.partitionKey !== news.partitionKey || olds.sortKey !== news.sortKey) {
             return replace;
           }
           for (const [name, type] of Object.entries(olds.attributes ?? {})) {
@@ -1663,17 +1531,11 @@ export const TableProvider = () =>
             havePropsChanged(
               {
                 localSecondaryIndexes:
-                  toWireLocalSecondaryIndexes(
-                    olds.partitionKey,
-                    olds.localSecondaryIndexes,
-                  ) ?? [],
+                  toWireLocalSecondaryIndexes(olds.partitionKey, olds.localSecondaryIndexes) ?? [],
               },
               {
                 localSecondaryIndexes:
-                  toWireLocalSecondaryIndexes(
-                    news.partitionKey,
-                    news.localSecondaryIndexes,
-                  ) ?? [],
+                  toWireLocalSecondaryIndexes(news.partitionKey, news.localSecondaryIndexes) ?? [],
               },
             )
           ) {
@@ -1691,18 +1553,10 @@ export const TableProvider = () =>
           // long-running jobs, deferred as effectful functions).
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          output,
-          news,
-          session,
-          bindings,
-        }) {
-          const tableName =
-            output?.tableName ?? (yield* createTableName(id, news));
+        reconcile: Effect.fn(function* ({ id, output, news, session, bindings }) {
+          const tableName = output?.tableName ?? (yield* createTableName(id, news));
           const desiredTags = yield* createTags(id, news.tags);
-          const desiredStreamSpecification =
-            yield* resolveStreamSpecification(bindings);
+          const desiredStreamSpecification = yield* resolveStreamSpecification(bindings);
 
           // Observe cloud state. `output` is treated as a cache for the table
           // name; the table's actual existence and configuration are fetched
@@ -1724,9 +1578,7 @@ export const TableProvider = () =>
                   news.partitionKey,
                   news.localSecondaryIndexes,
                 ),
-                GlobalSecondaryIndexes: toWireGlobalSecondaryIndexes(
-                  news.globalSecondaryIndexes,
-                ),
+                GlobalSecondaryIndexes: toWireGlobalSecondaryIndexes(news.globalSecondaryIndexes),
                 BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
                 SSESpecification: news.sseSpecification,
                 StreamSpecification: desiredStreamSpecification,
@@ -1739,15 +1591,12 @@ export const TableProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) =>
-                    e._tag === "LimitExceededException" ||
-                    e._tag === "InternalServerError",
+                    e._tag === "LimitExceededException" || e._tag === "InternalServerError",
                   schedule: Schedule.exponential(100),
                 }),
                 // A peer reconciler created the table between our observe and
                 // create; describe it and continue with the sync path.
-                Effect.catchTag("ResourceInUseException", () =>
-                  adoptExistingTable(tableName),
-                ),
+                Effect.catchTag("ResourceInUseException", () => adoptExistingTable(tableName)),
               );
 
             yield* waitForTableActive(session, tableName);
@@ -1756,16 +1605,13 @@ export const TableProvider = () =>
               yield* waitForGlobalSecondaryIndexesStable(
                 session,
                 tableName,
-                news.globalSecondaryIndexes?.map((index) => index.indexName) ??
-                  [],
+                news.globalSecondaryIndexes?.map((index) => index.indexName) ?? [],
               );
             }
 
             state = yield* readTableState(tableName);
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`Failed to read created table ${tableName}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to read created table ${tableName}`));
             }
           }
 
@@ -1779,8 +1625,7 @@ export const TableProvider = () =>
           const streamViewTypeChanged =
             currentStreamSpecification?.StreamEnabled === true &&
             desiredStreamSpecification?.StreamEnabled === true &&
-            currentStreamSpecification.StreamViewType !==
-              desiredStreamSpecification.StreamViewType;
+            currentStreamSpecification.StreamViewType !== desiredStreamSpecification.StreamViewType;
 
           if (streamViewTypeChanged) {
             yield* dynamodb.updateTable({
@@ -1796,9 +1641,7 @@ export const TableProvider = () =>
               { streamSpecification: desiredStreamSpecification },
             )
           ) {
-            yield* session.note(
-              `Table ${tableName}: updating stream configuration`,
-            );
+            yield* session.note(`Table ${tableName}: updating stream configuration`);
             yield* dynamodb.updateTable({
               TableName: tableName,
               StreamSpecification: desiredStreamSpecification ?? {
@@ -1813,13 +1656,12 @@ export const TableProvider = () =>
           // updateTable call. The diff function only reads fields shared
           // between `GlobalSecondaryIndex` and `GlobalSecondaryIndexDescription`
           // (IndexName, KeySchema, Projection, throughputs), so the cast is safe.
-          const { updates: globalSecondaryIndexUpdates } =
-            diffGlobalSecondaryIndexes(
-              state.table.GlobalSecondaryIndexes as
-                | readonly DynamoDB.GlobalSecondaryIndex[]
-                | undefined,
-              toWireGlobalSecondaryIndexes(news.globalSecondaryIndexes),
-            );
+          const { updates: globalSecondaryIndexUpdates } = diffGlobalSecondaryIndexes(
+            state.table.GlobalSecondaryIndexes as
+              | readonly DynamoDB.GlobalSecondaryIndex[]
+              | undefined,
+            toWireGlobalSecondaryIndexes(news.globalSecondaryIndexes),
+          );
 
           for (const globalSecondaryIndexUpdate of globalSecondaryIndexUpdates) {
             const action = globalSecondaryIndexUpdate.Create
@@ -1827,9 +1669,7 @@ export const TableProvider = () =>
               : globalSecondaryIndexUpdate.Update
                 ? `update ${globalSecondaryIndexUpdate.Update.IndexName}`
                 : `delete ${globalSecondaryIndexUpdate.Delete!.IndexName}`;
-            yield* session.note(
-              `Table ${tableName}: applying GSI update (${action})`,
-            );
+            yield* session.note(`Table ${tableName}: applying GSI update (${action})`);
             yield* dynamodb.updateTable({
               TableName: tableName,
               AttributeDefinitions: toAttributeDefinitions(news.attributes),
@@ -1840,16 +1680,11 @@ export const TableProvider = () =>
 
           if (globalSecondaryIndexUpdates.length > 0) {
             const expectedNames =
-              news.globalSecondaryIndexes?.map((index) => index.indexName) ??
-              [];
+              news.globalSecondaryIndexes?.map((index) => index.indexName) ?? [];
             yield* session.note(
               `Table ${tableName}: waiting for GSIs to stabilize (${expectedNames.join(", ") || "none"})`,
             );
-            yield* waitForGlobalSecondaryIndexesStable(
-              session,
-              tableName,
-              expectedNames,
-            );
+            yield* waitForGlobalSecondaryIndexesStable(session, tableName, expectedNames);
             yield* session.note(`Table ${tableName}: GSIs stabilized`);
           }
 
@@ -1865,35 +1700,26 @@ export const TableProvider = () =>
             ((state.table.ProvisionedThroughput?.ReadCapacityUnits ?? 0) > 0
               ? "PROVISIONED"
               : "PAY_PER_REQUEST");
-          const observedProvisionedThroughput = state.table
-            .ProvisionedThroughput
+          const observedProvisionedThroughput = state.table.ProvisionedThroughput
             ? {
-                ReadCapacityUnits:
-                  state.table.ProvisionedThroughput.ReadCapacityUnits,
-                WriteCapacityUnits:
-                  state.table.ProvisionedThroughput.WriteCapacityUnits,
+                ReadCapacityUnits: state.table.ProvisionedThroughput.ReadCapacityUnits,
+                WriteCapacityUnits: state.table.ProvisionedThroughput.WriteCapacityUnits,
               }
             : undefined;
           const baseChanged = havePropsChanged(
             {
               tableClass: state.table.TableClassSummary?.TableClass,
               billingMode: observedBillingMode,
-              deletionProtectionEnabled:
-                state.table.DeletionProtectionEnabled ?? false,
+              deletionProtectionEnabled: state.table.DeletionProtectionEnabled ?? false,
               provisionedThroughput:
-                desiredBillingMode === "PROVISIONED"
-                  ? observedProvisionedThroughput
-                  : undefined,
+                desiredBillingMode === "PROVISIONED" ? observedProvisionedThroughput : undefined,
             },
             {
               tableClass: news.tableClass,
               billingMode: desiredBillingMode,
-              deletionProtectionEnabled:
-                news.deletionProtectionEnabled ?? false,
+              deletionProtectionEnabled: news.deletionProtectionEnabled ?? false,
               provisionedThroughput:
-                desiredBillingMode === "PROVISIONED"
-                  ? news.provisionedThroughput
-                  : undefined,
+                desiredBillingMode === "PROVISIONED" ? news.provisionedThroughput : undefined,
             },
           );
 
@@ -1931,10 +1757,7 @@ export const TableProvider = () =>
             (desiredTtlEnabled && desiredTtlAttribute !== currentTtlAttribute)
           ) {
             if (desiredTtlEnabled) {
-              if (
-                currentTtlEnabled &&
-                currentTtlAttribute !== desiredTtlAttribute
-              ) {
+              if (currentTtlEnabled && currentTtlAttribute !== desiredTtlAttribute) {
                 // AWS only allows one TTL attribute. We must disable first
                 // before re-enabling on a different attribute.
                 yield* updateTimeToLive(tableName, {
@@ -1956,13 +1779,10 @@ export const TableProvider = () =>
 
           // Sync PITR — observed ↔ desired.
           const currentPitrEnabled =
-            state.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus ===
-            "ENABLED";
+            state.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus === "ENABLED";
           const desiredPitrEnabled =
-            news.pointInTimeRecoverySpecification?.pointInTimeRecoveryEnabled ??
-            false;
-          const currentPitrPeriod =
-            state.pointInTimeRecoveryDescription?.RecoveryPeriodInDays;
+            news.pointInTimeRecoverySpecification?.pointInTimeRecoveryEnabled ?? false;
+          const currentPitrPeriod = state.pointInTimeRecoveryDescription?.RecoveryPeriodInDays;
           const desiredPitrPeriod = toWireDays(
             news.pointInTimeRecoverySpecification?.recoveryPeriod,
           );
@@ -1979,25 +1799,15 @@ export const TableProvider = () =>
           // Sync resource policy — observed ↔ desired. The observed policy is
           // read fresh from the cloud (never olds/output) so adoption and
           // out-of-band drift converge.
-          const observedPolicy = yield* readTableResourcePolicy(
-            state.table.TableArn!,
-          );
+          const observedPolicy = yield* readTableResourcePolicy(state.table.TableArn!);
           if (
-            canonicalPolicyDocument(observedPolicy) !==
-            canonicalPolicyDocument(news.resourcePolicy)
+            canonicalPolicyDocument(observedPolicy) !== canonicalPolicyDocument(news.resourcePolicy)
           ) {
             if (news.resourcePolicy !== undefined) {
-              yield* session.note(
-                `Table ${tableName}: putting resource policy`,
-              );
-              yield* putTableResourcePolicy(
-                state.table.TableArn!,
-                news.resourcePolicy,
-              );
+              yield* session.note(`Table ${tableName}: putting resource policy`);
+              yield* putTableResourcePolicy(state.table.TableArn!, news.resourcePolicy);
             } else {
-              yield* session.note(
-                `Table ${tableName}: deleting resource policy`,
-              );
+              yield* session.note(`Table ${tableName}: deleting resource policy`);
               yield* deleteTableResourcePolicy(state.table.TableArn!);
             }
           }
@@ -2008,25 +1818,17 @@ export const TableProvider = () =>
           // ACTIVE but not desired, then enable/update the desired
           // destination and wait for it to reach ACTIVE.
           const desiredKinesisDestination = news.kinesisStreamingDestination;
-          let kinesisDestinations = yield* waitForKinesisDestinationsSettled(
-            session,
-            tableName,
-          );
+          let kinesisDestinations = yield* waitForKinesisDestinationsSettled(session, tableName);
           for (const destination of kinesisDestinations) {
             if (destination.DestinationStatus !== "ACTIVE") continue;
-            if (
-              destination.StreamArn === desiredKinesisDestination?.streamArn
-            ) {
+            if (destination.StreamArn === desiredKinesisDestination?.streamArn) {
               continue;
             }
             yield* session.note(
               `Table ${tableName}: disabling Kinesis streaming destination ${destination.StreamArn}`,
             );
             yield* disableKinesisDestination(tableName, destination.StreamArn!);
-            kinesisDestinations = yield* waitForKinesisDestinationsSettled(
-              session,
-              tableName,
-            );
+            kinesisDestinations = yield* waitForKinesisDestinationsSettled(session, tableName);
           }
           if (desiredKinesisDestination !== undefined) {
             const activeDestination = kinesisDestinations.find(
@@ -2038,63 +1840,44 @@ export const TableProvider = () =>
               yield* session.note(
                 `Table ${tableName}: enabling Kinesis streaming destination ${desiredKinesisDestination.streamArn}`,
               );
-              yield* enableKinesisDestination(
-                tableName,
-                desiredKinesisDestination,
-              );
-              kinesisDestinations = yield* waitForKinesisDestinationsSettled(
-                session,
-                tableName,
-              );
+              yield* enableKinesisDestination(tableName, desiredKinesisDestination);
+              kinesisDestinations = yield* waitForKinesisDestinationsSettled(session, tableName);
             } else if (
-              desiredKinesisDestination.approximateCreationDateTimePrecision !==
-                undefined &&
-              (activeDestination.ApproximateCreationDateTimePrecision ??
-                "MILLISECOND") !==
+              desiredKinesisDestination.approximateCreationDateTimePrecision !== undefined &&
+              (activeDestination.ApproximateCreationDateTimePrecision ?? "MILLISECOND") !==
                 desiredKinesisDestination.approximateCreationDateTimePrecision
             ) {
               yield* session.note(
                 `Table ${tableName}: updating Kinesis streaming destination precision to ${desiredKinesisDestination.approximateCreationDateTimePrecision}`,
               );
-              yield* updateKinesisDestinationPrecision(
-                tableName,
-                desiredKinesisDestination,
-              );
-              kinesisDestinations = yield* waitForKinesisDestinationsSettled(
-                session,
-                tableName,
-              );
+              yield* updateKinesisDestinationPrecision(tableName, desiredKinesisDestination);
+              kinesisDestinations = yield* waitForKinesisDestinationsSettled(session, tableName);
             }
             const settledDestination = kinesisDestinations.find(
-              (destination) =>
-                destination.StreamArn === desiredKinesisDestination.streamArn,
+              (destination) => destination.StreamArn === desiredKinesisDestination.streamArn,
             );
             if (settledDestination?.DestinationStatus !== "ACTIVE") {
-              return yield* Effect.fail(
-                new KinesisStreamingDestinationFailed({
-                  tableName,
-                  streamArn: desiredKinesisDestination.streamArn,
-                  status: settledDestination?.DestinationStatus,
-                  description: settledDestination?.DestinationStatusDescription,
-                }),
-              );
+              return yield* new KinesisStreamingDestinationFailed({
+                tableName,
+                streamArn: desiredKinesisDestination.streamArn,
+                status: settledDestination?.DestinationStatus,
+                description: settledDestination?.DestinationStatusDescription,
+              });
             }
           }
 
           // Sync Contributor Insights — observed ↔ desired.
-          const desiredInsightsEnabled =
-            news.contributorInsightsEnabled ?? false;
-          const observedInsightsStatus =
-            yield* waitForContributorInsightsSettled(session, tableName);
+          const desiredInsightsEnabled = news.contributorInsightsEnabled ?? false;
+          const observedInsightsStatus = yield* waitForContributorInsightsSettled(
+            session,
+            tableName,
+          );
           const observedInsightsEnabled = observedInsightsStatus === "ENABLED";
           if (observedInsightsEnabled !== desiredInsightsEnabled) {
             yield* session.note(
               `Table ${tableName}: ${desiredInsightsEnabled ? "enabling" : "disabling"} Contributor Insights`,
             );
-            yield* updateTableContributorInsights(
-              tableName,
-              desiredInsightsEnabled,
-            );
+            yield* updateTableContributorInsights(tableName, desiredInsightsEnabled);
             if (!desiredInsightsEnabled) {
               // Wait for the DISABLE to settle so DynamoDB's rule cleanup
               // (which fires on the DISABLING→DISABLED transition) runs
@@ -2127,9 +1910,7 @@ export const TableProvider = () =>
           // attributes reflect the post-reconcile cloud state.
           const final = yield* readTableState(tableName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`Failed to read reconciled table ${tableName}`),
-            );
+            return yield* Effect.fail(new Error(`Failed to read reconciled table ${tableName}`));
           }
 
           yield* session.note(final.table.TableArn!);
@@ -2154,14 +1935,10 @@ export const TableProvider = () =>
           // reconcile-side callers run right after the table was created),
           // so a table that is already gone would otherwise spin through the
           // full ~90s settle budget before this delete can notice.
-          const tableExists = yield* dynamodb
-            .describeTable({ TableName: output.tableName })
-            .pipe(
-              Effect.as(true),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(false),
-              ),
-            );
+          const tableExists = yield* dynamodb.describeTable({ TableName: output.tableName }).pipe(
+            Effect.as(true),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+          );
           if (tableExists) {
             yield* Effect.gen(function* () {
               const insightsStatus = yield* waitForContributorInsightsSettled(
@@ -2173,15 +1950,9 @@ export const TableProvider = () =>
                   `Table ${output.tableName}: disabling Contributor Insights before delete`,
                 );
                 yield* updateTableContributorInsights(output.tableName, false);
-                yield* waitForContributorInsightsSettled(
-                  session,
-                  output.tableName,
-                );
+                yield* waitForContributorInsightsSettled(session, output.tableName);
               }
-              yield* waitForContributorInsightsRulesDeleted(
-                session,
-                output.tableName,
-              );
+              yield* waitForContributorInsightsRulesDeleted(session, output.tableName);
             }).pipe(
               // Table vanished mid-teardown — nothing left to tear down.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -2192,9 +1963,7 @@ export const TableProvider = () =>
 
           while (true) {
             deleteAttempt += 1;
-            yield* session.note(
-              `Table ${output.tableName}: deleting (attempt ${deleteAttempt})`,
-            );
+            yield* session.note(`Table ${output.tableName}: deleting (attempt ${deleteAttempt})`);
 
             const deleteResult = yield* dynamodb
               .deleteTable({
@@ -2203,16 +1972,13 @@ export const TableProvider = () =>
               .pipe(
                 Effect.timeout(1000),
                 Effect.as("accepted" as const),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed("already-deleted" as const),
-                ),
-                Effect.catchTag("ResourceInUseException", () =>
-                  Effect.succeed("delete-gsis-first" as const),
-                ),
+                Effect.catchTags({
+                  ResourceNotFoundException: () => Effect.succeed("already-deleted" as const),
+                  ResourceInUseException: () => Effect.succeed("delete-gsis-first" as const),
+                }),
                 Effect.retry({
                   while: (error) =>
-                    error._tag === "InternalServerError" ||
-                    error._tag === "TimeoutError",
+                    error._tag === "InternalServerError" || error._tag === "TimeoutError",
                   schedule: waitForDeletionConvergence.pipe(
                     Schedule.tap(({ attempt }) =>
                       session.note(
@@ -2241,17 +2007,11 @@ export const TableProvider = () =>
               `DynamoDB Table provider: deleteTable blocked for ${output.tableName}; deleting GSIs first`,
             );
             yield* deleteGlobalSecondaryIndexes(session, output.tableName);
-            yield* waitForGlobalSecondaryIndexesStable(
-              session,
-              output.tableName,
-              [],
-            );
+            yield* waitForGlobalSecondaryIndexesStable(session, output.tableName, []);
             yield* waitForTableActive(session, output.tableName);
           }
 
-          yield* session.note(
-            `Table ${output.tableName}: waiting for deletion`,
-          );
+          yield* session.note(`Table ${output.tableName}: waiting for deletion`);
           yield* waitForTableDeleted(session, output.tableName);
         }),
       });
@@ -2266,13 +2026,9 @@ class TableStillDeleting extends Data.TaggedError("TableStillDeleting") {}
 
 class MissingStreamViewType extends Data.TaggedError("MissingStreamViewType") {}
 
-class KinesisDestinationNotSettled extends Data.TaggedError(
-  "KinesisDestinationNotSettled",
-) {}
+class KinesisDestinationNotSettled extends Data.TaggedError("KinesisDestinationNotSettled") {}
 
-class ContributorInsightsNotSettled extends Data.TaggedError(
-  "ContributorInsightsNotSettled",
-) {}
+class ContributorInsightsNotSettled extends Data.TaggedError("ContributorInsightsNotSettled") {}
 
 class KinesisStreamingDestinationFailed extends Data.TaggedError(
   "KinesisStreamingDestinationFailed",
@@ -2283,8 +2039,6 @@ class KinesisStreamingDestinationFailed extends Data.TaggedError(
   description: string | undefined;
 }> {}
 
-class ConflictingStreamViewTypes extends Data.TaggedError(
-  "ConflictingStreamViewTypes",
-)<{
+class ConflictingStreamViewTypes extends Data.TaggedError("ConflictingStreamViewTypes")<{
   requested: readonly (DynamoDB.StreamViewType | undefined)[];
 }> {}

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface GetTaskProtectionRequest extends Omit<
-  ECS.GetTaskProtectionRequest,
-  "cluster"
-> {}
+export interface GetTaskProtectionRequest extends Omit<ECS.GetTaskProtectionRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:GetTaskProtection`.
@@ -34,12 +31,7 @@ export interface GetTaskProtection extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetTaskProtectionRequest,
-    ) => Effect.Effect<
-      ECS.GetTaskProtectionResponse,
-      ECS.GetTaskProtectionError
-    >
+    ) => Effect.Effect<ECS.GetTaskProtectionResponse, ECS.GetTaskProtectionError>
   >
 > {}
-export const GetTaskProtection = Binding.Service<GetTaskProtection>(
-  "AWS.ECS.GetTaskProtection",
-);
+export const GetTaskProtection = Binding.Service<GetTaskProtection>("AWS.ECS.GetTaskProtection");

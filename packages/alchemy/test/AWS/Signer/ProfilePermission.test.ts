@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { ProfilePermission, SigningProfile } from "@/AWS/Signer";
-import * as Test from "@/Test/Alchemy";
 import * as signer from "@distilled.cloud/aws/signer";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ProfilePermission, SigningProfile } from "@/AWS/Signer";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -32,10 +32,7 @@ describe(
                 action: "signer:StartSigningJob",
                 principal,
               });
-              return {
-                profileName: permission.profileName,
-                statementId: permission.statementId,
-              };
+              return { profileName: permission.profileName, statementId: permission.statementId };
             }),
           );
 
@@ -62,10 +59,7 @@ describe(
                 action: "signer:GetSigningProfile",
                 principal,
               });
-              return {
-                profileName: permission.profileName,
-                statementId: permission.statementId,
-              };
+              return { profileName: permission.profileName, statementId: permission.statementId };
             }),
           );
 
@@ -94,9 +88,7 @@ describe(
               ),
             );
           expect(
-            (afterDestroy.permissions ?? []).find(
-              (p) => p.statementId === created.statementId,
-            ),
+            (afterDestroy.permissions ?? []).find((p) => p.statementId === created.statementId),
           ).toBeUndefined();
         }),
       { timeout: 120_000 },

@@ -51,7 +51,6 @@ export interface BatchUpdateDevicePosition extends Binding.Service<
     >
   >
 > {}
-export const BatchUpdateDevicePosition =
-  Binding.Service<BatchUpdateDevicePosition>(
-    "AWS.Location.BatchUpdateDevicePosition",
-  );
+export const BatchUpdateDevicePosition = Binding.Service<BatchUpdateDevicePosition>(
+  "AWS.Location.BatchUpdateDevicePosition",
+);

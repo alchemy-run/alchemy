@@ -82,18 +82,13 @@ const services = Effect.fn(function* (target: StateTarget) {
  * Resolve the profile, Cloudflare account, and provider layer every
  * state-store route (`bootstrap`, `teardown`, logs) is scoped to.
  */
-export const resolveStateStoreScope = Effect.fn(function* (
-  target: StateTarget,
-) {
-  const profile = yield* resolveProfileName(
-    Option.fromNullishOr(target.envFile),
-    target.profile,
-  );
+export const resolveStateStoreScope = Effect.fn(function* (target: StateTarget) {
+  const profile = yield* resolveProfileName(Option.fromNullishOr(target.envFile), target.profile);
   const resolved = { ...target, profile };
   const layer = yield* services(resolved);
-  const { accountId } = yield* Effect.flatten(
-    CloudflareEnvironment.CloudflareEnvironment,
-  ).pipe(Effect.provide(layer));
+  const { accountId } = yield* Effect.flatten(CloudflareEnvironment.CloudflareEnvironment).pipe(
+    Effect.provide(layer),
+  );
   return {
     layer,
     profile,
@@ -103,82 +98,75 @@ export const resolveStateStoreScope = Effect.fn(function* (
 });
 
 /** Provision (or adopt) the Cloudflare-hosted state-store worker. */
-export const bootstrap = Effect.fn("Alchemist.provider.cloudflare.bootstrap")(
-  function* (input: BootstrapInput) {
-    const { layer, accountId, workerName, profile } =
-      yield* resolveStateStoreScope(input);
-    return yield* Effect.gen(function* () {
-      const existed = yield* workers
-        .getScriptSetting({ accountId, scriptName: workerName })
-        .pipe(
-          Effect.as(true),
-          Effect.catchTag(
-            ["WorkerNotFound", "InvalidRoute", "WorkerHasNoVersions"],
-            () => Effect.succeed(false),
-          ),
-        );
-      const state = yield* bootstrapStateStore({
-        workerName,
-        force: input.force,
-        profile,
-      });
-      return {
-        accountId,
-        workerName,
-        status: !existed
-          ? ("created" as const)
-          : input.force
-            ? ("redeployed" as const)
-            : ("adopted" as const),
-        credentialsRefreshed: true,
-        stateStoreVersion: yield* state.getVersion(),
-      };
-    }).pipe(Effect.provide(layer));
-  },
-);
+export const bootstrap = Effect.fn("Alchemist.provider.cloudflare.bootstrap")(function* (
+  input: BootstrapInput,
+) {
+  const { layer, accountId, workerName, profile } = yield* resolveStateStoreScope(input);
+  return yield* Effect.gen(function* () {
+    const existed = yield* workers.getScriptSetting({ accountId, scriptName: workerName }).pipe(
+      Effect.as(true),
+      Effect.catchTag(["WorkerNotFound", "InvalidRoute", "WorkerHasNoVersions"], () =>
+        Effect.succeed(false),
+      ),
+    );
+    const state = yield* bootstrapStateStore({
+      workerName,
+      force: input.force,
+      profile,
+    });
+    return {
+      accountId,
+      workerName,
+      status: !existed
+        ? ("created" as const)
+        : input.force
+          ? ("redeployed" as const)
+          : ("adopted" as const),
+      credentialsRefreshed: true,
+      stateStoreVersion: yield* state.getVersion(),
+    };
+  }).pipe(Effect.provide(layer));
+});
 
 /** Tear down the Cloudflare-hosted state store. */
-export const teardown = Effect.fn("Alchemist.provider.cloudflare.teardown")(
-  function* (input: StateTarget) {
-    const { layer, accountId, workerName, profile } =
-      yield* resolveStateStoreScope(input);
-    yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
-    return { accountId, workerName, deleted: [workerName] };
-  },
-);
+export const teardown = Effect.fn("Alchemist.provider.cloudflare.teardown")(function* (
+  input: StateTarget,
+) {
+  const { layer, accountId, workerName, profile } = yield* resolveStateStoreScope(input);
+  yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
+  return { accountId, workerName, deleted: [workerName] };
+});
 
 /** Query past log entries from the state-store worker, oldest first. */
-export const stateLogs = Effect.fn("Alchemist.provider.cloudflare.stateLogs")(
-  function* (input: StateLogsInput) {
-    const { layer, accountId, workerName } =
-      yield* resolveStateStoreScope(input);
-    const lines = yield* Effect.gen(function* () {
-      const telemetry = yield* CloudflareLogs;
-      return yield* telemetry.queryLogs({
-        accountId,
-        filters: [
-          {
-            key: "$workers.scriptName",
-            operation: "eq",
-            type: "string",
-            value: workerName,
-          },
-        ],
-        options: { limit: input.limit ?? 100, since: input.since },
-      });
-    }).pipe(Effect.provide(layer));
-    return lines
-      .map((line) => logEntry(workerName, line))
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-  },
-);
+export const stateLogs = Effect.fn("Alchemist.provider.cloudflare.stateLogs")(function* (
+  input: StateLogsInput,
+) {
+  const { layer, accountId, workerName } = yield* resolveStateStoreScope(input);
+  const lines = yield* Effect.gen(function* () {
+    const telemetry = yield* CloudflareLogs;
+    return yield* telemetry.queryLogs({
+      accountId,
+      filters: [
+        {
+          key: "$workers.scriptName",
+          operation: "eq",
+          type: "string",
+          value: workerName,
+        },
+      ],
+      options: { limit: input.limit ?? 100, since: input.since },
+    });
+  }).pipe(Effect.provide(layer));
+  return lines
+    .map((line) => logEntry(workerName, line))
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+});
 
 /** Live-stream log entries from the state-store worker. */
 export const tailStateLogs = (input: StateTarget) =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const { layer, accountId, workerName } =
-        yield* resolveStateStoreScope(input);
+      const { layer, accountId, workerName } = yield* resolveStateStoreScope(input);
       const telemetry = yield* Effect.provide(CloudflareLogs, layer);
       return telemetry.tailScript({ accountId, scriptName: workerName }).pipe(
         Stream.provide(layer),

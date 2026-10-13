@@ -289,9 +289,9 @@ export interface Job extends Resource<
 export const Job = Resource<Job>("AWS.DataBrew.Job");
 
 /** The job's props don't satisfy the requirements of its `type`. */
-export class DataBrewJobConfigError extends Data.TaggedError(
-  "DataBrewJobConfigError",
-)<{ message: string }> {}
+export class DataBrewJobConfigError extends Data.TaggedError("DataBrewJobConfigError")<{
+  message: string;
+}> {}
 
 const validate = (props: JobProps) => {
   if (props.type === "PROFILE") {
@@ -311,13 +311,11 @@ const validate = (props: JobProps) => {
     }
   } else {
     const viaProject = props.projectName !== undefined;
-    const viaRecipe =
-      props.datasetName !== undefined && props.recipeReference !== undefined;
+    const viaRecipe = props.datasetName !== undefined && props.recipeReference !== undefined;
     if (!viaProject && !viaRecipe) {
       return Effect.fail(
         new DataBrewJobConfigError({
-          message:
-            "RECIPE jobs require either `projectName` or `datasetName` + `recipeReference`.",
+          message: "RECIPE jobs require either `projectName` or `datasetName` + `recipeReference`.",
         }),
       );
     }
@@ -380,26 +378,22 @@ const buildConfiguration = (config: ProfileJobConfiguration | undefined) =>
           ? buildStatisticsConfiguration(config.datasetStatisticsConfiguration)
           : undefined,
         ProfileColumns: buildColumnSelectors(config.profileColumns),
-        ColumnStatisticsConfigurations:
-          config.columnStatisticsConfigurations?.map((c) => ({
-            Selectors: buildColumnSelectors(c.selectors),
-            Statistics: buildStatisticsConfiguration(c.statistics),
-          })),
+        ColumnStatisticsConfigurations: config.columnStatisticsConfigurations?.map((c) => ({
+          Selectors: buildColumnSelectors(c.selectors),
+          Statistics: buildStatisticsConfiguration(c.statistics),
+        })),
         EntityDetectorConfiguration: config.entityDetectorConfiguration
           ? {
               EntityTypes: config.entityDetectorConfiguration.entityTypes,
-              AllowedStatistics:
-                config.entityDetectorConfiguration.allowedStatistics?.map(
-                  (a) => ({ Statistics: a.statistics }),
-                ),
+              AllowedStatistics: config.entityDetectorConfiguration.allowedStatistics?.map((a) => ({
+                Statistics: a.statistics,
+              })),
             }
           : undefined,
       }
     : undefined;
 
-const buildValidationConfigurations = (
-  configs: ValidationConfiguration[] | undefined,
-) =>
+const buildValidationConfigurations = (configs: ValidationConfiguration[] | undefined) =>
   configs?.map((c) => ({
     RulesetArn: c.rulesetArn,
     ValidationMode: c.validationMode,
@@ -422,23 +416,14 @@ export const JobProvider = () =>
   Provider.effect(
     Job,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { jobName?: string | undefined },
-      ) {
-        return (
-          props.jobName ?? (yield* createPhysicalName({ id, maxLength: 240 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { jobName?: string | undefined }) {
+        return props.jobName ?? (yield* createPhysicalName({ id, maxLength: 240 }));
       });
 
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeJob({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Job.Provider.of({
@@ -447,16 +432,12 @@ export const JobProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* databrew.listJobs
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* databrew.listJobs.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Jobs ?? [])
               .map((j) => ({
                 jobName: j.Name,
-                jobArn:
-                  j.ResourceArn ??
-                  databrewArn(region, accountId, "job", j.Name),
+                jobArn: j.ResourceArn ?? databrewArn(region, accountId, "job", j.Name),
                 type: j.Type ?? "RECIPE",
               }));
           }),
@@ -466,8 +447,7 @@ export const JobProvider = () =>
           const name = output?.jobName ?? (yield* createName(id, olds ?? {}));
           const job = yield* observe(name);
           if (job === undefined) return undefined;
-          const arn =
-            job.ResourceArn ?? databrewArn(region, accountId, "job", name);
+          const arn = job.ResourceArn ?? databrewArn(region, accountId, "job", name);
           const attrs = {
             jobName: name,
             jobArn: arn,
@@ -538,9 +518,7 @@ export const JobProvider = () =>
                         Name: news.recipeReference.name,
                         // the API rejects a null version ("version null is
                         // invalid") — apply the documented default explicitly
-                        RecipeVersion:
-                          news.recipeReference.recipeVersion ??
-                          "LATEST_PUBLISHED",
+                        RecipeVersion: news.recipeReference.recipeVersion ?? "LATEST_PUBLISHED",
                       }
                     : undefined,
                   Outputs: buildOutputs(news.outputs),
@@ -572,8 +550,7 @@ export const JobProvider = () =>
             );
           }
 
-          const arn =
-            job?.ResourceArn ?? databrewArn(region, accountId, "job", name);
+          const arn = job?.ResourceArn ?? databrewArn(region, accountId, "job", name);
 
           // 3b. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -589,33 +566,25 @@ export const JobProvider = () =>
           // with ConflictException ("is used in job …") long after DeleteJob
           // itself succeeds. Stop in-flight runs and wait (bounded) for every
           // run to reach a terminal state before deleting the job.
-          const runs = yield* databrew.listJobRuns
-            .items({ Name: output.jobName })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([]),
-              ),
-            );
+          const runs = yield* databrew.listJobRuns.items({ Name: output.jobName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+          );
           const isActive = (state: string | undefined): boolean =>
             state === "STARTING" || state === "RUNNING" || state === "STOPPING";
           yield* Effect.forEach(
             runs.filter(
               (run) =>
-                run.RunId !== undefined &&
-                (run.State === "STARTING" || run.State === "RUNNING"),
+                run.RunId !== undefined && (run.State === "STARTING" || run.State === "RUNNING"),
             ),
             (run) =>
-              databrew
-                .stopJobRun({ Name: output.jobName, RunId: run.RunId! })
-                .pipe(
-                  // Already stopping/stopped (ValidationException) or gone.
-                  Effect.catchTag(
-                    ["ResourceNotFoundException", "ValidationException"],
-                    () => Effect.succeed(undefined),
-                  ),
+              databrew.stopJobRun({ Name: output.jobName, RunId: run.RunId! }).pipe(
+                // Already stopping/stopped (ValidationException) or gone.
+                Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
+                  Effect.succeed(undefined),
                 ),
+              ),
           );
           if (runs.some((run) => isActive(run.State))) {
             yield* databrew.listJobRuns.items({ Name: output.jobName }).pipe(
@@ -624,9 +593,7 @@ export const JobProvider = () =>
               Stream.filter((run) => isActive(run.State)),
               Stream.runHead,
               Effect.map(Option.isNone),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               Effect.repeat({
                 schedule: Schedule.spaced("5 seconds"),
                 until: (settled): boolean => settled,
@@ -635,12 +602,8 @@ export const JobProvider = () =>
             );
           }
           // ConflictException while a job run is still in flight.
-          yield* retryWhileConflict(
-            databrew.deleteJob({ Name: output.jobName }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+          yield* retryWhileConflict(databrew.deleteJob({ Name: output.jobName })).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
         }),
       });

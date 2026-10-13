@@ -10,7 +10,6 @@ import { makeReadObjectHttp } from "./StorageObjectBinding.ts";
  * @product Bucket
  * @provides ReadObject
  */
-export const ReadObjectHttp = Layer.effect(
-  ReadObject,
-  makeReadObjectHttp(),
-).pipe(Layer.provide(storageHttpLayer));
+export const ReadObjectHttp = Layer.effect(ReadObject, makeReadObjectHttp()).pipe(
+  Layer.provide(storageHttpLayer),
+);

@@ -49,7 +49,6 @@ export interface UpdatePackageVersionsStatus extends Binding.Service<
   >
 > {}
 
-export const UpdatePackageVersionsStatus =
-  Binding.Service<UpdatePackageVersionsStatus>(
-    "AWS.CodeArtifact.UpdatePackageVersionsStatus",
-  );
+export const UpdatePackageVersionsStatus = Binding.Service<UpdatePackageVersionsStatus>(
+  "AWS.CodeArtifact.UpdatePackageVersionsStatus",
+);

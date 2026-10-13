@@ -1,7 +1,6 @@
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -129,9 +128,7 @@ export const HostnameAssociation = Resource<HostnameAssociation>(TypeId);
  * Returns true if the given value is an HostnameAssociation
  * resource.
  */
-export const isHostnameAssociation = (
-  value: unknown,
-): value is HostnameAssociation =>
+export const isHostnameAssociation = (value: unknown): value is HostnameAssociation =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameAssociationProvider = () =>
@@ -191,11 +188,7 @@ export const HostnameAssociationProvider = () =>
 
       // 2. Sync — the PUT is a true upsert; skip it when the observed entry
       //    already matches the desired certificate and enablement.
-      if (
-        observed &&
-        observed.certId === certId &&
-        observed.enabled === news.enabled
-      ) {
+      if (observed && observed.certId === certId && observed.enabled === news.enabled) {
         return toAttributes(observed, zoneId, hostname);
       }
       const put = yield* originTls.putHostname({
@@ -206,11 +199,7 @@ export const HostnameAssociationProvider = () =>
 
       // 3. Return — propagation is asynchronous (`pending_deployment` →
       //    `active`); we do not block on activation.
-      return toAttributes(
-        result ?? { certId, enabled: news.enabled },
-        zoneId,
-        hostname,
-      );
+      return toAttributes(result ?? { certId, enabled: news.enabled }, zoneId, hostname);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -249,9 +238,7 @@ const observeAssociation = (zoneId: string, hostname: string) =>
     Effect.map((assoc) =>
       assoc.enabled === null || assoc.enabled === undefined ? undefined : assoc,
     ),
-    Effect.catchTag("HostnameAssociationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("HostnameAssociationNotFound", () => Effect.succeed(undefined)),
   );
 
 type AssociationShape = {

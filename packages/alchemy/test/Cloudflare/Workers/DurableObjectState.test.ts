@@ -1,20 +1,15 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import {
   fromDurableObjectState,
   type DurableObjectAbortOptions,
 } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 describe(
   "fromDurableObjectState.abort",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
   },
   () => {
     const mockState = (abort: (...args: unknown[]) => void) =>

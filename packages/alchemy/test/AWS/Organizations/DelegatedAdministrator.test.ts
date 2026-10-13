@@ -1,16 +1,13 @@
+import * as organizations from "@distilled.cloud/aws/organizations";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DelegatedAdministrator } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as organizations from "@distilled.cloud/aws/organizations";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = OrganizationLease.make(
-  { providers: AWS.providers() },
-  "shared",
-);
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 // Read-only `list()` test (AWS account/region-scoped collection with a
 // per-account service fan-out). Resolve the provider from context via the
@@ -48,8 +45,7 @@ test.provider(
 // skipped by default. On the emulator the organization lease provisions the
 // member account when AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is unset.
 const servicePrincipal =
-  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ??
-  "config.amazonaws.com";
+  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ?? "config.amazonaws.com";
 
 // Destroying the test's resource deregisters the account, so refuse to take
 // over a registration that existed before the test.
@@ -154,9 +150,7 @@ describe.sequential("delegated administrator lifecycle", () => {
         const stage = stack.stage;
         const fqns = yield* state.list({ stack: stack.name, stage });
         const rows = yield* Effect.forEach(fqns, (fqn) =>
-          state
-            .get({ stack: stack.name, stage, fqn })
-            .pipe(Effect.map((row) => ({ fqn, row }))),
+          state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
         );
         const wedged = rows.find(
           (r): r is { fqn: string; row: ResourceState } =>
@@ -165,9 +159,7 @@ describe.sequential("delegated administrator lifecycle", () => {
         );
         if (!wedged) {
           return yield* Effect.die(
-            new Error(
-              "no AWS.Organizations.DelegatedAdministrator state row found after deploy",
-            ),
+            new Error("no AWS.Organizations.DelegatedAdministrator state row found after deploy"),
           );
         }
         yield* state.set({
@@ -178,11 +170,7 @@ describe.sequential("delegated administrator lifecycle", () => {
             ...wedged.row,
             status: "creating",
             attr: undefined,
-            props: {
-              ...wedged.row.props,
-              accountId: undefined,
-              servicePrincipal: undefined,
-            },
+            props: { ...wedged.row.props, accountId: undefined, servicePrincipal: undefined },
           },
         });
 
@@ -195,9 +183,6 @@ describe.sequential("delegated administrator lifecycle", () => {
 
         yield* stack.destroy();
       }),
-    {
-      tags: ["provider:aws", "provider:aws:organizations", "live"],
-      timeout: 240_000,
-    },
+    { tags: ["provider:aws", "provider:aws:organizations", "live"], timeout: 240_000 },
   );
 });

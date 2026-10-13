@@ -49,10 +49,7 @@ export interface UpdateResourcePosition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateResourcePositionRequest,
-    ) => Effect.Effect<
-      iotw.UpdateResourcePositionResponse,
-      iotw.UpdateResourcePositionError
-    >
+    ) => Effect.Effect<iotw.UpdateResourcePositionResponse, iotw.UpdateResourcePositionError>
   >
 > {}
 export const UpdateResourcePosition = Binding.Service<UpdateResourcePosition>(

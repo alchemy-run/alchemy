@@ -1,14 +1,11 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import IsolatedProjectTaskLive, {
   IsolatedProjectTask,
@@ -30,10 +27,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // bootstrap's imports left external the container dies at boot with
 // `Cannot find module …` (exit code 1).
 //
-// Docker + ECR + Fargate placement is minutes of wall clock, so like the Task
-// e2e smoke test this is gated out of the default sweep: run it explicitly
-// with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Docker + ECR + Fargate placement is ~1 minute of wall clock, so it is
+// skipped under --fast like the Task e2e smoke test.
+test.provider.skipIf(!!process.env.FAST)(
   "task bundled from an isolated project boots and exits 0",
   (stack) =>
     Effect.gen(function* () {
@@ -95,30 +91,24 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
         // Wait for the task to stop: image pull + container boot + the
         // one-shot program running to completion (~1-3 minutes cold).
-        const stopped = yield* ecs
-          .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
-          .pipe(
-            Effect.flatMap((result) => {
-              const task = result.tasks?.[0];
-              return task?.lastStatus === "STOPPED"
-                ? Effect.succeed(task)
-                : Effect.fail(
-                    new Error(`task not stopped yet: ${task?.lastStatus}`),
-                  );
-            }),
-            Effect.tapError((error) => Effect.logInfo(String(error))),
-            Effect.retry({
-              schedule: Schedule.spaced("6 seconds"),
-              times: 50,
-            }),
-          );
+        const stopped = yield* ecs.describeTasks({ cluster: clusterArn, tasks: [taskArn!] }).pipe(
+          Effect.flatMap((result) => {
+            const task = result.tasks?.[0];
+            return task?.lastStatus === "STOPPED"
+              ? Effect.succeed(task)
+              : Effect.fail(new Error(`task not stopped yet: ${task?.lastStatus}`));
+          }),
+          Effect.tapError((error) => Effect.logInfo(String(error))),
+          Effect.retry({
+            schedule: Schedule.spaced("6 seconds"),
+            times: 50,
+          }),
+        );
 
         // Exit code 0 proves the bootstrap's own imports were bundled and the
         // program ran `{ run }` to completion; externalised imports crash bun
         // at module load and the container exits 1.
-        expect(stopped.stoppedReason ?? "").not.toContain(
-          "CannotPullContainer",
-        );
+        expect(stopped.stoppedReason ?? "").not.toContain("CannotPullContainer");
         expect(stopped.containers?.[0]?.exitCode).toBe(0);
 
         yield* stack.destroy();

@@ -19,12 +19,7 @@ export interface ProviderConnection {
   readonly name: string;
   /** How credentials were supplied (`oauth`, `api-token`, …). */
   readonly method: string;
-  readonly status:
-    | "connected"
-    | "needs-reauth"
-    | "needs-reconfigure"
-    | "invalid"
-    | "unavailable";
+  readonly status: "connected" | "needs-reauth" | "needs-reconfigure" | "invalid" | "unavailable";
   readonly details: ReadonlyArray<ProviderDetailLine>;
   /** Present whenever `status` is anything but `connected`. */
   readonly diagnostic?: {
@@ -95,18 +90,10 @@ export const inspectProvider = Effect.fn("inspectProvider")(function* (
 
   const decoded = yield* Effect.result(provider.decodeConfig(profile, config));
   if (Result.isFailure(decoded)) {
-    return broken(
-      name,
-      method,
-      "error",
-      "provider.invalid-config",
-      decoded.failure.message,
-    );
+    return broken(name, method, "error", "provider.invalid-config", decoded.failure.message);
   }
 
-  const details = yield* Effect.result(
-    provider.details(profile, decoded.success, updateConfig),
-  );
+  const details = yield* Effect.result(provider.details(profile, decoded.success, updateConfig));
   if (Result.isSuccess(details)) {
     return {
       name,

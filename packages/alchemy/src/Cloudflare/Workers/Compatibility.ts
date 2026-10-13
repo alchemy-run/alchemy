@@ -18,8 +18,14 @@ import type { WorkerProps } from "./Worker.ts";
  * alchemy-bundled workers — and explicitly disabling it is a deploy-time
  * error.
  */
-const CROSS_REQUEST_PROMISE_RESOLUTION =
-  "handle_cross_request_promise_resolution";
+const CROSS_REQUEST_PROMISE_RESOLUTION = "handle_cross_request_promise_resolution";
+
+/**
+ * An Effect Worker that binds itself with `bindWorker` calls its own default
+ * entrypoint through workerd's `ctx.exports` loopback (default-on since
+ * compatibility date 2025-11-17), so disabling it is a deploy-time error.
+ */
+const DISABLE_CTX_EXPORTS = "disable_ctx_exports";
 
 /**
  * Compatibility settings passed to build tools and framework adapters.
@@ -55,15 +61,19 @@ export const getCompatibility = (props: WorkerProps) => {
         "handlers live in the Python entry module).",
     );
   }
-  if (
-    !props.isExternal &&
-    userFlags.includes(`no_${CROSS_REQUEST_PROMISE_RESOLUTION}`)
-  ) {
+  if (!props.isExternal && userFlags.includes(`no_${CROSS_REQUEST_PROMISE_RESOLUTION}`)) {
     throw new Error(
       `The "no_${CROSS_REQUEST_PROMISE_RESOLUTION}" compatibility flag is not supported: ` +
         "the alchemy Worker runtime shares its layer build across concurrent " +
         "requests, which requires workerd's corrected cross-request promise " +
         "semantics. Remove the flag from `compatibility.flags`.",
+    );
+  }
+  if (!props.isExternal && userFlags.includes(DISABLE_CTX_EXPORTS)) {
+    throw new Error(
+      `The "${DISABLE_CTX_EXPORTS}" compatibility flag is not supported: ` +
+        "the alchemy Worker runtime calls a Worker's own entrypoints through " +
+        "`ctx.exports`. Remove the flag from `compatibility.flags`.",
     );
   }
   const date = props.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE;

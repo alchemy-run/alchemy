@@ -19,12 +19,7 @@
  * reimplementation of the changelog format, and no fork.
  */
 import type { ChangelogOptions, Commit } from "changelogithub";
-import {
-  generateMarkdown,
-  parseCommits,
-  resolveAuthors,
-  resolveConfig,
-} from "changelogithub";
+import { generateMarkdown, parseCommits, resolveAuthors, resolveConfig } from "changelogithub";
 
 interface RawGitCommit {
   message: string;
@@ -68,9 +63,7 @@ export const getGitDiff = async (
     .splice(1)
     .map((line) => {
       const [firstLine, ..._body] = line.split("\n");
-      const [message, shortHash, authorName, authorEmail] = (
-        firstLine ?? ""
-      ).split("|");
+      const [message, shortHash, authorName, authorEmail] = (firstLine ?? "").split("|");
       return {
         message: message ?? "",
         shortHash: shortHash ?? "",

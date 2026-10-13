@@ -1,18 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import CacheTestWorker from "./fixtures/cache/cache-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The worker stamps every invocation with a fresh UUID, so two fetches of
 // the same URL returning the same body means the second response was served
@@ -149,9 +148,7 @@ test.provider(
       // response parses as JSON — transient placeholders/5xx bodies throw
       // and retry; a parsed `success: false` is a genuine failure and
       // surfaces via the assertion.
-      const purged = yield* Effect.sync(
-        () => `${worker.url}/purge?cb=${Date.now()}`,
-      ).pipe(
+      const purged = yield* Effect.sync(() => `${worker.url}/purge?cb=${Date.now()}`).pipe(
         Effect.flatMap(fetchCached),
         Effect.flatMap((res) =>
           res.status === 200
@@ -172,9 +169,7 @@ test.provider(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (res) =>
-            res.status === 200 &&
-            res.body.startsWith("id:") &&
-            res.body !== cachedBody,
+            res.status === 200 && res.body.startsWith("id:") && res.body !== cachedBody,
           times: 20,
         }),
       );
@@ -190,6 +185,240 @@ test.provider(
       "provider:cloudflare:worker",
       "live",
     ],
+    timeout: 240_000,
+  },
+);
+
+// A gateway default export that forwards to a named `Public` entrypoint via
+// `ctx.exports`. Each layer stamps its own UUID, so one response body shows
+// which layer ran: a repeated `pub:` id with a fresh `gw:` id means only
+// `Public` was served from cache; a fully repeated body means the gateway
+// itself was cached.
+const entrypointScript = `import { WorkerEntrypoint } from "cloudflare:workers";
+
+export class Public extends WorkerEntrypoint {
+  async fetch() {
+    return new Response("pub:" + crypto.randomUUID(), {
+      headers: { "Cache-Control": "public, max-age=300" },
+    });
+  }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const inner = await ctx.exports.Public.fetch(request);
+    return new Response("gw:" + crypto.randomUUID() + "|" + (await inner.text()), {
+      headers: { "Cache-Control": "public, max-age=300" },
+    });
+  },
+};
+`;
+
+const parseLayers = (body: string) => {
+  const match = /^gw:([^|]+)\|pub:(.+)$/.exec(body);
+  return match ? { gateway: match[1]!, public: match[2]! } : undefined;
+};
+
+// Poll until two consecutive worker-stamped responses satisfy `isHit`.
+const pollForLayers = (
+  url: string,
+  isHit: (
+    previous: { gateway: string; public: string },
+    current: { gateway: string; public: string },
+  ) => boolean,
+) => {
+  let previous: { gateway: string; public: string } | undefined;
+  return fetchCached(url).pipe(
+    Effect.map((res) => {
+      const current = res.status === 200 ? parseLayers(res.body) : undefined;
+      const hit = current !== undefined && previous !== undefined && isHit(previous, current);
+      if (current) previous = current;
+      return { ...res, hit };
+    }),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (res) => res.hit,
+      times: 20,
+    }),
+  );
+};
+
+// The `exports` map Cloudflare recorded on the version serving traffic.
+const liveExports = (scriptName: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const { deployments } = yield* workers.listScriptDeployments({ accountId, scriptName });
+    const versionId = deployments[0]!.versions[0]!.versionId;
+    const version = yield* workers.getScriptVersion({ accountId, scriptName, versionId });
+    return version.resources?.scriptRuntime?.exports ?? {};
+  });
+
+test.provider(
+  "entrypoints configures Workers Cache per entrypoint",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Uncached gateway in front of a cached `Public` entrypoint, with no
+      // Worker-wide `cache` at all.
+      const { worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("EntrypointCacheWorker", {
+              script: entrypointScript,
+              entrypoints: {
+                default: { cache: { enabled: false } },
+                Public: { cache: { enabled: true } },
+              },
+            }),
+          };
+        }),
+      );
+      expect(worker.url).toBeDefined();
+      const exports = yield* liveExports(worker.workerName);
+      expect(exports.default).toMatchObject({ type: "worker", cache: { enabled: false } });
+      expect(exports.Public).toMatchObject({ type: "worker", cache: { enabled: true } });
+
+      yield* expectUrlContains(worker.url!, "gw:", {
+        label: "entrypoint cache worker propagation",
+      });
+
+      const publicHit = yield* pollForLayers(
+        `${worker.url}/gateway`,
+        (previous, current) =>
+          current.public === previous.public && current.gateway !== previous.gateway,
+      );
+      expect(publicHit.hit).toBe(true);
+
+      // Flip it: cache the gateway, not `Public`. The new version starts
+      // cold; a fully repeated body proves the default export is cached.
+      const flipped = yield* stack.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("EntrypointCacheWorker", {
+              script: entrypointScript,
+              entrypoints: {
+                default: { cache: { enabled: true } },
+                Public: { cache: { enabled: false } },
+              },
+            }),
+          };
+        }),
+      );
+      expect(flipped.worker.workerName).toEqual(worker.workerName);
+      const flippedExports = yield* liveExports(worker.workerName);
+      expect(flippedExports.default).toMatchObject({ type: "worker", cache: { enabled: true } });
+      expect(flippedExports.Public).toMatchObject({ type: "worker", cache: { enabled: false } });
+
+      const gatewayHit = yield* pollForLayers(
+        `${worker.url}/gateway`,
+        (previous, current) => current.gateway === previous.gateway,
+      );
+      expect(gatewayHit.hit).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
+);
+
+// The `exports` map Cloudflare recorded on one version.
+const versionExports = (scriptName: string, versionId: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const version = yield* workers.getScriptVersion({ accountId, scriptName, versionId });
+    return version.resources?.scriptRuntime?.exports ?? {};
+  });
+
+// Unlike Durable Object exports, entrypoint cache overrides may differ
+// between the versions of a gradual rollout: each version carries its own.
+test.provider(
+  "a gradual rollout may change an entrypoint's cache setting",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (publicCache: boolean, marker: string, traffic?: number) =>
+        Cloudflare.Worker("EntrypointGradualWorker", {
+          script: `${entrypointScript}\n// ${marker}\n`,
+          entrypoints: { Public: { cache: { enabled: publicCache } } },
+          ...(traffic !== undefined ? { version: { traffic } } : {}),
+        });
+
+      const base = yield* stack.deploy(program(true, "v1"));
+      const gradual = yield* stack.deploy(program(false, "v2", 50));
+      expect(gradual.versionId).toBeDefined();
+
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const { deployments } = yield* workers.listScriptDeployments({
+        accountId,
+        scriptName: base.workerName,
+      });
+      const split = deployments[0]?.versions ?? [];
+      expect(split.map((v) => v.percentage)).toEqual([50, 50]);
+      const previous = split.find((v) => v.versionId !== gradual.versionId)!;
+      expect(split.some((v) => v.versionId === gradual.versionId)).toBe(true);
+
+      expect((yield* versionExports(base.workerName, previous.versionId)).Public).toMatchObject({
+        type: "worker",
+        cache: { enabled: true },
+      });
+      expect((yield* versionExports(base.workerName, gradual.versionId!)).Public).toMatchObject({
+        type: "worker",
+        cache: { enabled: false },
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Previews upload their own `exports` map: the gateway/`Public` split
+// applies on the Preview URL, independent of the parent's settings.
+test.provider(
+  "a preview applies its own entrypoint cache settings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { preview } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const parent = yield* Cloudflare.Worker("EntrypointCacheParent", {
+            script: cachedScript,
+          });
+          const preview = yield* Cloudflare.Worker("EntrypointCachePreview", {
+            script: entrypointScript,
+            preview: { of: parent },
+            entrypoints: {
+              default: { cache: { enabled: false } },
+              Public: { cache: { enabled: true } },
+            },
+          });
+          return { parent, preview };
+        }),
+      );
+      expect(preview.url).toBeDefined();
+
+      yield* expectUrlContains(preview.url!, "gw:", {
+        label: "entrypoint cache preview propagation",
+      });
+
+      const publicHit = yield* pollForLayers(
+        `${preview.url}/gateway`,
+        (previous, current) =>
+          current.public === previous.public && current.gateway !== previous.gateway,
+      );
+      expect(publicHit.hit).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
   },
 );

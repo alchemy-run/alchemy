@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
-export interface DeleteLogStreamRequest extends Omit<
-  Logs.DeleteLogStreamRequest,
-  "logGroupName"
-> {}
+export interface DeleteLogStreamRequest extends Omit<Logs.DeleteLogStreamRequest, "logGroupName"> {}
 
 /**
  * Runtime binding for `logs:DeleteLogStream`.
@@ -38,6 +35,4 @@ export interface DeleteLogStream extends Binding.Service<
     ) => Effect.Effect<Logs.DeleteLogStreamResponse, Logs.DeleteLogStreamError>
   >
 > {}
-export const DeleteLogStream = Binding.Service<DeleteLogStream>(
-  "AWS.Logs.DeleteLogStream",
-);
+export const DeleteLogStream = Binding.Service<DeleteLogStream>("AWS.Logs.DeleteLogStream");

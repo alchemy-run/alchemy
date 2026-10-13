@@ -40,10 +40,7 @@ export interface ListManagedThingSchemas extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListManagedThingSchemasRequest,
-    ) => Effect.Effect<
-      mi.ListManagedThingSchemasResponse,
-      mi.ListManagedThingSchemasError
-    >
+    ) => Effect.Effect<mi.ListManagedThingSchemasResponse, mi.ListManagedThingSchemasError>
   >
 > {}
 export const ListManagedThingSchemas = Binding.Service<ListManagedThingSchemas>(

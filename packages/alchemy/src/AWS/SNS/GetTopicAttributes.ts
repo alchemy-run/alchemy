@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface GetTopicAttributesRequest extends Omit<
-  sns.GetTopicAttributesInput,
-  "TopicArn"
-> {}
+export interface GetTopicAttributesRequest extends Omit<sns.GetTopicAttributesInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:GetTopicAttributes`.
@@ -37,13 +34,8 @@ export interface GetTopicAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetTopicAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetTopicAttributesResponse,
-      sns.GetTopicAttributesError
-    >
+    ) => Effect.Effect<sns.GetTopicAttributesResponse, sns.GetTopicAttributesError>
   >
 > {}
 
-export const GetTopicAttributes = Binding.Service<GetTopicAttributes>(
-  "AWS.SNS.GetTopicAttributes",
-);
+export const GetTopicAttributes = Binding.Service<GetTopicAttributes>("AWS.SNS.GetTopicAttributes");

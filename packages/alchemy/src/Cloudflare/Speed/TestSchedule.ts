@@ -2,7 +2,6 @@ import * as speed from "@distilled.cloud/cloudflare/speed";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -188,9 +187,7 @@ export const TestScheduleProvider = () =>
                     ? [
                         {
                           url: p.url,
-                          region:
-                            (p.region?.value as TestRegion | undefined) ??
-                            DEFAULT_REGION,
+                          region: (p.region?.value as TestRegion | undefined) ?? DEFAULT_REGION,
                         },
                       ]
                     : [],
@@ -203,22 +200,16 @@ export const TestScheduleProvider = () =>
                 ({ url, region }) =>
                   getSchedule(zone.id, url, region).pipe(
                     Effect.map((observed) =>
-                      observed
-                        ? toAttributes(observed, zone.id, url, region)
-                        : undefined,
+                      observed ? toAttributes(observed, zone.id, url, region) : undefined,
                     ),
                     // Plan-gated zone rejects the schedule route; skip it.
-                    Effect.catchTag("Forbidden", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 10 },
               ),
             ),
             Effect.map((items) =>
-              items.filter(
-                (item): item is TestScheduleAttributes => item !== undefined,
-              ),
+              items.filter((item): item is TestScheduleAttributes => item !== undefined),
             ),
             // Plan-gated / partial zones reject the pages route; skip them.
             Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
@@ -242,11 +233,7 @@ export const TestScheduleProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       // frequency converges in place (reconcile deletes + re-creates).
@@ -256,8 +243,7 @@ export const TestScheduleProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       const url = output?.url ?? olds?.url;
-      const region =
-        output?.region ?? (olds?.region as TestRegion) ?? DEFAULT_REGION;
+      const region = output?.region ?? (olds?.region as TestRegion) ?? DEFAULT_REGION;
       if (!zoneId || !url) return undefined;
 
       const observed = yield* getSchedule(zoneId, url, region);
@@ -286,32 +272,19 @@ export const TestScheduleProvider = () =>
       //    `TestScheduleAlreadyExists`: converge by re-reading the schedule
       //    that won the race.
       if (!observed) {
-        observed = yield* createAndObserve(
-          zoneId,
-          news.url,
-          region,
-          news.frequency,
-        );
+        observed = yield* createAndObserve(zoneId, news.url, region, news.frequency);
       }
 
       // 3. Sync — the only mutable aspect is `frequency`, and the API has
       //    no update call: converge drift by deleting and re-creating the
       //    schedule under the same identity. Skip entirely on a no-op (or
       //    when the user left frequency to the API default).
-      if (
-        news.frequency !== undefined &&
-        observed.frequency !== news.frequency
-      ) {
+      if (news.frequency !== undefined && observed.frequency !== news.frequency) {
         const previous = observed;
         yield* speed
           .deleteSchedule({ zoneId, url: news.url, region })
           .pipe(Effect.catchTag("TestScheduleNotFound", () => Effect.void));
-        observed = yield* createAndObserve(
-          zoneId,
-          news.url,
-          region,
-          news.frequency,
-        ).pipe(
+        observed = yield* createAndObserve(zoneId, news.url, region, news.frequency).pipe(
           // Cloudflare caps DAILY-schedule creations per URL per day. We
           // already deleted the old schedule — restore it so a quota
           // rejection degrades to "unchanged" rather than "lost", then
@@ -379,18 +352,14 @@ const createAndObserve = (
         : // The create succeeded but echoed no schedule — re-observe.
           getScheduleOrFail(zoneId, url, region),
     ),
-    Effect.catchTag("TestScheduleAlreadyExists", () =>
-      getScheduleOrFail(zoneId, url, region),
-    ),
+    Effect.catchTag("TestScheduleAlreadyExists", () => getScheduleOrFail(zoneId, url, region)),
   );
 
 const getScheduleOrFail = (zoneId: string, url: string, region: TestRegion) =>
   // Let the typed `TestScheduleNotFound` propagate — reaching this state
   // means the schedule vanished between our calls; surfacing the typed
   // error is more honest than inventing one.
-  speed
-    .getSchedule({ zoneId, url, region })
-    .pipe(Effect.map((s): ObservedSchedule => s));
+  speed.getSchedule({ zoneId, url, region }).pipe(Effect.map((s): ObservedSchedule => s));
 
 const toAttributes = (
   observed: ObservedSchedule,

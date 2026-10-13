@@ -1,26 +1,22 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { normalizeEndpoint } from "@/Cloudflare/ApiShield/Operation";
-import * as Provider from "@/Provider";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { normalizeEndpoint } from "@/Cloudflare/ApiShield/Operation";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test endpoints. Each test owns a disjoint path so reruns
 // and parallel runs never collide (never derive identity from Date.now()).
@@ -32,9 +28,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -44,27 +38,22 @@ const resolveZoneId = Effect.gen(function* () {
 // the test's own out-of-band calls by retrying the typed `Forbidden` error.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const findOperation = (
-  zoneId: string,
-  tuple: { method: string; host: string; endpoint: string },
-) =>
-  apiGateway.listOperations
-    .items({ zoneId, host: [tuple.host], method: [tuple.method] })
-    .pipe(
-      Stream.filter(
-        (op) =>
-          op.method === tuple.method &&
-          op.host === tuple.host &&
-          op.endpoint === normalizeEndpoint(tuple.endpoint),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
+const findOperation = (zoneId: string, tuple: { method: string; host: string; endpoint: string }) =>
+  apiGateway.listOperations.items({ zoneId, host: [tuple.host], method: [tuple.method] }).pipe(
+    Stream.filter(
+      (op) =>
+        op.method === tuple.method &&
+        op.host === tuple.host &&
+        op.endpoint === normalizeEndpoint(tuple.endpoint),
+    ),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)[0]),
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
 
 const getOperation = (zoneId: string, operationId: string) =>
   apiGateway.getOperation({ zoneId, operationId }).pipe(
@@ -83,16 +72,14 @@ const purgeOperation = (
   findOperation(zoneId, tuple).pipe(
     Effect.flatMap((op) =>
       op
-        ? apiGateway
-            .deleteOperation({ zoneId, operationId: op.operationId })
-            .pipe(
-              Effect.catchTag("OperationNotFound", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "Forbidden",
-                schedule: forbiddenRetrySchedule,
-                times: 8,
-              }),
-            )
+        ? apiGateway.deleteOperation({ zoneId, operationId: op.operationId }).pipe(
+            Effect.catchTag("OperationNotFound", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+          )
         : Effect.void,
     ),
   );
@@ -102,11 +89,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
-      const tuple = {
-        method: "GET",
-        host: zoneName,
-        endpoint: ENDPOINT_DEFAULT,
-      };
+      const tuple = { method: "GET", host: zoneName, endpoint: ENDPOINT_DEFAULT };
 
       yield* stack.destroy();
       yield* purgeOperation(zoneId, tuple);
@@ -167,11 +150,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
-      const getTuple = {
-        method: "GET",
-        host: zoneName,
-        endpoint: ENDPOINT_REPLACE,
-      };
+      const getTuple = { method: "GET", host: zoneName, endpoint: ENDPOINT_REPLACE };
       const postTuple = { ...getTuple, method: "POST" };
 
       yield* stack.destroy();
@@ -229,11 +208,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
-      const tuple = {
-        method: "GET",
-        host: zoneName,
-        endpoint: ENDPOINT_LIST,
-      };
+      const tuple = { method: "GET", host: zoneName, endpoint: ENDPOINT_LIST };
 
       yield* stack.destroy();
       yield* purgeOperation(zoneId, tuple);
@@ -249,9 +224,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ApiShield.Operation,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ApiShield.Operation);
       const all = yield* provider.list();
 
       // The deployed operation appears in the exhaustively-paginated,

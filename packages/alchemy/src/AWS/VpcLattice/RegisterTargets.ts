@@ -40,12 +40,7 @@ export interface RegisterTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RegisterTargetsRequest,
-    ) => Effect.Effect<
-      vpclattice.RegisterTargetsResponse,
-      vpclattice.RegisterTargetsError
-    >
+    ) => Effect.Effect<vpclattice.RegisterTargetsResponse, vpclattice.RegisterTargetsError>
   >
 > {}
-export const RegisterTargets = Binding.Service<RegisterTargets>(
-  "AWS.VpcLattice.RegisterTargets",
-);
+export const RegisterTargets = Binding.Service<RegisterTargets>("AWS.VpcLattice.RegisterTargets");

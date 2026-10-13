@@ -30,10 +30,7 @@ export interface ListServiceStates extends Binding.Service<
   () => Effect.Effect<
     (
       request: appsignals.ListServiceStatesInput,
-    ) => Effect.Effect<
-      appsignals.ListServiceStatesOutput,
-      appsignals.ListServiceStatesError
-    >
+    ) => Effect.Effect<appsignals.ListServiceStatesOutput, appsignals.ListServiceStatesError>
   >
 > {}
 

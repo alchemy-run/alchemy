@@ -40,7 +40,7 @@ export interface PipelineEndpoint extends Resource<
   PipelineEndpointProps,
   {
     /**
-     * Id of the pipeline endpoint (`pe-…`), assigned by OSIS on create.
+     * Opaque id of the pipeline endpoint, assigned by OSIS on create.
      */
     endpointId: string;
     /**
@@ -69,6 +69,12 @@ export interface PipelineEndpoint extends Resource<
  * clients inside a VPC ingest data into a pipeline privately, without
  * traversing the public ingest endpoint.
  *
+ * The target pipeline must itself be a VPC pipeline (`vpcOptions` set), and
+ * the endpoint must live in a different VPC than the pipeline — within the
+ * pipeline's own VPC, use its ingest URL instead. Every VPC involved needs
+ * `enableDnsSupport` and `enableDnsHostnames`. Cross-account endpoints also
+ * need an {@link ResourcePolicy} granting `osis:CreatePipelineEndpoint`.
+ *
  * All properties are create-only; any change replaces the endpoint. The
  * endpoint id is assigned by OSIS on create.
  * ### Creating a Pipeline Endpoint
@@ -86,9 +92,7 @@ export interface PipelineEndpoint extends Resource<
  *
  * @resource
  */
-export const PipelineEndpoint = Resource<PipelineEndpoint>(
-  "AWS.OSIS.PipelineEndpoint",
-);
+export const PipelineEndpoint = Resource<PipelineEndpoint>("AWS.OSIS.PipelineEndpoint");
 
 /**
  * A pipeline endpoint whose asynchronous create converged to a failed
@@ -147,12 +151,8 @@ export const PipelineEndpointProvider = () =>
         read: Effect.Effect<osis.PipelineEndpoint | undefined, E, R>,
       ): Effect.Effect<osis.PipelineEndpoint | undefined, E, R> =>
         Effect.repeat(read, {
-          schedule: Schedule.max([
-            Schedule.fixed("15 seconds"),
-            Schedule.recurs(40),
-          ]),
-          until: (endpoint): boolean =>
-            endpoint === undefined || endpoint.Status !== "CREATING",
+          schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
+          until: (endpoint): boolean => endpoint === undefined || endpoint.Status !== "CREATING",
         });
 
       return {
@@ -185,9 +185,7 @@ export const PipelineEndpointProvider = () =>
 
           // 1. Observe — the persisted id is a cache, not a guarantee.
           let observed =
-            output?.endpointId !== undefined
-              ? yield* findEndpoint(output.endpointId)
-              : undefined;
+            output?.endpointId !== undefined ? yield* findEndpoint(output.endpointId) : undefined;
 
           // 2. Ensure — create if missing (ids are server-assigned, so
           // there is no AlreadyExists race to tolerate).
@@ -214,18 +212,14 @@ export const PipelineEndpointProvider = () =>
           }
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                "OSIS pipeline endpoint disappeared while waiting for create",
-              ),
+              new Error("OSIS pipeline endpoint disappeared while waiting for create"),
             );
           }
           if (observed.Status === "CREATE_FAILED") {
-            return yield* Effect.fail(
-              new PipelineEndpointCreateFailed({
-                endpointId: observed.EndpointId ?? "",
-                status: observed.Status,
-              }),
-            );
+            return yield* new PipelineEndpointCreateFailed({
+              endpointId: observed.EndpointId ?? "",
+              status: observed.Status,
+            });
           }
 
           yield* session.note(observed.EndpointId ?? "");

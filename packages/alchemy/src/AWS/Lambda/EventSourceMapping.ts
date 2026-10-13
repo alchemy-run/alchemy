@@ -6,10 +6,10 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -92,7 +92,10 @@ export interface EventSourceMappingProps {
   tumblingWindow?: Duration.Input;
   /**
    * A list of current response type enums applied to the event source mapping.
-   * @default ["ReportBatchItemFailures"]
+   * Defaults to `["ReportBatchItemFailures"]` for SQS, Kinesis and DynamoDB
+   * Streams sources, and for other sources (e.g. Kafka/MSK) only when
+   * `provisionedPollerConfig.MinimumPollers` is set — they reject it otherwise.
+   * @default ["ReportBatchItemFailures"] (SQS, Kinesis, DynamoDB Streams)
    */
   functionResponseTypes?: FunctionResponseType[];
   /**
@@ -112,8 +115,10 @@ export interface EventSourceMappingProps {
    */
   kmsKeyArn?: string;
   /**
-   * Metrics configuration for the event source mapping.
-   * @default { Metrics: ["EventCount"] }
+   * Metrics configuration for the event source mapping. Defaulted only for
+   * SQS, Kinesis and DynamoDB Streams sources, or other sources (Kafka/MSK)
+   * with `provisionedPollerConfig.MinimumPollers` set.
+   * @default { Metrics: ["EventCount"] } (where supported)
    */
   metricsConfig?: lambda.EventSourceMappingMetricsConfig;
   /**
@@ -495,9 +500,7 @@ export interface EventSourceMapping extends Resource<
  *
  * @resource
  */
-export const EventSourceMapping = Resource<EventSourceMapping>(
-  "AWS.Lambda.EventSourceMapping",
-);
+export const EventSourceMapping = Resource<EventSourceMapping>("AWS.Lambda.EventSourceMapping");
 
 export const EventSourceMappingProvider = () =>
   Provider.effect(
@@ -511,6 +514,23 @@ export const EventSourceMappingProvider = () =>
         };
       });
 
+      // ReportBatchItemFailures and MetricsConfig are only accepted for
+      // SQS / Kinesis / DynamoDB Streams, or for other sources (Kafka/MSK)
+      // in provisioned-poller mode — MSK rejects them otherwise ("... is only
+      // available for provisioned mode"). Only default them where valid.
+      const supportsDefaults = (props: EventSourceMappingProps): boolean =>
+        /^arn:[^:]+:(sqs|kinesis|dynamodb):/.test(String(props.eventSourceArn)) ||
+        props.provisionedPollerConfig?.MinimumPollers !== undefined;
+      const defaultFunctionResponseTypes = (
+        props: EventSourceMappingProps,
+      ): FunctionResponseType[] | undefined =>
+        props.functionResponseTypes ??
+        (supportsDefaults(props) ? ["ReportBatchItemFailures"] : undefined);
+      const defaultMetricsConfig = (
+        props: EventSourceMappingProps,
+      ): lambda.EventSourceMappingMetricsConfig | undefined =>
+        props.metricsConfig ?? (supportsDefaults(props) ? { Metrics: ["EventCount"] } : undefined);
+
       const toCreateRequest = (
         props: EventSourceMappingProps,
         tags: Record<string, string>,
@@ -519,9 +539,7 @@ export const EventSourceMappingProvider = () =>
         EventSourceArn: props.eventSourceArn as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: toWireSeconds(
-          props.maximumBatchingWindow,
-        ),
+        MaximumBatchingWindowInSeconds: toWireSeconds(props.maximumBatchingWindow),
         StartingPosition: props.startingPosition,
         StartingPositionTimestamp: props.startingPositionTimestamp,
         ParallelizationFactor: props.parallelizationFactor,
@@ -529,19 +547,15 @@ export const EventSourceMappingProvider = () =>
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? [
-          "ReportBatchItemFailures",
-        ],
+        FunctionResponseTypes: defaultFunctionResponseTypes(props),
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
-        MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
+        MetricsConfig: defaultMetricsConfig(props),
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        AmazonManagedKafkaEventSourceConfig:
-          props.amazonManagedKafkaEventSourceConfig,
-        SelfManagedKafkaEventSourceConfig:
-          props.selfManagedKafkaEventSourceConfig,
+        AmazonManagedKafkaEventSourceConfig: props.amazonManagedKafkaEventSourceConfig,
+        SelfManagedKafkaEventSourceConfig: props.selfManagedKafkaEventSourceConfig,
         SelfManagedEventSource: props.selfManagedEventSource,
         SourceAccessConfigurations: props.sourceAccessConfigurations,
         Topics: props.topics,
@@ -551,6 +565,15 @@ export const EventSourceMappingProvider = () =>
         Tags: tags,
       });
 
+      const withoutConsumerGroupId = <
+        C extends { ConsumerGroupId?: string; SchemaRegistryConfig?: unknown },
+      >(
+        config: C | undefined,
+      ): C | undefined =>
+        config?.SchemaRegistryConfig === undefined
+          ? undefined
+          : ({ ...config, ConsumerGroupId: undefined } as C);
+
       const toUpdateRequest = (
         uuid: string,
         props: EventSourceMappingProps,
@@ -559,26 +582,26 @@ export const EventSourceMappingProvider = () =>
         FunctionName: props.functionName as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: toWireSeconds(
-          props.maximumBatchingWindow,
-        ),
+        MaximumBatchingWindowInSeconds: toWireSeconds(props.maximumBatchingWindow),
         BisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
         MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
         TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
-        FunctionResponseTypes: props.functionResponseTypes ?? [
-          "ReportBatchItemFailures",
-        ],
+        FunctionResponseTypes: defaultFunctionResponseTypes(props),
         ScalingConfig: props.scalingConfig,
         DestinationConfig: props.destinationConfig,
         FilterCriteria: props.filterCriteria,
         KMSKeyArn: props.kmsKeyArn,
-        MetricsConfig: props.metricsConfig ?? { Metrics: ["EventCount"] },
+        MetricsConfig: defaultMetricsConfig(props),
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        AmazonManagedKafkaEventSourceConfig:
+        // ConsumerGroupId is create-only — UpdateEventSourceMapping rejects it
+        // ("Unsupported '...consumerGroupId' parameter"); changing it replaces.
+        AmazonManagedKafkaEventSourceConfig: withoutConsumerGroupId(
           props.amazonManagedKafkaEventSourceConfig,
-        SelfManagedKafkaEventSourceConfig:
+        ),
+        SelfManagedKafkaEventSourceConfig: withoutConsumerGroupId(
           props.selfManagedKafkaEventSourceConfig,
+        ),
         SourceAccessConfigurations: props.sourceAccessConfigurations,
         DocumentDBEventSourceConfig: props.documentDBEventSourceConfig,
         LoggingConfig: props.loggingConfig,
@@ -597,22 +620,25 @@ export const EventSourceMappingProvider = () =>
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          if (
-            (news.eventSourceArn as string) !== (olds.eventSourceArn as string)
-          ) {
+          if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
             return { action: "replace" } as const;
           }
           if (news.startingPosition !== olds.startingPosition) {
             return { action: "replace" } as const;
           }
           if (
-            news.startingPositionTimestamp?.getTime() !==
-            olds.startingPositionTimestamp?.getTime()
+            news.startingPositionTimestamp?.getTime() !== olds.startingPositionTimestamp?.getTime()
           ) {
             return { action: "replace" } as const;
           }
+          if (!deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)) {
+            return { action: "replace" } as const;
+          }
           if (
-            !deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)
+            news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+              olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId ||
+            news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+              olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId
           ) {
             return { action: "replace" } as const;
           }
@@ -633,11 +659,7 @@ export const EventSourceMappingProvider = () =>
           if (output?.uuid) {
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
           if (!config?.UUID) {
             config = yield* lambda.listEventSourceMappings
@@ -675,39 +697,37 @@ export const EventSourceMappingProvider = () =>
               .pipe(
                 Effect.catchTags({
                   ResourceConflictException: () =>
-                    lambda.listEventSourceMappings
-                      .pages({ FunctionName: functionName })
-                      .pipe(
-                        Stream.mapEffect(
-                          Effect.fn(function* (page) {
-                            const mapping = page.EventSourceMappings?.find(
-                              (m) => m.EventSourceArn === eventSourceArn,
-                            );
-                            if (mapping?.UUID) {
-                              const { Tags } = yield* lambda
-                                .listTags({
-                                  Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
-                                })
-                                .pipe(retryTransient);
-                              if (hasTags(expectedInternalTags, Tags)) {
-                                return mapping;
-                              }
+                    lambda.listEventSourceMappings.pages({ FunctionName: functionName }).pipe(
+                      Stream.mapEffect(
+                        Effect.fn(function* (page) {
+                          const mapping = page.EventSourceMappings?.find(
+                            (m) => m.EventSourceArn === eventSourceArn,
+                          );
+                          if (mapping?.UUID) {
+                            const { Tags } = yield* lambda
+                              .listTags({
+                                Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                              })
+                              .pipe(retryTransient);
+                            if (hasTags(expectedInternalTags, Tags)) {
+                              return mapping;
                             }
-                          }),
-                        ),
-                        Stream.filter((item) => item !== undefined),
-                        Stream.runHead,
-                        Effect.map(Option.getOrUndefined),
-                        Effect.flatMap((mapping) =>
-                          mapping
-                            ? Effect.succeed(mapping)
-                            : Effect.die(
-                                new Error(
-                                  `EventSourceMapping(${id}) not found on function ${functionName}`,
-                                ),
-                              ),
-                        ),
+                          }
+                        }),
                       ),
+                      Stream.filter((item) => item !== undefined),
+                      Stream.runHead,
+                      Effect.map(Option.getOrUndefined),
+                      Effect.flatMap((mapping) =>
+                        mapping
+                          ? Effect.succeed(mapping)
+                          : Effect.die(
+                              new Error(
+                                `EventSourceMapping(${id}) not found on function ${functionName}`,
+                              ),
+                            ),
+                      ),
+                    ),
                 }),
                 retryPermissionsPropagation,
                 retryTransient,
@@ -727,21 +747,15 @@ export const EventSourceMappingProvider = () =>
           // for mutable fields. We always send the full desired config so
           // observed state converges. Retry `ResourceInUseException`
           // (mapping is transitioning) and known IAM-propagation errors.
-          config = yield* lambda
-            .updateEventSourceMapping(toUpdateRequest(uuid, news))
-            .pipe(
-              Effect.retry({
-                while: (e: any) =>
-                  e._tag === "ResourceInUseException" ||
-                  e._tag === "ResourceConflictException",
-                schedule: Schedule.max([
-                  Schedule.exponential(100),
-                  Schedule.recurs(20),
-                ]),
-              }),
-              retryPermissionsPropagation,
-              retryTransient,
-            );
+          config = yield* lambda.updateEventSourceMapping(toUpdateRequest(uuid, news)).pipe(
+            Effect.retry({
+              while: (e: any) =>
+                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+            }),
+            retryPermissionsPropagation,
+            retryTransient,
+          );
 
           // Wait for the mapping to settle into its desired terminal state.
           // A fresh mapping sits in `Creating` for up to ~a minute before
@@ -755,16 +769,11 @@ export const EventSourceMappingProvider = () =>
               Effect.flatMap((observed) =>
                 observed.State === desiredState
                   ? Effect.succeed(observed)
-                  : Effect.fail(
-                      new MappingNotSettled({ state: observed.State }),
-                    ),
+                  : Effect.fail(new MappingNotSettled({ state: observed.State })),
               ),
               Effect.retry({
                 while: (e) => e._tag === "MappingNotSettled",
-                schedule: Schedule.max([
-                  Schedule.spaced("2 seconds"),
-                  Schedule.recurs(45),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(
                       `EventSourceMapping ${uuid}: waiting to become ${desiredState} (${(attempt + 1) * 2}s elapsed)`,
@@ -787,8 +796,7 @@ export const EventSourceMappingProvider = () =>
             .pipe(retryTransient);
           const observedTags: Record<string, string> = Object.fromEntries(
             Object.entries(observedTagsResp.Tags ?? {}).filter(
-              (entry): entry is [string, string] =>
-                typeof entry[1] === "string",
+              (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
           );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
@@ -816,12 +824,8 @@ export const EventSourceMappingProvider = () =>
           yield* lambda.deleteEventSourceMapping({ UUID: output.uuid }).pipe(
             Effect.retry({
               while: (e: any) =>
-                e._tag === "ResourceInUseException" ||
-                e._tag === "ResourceConflictException",
-              schedule: Schedule.max([
-                Schedule.exponential(100),
-                Schedule.recurs(20),
-              ]),
+                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
@@ -863,27 +867,24 @@ export const EventSourceMappingProvider = () =>
     }),
   );
 
-const retryTransient: <A, R, Err>(
-  self: Effect.Effect<A, Err, R>,
-) => Effect.Effect<A, Err, R> = Effect.retry({
-  while: (e: any) =>
-    e._tag === "InternalFailure" ||
-    e._tag === "RequestExpired" ||
-    e._tag === "ServiceException" ||
-    e._tag === "ServiceUnavailable" ||
-    e._tag === "ThrottlingException" ||
-    e._tag === "TooManyRequestsException" ||
-    e._tag === "RequestLimitExceeded" ||
-    e._tag === "ResourceInUseException",
-  schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
-});
+const retryTransient: <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R> =
+  Effect.retry({
+    while: (e: any) =>
+      e._tag === "InternalFailure" ||
+      e._tag === "RequestExpired" ||
+      e._tag === "ServiceException" ||
+      e._tag === "ServiceUnavailable" ||
+      e._tag === "ThrottlingException" ||
+      e._tag === "TooManyRequestsException" ||
+      e._tag === "RequestLimitExceeded" ||
+      e._tag === "ResourceInUseException",
+    schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
+  });
 
 const retryPermissionsPropagation = Effect.retry({
   while: (e: any) =>
     e._tag === "InvalidParameterValueException" &&
-    (e.message?.includes(
-      "The function execution role does not have permissions to call",
-    ) ||
+    (e.message?.includes("The function execution role does not have permissions to call") ||
       e.message?.includes("cannot be assumed by Lambda") ||
       e.message?.includes("Please add Lambda as a Trusted Entity") ||
       e.message?.includes("Cannot access stream") ||
@@ -891,5 +892,4 @@ const retryPermissionsPropagation = Effect.retry({
   schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
 }) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
 
-const sanitizeAwsTagValue = (value: string) =>
-  value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");
+const sanitizeAwsTagValue = (value: string) => value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");

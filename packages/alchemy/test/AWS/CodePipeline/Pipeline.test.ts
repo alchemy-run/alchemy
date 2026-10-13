@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Pipeline } from "@/AWS/CodePipeline/Pipeline.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Pipeline } from "@/AWS/CodePipeline/Pipeline.ts";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,11 +13,7 @@ const pipelineName = "alchemy-test-codepipeline";
 
 const getPipeline = codepipeline
   .getPipeline({ name: pipelineName })
-  .pipe(
-    Effect.catchTag("PipelineNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.succeed(undefined)));
 
 // Build the stack: an S3 source bucket (must be versioned for an S3 source
 // action), an artifact bucket, a pipeline role, and the pipeline itself.
@@ -118,10 +114,9 @@ test.provider(
       expect(created?.pipeline?.name).toBe(pipelineName);
       expect(created?.pipeline?.stages?.length).toBe(2);
       expect(created?.pipeline?.stages?.[0]?.name).toBe("Source");
-      expect(
-        created?.pipeline?.stages?.[0]?.actions?.[0]?.configuration
-          ?.S3ObjectKey,
-      ).toBe("source.zip");
+      expect(created?.pipeline?.stages?.[0]?.actions?.[0]?.configuration?.S3ObjectKey).toBe(
+        "source.zip",
+      );
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(Pipeline);
@@ -131,10 +126,9 @@ test.provider(
       // Update — change the source object key in place (no replacement).
       yield* stack.deploy(makeStack("release.zip"));
       const updated = yield* getPipeline;
-      expect(
-        updated?.pipeline?.stages?.[0]?.actions?.[0]?.configuration
-          ?.S3ObjectKey,
-      ).toBe("release.zip");
+      expect(updated?.pipeline?.stages?.[0]?.actions?.[0]?.configuration?.S3ObjectKey).toBe(
+        "release.zip",
+      );
 
       // Destroy — pipeline is deleted; verify it is gone out-of-band.
       yield* stack.destroy();

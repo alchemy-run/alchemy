@@ -60,16 +60,12 @@ export const makeEmailContactHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${contact.LogicalId})`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${contact.LogicalId})`)(function* (request?: Req) {
         const arn = yield* ContactArn;
         // The region must also be pinned at the call site: the yield-time
         // snapshot is only a fallback — the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
-        return yield* pinContactsRegion(
-          op({ ...(request as object), arn } as I),
-        );
+        return yield* pinContactsRegion(op({ ...(request as object), arn } as I));
       });
     });
   });

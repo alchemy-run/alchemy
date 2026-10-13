@@ -7,8 +7,7 @@ import { createInternalTags, diffTags } from "../../Tags.ts";
  * (hyphens from generated physical names, colons, etc.) to an underscore so
  * a name derived from the stack/id/stage is always valid.
  */
-export const sanitizeRuleName = (name: string): string =>
-  name.replace(/[^a-zA-Z0-9_]/g, "_");
+export const sanitizeRuleName = (name: string): string => name.replace(/[^a-zA-Z0-9_]/g, "_");
 
 /**
  * Reads the observed tag map for an IoT resource ARN. A missing resource
@@ -18,9 +17,7 @@ export const readIotTags = Effect.fn(function* (resourceArn: string) {
   const { tags } = yield* iot
     .listTagsForResource({ resourceArn })
     .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed({ tags: [] as iot.Tag[] }),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ tags: [] as iot.Tag[] })),
     );
   const record: Record<string, string> = {};
   for (const tag of tags ?? []) {

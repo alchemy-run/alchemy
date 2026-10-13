@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, syncIotWirelessTags } from "./internal.ts";
 
@@ -153,33 +149,19 @@ export const DestinationProvider = () =>
   Provider.effect(
     Destination,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const getDestination = (name: string) =>
         iotw
           .getDestination({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const toAttrs = Effect.fn(function* (
-        destination: iotw.GetDestinationResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (destination: iotw.GetDestinationResponse, name: string) {
         if (destination.Arn === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `IoT Wireless destination '${name}' returned without Arn`,
-            ),
+            new Error(`IoT Wireless destination '${name}' returned without Arn`),
           );
         }
         return {
@@ -217,8 +199,7 @@ export const DestinationProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.destinationName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.destinationName ?? (yield* createName(id, olds ?? {}));
           const destination = yield* getDestination(name);
           if (destination === undefined) return undefined;
           const attrs = yield* toAttrs(destination, name);
@@ -264,9 +245,7 @@ export const DestinationProvider = () =>
           }
           if (destination === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless destination '${name}' not found after create`,
-              ),
+              new Error(`IoT Wireless destination '${name}' not found after create`),
             );
           }
 
@@ -276,8 +255,7 @@ export const DestinationProvider = () =>
             destination.Expression !== news.expression ||
             destination.ExpressionType !== news.expressionType;
           const descriptionDelta =
-            news.description !== undefined &&
-            destination.Description !== news.description;
+            news.description !== undefined && destination.Description !== news.description;
           const roleDelta = destination.RoleArn !== news.roleArn;
           if (expressionDelta || descriptionDelta || roleDelta) {
             yield* iotw.updateDestination({
@@ -291,9 +269,7 @@ export const DestinationProvider = () =>
           }
           if (destination === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless destination '${name}' vanished during update`,
-              ),
+              new Error(`IoT Wireless destination '${name}' vanished during update`),
             );
           }
 

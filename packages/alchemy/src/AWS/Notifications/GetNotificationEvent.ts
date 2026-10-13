@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetNotificationEvent}.
  */
-export interface GetNotificationEventRequest
-  extends notifications.GetNotificationEventRequest {}
+export interface GetNotificationEventRequest extends notifications.GetNotificationEventRequest {}
 
 /**
  * Runtime binding for `notifications:GetNotificationEvent`.
