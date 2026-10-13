@@ -98,20 +98,39 @@ const useSessionIds = () => {
   }, [refreshes]);
   const listedIds = listed.map((session) => session.id);
   const ids = [...created.filter((id) => !listedIds.includes(id)), ...listedIds];
-  // Settled here: shown as settled before the server lists it so.
+  // Settled here: shown as settled until the server's list catches up (a
+  // new prompt can unsettle it again, so this never outlives that).
   const [settled, setSettled] = useState<Record<string, number>>({});
+  const pending = (id: string) => {
+    const at = settled[id];
+    return at !== undefined && Date.now() - at < 30_000 ? at : undefined;
+  };
   const byId: Record<string, ListedSession> = Object.fromEntries(
-    listed.map((session) => [
-      session.id,
-      settled[session.id] && !session.settledAt
-        ? { ...session, settledAt: settled[session.id] }
-        : session,
-    ]),
+    listed.map((session) => {
+      const at = pending(session.id);
+      return [
+        session.id,
+        at !== undefined && !session.settledAt ? { ...session, settledAt: at } : session,
+      ];
+    }),
   );
   const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
   const refresh = () => setRefreshes((n) => n + 1);
   const markSettled = (id: string) => setSettled((prev) => ({ ...prev, [id]: Date.now() }));
-  return { ids, listed: byId, add, refresh, markSettled };
+  const unmarkSettled = (id: string) => setSettled(({ [id]: _, ...rest }) => rest);
+  // Once the server lists a session as settled, it alone decides (so a new
+  // prompt that unsettles it shows at once).
+  useEffect(() => {
+    const confirmed = new Set(
+      listed.filter((session) => session.settledAt && settled[session.id]).map((s) => s.id),
+    );
+    if (confirmed.size > 0) {
+      setSettled((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([id]) => !confirmed.has(id))),
+      );
+    }
+  }, [listed]);
+  return { ids, listed: byId, add, refresh, markSettled, unmarkSettled };
 };
 
 /** How long ago, briefly: "now", "5m", "3h", "2d". */
@@ -340,7 +359,9 @@ function Sidebar(props: {
           <PlusIcon className="size-4" /> New session
         </Button>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
+      {/* Two panes: active sessions scroll on their own, and Settled is always
+          at the bottom — collapsed to its header, or open at its own height. */}
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
         {active.map((id) => (
           <SidebarRow
             key={id}
@@ -351,24 +372,30 @@ function Sidebar(props: {
             onSettle={() => props.onSettle(id)}
           />
         ))}
-        {settled.length > 0 && (
-          <div className="mt-auto pt-4" data-testid="settled">
-            <button
-              type="button"
-              onClick={() => setShowSettled((open) => !open)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-muted-foreground text-xs"
-            >
-              <span>Settled</span>
-              <span className="tabular-nums">{settled.length}</span>
-              <span className="h-px flex-1 bg-border" />
-              {showSettled ? (
-                <ChevronDownIcon className="size-3.5" />
-              ) : (
-                <ChevronRightIcon className="size-3.5" />
-              )}
-            </button>
-            {showSettled &&
-              settled.map((id) => (
+      </nav>
+      {settled.length > 0 && (
+        <div
+          className={cn("flex shrink-0 flex-col border-t px-2 pt-2", showSettled && "h-[40%]")}
+          data-testid="settled"
+        >
+          <button
+            type="button"
+            onClick={() => setShowSettled((open) => !open)}
+            className="flex w-full shrink-0 items-center gap-2 px-3 py-1.5 text-muted-foreground text-xs"
+          >
+            <span>
+              Settled <span className="tabular-nums">({settled.length})</span>
+            </span>
+            <span className="h-px flex-1 bg-border" />
+            {showSettled ? (
+              <ChevronDownIcon className="size-3.5" />
+            ) : (
+              <ChevronRightIcon className="size-3.5" />
+            )}
+          </button>
+          {showSettled && (
+            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-2">
+              {settled.map((id) => (
                 <SettledRow
                   key={id}
                   id={id}
@@ -378,9 +405,10 @@ function Sidebar(props: {
                   onSelect={() => props.onSelect(id)}
                 />
               ))}
-          </div>
-        )}
-      </nav>
+            </div>
+          )}
+        </div>
+      )}
       <div className="border-t px-4 py-3 text-muted-foreground text-xs">
         Each session runs in its own container.
       </div>
@@ -832,12 +860,20 @@ function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
 //#endregion
 
 export function App() {
-  const { ids, listed, add: addId, refresh: refreshSessions, markSettled } = useSessionIds();
+  const {
+    ids,
+    listed,
+    add: addId,
+    refresh: refreshSessions,
+    markSettled,
+    unmarkSettled,
+  } = useSessionIds();
   const settle = (id: string) => {
     markSettled(id);
     void agents
       .settle(id)
-      .catch(() => {})
+      // Didn't settle: put it back.
+      .catch(() => unmarkSettled(id))
       .finally(refreshSessions);
   };
   // The open session is in the URL, so a reload (or a link) opens it again.

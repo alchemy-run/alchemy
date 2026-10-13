@@ -4,6 +4,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { INSTANCE, makeMachine } from "./machine.ts";
 import { AgentRpcs } from "./rpcs.ts";
@@ -75,6 +76,8 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
     const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
     const sessions = yield* Sessions;
     const machine = makeMachine(sandbox);
+    /** Work that must outlive the call that started it (a caller may disconnect). */
+    const background = yield* Scope.make();
 
     return Effect.sync(() => {
       const claude = harness
@@ -133,12 +136,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
             }),
           ),
         settle: ({ sessionId }) =>
-          harness
-            .stop()
-            .pipe(
-              Effect.andThen(sessions.getByName(SESSIONS_INDEX).settle(sessionId)),
-              Effect.andThen(machine()),
-            ),
+          Effect.gen(function* () {
+            // Settled at once; stopping the machine (checkpoint, snapshot)
+            // takes a while, and must not be cancelled if the caller leaves.
+            yield* sessions.getByName(SESSIONS_INDEX).settle(sessionId);
+            yield* harness.stop().pipe(Effect.ignore, Effect.forkIn(background));
+            return yield* machine();
+          }),
         // Checkpoint and snapshot the work, then stop the container.
         suspend: () => harness.stop().pipe(Effect.andThen(machine())),
         resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),

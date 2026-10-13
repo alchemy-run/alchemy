@@ -142,6 +142,9 @@ test("settling a session stops its machine and archives it until a new prompt", 
   const id = decodeURIComponent(new URL(page.url()).hash.slice(1));
 
   await page.getByTestId("settle").click();
+  // Settled at once on the server: a refresh straight away keeps it settled.
+  await page.waitForTimeout(500);
+  await page.reload();
   // Out of the active list, into Settled.
   await expect(page.locator("aside nav > div.group").filter({ hasText: id })).toHaveCount(0);
   const settled = page.getByTestId("settled");

@@ -23,6 +23,7 @@ const cors = {
  *                                         (`?wait=false` returns as soon as the turn starts)
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
  *   POST /agents/:id/interrupt            stop the running turn
+ *   POST /agents/:id/settle               stop its machine and archive it
  *   POST /agents/:id/model    { model }   switch models mid-session
  *   GET  /agents/:id                      session info (state, model, usage)
  *   GET  /agents/:id/events?after=N       server-sent events, resumable by cursor
@@ -73,7 +74,7 @@ export default Cloudflare.Worker(
             ),
           );
         }
-        const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model))?$/.exec(
+        const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model|settle))?$/.exec(
           url.pathname,
         );
         if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
@@ -106,6 +107,9 @@ export default Cloudflare.Worker(
         const agent = yield* agents.getByName(id!);
         if (request.method === "GET" && action === undefined) {
           return yield* HttpServerResponse.json(yield* agent.info({ sessionId: id! }));
+        }
+        if (action === "settle") {
+          return yield* HttpServerResponse.json(yield* agent.settle({ sessionId: id! }));
         }
         if (action === "interrupt") {
           yield* agent.interrupt({ sessionId: id! });
