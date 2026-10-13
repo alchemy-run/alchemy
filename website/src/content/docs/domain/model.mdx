@@ -1,143 +1,162 @@
 ---
 title: Domain model
-description: Host aggregates, views and policies together, on Cloudflare or in memory.
+description: What happens when a command reaches a running model, and how you declare, run and use one.
 ---
 
-A domain model is the set of aggregates, views and policies you host together. Declare it with `Domain.Model`, and give it the policies' implementations and a platform to run on.
+import DAG from "../../../components/DAG.astro";
 
-## Declare a model
+A `Domain.Model` is one bounded context running as a whole: its aggregates, the views built from their events, and the policies that react to them. This page follows a single deposit through a running model, then shows how to declare one, run it, and call it from your own code.
 
-List every aggregate, view and policy the model hosts.
+If the words aggregate, view and policy are new, read [What is Domain-Driven Design?](/domain/what-is-ddd) first.
+
+## Follow one command
+
+A client deposits 100 into account `a-1`. Here is everything that happens, from the moment the command is sent to the moment the balance on screen changes.
+
+<DAG
+  nodes={[
+    { id: "send", label: "send", type: "DepositMoney" },
+    { id: "account", label: "Account a-1", type: "aggregate", tone: "accent" },
+    { id: "commit", label: "commit", type: "events + state" },
+    { id: "receipt", label: "receipt", type: "to the caller" },
+    { id: "summary", label: "AccountSummary", type: "view" },
+    { id: "statement", label: "Statement", type: "view" },
+  ]}
+  edges={[
+    { from: "send", to: "account" },
+    { from: "account", to: "commit" },
+    { from: "commit", to: "receipt" },
+    { from: "commit", to: "summary", dashed: true },
+    { from: "commit", to: "statement", dashed: true },
+  ]}
+  caption="Solid edges are one step. Dashed edges are delivered shortly after the commit."
+/>
+
+## The command reaches one instance
+
+Every command names its target, the id of one aggregate instance. `DepositMoney` targets an `AccountId`, so the model routes it to account `a-1` and nowhere else.
+
+Each instance handles one command at a time. If two commands for `a-1` arrive together, the second waits until the first has committed, then sees the state it left behind. Commands for different accounts run in parallel, since they can't affect each other.
+
+## The aggregate decides
+
+The instance loads its current state and calls the aggregate's `decide` handler for the command.
+
+```typescript title="src/Account.ts"
+DepositMoney: (s, cmd) =>
+  s._tag !== "Open"
+    ? new NotOpen()
+    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+```
+
+If it returns a rejection, the command ends there. Nothing is recorded, and the caller gets the rejection as a typed error, here `NotOpen`.
+
+If it returns events, each one is folded into the state with `evolve`, in order.
+
+## The events and the state commit together
+
+The new events are appended to the instance's stream, each with the next sequence number. In the same atomic write, the instance stores its new state and version, the reply to the caller, and a delivery for every view and policy that consumes these events. Either all of it is stored, or none of it is.
+
+The caller then gets a receipt: the stream and the version it committed at, the events, and the reply.
+
+Every command also carries an id. If a client resends the same command after a dropped connection, the instance finds the receipt it stored for that id and returns it again. The money is deposited once.
+
+## Views and policies catch up
+
+After the commit, each delivery is sent on. `AccountSummary` folds `MoneyDeposited` into its balance; `Statement` adds a line. Each one receives every event it consumes at least once, in the order its source recorded them, even if something restarts in between.
+
+That's why the dashed edges above come after the receipt. For a moment, the account knows the new balance and the summary doesn't yet. A reader who needs their own write passes the receipt along, and the view waits until it has applied that version before answering.
+
+## Declare the model
+
+A model lists what runs together. It can start as a single aggregate.
 
 ```typescript
 // src/Bank.ts
 import * as Domain from "alchemy/Domain";
-import * as Layer from "effect/Layer";
-import { Account } from "./Account/Account.ts";
-import { AccountActivity } from "./Account/AccountActivity.ts";
-import { AccountSummary } from "./Account/AccountSummary.ts";
-import { Statement } from "./Account/Statement.ts";
-import { Customer } from "./Customer/Customer.ts";
-import { CustomerDashboard } from "./Customer/CustomerDashboard.ts";
+import { Account } from "./Account.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+}) {}
+```
+
+Adding a view to `views` is enough for the model to deliver the events it reads. You never wire an event to a view by hand.
+
+```typescript
+// src/Bank.ts
+import * as Domain from "alchemy/Domain";
+import { Account } from "./Account.ts";
+import { AccountSummary } from "./AccountSummary.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+  views: [AccountSummary],
+}) {}
+```
+
+A policy is declared in one place and implemented in another, because its implementation usually needs things from outside the model, like a client for another aggregate or a payment provider. The declaration goes in `policies`; the implementation is a Layer you keep beside it.
+
+```typescript
+// src/Bank.ts
+import * as Domain from "alchemy/Domain";
+import { Account } from "./Account.ts";
+import { AccountSummary } from "./AccountSummary.ts";
+import { Customer } from "./Customer.ts";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
-} from "./Customer/MainAccountProvisioning.ts";
-import { UsernameClaim } from "./Customer/UsernameClaim.ts";
-import { UsernameReservation, UsernameReservationLive } from "./Customer/UsernameReservation.ts";
-import { DailyOutflow } from "./Fraud/DailyOutflow.ts";
-import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
-import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
-import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
-import { Transfer } from "./Transfer/Transfer.ts";
-import {
-  TransferApprovalDeadline,
-  TransferApprovalDeadlineLive,
-} from "./Transfer/TransferApprovalDeadline.ts";
-import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
-import { TransferStatus } from "./Transfer/TransferStatus.ts";
+} from "./MainAccountProvisioning.ts";
 
-/** The bank: every aggregate, view and policy, hosted together. */
 export class Bank extends Domain.Model("Bank", {
-  aggregates: [Customer, UsernameClaim, Account, Transfer],
-  views: [
-    AccountSummary,
-    CustomerDashboard,
-    Statement,
-    AccountActivity,
-    TransferStatus,
-    AccountTransfers,
-    DailyOutflow,
-  ],
-  policies: [
-    UsernameReservation,
-    MainAccountProvisioning,
-    TransferExecution,
-    TransferApprovalDeadline,
-    FraudReview,
-    SettlementRefund,
-  ],
+  aggregates: [Account, Customer],
+  views: [AccountSummary],
+  policies: [MainAccountProvisioning],
 }) {}
 
-/** The policies' implementations. They require the FraudCheck and Payments ports. */
-export const BankPolicies = Layer.mergeAll(
-  UsernameReservationLive,
-  MainAccountProvisioningLive,
-  TransferExecutionLive,
-  TransferApprovalDeadlineLive,
-  FraudReviewLive,
-  SettlementRefundLive,
-);
+export const BankPolicies = MainAccountProvisioningLive;
 ```
 
-`BankPolicies` collects each policy's implementation. A policy is declared in one place and implemented with `toLayer`, so the model can be hosted with different implementations in different places.
+## Run it
 
-## Host it in memory
-
-`Bank.layer(BankPolicies)` builds the whole model. It needs a platform, plus whatever the policies need, such as ports.
+A declaration doesn't run anything. `Bank.layer(BankPolicies)` turns it into a Layer that hosts the model, and a platform underneath decides where its state lives.
 
 ```typescript
 // src/BankInMemory.ts
 import * as Domain from "alchemy/Domain";
 import * as Layer from "effect/Layer";
 import { Bank, BankPolicies } from "./Bank.ts";
-import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { StripePayments } from "./Settlement/StripePayments.ts";
 
-export const BankInMemory = Bank.layer(BankPolicies).pipe(
-  Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments)),
-);
+export const BankInMemory = Bank.layer(BankPolicies).pipe(Layer.provide(Domain.InMemory));
 ```
 
-`Domain.InMemory` keeps everything in the process. Use it in tests and single-process apps.
+`Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Hosting](/domain/cloudflare).
 
-## Host it on Cloudflare
+## Call it from your code
 
-Swap the platform for `DomainCloudflare.DurableObjects`, and nothing else changes.
-
-```typescript
-// src/BankOnCloudflare.ts
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
-import * as Layer from "effect/Layer";
-import { Bank, BankPolicies } from "./Bank.ts";
-import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { StripePayments } from "./Settlement/StripePayments.ts";
-
-export const BankOnCloudflare = Bank.layer(BankPolicies).pipe(
-  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, StripePayments)),
-);
-```
-
-Provide this Layer to a Worker. Every aggregate, view and policy becomes a Durable Object class on that Worker, with no bindings to write. See [Cloudflare Durable Objects](/domain/cloudflare).
-
-## Use what the model provides
-
-The model provides every aggregate and view as a service. `yield* Account` gives you the account client, and `yield* AccountSummary` gives you the view.
+Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the target id and the command.
 
 ```typescript
 // src/depositAndRead.ts
 import * as Effect from "effect/Effect";
-import { Account } from "./Account/Account.ts";
-import type { AccountId } from "./Account/AccountId.ts";
-import { AccountSummary } from "./Account/AccountSummary.ts";
-import { DepositMoney } from "./Account/DepositMoney.ts";
-import { customer } from "./Actor.ts";
-import { CurrentActor } from "./CurrentActor.ts";
-import type { CustomerId } from "./Customer/CustomerId.ts";
+import { Account, AccountId, DepositMoney } from "./Account.ts";
+import { AccountSummary } from "./AccountSummary.ts";
 
-export const depositAndRead = Effect.fn(function* (customerId: CustomerId, accountId: AccountId) {
+export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;
   const summaries = yield* AccountSummary;
-  const receipt = yield* accounts
-    .send(accountId, new DepositMoney({ amount: 1_000 }))
-    .pipe(Effect.provideService(CurrentActor, customer(customerId)));
-  // Wait until the view has applied this deposit, then read it.
+  const accountId = AccountId.make("a-1");
+  const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
   return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
 });
 ```
 
-`send` needs what the command's middleware would provide. Here that's the `CurrentActor`, provided directly. Views catch up shortly after a command commits, so `atLeast` waits for the receipt's version before reading.
+Passing the receipt as `atLeast` is the read-your-own-write from earlier: `query` waits until the summary has applied the deposit.
 
-:::note
-Reference: [`Domain.Model`](/providers/domain/reference#model). Build a model step by step in [Part 3 of the tutorial](/domain/tutorial/part-3).
-:::
+Clients outside the model, a browser or another service, reach it through an [Api](/domain/api) instead, which decides what each kind of client may send and read.
+
+## Keep one language per model
+
+A model is one bounded context, so every name in it means one thing. When two parts of the business use a word differently, give each its own model. One model never sends commands to another model's aggregates directly; it calls that model's Api.
+
+The pages that follow take each building block in turn, in the order a command meets them: [Command](/domain/command), [Event](/domain/event), [Aggregate](/domain/aggregate), [View](/domain/view), [Policy](/domain/policy) and [Api](/domain/api).

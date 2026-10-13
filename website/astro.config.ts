@@ -1484,9 +1484,9 @@ export default defineConfig({
               label: "Concepts",
               items: [
                 { label: "Domain model", link: "/domain/model" },
-                { label: "Aggregate", link: "/domain/aggregate" },
                 { label: "Command", link: "/domain/command" },
                 { label: "Event", link: "/domain/event" },
+                { label: "Aggregate", link: "/domain/aggregate" },
                 { label: "View", link: "/domain/view" },
                 { label: "Policy", link: "/domain/policy" },
                 { label: "Api", link: "/domain/api" },

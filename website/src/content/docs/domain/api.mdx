@@ -1,162 +1,108 @@
 ---
 title: Api
-description: Expose commands and views to one kind of client, serve them from a Worker, and call them with a typed client.
+description: How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
 ---
 
-An Api is what one kind of client may reach: the commands it may send, and the views and aggregates it may read. Nothing in an Api needs a handler. Aggregates handle the commands, and the model hosts the views.
+import DAG from "../../../components/DAG.astro";
 
-## Declare an Api
+An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views and aggregates it may read. Everything else in the model stays private.
 
-List its commands, views, and aggregates with a `read` contract.
+An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers declaring one, serving it, and calling it.
 
-```typescript
-// src/CustomerApi/CustomerApi.ts
-import * as Domain from "alchemy/Domain";
-import { Account } from "../Account/Account.ts";
-import { AccountSummary } from "../Account/AccountSummary.ts";
-import { CloseAccount } from "../Account/CloseAccount.ts";
-import { DepositMoney } from "../Account/DepositMoney.ts";
-import { Statement } from "../Account/Statement.ts";
-import { WithdrawMoney } from "../Account/WithdrawMoney.ts";
-import { CustomerDashboard } from "../Customer/CustomerDashboard.ts";
-import { RegisterCustomer } from "../Customer/RegisterCustomer.ts";
-import { AccountTransfers } from "../Transfer/AccountTransfers.ts";
-import { RequestTransfer } from "../Transfer/RequestTransfer.ts";
-import { TransferStatus } from "../Transfer/TransferStatus.ts";
+## List what a client may reach
 
-/**
- * What the customer app reaches: commands to change things, and the Account
- * aggregate and views to read and watch. Each entry authorizes itself,
- * through its `decide` or `validate`.
- */
-export class CustomerApi extends Domain.Api(
-  "CustomerApi",
+The tutorial's bank exposes registration, deposits, withdrawals and the account summary.
+
+```typescript title="src/BankApi.ts"
+export class BankApi extends Domain.Api(
+  "BankApi",
   RegisterCustomer,
   DepositMoney,
   WithdrawMoney,
-  CloseAccount,
-  RequestTransfer,
-  Account,
-  CustomerDashboard,
   AccountSummary,
-  Statement,
-  AccountTransfers,
-  TransferStatus,
 ) {}
 ```
 
-Each entry guards itself. A command's middleware and `decide` decide what a caller may do; a view's middleware and `validate` decide what a caller may see. Give each kind of client its own Api, like `SupportApi` for support agents.
+Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
 
-## Serve it from a Worker
+## Give each kind of client its own Api
 
-`httpEffect` serves the Api over HTTP, with live reads over WebSockets.
+Different clients need different surfaces. In the example bank, customers and support agents use the same model through two Apis.
 
-```typescript
-// src/BankWorker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
-import { Bank, BankPolicies } from "./Bank.ts";
-import { CustomerApi } from "./CustomerApi/CustomerApi.ts";
-import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { MfaChallengeLive } from "./MfaChallenge.ts";
-import { SessionLive, sessionRoute } from "./Session.ts";
-import { StripePayments } from "./Settlement/StripePayments.ts";
-import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
-import { SupportApi } from "./SupportApi/SupportApi.ts";
-
-/**
- * Everything the Worker serves: the middleware both Apis declare, and the
- * Bank hosted on Durable Objects. Swap `DomainCloudflare.DurableObjects` for
- * `Domain.InMemory` and nothing else changes.
- */
-const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive, Stripe.ConsumeEventsLive).pipe(
-  Layer.provideMerge(Bank.layer(BankPolicies)),
-  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, StripePayments)),
-);
-
-export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
-  "BankWorker",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const customerApi = yield* CustomerApi.httpEffect;
-    const supportApi = yield* SupportApi.httpEffect;
-    // Claims POST /webhooks/stripe and provisions the Stripe webhook endpoint.
-    yield* StripeSettlements;
-    return {
-      // The foldkit app reaches /api through its own Worker, on its own origin,
-      // so the session cookie needs no cross-origin allowances.
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const path = new URL(request.url, "http://localhost").pathname;
-        if (path === "/api/session") return yield* sessionRoute;
-        if (path.startsWith("/api")) return yield* customerApi;
-        if (path.startsWith("/support")) return yield* supportApi;
-        return HttpServerResponse.text("Not Found", { status: 404 });
-      }),
-    };
-  }).pipe(Effect.provide(BankLive)),
+```typescript title="src/SupportApi/SupportApi.ts"
+export class SupportApi extends Domain.Api(
+  "SupportApi",
+  FreezeAccount,
+  ChangeOwner,
+  ApproveTransfer,
+  AccountSummary,
+  AccountActivity,
 ) {}
 ```
 
-The Worker provides the middleware the entries declare, here `SessionLive` and `MfaChallengeLive`, along with the hosted model.
+`FreezeAccount` and `ChangeOwner` are on the support Api and not the customer one. `AccountSummary` is on both.
 
-## Call it
+<DAG
+  nodes={[
+    { id: "app", label: "Customer app", type: "client" },
+    { id: "console", label: "Support console", type: "client" },
+    { id: "customerApi", label: "CustomerApi", type: "api", tone: "accent" },
+    { id: "supportApi", label: "SupportApi", type: "api", tone: "accent" },
+    { id: "bank", label: "Bank", type: "model" },
+  ]}
+  edges={[
+    { from: "app", to: "customerApi" },
+    { from: "console", to: "supportApi" },
+    { from: "customerApi", to: "bank" },
+    { from: "supportApi", to: "bank" },
+  ]}
+  caption="One model, published to two kinds of client."
+/>
 
-The client is typed from the Api. Commands are methods, and each view or aggregate is a namespace with its reads.
+Being on an Api doesn't mean anyone may use an entry for anything. Each entry still guards itself. A command's middleware establishes who's calling and its `decide` checks whether they may; a view's middleware and `validate` decide what they may see. So `AccountSummary` can sit on both Apis, and a customer still reads only their own accounts.
+
+## Serve it
+
+`httpEffect` turns an Api into an HTTP handler. Mount it on a route in whatever serves your app.
+
+```typescript title="src/BankWorker.ts"
+const customerApi = yield* CustomerApi.httpEffect;
+const supportApi = yield* SupportApi.httpEffect;
+```
+
+The handler needs the hosted model, plus implementations of any middleware its entries declare, such as the session check. Commands, `get` and `list` are plain requests. Live reads, `watch` and `events`, are upgraded to WebSockets connected to the aggregate or view that owns the key, which pushes each change as it commits.
+
+## Call it with a typed client
+
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target and the input together. Each view or aggregate is a namespace with its reads.
 
 ```typescript
-// test/script.ts
-import * as Domain from "alchemy/Domain";
+// test/depositAndWatch.ts
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { AccountId } from "../src/Account/AccountId.ts";
 import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
-import { sessionClient } from "../src/Session.ts";
 
-const accountId = AccountId.make("c-1-main");
-
-const program = Effect.gen(function* () {
+export const depositAndWatch = Effect.gen(function* () {
   const bank = yield* CustomerApi.client;
+  const accountId = AccountId.make("c-1-main");
   const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
-    Stream.take(1),
-    Stream.runForEach((summary) => Effect.log(`watched balance ${summary?.balance}`)),
+    Stream.take(2),
+    Stream.runForEach((summary) => Effect.log(`balance is now ${summary?.balance}`)),
   );
 });
-
-const Connection = Layer.mergeAll(
-  Domain.protocolWebSocket("https://bank.example.com/api"),
-  sessionClient("customer:c-1"),
-).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)));
-
-Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(Connection)));
 ```
 
-`sessionClient` attaches the session for a client that isn't a browser. A browser sends its session cookie instead. See [Sessions and middleware](/domain/sessions).
-
-## Choose a protocol
-
-`Domain.protocolWebSocket` sends commands, `get` and `list` over HTTP, and opens a WebSocket for each `watch` and `events`. The aggregate or view that owns the key pushes every change down it. If the connection drops, the client reconnects and carries on from the last change it saw.
-
-`Domain.protocolHttp` sends everything over HTTP, and streams `watch` and `events` as long-running responses.
-
-## Provide the client to an app
-
-`CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` builds it for the life of a Layer. Code that sends commands reads `CustomerApi.Client` and leaves the connection to whoever provides it. See [Integrate with foldkit](/domain/foldkit).
+The client needs to know how to reach the server. `Domain.protocolWebSocket(url)` sends commands and one-off reads over HTTP and opens a WebSocket for each live read; if the connection drops, the client reconnects and resumes from the last change it saw. `Domain.protocolHttp(url)` uses HTTP for everything, streaming live reads as long-running responses.
 
 ## Handle what can go wrong
 
-A call fails with one of three things: a rejection the entry declares, like `InsufficientFunds`; an error from its middleware, like `Unauthorized`; or an `RpcClientError` when the server can't be reached. Each is typed, so `Effect.catchTag` handles exactly the cases you expect.
+Every call's error type says exactly what can fail. It's one of the rejections the entry declares, like `InsufficientFunds`; an error from its middleware, like `Unauthorized`; or an `RpcClientError` when the server can't be reached. Because each is a tagged error, `Effect.catchTag` handles the cases you expect and leaves the rest to propagate.
 
-:::note
-Reference: [`Domain.Api`](/providers/domain/reference#api). Expose an Api in [Part 4 of the tutorial](/domain/tutorial/part-4), and test one in [Testing an Api](/domain/testing-apis).
-:::
+## Provide the client to an app
+
+An app usually wants one client for its whole lifetime. `CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` provides it. Code that sends commands depends on `CustomerApi.Client` and leaves the connection details to whoever provides the Layer. See [Integrate with foldkit](/domain/foldkit) for a full browser app.
+
+To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).

@@ -1,86 +1,214 @@
 ---
 title: What is Domain-Driven Design?
-description: The ideas behind aggregates, commands, events, views and policies, and how they map to alchemy/Domain.
+description: The problems Domain-Driven Design solves, and the ideas it uses to solve them, worked through on a bank account.
 ---
 
-Domain-Driven Design (DDD) models software around the business it serves, in the words the business uses. A bank talks about accounts, deposits and transfers, so the code does too.
+import DAG from "../../../components/DAG.astro";
 
-## Map an Event Storming session to code
+Domain-Driven Design (DDD) is a way of structuring software so that the code is a working model of the business it serves. Most of its ideas answer two questions: where does each business rule live, and what stays correct when many things happen at once?
 
-Teams often discover a domain with [Event Storming](https://www.eventstorming.com): sticky notes on a wall, one colour per kind of thing. Each colour becomes one building block.
+This page builds those ideas up on a bank account, starting from the code most apps begin with.
 
-| Sticky note | Meaning | Building block |
-| --- | --- | --- |
-| Orange | Something happened: "Money deposited" | [`Domain.Event`](/domain/event) |
-| Blue | Someone asks for a change: "Deposit money" | [`Domain.Command`](/domain/command) |
-| Large yellow | The thing that decides: "Account" | [`Domain.Aggregate`](/domain/aggregate) |
-| Green | What someone needs to see: "Account summary" | [`Domain.View`](/domain/view) |
-| Lilac | Whenever this happens, do that: "When a customer registers, open an account" | [`Domain.Policy`](/domain/policy) |
-| Pink | An outside system: "Fraud check" | [`Domain.Port`](/domain/policy#call-outside-systems-through-ports) |
+## Start from a row you update
 
-## Decide with commands, record with events
-
-A command is a request, and it can be refused. An event is a fact, and it can't be undone. An aggregate takes a command, checks it against its current state, and records events or returns a rejection.
+The usual first version keeps each account's current balance and changes it in place.
 
 ```typescript
-// src/Account.ts
-import * as Domain from "alchemy/Domain";
-import * as Schema from "effect/Schema";
+// withdraw.ts
+interface Account {
+  balance: number;
+}
 
-export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+const accounts = new Map<string, Account>();
 
-export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
-}) {}
-
-export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  data: { balance: Schema.Int, requested: Schema.Int },
-}) {}
-
-export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
-  events: [MoneyWithdrawn],
-  rejects: [InsufficientFunds],
-}) {}
-
-export class Account extends Domain.Aggregate("Account", {
-  id: AccountId,
-  state: Schema.Struct({ balance: Schema.Int }),
-  initial: { balance: 0 },
-  commands: [WithdrawMoney],
-  decide: {
-    WithdrawMoney: (s, cmd) =>
-      cmd.amount > s.balance
-        ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
-  },
-  evolve: {
-    MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
-  },
-}) {}
+export function withdraw(id: string, amount: number) {
+  const account = accounts.get(id);
+  if (!account) throw new Error("no such account");
+  if (amount > account.balance) throw new Error("insufficient funds");
+  account.balance -= amount;
+}
 ```
 
-The events are the record of truth. The account's state is whatever its events add up to.
+It works until the app grows, and then it fails in three ways.
 
-## Draw consistency boundaries
+The rule "never overdraw" lives in this one handler. Every other change to a balance, a transfer, a fee, a refund, has to remember to repeat it, and sooner or later one doesn't.
 
-An aggregate is a consistency boundary. Each account handles one command at a time, and its rules always hold, because nothing else can change it at the same moment.
+With a real database, reading the balance and writing it back are separate steps. Two withdrawals of 80 that arrive together can both read a balance of 100, both pass the check, and both write back 20. The customer has taken out 160 from an account that held 100.
 
-Nothing spans two aggregates at once. A transfer debits one account and credits another as separate steps, each in its own boundary, and the transfer itself tracks where it got to. That's a [saga](/domain/sagas). Make each aggregate as small as the rules it protects, and let everything between aggregates catch up shortly after.
+Once the balance is overwritten, the reason for it is gone. You can't say why it's 20, and a statement needs a second table that you must keep in step with the first by hand.
 
-## Separate reading from deciding
+DDD answers each failure with a separate idea.
 
-Aggregates decide, and views answer questions. A view folds events into whatever shape a screen needs: a balance, a statement, a dashboard across several accounts. Keeping the two apart is called CQRS (Command Query Responsibility Segregation). It lets each view be fast for its own question without changing how decisions are made.
+## Name things the way the business does
 
-## React with policies
+First, the code uses the business's own words. A customer doesn't "update a balance", they withdraw money. Saying so in the code gives you two kinds of message.
 
-A policy is the "whenever this happens, do that" note. It listens to events and sends commands to other aggregates or calls outside systems. Policies run shortly after the event, never in the same step. Use them for work that may happen eventually, and put any rule that must hold immediately in the aggregate's `decide`.
+```typescript
+// messages.ts
+export type Command =
+  | { readonly _tag: "DepositMoney"; readonly amount: number }
+  | { readonly _tag: "WithdrawMoney"; readonly amount: number };
 
-## Name the boundary of the whole model
+export type Event =
+  | { readonly _tag: "MoneyDeposited"; readonly amount: number; readonly balanceAfter: number }
+  | { readonly _tag: "MoneyWithdrawn"; readonly amount: number; readonly balanceAfter: number };
+```
 
-A bounded context is one model with one consistent language. In `alchemy/Domain` it's a [`Domain.Model`](/domain/model): the aggregates, views and policies you host together, behind the [Apis](/domain/api) you expose to clients.
+A **command** is a request, named as an instruction: `WithdrawMoney`. It can be refused. An **event** is a fact, named in the past tense: `MoneyWithdrawn`. It already happened, so nothing can refuse it.
 
-:::note
-Put these ideas to work in [Get started](/domain/getting-started), or build a whole bank in the [tutorial](/domain/tutorial/part-1).
-:::
+DDD calls this shared vocabulary the *ubiquitous language*. When the people who run the business and the code use the same words, a conversation about a rule turns straight into a change to the code.
+
+## Decide in one place
+
+Next, every rule about an account moves into one function. It takes the account's current state and a command, and returns either the events to record or a refusal.
+
+```typescript
+// decide.ts
+import type { Command, Event } from "./messages.ts";
+
+export interface State {
+  readonly balance: number;
+}
+
+export class InsufficientFunds {
+  readonly _tag = "InsufficientFunds";
+  constructor(readonly balance: number) {}
+}
+
+export function decide(state: State, command: Command): ReadonlyArray<Event> | InsufficientFunds {
+  switch (command._tag) {
+    case "DepositMoney":
+      return [
+        { _tag: "MoneyDeposited", amount: command.amount, balanceAfter: state.balance + command.amount },
+      ];
+    case "WithdrawMoney":
+      if (command.amount > state.balance) return new InsufficientFunds(state.balance);
+      return [
+        { _tag: "MoneyWithdrawn", amount: command.amount, balanceAfter: state.balance - command.amount },
+      ];
+  }
+}
+```
+
+`decide` changes nothing. It only looks at the state and says what should happen. Any code that wants to touch a balance has to send a command through it, so the rule can't be skipped.
+
+The thing that owns this state and this function is an **aggregate**: here, one account. An aggregate handles one command at a time. The second of two concurrent withdrawals sees the balance the first one left behind, so both can't spend the same money.
+
+That makes each aggregate a *consistency boundary*. Everything inside one account is always correct, because only one command changes it at a time. Nothing outside it is guaranteed to change in the same step. You'll see what that means for rules that span two accounts in a moment.
+
+## Record what happened
+
+Third, the events `decide` returns become the record. You never overwrite them, you only add new ones. A second function folds each event into the state.
+
+```typescript
+// evolve.ts
+import type { State } from "./decide.ts";
+import type { Event } from "./messages.ts";
+
+export function evolve(_state: State, event: Event): State {
+  switch (event._tag) {
+    case "MoneyDeposited":
+    case "MoneyWithdrawn":
+      return { balance: event.balanceAfter };
+  }
+}
+
+export const replay = (history: ReadonlyArray<Event>): State =>
+  history.reduce(evolve, { balance: 0 });
+```
+
+The balance is no longer the source of truth. It's the result of replaying the account's history, so it can't disagree with that history. The history also answers the question the first version couldn't: the balance is 20 *because* of these deposits and withdrawals, in this order.
+
+This is *event sourcing*. Splitting `decide` from `evolve` is what makes it safe. `decide` may refuse; `evolve` never does, because by the time it runs the event has happened. Replaying the same events always gives the same state.
+
+<DAG
+  nodes={[
+    { id: "command", label: "WithdrawMoney", type: "command" },
+    { id: "state", label: "balance: 100", type: "state" },
+    { id: "decide", label: "decide", tone: "accent" },
+    { id: "event", label: "MoneyWithdrawn", type: "event" },
+    { id: "evolve", label: "evolve", tone: "accent" },
+    { id: "next", label: "balance: 70", type: "state" },
+  ]}
+  edges={[
+    { from: "command", to: "decide" },
+    { from: "state", to: "decide" },
+    { from: "decide", to: "event" },
+    { from: "event", to: "evolve" },
+    { from: "evolve", to: "next" },
+  ]}
+  caption="decide turns a command into events; evolve folds each event into the next state."
+/>
+
+## Answer questions separately
+
+An account needs its balance to decide a withdrawal. It doesn't need a list of statement lines, a monthly total, or a dashboard across every account a customer holds. Those are questions people ask, and each wants its own shape.
+
+So the shapes for reading are built separately, from the same events.
+
+```typescript
+// statement.ts
+import type { Event } from "./messages.ts";
+
+export interface StatementLine {
+  readonly kind: "deposit" | "withdrawal";
+  readonly amount: number;
+  readonly balance: number;
+}
+
+export const toLine = (event: Event): StatementLine => ({
+  kind: event._tag === "MoneyDeposited" ? "deposit" : "withdrawal",
+  amount: event.amount,
+  balance: event.balanceAfter,
+});
+```
+
+A read model like this is called a **view**. Keeping the side that decides apart from the side that answers is called *CQRS*, Command Query Responsibility Segregation. Each view can be shaped and stored for its one question, and adding a new one never touches the rules.
+
+Views are built after the events are recorded, so they trail the aggregate by a moment. That short delay is *eventual consistency*. A screen that has just sent a command and wants to show its effect waits for the view to catch up to it.
+
+## React to what happened
+
+Some rules span more than one aggregate. When a customer registers, the bank opens their main account. The customer and the account are separate aggregates, so no single `decide` can do both.
+
+A **policy** handles it. It listens for `CustomerRegistered` and sends `OpenAccount` to the account. It runs shortly after the registration is recorded, never in the same step.
+
+<DAG
+  nodes={[
+    { id: "customer", label: "Customer", type: "CustomerRegistered" },
+    { id: "policy", label: "policy", type: "open their account", tone: "accent" },
+    { id: "account", label: "Account", type: "OpenAccount" },
+  ]}
+  edges={[
+    { from: "customer", to: "policy", dashed: true },
+    { from: "policy", to: "account" },
+  ]}
+  caption="The customer's registration commits first. Shortly after, the policy sends OpenAccount to the account."
+/>
+
+Because the two steps commit separately, the system can be between them for a moment, and a policy may be run again after a failure. So the command a policy sends must be safe to repeat: opening an account that's already open is refused, and the policy treats that refusal as success.
+
+When a process spans several aggregates and can fail partway, like a transfer that debits one account and credits another, a chain of policies drives it step by step and undoes earlier steps when a later one fails. That's a *saga*.
+
+## Draw the boundary of the model
+
+All of this is one model, with one vocabulary. Another part of the business may use the same words differently. To the bank, an "account" holds money; to the support team's ticketing system, an "account" is a login. Forcing both into one model makes both worse.
+
+DDD gives each its own model, called a *bounded context*. Inside it, every word means one thing. Models talk to each other through their published interfaces, never by reaching into each other's aggregates.
+
+## Where alchemy/Domain fits
+
+`alchemy/Domain` gives each of these ideas a building block, with the plumbing done for you. You declare commands with [`Domain.Command`](/domain/command) and events with [`Domain.Event`](/domain/event). An [aggregate](/domain/aggregate) is the `decide` and `evolve` from this page, and the platform gives each instance one command at a time and stores its events. [Views](/domain/view) and [policies](/domain/policy) receive every event at least once, in order. A [`Domain.Model`](/domain/model) is one bounded context, and an [`Api`](/domain/api) is the interface it publishes.
+
+Here is the same withdrawal as an aggregate:
+
+```typescript title="src/Account.ts"
+WithdrawMoney: (s, cmd) =>
+  s._tag !== "Open"
+    ? new NotOpen()
+    : cmd.amount > s.balance
+      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+```
+
+Next, [Domain model](/domain/model) follows one command through a running model, from the moment it's sent to the moment every view has caught up.

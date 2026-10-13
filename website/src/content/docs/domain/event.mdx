@@ -1,86 +1,86 @@
 ---
 title: Event
-description: Record facts in the past tense; they are the only source of an aggregate's state.
+description: What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.
 ---
 
-An event is a fact: something that happened and can't be undone. Aggregates record events, and everything else, an aggregate's state, every view, every policy, follows from them.
+An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
+
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This page covers how to declare an event, what to put in it, and what happens to it after it's recorded.
 
 ## Declare an event
 
-Name it in the past tense, and give it the data a reader needs.
+An event has a name and, usually, some data.
 
-```typescript
-// src/Account/FreezeAccount.ts
-import * as Domain from "alchemy/Domain";
-import * as Schema from "effect/Schema";
-import { Actor } from "../Actor.ts";
-import { Session } from "../Session.ts";
-import { AccountId } from "./AccountId.ts";
-import { NotOpen } from "./NotOpen.ts";
-import { NotOwner } from "./NotOwner.ts";
-
-export class AccountFrozen extends Domain.Event("AccountFrozen", {
-  data: { reason: Schema.String, by: Actor },
-}) {}
-
-/** Stop money leaving an account. Freezing a frozen account records nothing. */
-export class FreezeAccount extends Domain.Command("FreezeAccount", {
-  target: AccountId,
-  middleware: [Session],
-  input: { reason: Schema.String },
-  events: [AccountFrozen],
-  rejects: [NotOpen, NotOwner],
-}) {}
-```
-
-`by` records who froze the account, so the history explains itself. An event can carry no data at all: `Domain.Event("AccountClosed")`.
-
-## Fold events into state
-
-An aggregate's `evolve` turns each event into its next state. The third argument gives you the event's envelope, including when it happened.
-
-```typescript
-// src/Account.ts
-import * as Domain from "alchemy/Domain";
-import * as DateTime from "effect/DateTime";
-import * as Schema from "effect/Schema";
-
-export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
-
+```typescript title="src/Account.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
   data: { amount: Schema.Int, balanceAfter: Schema.Int },
 }) {}
+```
 
-export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
-  events: [MoneyWithdrawn],
-}) {}
+Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data leaves `data` out: `Domain.Event("AccountClosed")`.
 
-export class Account extends Domain.Aggregate("Account", {
-  id: AccountId,
-  state: Schema.Struct({ balance: Schema.Int, lastWithdrawal: Schema.NullOr(Schema.String) }),
-  initial: { balance: 0, lastWithdrawal: null },
-  commands: [WithdrawMoney],
-  decide: {
-    WithdrawMoney: (s, cmd) => [
-      new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount }),
-    ],
-  },
-  evolve: {
-    MoneyWithdrawn: (_, e, { at }) => ({
-      balance: e.balanceAfter,
-      lastWithdrawal: DateTime.formatIsoDateUtc(at),
-    }),
-  },
+## Only decide creates events
+
+Events are created in exactly one place: an aggregate's `decide` handler, as its answer to a command.
+
+```typescript title="src/Account.ts"
+: [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+```
+
+The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way a bank corrects one, with a new event that reverses it, so the history still shows both.
+
+## Record what readers will need
+
+Put in the event what someone reading it later needs to understand it on its own, without asking the aggregate what its state was at the time.
+
+`MoneyWithdrawn` carries `balanceAfter` for that reason. The aggregate knows the balance when it decides, so it's free to record. A view that shows the balance, a statement that prints it on each line, and a policy that flags low balances can all read it straight from the event. Without it, each would have to keep its own running total and hope it never drifts.
+
+The same goes for who did something and why. When a support agent freezes an account, the event records the agent and the reason, so the history explains itself.
+
+```typescript title="src/Account/FreezeAccount.ts"
+export class AccountFrozen extends Domain.Event("AccountFrozen", {
+  data: { reason: Schema.String, by: Actor },
 }) {}
 ```
 
-`evolve` never refuses an event: by the time it runs, the event has happened. Only `decide` can say no.
+## Fold events into state
 
-## Read the envelope
+The aggregate turns each event into its next state with `evolve`. This is where an event's data takes effect.
 
-Every recorded event comes in an envelope. `id` is the aggregate instance, `stream` and `seq` place the event in that instance's history, `at` is when it was recorded, and `commandId` is the command that caused it.
+```typescript title="src/Account.ts"
+evolve: {
+  AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
+  MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+  MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+},
+```
+
+`evolve` can't refuse an event. It already happened, and only `decide` gets to say no. If an event arrives in a state where it makes no sense, like a deposit to an account that was never opened, that's a bug in `decide`, so `mustBeOpen` throws and the whole command rolls back. See [Aggregate](/domain/aggregate#apply-events-with-evolve).
+
+## The envelope
+
+When an event commits, it's stored inside an envelope that says where and when it happened. `id` is the aggregate instance and `stream` names its history, like `Account/a-1`. `seq` is the event's position in that stream, starting at 1. `at` is the commit time, and `commandId` is the id of the command that caused it.
+
+`evolve` receives the envelope as its third argument, for state that depends on when something happened.
+
+```typescript title="src/Account.ts"
+MoneyWithdrawn: (_, e, { at }) => ({
+  balance: e.balanceAfter,
+  lastWithdrawal: DateTime.formatIsoDateUtc(at),
+}),
+```
+
+The `commandId` lets a client recognize the events its own commands caused, which is how an app confirms an [optimistic update](/domain/optimistic-updates).
+
+## Delivered to views and policies
+
+In the same commit that stores an event, the instance records a delivery for every [view](/domain/view) and [policy](/domain/policy) that consumes it. After the commit, each delivery is sent. Every consumer receives every event it consumes at least once, and in the order the instance recorded them.
+
+A view can record events of its own as it folds, such as one `StatementLine` per deposit or withdrawal. Those are delivered the same way, so another view or policy can build on them.
+
+## Follow an instance's events
+
+A client can read an instance's history directly, then keep receiving new events as they're recorded.
 
 ```typescript
 // test/followAccount.ts
@@ -98,14 +98,6 @@ export const followAccount = Effect.fn(function* (bank: CustomerClient, accountI
 });
 ```
 
-`events` replays the history first, then keeps going with each new event. Pass `after` with a `seq` to start later.
+`events` replays from the beginning, then continues live. Pass `after` with a `seq` to resume from a position you've already seen.
 
-The `commandId` is how a client recognizes the event its own command caused. See [Optimistic updates](/domain/optimistic-updates).
-
-## React to events
-
-Views fold events into read models, and policies react to them with more commands. A view can emit events of its own, each with the view's state after it, which other views and policies consume like any other event. See [View](/domain/view) and [Policy](/domain/policy).
-
-:::note
-Reference: [`Domain.Event`](/providers/domain/reference#event).
-:::
+Next, [Aggregate](/domain/aggregate) puts commands and events together.
