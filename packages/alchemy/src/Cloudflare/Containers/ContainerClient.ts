@@ -238,10 +238,20 @@ const classifyStartError = (cause: unknown): ContainerStartError =>
  * never both call `container.start()` ("already running",
  * cloudflare/containers#173).
  */
-const coordination = new WeakMap<
-  object,
-  { readonly startMutex: Semaphore.Semaphore; readonly readyPorts: Set<number> }
->();
+/**
+ * Per-container state shared by every client of it in the Durable Object:
+ * start coordination, ready ports, and the live egress (so `exec` from any
+ * client knows to trust the egress CA).
+ */
+interface Coordination {
+  readonly startMutex: Semaphore.Semaphore;
+  readonly readyPorts: Set<number>;
+  /** The live egress set, and which egress each intercepted host routes to. */
+  liveEgress: ReadonlyArray<Egress>;
+  interceptedHosts: Map<string, string>;
+}
+
+const coordination = new WeakMap<object, Coordination>();
 
 /** The bundled program's image of a Durable Object-managed container, if it has one. */
 const mainImage = (container: cf.Container): string | undefined => {
@@ -255,7 +265,12 @@ const mainImage = (container: cf.Container): string | undefined => {
 const coordinationFor = (container: cf.Container) => {
   let entry = coordination.get(container);
   if (!entry) {
-    entry = { startMutex: Semaphore.makeUnsafe(1), readyPorts: new Set<number>() };
+    entry = {
+      startMutex: Semaphore.makeUnsafe(1),
+      readyPorts: new Set<number>(),
+      liveEgress: [],
+      interceptedHosts: new Map(),
+    };
     coordination.set(container, entry);
   }
   return entry;
@@ -364,10 +379,6 @@ export const fromContainer = <ImageName extends string = string>(
 
   //#region egress
 
-  /** The live egress set, and which egress each intercepted host routes to. */
-  let liveEgress: ReadonlyArray<Egress> = [];
-  let interceptedHosts = new Map<string, string>();
-
   /**
    * Point every host of `next` at its egress, and refuse hosts that left the
    * set. `fresh` re-registers everything (a container starting has none).
@@ -396,7 +407,8 @@ export const fromContainer = <ImageName extends string = string>(
         registerEgress(state, egress);
         for (const host of egress.hosts) desired.set(host, egress.key);
       }
-      const previous = fresh ? new Map<string, string>() : interceptedHosts;
+      const shared = coordinationFor(container);
+      const previous = fresh ? new Map<string, string>() : shared.interceptedHosts;
       const intercept = (host: string, key: string) =>
         Effect.tryPromise({
           try: async () => {
@@ -413,8 +425,8 @@ export const fromContainer = <ImageName extends string = string>(
       for (const host of previous.keys()) {
         if (!desired.has(host)) yield* intercept(host, EGRESS_DENIED);
       }
-      interceptedHosts = desired;
-      liveEgress = next;
+      shared.interceptedHosts = desired;
+      shared.liveEgress = next;
     });
 
   const sameEgress = (a: ReadonlyArray<Egress>, b: ReadonlyArray<Egress>) =>
@@ -437,7 +449,7 @@ export const fromContainer = <ImageName extends string = string>(
       const container = yield* attached;
       // Fast path: the steady state is one cheap `running` read, no lock.
       if (container.running) {
-        if (egress !== undefined && !sameEgress(egress, liveEgress)) {
+        if (egress !== undefined && !sameEgress(egress, coordinationFor(container).liveEgress)) {
           yield* applyEgress(egress, false);
         }
         return;
@@ -572,7 +584,9 @@ export const fromContainer = <ImageName extends string = string>(
         try: (interrupt) =>
           container.exec(
             // With egress, the command trusts its interception CA.
-            liveEgress.length > 0 ? ["sh", "-c", TRUST_EGRESS_CA_THEN_EXEC, "sh", ...cmd] : cmd,
+            coordinationFor(container).liveEgress.length > 0
+              ? ["sh", "-c", TRUST_EGRESS_CA_THEN_EXEC, "sh", ...cmd]
+              : cmd,
             {
               ...options,
               signal: combineSignals(interrupt, options?.signal),
@@ -589,13 +603,16 @@ export const fromContainer = <ImageName extends string = string>(
     start,
     setEgress: (egress) => applyEgress(egress, false),
     addEgress: (egress) =>
-      Effect.suspend(() =>
-        applyEgress([...liveEgress.filter((e) => e.key !== egress.key), egress], false),
+      Effect.flatMap(attached, (container) =>
+        applyEgress(
+          [...coordinationFor(container).liveEgress.filter((e) => e.key !== egress.key), egress],
+          false,
+        ),
       ),
     removeEgress: (egress) =>
-      Effect.suspend(() =>
+      Effect.flatMap(attached, (container) =>
         applyEgress(
-          liveEgress.filter((e) => e.key !== egress.key),
+          coordinationFor(container).liveEgress.filter((e) => e.key !== egress.key),
           false,
         ),
       ),

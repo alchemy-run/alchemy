@@ -1,6 +1,6 @@
-# cloudflare-coding-agent
+# harness
 
-Many Claude Code agents behind one HTTP API, each in its own Cloudflare Container.
+Alchemy's hosted coding-agent harness: Claude Code agents working on [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), one per issue, each in its own Cloudflare Container, behind one HTTP API and a web UI. Deployed with Alchemy.
 
 ```
 HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ Sandbox (Container)
@@ -12,7 +12,7 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 - `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the Durable Object adds them to its requests and decides what it may reach. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
 - `src/worker.ts` — the HTTP API.
 
-## Run it
+## Develop and deploy
 
 Each session works in a shallow clone of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy); the agent installs dependencies when it needs them. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
@@ -43,9 +43,7 @@ curl -X POST $URL/agents/fix-42/steer -d '{"prompt":"keep it under 20 lines"}'
 curl -X POST $URL/agents/fix-42/interrupt
 ```
 
-Swap the harness by swapping the server: `OpenAI.CodexServer`, `OpenCode.Server`, or any ACP agent with `AI.AcpServer`.
-
-## Test it
+## Test
 
 End-to-end tests drive the API and the web UI (Playwright). They start
 `alchemy dev` (or reuse a running one), so run them with the same

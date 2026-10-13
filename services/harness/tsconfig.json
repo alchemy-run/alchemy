@@ -16,6 +16,8 @@
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
+    "declaration": false,
+    "declarationMap": false,
     "paths": {
       "@/*": ["./web/src/*"]
     }

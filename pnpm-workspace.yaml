@@ -31,6 +31,7 @@ tasks:
 packages:
   - website
   - packages/*
+  - services/*
   - examples/*
   - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*

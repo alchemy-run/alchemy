@@ -8,7 +8,7 @@ import SandboxLive from "./src/Sandbox.runtime.ts";
 import CodingAgents from "./src/worker.ts";
 
 export default Alchemy.Stack(
-  "CloudflareCodingAgent",
+  "Harness",
   {
     // GitHub: the egress resolves your GitHub auth profile's token.
     providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
