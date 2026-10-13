@@ -372,7 +372,7 @@ export const ProjectProvider = () =>
             findProjectByName(name, news.orgId).pipe(
               Effect.flatMap(
                 Effect.fn(function* (matches) {
-                  if (matches.length !== 1) return yield* Effect.fail(error);
+                  if (matches.length !== 1) return yield* error;
                   const project = yield* authorize(matches[0]!);
                   return { project, operations: [] };
                 }),

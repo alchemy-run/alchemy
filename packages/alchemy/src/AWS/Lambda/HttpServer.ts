@@ -15,26 +15,23 @@ import type { Scope } from "effect/Scope";
 import * as Http from "../../Http.ts";
 import { withInvocationDeadline } from "./InvocationDeadline.ts";
 
-export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
-  return event.requestContext?.http?.method !== undefined;
-};
+export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
+  event.requestContext?.http?.method !== undefined;
 
 /**
  * REST API (v1) AWS_PROXY events have a top-level `httpMethod` and a
  * `requestContext.resourcePath` field. They lack the `requestContext.http.*`
  * shape of Function URL / HTTP API (v2) events.
  */
-export const isApiGatewayProxyEvent = (event: any): event is APIGatewayProxyEvent => {
-  return typeof event?.httpMethod === "string" && event?.requestContext?.resourcePath !== undefined;
-};
+export const isApiGatewayProxyEvent = (event: any): event is APIGatewayProxyEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.resourcePath !== undefined;
 
 /**
  * Application Load Balancer target events carry a `requestContext.elb` marker
  * (the target group ARN) and a top-level `httpMethod` + `path`.
  */
-export const isAlbEvent = (event: any): event is ALBEvent => {
-  return typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
-};
+export const isAlbEvent = (event: any): event is ALBEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 
 // `HttpMiddleware.tracer` records the request on the `http.server` span only
 // when the request finishes. A span the deadline flush ends early would ship
@@ -62,8 +59,11 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `InvocationTimeoutError` as its status — before draining the exporters.
   // The dispatcher's outer guard stands down when this one takes the
   // deadline; see `withInvocationDeadline`.
-  const safeHandler = HttpMiddleware.tracer(
-    withInvocationDeadline(Http.safeHttpEffect(handler)).pipe(annotateRequestSpan),
+  const safeHandler = handler.pipe(
+    Http.safeHttpEffect,
+    withInvocationDeadline,
+    annotateRequestSpan,
+    HttpMiddleware.tracer,
   );
   return (
     event: any,
@@ -80,6 +80,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toLambdaFunctionURLResult),
@@ -94,6 +95,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
@@ -113,6 +115,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toApiGatewayProxyResult),

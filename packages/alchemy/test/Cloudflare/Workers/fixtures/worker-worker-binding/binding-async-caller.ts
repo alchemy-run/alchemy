@@ -31,12 +31,24 @@ const timeout = (ms: number) =>
  *
  * GET /rpc-async?name=foo  →  the same call through a `toRpcAsync` view that
  * was returned from an `async` function.
+ *
+ * GET /self?name=foo  →  re-enters this Worker through its `SELF` binding.
  */
 export default {
-  async fetch(request: Request, env: { TARGET: TargetBinding }): Promise<Response> {
+  async fetch(request: Request, env: { TARGET: TargetBinding; SELF: Service }): Promise<Response> {
     const url = new URL(request.url);
     const name = url.searchParams.get("name") ?? "world";
     try {
+      // `SELF` is `Cloudflare.Workers.Self`: a service binding to this
+      // Worker's own default export. `/self` re-enters through it and the
+      // inner request answers `/self-inner`.
+      if (url.pathname === "/self") {
+        const inner = await env.SELF.fetch(`https://self.internal/self-inner?name=${name}`);
+        return new Response(`via self: ${await inner.text()}`, { status: inner.status });
+      }
+      if (url.pathname === "/self-inner") {
+        return new Response(`inner ${name}`);
+      }
       if (url.pathname === "/rpc-async") {
         const target = await Promise.race([resolveTarget(env), timeout(5_000)]);
         return new Response(String(await target.greet(name)));

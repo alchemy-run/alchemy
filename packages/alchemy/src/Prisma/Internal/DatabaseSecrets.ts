@@ -4,6 +4,7 @@ import {
   getDatabase,
   createConnectionRotate,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -37,10 +38,10 @@ export const deriveConnectionAttrs = (secrets: {
     secrets.directConnectionString ??
     secrets.accelerateConnectionString,
   origin: secrets.directConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.directConnectionString))
+    ? secrets.directConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
   pooledOrigin: secrets.pooledConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.pooledConnectionString))
+    ? secrets.pooledConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
 });
 
@@ -57,7 +58,9 @@ export const mergeConnectionSecrets = (
   password: preferred.password ?? fallback.password,
 });
 
-class DatabaseCredentialsNotReady extends Error {}
+class DatabaseCredentialsNotReady extends Data.TaggedError("DatabaseCredentialsNotReady")<{
+  readonly message: string;
+}> {}
 
 const databaseCredentialsSchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -69,9 +72,9 @@ const waitForRotatableDatabase = (database: ObservedDatabase) =>
     Effect.map((response) => response.data),
     Effect.catchTag("NotFound", () =>
       Effect.fail(
-        new DatabaseCredentialsNotReady(
-          `Prisma database '${database.name}' (${database.id}) is not visible yet while waiting to recover its credentials.`,
-        ),
+        new DatabaseCredentialsNotReady({
+          message: `Prisma database '${database.name}' (${database.id}) is not visible yet while waiting to recover its credentials.`,
+        }),
       ),
     ),
     Effect.flatMap((observed) =>
@@ -84,9 +87,9 @@ const waitForRotatableDatabase = (database: ObservedDatabase) =>
         : observed.status === "ready" && observed.defaultConnectionId !== null
           ? Effect.succeed(observed)
           : Effect.fail(
-              new DatabaseCredentialsNotReady(
-                `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
-              ),
+              new DatabaseCredentialsNotReady({
+                message: `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
+              }),
             ),
     ),
     Effect.retry({
@@ -137,11 +140,9 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends O
 
   const connectionId = database.defaultConnectionId;
   if (connectionId === null) {
-    return yield* Effect.fail(
-      new DatabaseCredentialsNotReady(
-        `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
-      ),
-    );
+    return yield* new DatabaseCredentialsNotReady({
+      message: `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
+    });
   }
   const rotated = yield* createConnectionRotate({ id: connectionId }).pipe(
     // Rotation mints new credentials; a replay would revoke the ones we

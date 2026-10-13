@@ -221,8 +221,10 @@ export const ListenerProvider = () =>
       return toAttributes(live ?? {}, listenerArn);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* retryUntilListenerDeletable(
-        withGaRegion(ga.deleteListener({ ListenerArn: output.listenerArn })),
-      ).pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
+      yield* ga.deleteListener({ ListenerArn: output.listenerArn }).pipe(
+        withGaRegion,
+        retryUntilListenerDeletable,
+        Effect.catchTag("ListenerNotFoundException", () => Effect.void),
+      );
     }),
   });

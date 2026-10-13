@@ -41,8 +41,8 @@ export const fromStream = <E, R>(
           feeder.end();
           return { total };
         }),
-        Effect.mapError(
-          (error) => new StoreError({ reason: `pack stream failed: ${String(error)}` }),
+        Effect.mapError((error) =>
+          StoreError.make({ reason: `pack stream failed: ${String(error)}` }),
         ),
         Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
         Effect.result,
@@ -60,7 +60,7 @@ export const fromStream = <E, R>(
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         state.active = false;
-        feeder.fail(new StoreError({ reason: "push scope closed" }));
+        feeder.fail(StoreError.make({ reason: "push scope closed" }));
         yield* Fiber.interrupt(receiving);
       }),
     );

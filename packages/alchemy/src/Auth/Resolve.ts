@@ -66,11 +66,9 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
     const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
     if (ci) {
       if (auth.readEnvironment === undefined) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
+        });
       }
       return {
         auth,
@@ -90,12 +88,11 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
       config,
       resolve: auth.read(profileName, config, (updated) =>
         profile.setProviderConfig(profileName, providerName, updated).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
+              cause,
+            }),
           ),
         ),
       ),
@@ -138,13 +135,12 @@ export const orDieCredentialsUnavailable =
   (provider: string) =>
   <A, E extends { readonly message: string }, R>(self: Effect.Effect<A, E, R>) =>
     self.pipe(
-      Effect.mapError(
-        (cause) =>
-          new CredentialsUnavailable({
-            provider,
-            message: cause.message,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        CredentialsUnavailable.make({
+          provider,
+          message: cause.message,
+          cause,
+        }),
       ),
       Effect.orDie,
     );

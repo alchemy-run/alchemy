@@ -15,8 +15,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 // keyspacesstreams is a data-plane read API over CDC streams of Keyspaces
 // tables. The ungated probes assert the distilled wiring surfaces typed
 // errors; the live traverse (which needs a CDC-enabled table + a deployed
-// Lambda exercising the TableStreams binding) is gated behind
-// AWS_TEST_SLOW=1.
+// Lambda exercising the TableStreams binding, ~2.5 min) is skipped under
+// --fast.
 describe(
   "AWS.Keyspaces.TableStreams",
   { tags: ["provider:aws", "provider:aws:keyspaces", "live"] },
@@ -52,7 +52,7 @@ describe(
       { timeout: 60_000 },
     );
 
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    test.provider.skipIf(!!process.env.FAST)(
       "CDC table exposes latestStreamArn and Lambda traverses the stream via the binding",
       (stack) =>
         Effect.gen(function* () {

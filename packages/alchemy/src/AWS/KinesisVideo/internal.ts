@@ -109,12 +109,10 @@ export const waitForStreamActive = Effect.fn("AWS.KinesisVideo.waitForStreamActi
     done,
   );
   if (!done(info)) {
-    return yield* Effect.fail(
-      new KinesisVideoNotConverged({
-        resource: streamName,
-        status: info?.Status,
-      }),
-    );
+    return yield* new KinesisVideoNotConverged({
+      resource: streamName,
+      status: info?.Status,
+    });
   }
   return info!;
 });
@@ -139,12 +137,10 @@ export const waitForChannelActive = Effect.fn("AWS.KinesisVideo.waitForChannelAc
     done,
   );
   if (!done(info)) {
-    return yield* Effect.fail(
-      new KinesisVideoNotConverged({
-        resource: channelName,
-        status: info?.ChannelStatus,
-      }),
-    );
+    return yield* new KinesisVideoNotConverged({
+      resource: channelName,
+      status: info?.ChannelStatus,
+    });
   }
   return info!;
 });
@@ -167,12 +163,10 @@ export const waitForStreamGone = Effect.fn("AWS.KinesisVideo.waitForStreamGone")
     45,
   );
   if (info !== undefined) {
-    return yield* Effect.fail(
-      new KinesisVideoNotConverged({
-        resource: streamName,
-        status: info.Status,
-      }),
-    );
+    return yield* new KinesisVideoNotConverged({
+      resource: streamName,
+      status: info.Status,
+    });
   }
 });
 
@@ -192,12 +186,10 @@ export const waitForChannelGone = Effect.fn("AWS.KinesisVideo.waitForChannelGone
     45,
   );
   if (info !== undefined) {
-    return yield* Effect.fail(
-      new KinesisVideoNotConverged({
-        resource: channelName,
-        status: info.ChannelStatus,
-      }),
-    );
+    return yield* new KinesisVideoNotConverged({
+      resource: channelName,
+      status: info.ChannelStatus,
+    });
   }
 });
 
@@ -283,7 +275,7 @@ export const discoverSignalingEndpoint = <E, R>(
       (item) => item.Protocol === protocol,
     )?.ResourceEndpoint;
     if (endpoint === undefined) {
-      return yield* Effect.fail(new SignalingEndpointUnavailable({ channelArn, protocol }));
+      return yield* new SignalingEndpointUnavailable({ channelArn, protocol });
     }
     signalingEndpointCache.set(key, endpoint);
     return endpoint;

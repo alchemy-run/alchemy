@@ -515,22 +515,18 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
   Effect.gen(function* () {
     const description = yield* describeDeliveryStream(deliveryStreamName);
     if (!description) {
-      return yield* Effect.fail(new DeliveryStreamNotActive({ status: "MISSING" }));
+      return yield* new DeliveryStreamNotActive({ status: "MISSING" });
     }
     if (description.DeliveryStreamStatus === "CREATING_FAILED") {
-      return yield* Effect.fail(
-        new DeliveryStreamCreateFailed({
-          deliveryStreamName,
-          details: description.FailureDescription?.Details,
-        }),
-      );
+      return yield* new DeliveryStreamCreateFailed({
+        deliveryStreamName,
+        details: description.FailureDescription?.Details,
+      });
     }
     if (description.DeliveryStreamStatus !== "ACTIVE") {
-      return yield* Effect.fail(
-        new DeliveryStreamNotActive({
-          status: description.DeliveryStreamStatus,
-        }),
-      );
+      return yield* new DeliveryStreamNotActive({
+        status: description.DeliveryStreamStatus,
+      });
     }
     return description;
   }).pipe(
@@ -549,7 +545,7 @@ const waitForEncryptionSettled = (deliveryStreamName: string) =>
     const description = yield* describeDeliveryStream(deliveryStreamName);
     const encryption = description?.DeliveryStreamEncryptionConfiguration;
     if (encryption?.Status === "ENABLING" || encryption?.Status === "DISABLING") {
-      return yield* Effect.fail(new DeliveryStreamEncryptionPending());
+      return yield* new DeliveryStreamEncryptionPending();
     }
     return encryption;
   }).pipe(
@@ -565,7 +561,7 @@ const waitForDeliveryStreamDeleted = (deliveryStreamName: string) =>
   Effect.gen(function* () {
     const description = yield* describeDeliveryStream(deliveryStreamName);
     if (description !== undefined) {
-      return yield* Effect.fail(new DeliveryStreamStillExists());
+      return yield* new DeliveryStreamStillExists();
     }
   }).pipe(
     Effect.retry({
@@ -732,25 +728,19 @@ export const DeliveryStreamProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
 
           if (!news?.destination?.bucketArn) {
-            return yield* Effect.fail(
-              new DeliveryStreamValidationError({
-                message: `DeliveryStream "${id}" requires destination.bucketArn`,
-              }),
-            );
+            return yield* new DeliveryStreamValidationError({
+              message: `DeliveryStream "${id}" requires destination.bucketArn`,
+            });
           }
           if (news.encryption && news.source) {
-            return yield* Effect.fail(
-              new DeliveryStreamValidationError({
-                message: `DeliveryStream "${id}" cannot enable server-side encryption on a KinesisStreamAsSource stream — encryption is inherited from the source Kinesis stream`,
-              }),
-            );
+            return yield* new DeliveryStreamValidationError({
+              message: `DeliveryStream "${id}" cannot enable server-side encryption on a KinesisStreamAsSource stream — encryption is inherited from the source Kinesis stream`,
+            });
           }
           if (news.encryption?.keyType === "CUSTOMER_MANAGED_CMK" && !news.encryption.keyArn) {
-            return yield* Effect.fail(
-              new DeliveryStreamValidationError({
-                message: `DeliveryStream "${id}" requires encryption.keyArn when keyType is CUSTOMER_MANAGED_CMK`,
-              }),
-            );
+            return yield* new DeliveryStreamValidationError({
+              message: `DeliveryStream "${id}" requires encryption.keyArn when keyType is CUSTOMER_MANAGED_CMK`,
+            });
           }
 
           const deliveryStreamName =
@@ -917,13 +907,11 @@ export const DeliveryStreamProvider = () =>
               );
               const settled = yield* waitForEncryptionSettled(deliveryStreamName);
               if (settled?.Status !== "ENABLED") {
-                return yield* Effect.fail(
-                  new DeliveryStreamEncryptionFailed({
-                    deliveryStreamName,
-                    status: settled?.Status ?? "UNKNOWN",
-                    details: settled?.FailureDescription?.Details,
-                  }),
-                );
+                return yield* new DeliveryStreamEncryptionFailed({
+                  deliveryStreamName,
+                  status: settled?.Status ?? "UNKNOWN",
+                  details: settled?.FailureDescription?.Details,
+                });
               }
               yield* session.note(
                 `Enabled SSE (${news.encryption.keyType}) on ${deliveryStreamName}`,
@@ -937,13 +925,11 @@ export const DeliveryStreamProvider = () =>
             );
             const settled = yield* waitForEncryptionSettled(deliveryStreamName);
             if (settled !== undefined && settled.Status !== "DISABLED") {
-              return yield* Effect.fail(
-                new DeliveryStreamEncryptionFailed({
-                  deliveryStreamName,
-                  status: settled.Status ?? "UNKNOWN",
-                  details: settled.FailureDescription?.Details,
-                }),
-              );
+              return yield* new DeliveryStreamEncryptionFailed({
+                deliveryStreamName,
+                status: settled.Status ?? "UNKNOWN",
+                details: settled.FailureDescription?.Details,
+              });
             }
             yield* session.note(`Disabled SSE on ${deliveryStreamName}`);
           }
@@ -978,11 +964,9 @@ export const DeliveryStreamProvider = () =>
             roleName,
           });
           if (!final) {
-            return yield* Effect.fail(
-              new DeliveryStreamValidationError({
-                message: `failed to read reconciled delivery stream ${deliveryStreamName}`,
-              }),
-            );
+            return yield* new DeliveryStreamValidationError({
+              message: `failed to read reconciled delivery stream ${deliveryStreamName}`,
+            });
           }
           return final;
         }),

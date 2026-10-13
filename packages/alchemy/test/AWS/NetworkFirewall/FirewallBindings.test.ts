@@ -133,7 +133,12 @@ describe.sequential(
             yield* Effect.logInfo(`/flow response: ${JSON.stringify(response)}`);
             expect(response).toMatchObject({ step: "ok" });
             expect(response.flowOperationId).toBeTruthy();
-            expect(["COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED"]).toContain(response.status);
+            // A capture can outlive the handler's bounded (~40s) poll; the
+            // describe/list/results calls all succeeding is what proves the
+            // grants, so a still-running capture is accepted too.
+            expect(["IN_PROGRESS", "COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED"]).toContain(
+              response.status,
+            );
             expect(response.operations).toBeGreaterThanOrEqual(1);
             expect(response.flows).toBeGreaterThanOrEqual(0);
           }),

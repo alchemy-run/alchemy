@@ -85,106 +85,111 @@ test(
 for (const dev of [false, true]) {
   const { test: providerTest } = Test.make({ providers: Cloudflare.providers(), dev });
 
-  providerTest.provider(`web responses over HTTP (${dev ? "local" : "live"})`, (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const worker = yield* stack.deploy(RawResponseWorker);
-      const client = yield* HttpClient.HttpClient;
-      const ready = yield* client.get(`${worker.url!}/ready`).pipe(
-        Effect.flatMap((response) => response.text),
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-          until: (body) => body === "raw-response:ready",
-        }),
-      );
-      expect(ready).toBe("raw-response:ready");
+  providerTest.provider(
+    `web responses over HTTP (${dev ? "local" : "live"})`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const worker = yield* stack.deploy(RawResponseWorker);
+        const client = yield* HttpClient.HttpClient;
+        const ready = yield* client.get(`${worker.url!}/ready`).pipe(
+          Effect.flatMap((response) => response.text),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+            until: (body) => body === "raw-response:ready",
+          }),
+        );
+        expect(ready).toBe("raw-response:ready");
 
-      for (const path of [
-        "/status",
-        "/native",
-        "/constructed-header",
-        "/explicit-status",
-        "/cookie",
-        "/stream",
-        "/no-content",
-        "/reset-content",
-        "/not-modified",
-      ]) {
-        for (const method of ["GET", "HEAD"] as const) {
-          const url = `${worker.url!}${path}`;
-          // Routes can propagate after /ready starts serving.
-          const { response, body } = yield* Effect.gen(function* () {
-            const response = yield* method === "GET" ? client.get(url) : client.head(url);
-            return { response, body: yield* response.text };
-          }).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              times: 8,
-              until: ({ response }) =>
-                response.status !== 404 || response.headers["x-native"] !== undefined,
-            }),
-          );
-          const mutated = path === "/status" || path === "/stream";
-          const status =
-            path === "/no-content"
-              ? 204
-              : path === "/reset-content"
-                ? 205
-                : path === "/not-modified"
-                  ? 304
-                  : path === "/explicit-status"
-                    ? 201
-                    : mutated
-                      ? 418
-                      : 202;
-          expect(response.status).toBe(status);
-          expect(response.headers["x-native"]).toBe(
-            mutated ? "effect" : path === "/constructed-header" ? "constructed" : "native",
-          );
-          expect(response.headers["x-remove"]).toBe(mutated ? undefined : "native");
-          if (mutated) {
-            expect(response.headers["x-observed-status"]).toBe("202");
-            expect(response.headers["x-observed-native"]).toBe("native");
-          }
-          expect(Cookies.toRecord(response.cookies)).toEqual(
-            path === "/cookie" ? { a: "1", b: "2", session: "abc" } : { a: "1", b: "2" },
-          );
-          expect(body).toBe(
-            method === "HEAD" || [204, 205, 304].includes(status)
-              ? ""
-              : path === "/stream"
-                ? "raw-response:streamed"
-                : "raw-response:body",
-          );
-          const finalized = yield* client
-            .get(`${worker.url!}/finalized?entry=${encodeURIComponent(`${method}:${path}`)}`)
-            .pipe(
-              Effect.flatMap((response) => response.text),
+        for (const path of [
+          "/status",
+          "/native",
+          "/constructed-header",
+          "/explicit-status",
+          "/cookie",
+          "/stream",
+          "/no-content",
+          "/reset-content",
+          "/not-modified",
+        ]) {
+          for (const method of ["GET", "HEAD"] as const) {
+            const url = `${worker.url!}${path}`;
+            // Routes can propagate after /ready starts serving.
+            const { response, body } = yield* Effect.gen(function* () {
+              const response = yield* method === "GET" ? client.get(url) : client.head(url);
+              return { response, body: yield* response.text };
+            }).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 times: 8,
-                until: (body) => body === "true",
+                until: ({ response }) =>
+                  response.status !== 404 || response.headers["x-native"] !== undefined,
               }),
             );
-          expect({ request: `${method} ${path}`, finalized }).toEqual({
-            request: `${method} ${path}`,
-            finalized: "true",
-          });
+            const mutated = path === "/status" || path === "/stream";
+            const status =
+              path === "/no-content"
+                ? 204
+                : path === "/reset-content"
+                  ? 205
+                  : path === "/not-modified"
+                    ? 304
+                    : path === "/explicit-status"
+                      ? 201
+                      : mutated
+                        ? 418
+                        : 202;
+            expect(response.status).toBe(status);
+            expect(response.headers["x-native"]).toBe(
+              mutated ? "effect" : path === "/constructed-header" ? "constructed" : "native",
+            );
+            expect(response.headers["x-remove"]).toBe(mutated ? undefined : "native");
+            if (mutated) {
+              expect(response.headers["x-observed-status"]).toBe("202");
+              expect(response.headers["x-observed-native"]).toBe("native");
+            }
+            expect(Cookies.toRecord(response.cookies)).toEqual(
+              path === "/cookie" ? { a: "1", b: "2", session: "abc" } : { a: "1", b: "2" },
+            );
+            expect(body).toBe(
+              method === "HEAD" || [204, 205, 304].includes(status)
+                ? ""
+                : path === "/stream"
+                  ? "raw-response:streamed"
+                  : "raw-response:body",
+            );
+            const finalized = yield* client
+              .get(`${worker.url!}/finalized?entry=${encodeURIComponent(`${method}:${path}`)}`)
+              .pipe(
+                Effect.flatMap((response) => response.text),
+                Effect.repeat({
+                  schedule: Schedule.spaced("1 second"),
+                  times: 8,
+                  until: (body) => body === "true",
+                }),
+              );
+            expect({ request: `${method} ${path}`, finalized }).toEqual({
+              request: `${method} ${path}`,
+              finalized: "true",
+            });
+          }
         }
-      }
 
-      yield* Effect.gen(function* () {
-        const socket = yield* Socket.makeWebSocket(
-          `${worker.url!.replace(/^http/, "ws")}/websocket`,
-        );
-        const reader = yield* socket.reader;
-        const writer = yield* socket.writer;
-        yield* writer.write("response-upgrade");
-        expect(yield* reader.pull).toEqual(["response-upgrade"]);
-      }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal));
-      yield* stack.destroy();
-    }),
+        yield* Effect.gen(function* () {
+          const socket = yield* Socket.makeWebSocket(
+            `${worker.url!.replace(/^http/, "ws")}/websocket`,
+          );
+          const reader = yield* socket.reader;
+          const writer = yield* socket.writer;
+          yield* writer.write("response-upgrade");
+          expect(yield* reader.pull).toEqual(["response-upgrade"]);
+        }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal));
+        yield* stack.destroy();
+      }),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:worker", ...(dev ? ["local"] : ["live"])],
+    },
   );
 }

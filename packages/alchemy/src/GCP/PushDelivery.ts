@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -24,11 +25,12 @@ export type PushHost = GcpHostRuntimeContext & {
   Type: string;
 };
 
-export class PushHostRequired extends Error {
-  constructor(source: string, host: string | undefined) {
-    super(
-      `${source} delivers over HTTPS and needs a GCP.Run.Service (GCP.Function) or GCP.CloudFunctions.Function host; got ${host ?? "no host"}. Use GCP.Run.TopicPullEventSource on Jobs and WorkerPools.`,
-    );
+export class PushHostRequired extends Data.TaggedError("PushHostRequired")<{
+  readonly source: string;
+  readonly host: string | undefined;
+}> {
+  override get message() {
+    return `${this.source} delivers over HTTPS and needs a GCP.Run.Service (GCP.Function) or GCP.CloudFunctions.Function host; got ${this.host ?? "no host"}. Use GCP.Run.TopicPullEventSource on Jobs and WorkerPools.`;
   }
 }
 
@@ -37,7 +39,9 @@ export const pushHost = (source: string) =>
   Effect.gen(function* () {
     const host = yield* Binding.Host;
     if (!isGcpListenHost(host)) {
-      return yield* Effect.die(new PushHostRequired(source, (host as { Type?: string })?.Type));
+      return yield* Effect.die(
+        new PushHostRequired({ source, host: (host as { Type?: string })?.Type }),
+      );
     }
     return host as PushHost;
   });

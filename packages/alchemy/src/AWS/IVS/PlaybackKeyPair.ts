@@ -109,11 +109,9 @@ export const PlaybackKeyPairProvider = () =>
 
       const toAttrs = Effect.fn(function* (keyPair: ivs.PlaybackKeyPair) {
         if (!keyPair.arn || !keyPair.name) {
-          return yield* Effect.fail(
-            new IvsPlaybackKeyPairIncomplete({
-              message: "IVS playback key pair is missing its ARN or name",
-            }),
-          );
+          return yield* new IvsPlaybackKeyPairIncomplete({
+            message: "IVS playback key pair is missing its ARN or name",
+          });
         }
         return {
           playbackKeyPairName: keyPair.name,
@@ -200,11 +198,9 @@ export const PlaybackKeyPairProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsPlaybackKeyPairIncomplete({
-                message: `IVS playback key pair '${name}' could not be imported or found`,
-              }),
-            );
+            return yield* new IvsPlaybackKeyPairIncomplete({
+              message: `IVS playback key pair '${name}' could not be imported or found`,
+            });
           }
 
           // 3. Sync tags — the only mutable aspect.
@@ -213,11 +209,9 @@ export const PlaybackKeyPairProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsPlaybackKeyPairIncomplete({
-                message: `IVS playback key pair '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsPlaybackKeyPairIncomplete({
+              message: `IVS playback key pair '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

@@ -46,6 +46,8 @@ test.provider(
   },
 );
 
+// Project setup (one-time): the Developer Connect service agent must hold
+// roles/secretmanager.admin, see the Connection JSDoc.
 test.provider(
   "create, update, and delete a developer connect connection",
   (stack) =>

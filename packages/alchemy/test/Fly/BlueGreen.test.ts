@@ -7703,7 +7703,9 @@ describe.sequential(
                   machine: oldId,
                   version: "one",
                 });
-                const body = yield* Fiber.join(streamed);
+                // The fixture pads quiet gaps with blank heartbeat lines so Fly's proxy
+                // never sees a 60s-idle connection; the payload itself must be intact.
+                const body = (yield* Fiber.join(streamed)).replace(/^\n+/gm, "");
                 const expected = "first\n".repeat(32768) + "last\n".repeat(32768);
                 const hashes = yield* Effect.sync(() =>
                   [body, expected].map((value) => createHash("sha256").update(value).digest("hex")),

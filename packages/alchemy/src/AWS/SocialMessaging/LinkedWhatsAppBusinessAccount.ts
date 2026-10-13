@@ -292,7 +292,7 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
           // be linked; there is no create path to fall through to.
           const state = yield* readLinkedAccount(accountId);
           if (state === undefined) {
-            return yield* Effect.fail(new WhatsAppBusinessAccountNotLinked({ accountId }));
+            return yield* new WhatsAppBusinessAccountNotLinked({ accountId });
           }
 
           // Sync event destinations — the API replaces the full list.
@@ -332,7 +332,7 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
 
           const final = yield* readLinkedAccount(accountId);
           if (final === undefined) {
-            return yield* Effect.fail(new WhatsAppBusinessAccountNotLinked({ accountId }));
+            return yield* new WhatsAppBusinessAccountNotLinked({ accountId });
           }
           return final.attrs;
         }),

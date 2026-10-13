@@ -22,9 +22,6 @@ export class PrismaUploadClient extends EffectContext.Service<
   HttpClient.HttpClient
 >()("alchemy/Prisma/UploadClient") {}
 
-export const PrismaUploadClientLive = Layer.effect(
-  PrismaUploadClient,
-  Effect.gen(function* () {
-    return yield* HttpClient.HttpClient;
-  }),
-).pipe(Layer.provide(PrismaHttpClientLive));
+export const PrismaUploadClientLive = Layer.effect(PrismaUploadClient, HttpClient.HttpClient).pipe(
+  Layer.provide(PrismaHttpClientLive),
+);

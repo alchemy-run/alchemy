@@ -37,10 +37,10 @@ const assertBrokerGone = (brokerId: string) =>
   );
 
 // A broker bills per instance-hour and takes 5-10 min to provision, so the
-// full lifecycle is gated behind AWS_TEST_SLOW=1 and always destroys. A
+// full lifecycle is skipped under `--fast` and always destroys. A
 // single-instance mq.t3.micro ActiveMQ broker is the cheapest topology; with
 // SubnetIds omitted, Amazon MQ places it in a default-VPC subnet.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create a single-instance ActiveMQ broker, verify RUNNING, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {

@@ -648,9 +648,11 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("BadRequest", () => Effect.void),
-          Effect.catchTag("Conflict", () => Effect.void),
+          Effect.catchTags({
+            NotFound: () => Effect.void,
+            BadRequest: () => Effect.void,
+            Conflict: () => Effect.void,
+          }),
         );
     }),
   });

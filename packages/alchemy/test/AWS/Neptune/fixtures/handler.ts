@@ -32,7 +32,7 @@ export class NeptuneBindingsTestFunction extends Lambda.Function<Lambda.Function
  * `FailoverDBCluster`, `StartDBCluster`, `StopDBCluster`,
  * `RebootDBInstance`) resolve a bound resource at deploy time, so they need
  * a live cluster (~10 min, billed hourly) and are exercised only under
- * AWS_TEST_SLOW-gated lifecycle runs.
+ * slow (skipped under `--fast`) lifecycle runs.
  */
 export default NeptuneBindingsTestFunction.make(
   {

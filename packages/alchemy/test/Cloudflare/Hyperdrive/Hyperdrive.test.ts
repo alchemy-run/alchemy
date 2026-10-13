@@ -25,6 +25,14 @@ import {
   AccessOriginConnection,
   AccessOriginRoute,
 } from "./fixtures/access-origin.ts";
+import HyperdriveVpcEffectWorker from "./fixtures/vpc-effect-worker.ts";
+import {
+  VPC_ORIGIN_PASSWORD,
+  VPC_ORIGIN_PORT,
+  VpcOriginConnection,
+  VpcOriginService,
+  VpcOriginTunnel,
+} from "./fixtures/vpc-origin.ts";
 
 const { test } = Test.make({ providers: Layer.merge(Cloudflare.providers(), Neon.providers()) });
 
@@ -166,60 +174,67 @@ const ACCESS_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-access-origin";
 const run = (cmd: string[]) =>
   Effect.sync(() => Bun.spawnSync(cmd, { stdout: "pipe", stderr: "pipe" }));
 
-/** Postgres with TLS (the image's snakeoil cert) on {@link ACCESS_ORIGIN_PORT}. */
-const accessOriginPostgres = Effect.acquireRelease(
-  Effect.gen(function* () {
-    yield* run([dockerBin!, "rm", "-f", ACCESS_ORIGIN_CONTAINER]);
-    const started = yield* run([
-      dockerBin!,
-      "run",
-      "-d",
-      "--rm",
-      "--name",
-      ACCESS_ORIGIN_CONTAINER,
-      "-e",
-      `POSTGRES_PASSWORD=${ACCESS_ORIGIN_PASSWORD}`,
-      "-p",
-      `127.0.0.1:${ACCESS_ORIGIN_PORT}:5432`,
-      "postgres:17",
-      "-c",
-      "ssl=on",
-      "-c",
-      "ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem",
-      "-c",
-      "ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key",
-    ]);
-    if (started.exitCode !== 0) {
-      return yield* Effect.die(new Error(`docker run failed: ${started.stderr.toString()}`));
-    }
-    yield* run([
-      dockerBin!,
-      "exec",
-      ACCESS_ORIGIN_CONTAINER,
-      "pg_isready",
-      "-h",
-      "127.0.0.1",
-      "-U",
-      "postgres",
-    ]).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (result) => result.exitCode === 0,
-        times: 30,
-      }),
-    );
-  }),
-  () => run([dockerBin!, "rm", "-f", ACCESS_ORIGIN_CONTAINER]),
+/** Postgres with TLS (the image's snakeoil cert) on `127.0.0.1:${port}`, removed when the scope closes. */
+const localPostgres = (container: string, port: number, password: string) =>
+  Effect.acquireRelease(
+    Effect.gen(function* () {
+      yield* run([dockerBin!, "rm", "-f", container]);
+      const started = yield* run([
+        dockerBin!,
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        container,
+        "-e",
+        `POSTGRES_PASSWORD=${password}`,
+        "-p",
+        `127.0.0.1:${port}:5432`,
+        "postgres:17",
+        "-c",
+        "ssl=on",
+        "-c",
+        "ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem",
+        "-c",
+        "ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key",
+      ]);
+      if (started.exitCode !== 0) {
+        return yield* Effect.die(new Error(`docker run failed: ${started.stderr.toString()}`));
+      }
+      yield* run([
+        dockerBin!,
+        "exec",
+        container,
+        "pg_isready",
+        "-h",
+        "127.0.0.1",
+        "-U",
+        "postgres",
+      ]).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (result) => result.exitCode === 0,
+          times: 30,
+        }),
+      );
+    }),
+    () => run([dockerBin!, "rm", "-f", container]),
+  );
+
+const accessOriginPostgres = localPostgres(
+  ACCESS_ORIGIN_CONTAINER,
+  ACCESS_ORIGIN_PORT,
+  ACCESS_ORIGIN_PASSWORD,
 );
 
 class TunnelNotHealthy extends Data.TaggedError("TunnelNotHealthy")<{ status: string }> {}
-class AccessQueryFailed extends Data.TaggedError("AccessQueryFailed")<{
+class OriginQueryFailed extends Data.TaggedError("OriginQueryFailed")<{
   status: number;
   body: string;
 }> {}
 
 /** Run the tunnel's connector here until the scope closes, then wait for it to register. */
-const accessOriginConnector = (accountId: string, tunnelId: string, token: string) =>
+const tunnelConnector = (accountId: string, tunnelId: string, token: string) =>
   Effect.gen(function* () {
     yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -248,14 +263,14 @@ const accessOriginConnector = (accountId: string, tunnelId: string, token: strin
     );
   });
 
-const queryThroughAccess = (url: string) =>
+const queryThroughOrigin = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((res) =>
       res.text.pipe(
         Effect.flatMap((body) =>
           res.status === 200
             ? Effect.succeed(JSON.parse(body) as { via: string })
-            : Effect.fail(new AccessQueryFailed({ status: res.status, body })),
+            : Effect.fail(new OriginQueryFailed({ status: res.status, body })),
         ),
       ),
     ),
@@ -279,7 +294,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           // The tunnel must have a live connector before Hyperdrive is
           // created: Cloudflare connects to the origin when it creates it.
           const route = yield* stack.deploy(AccessOriginRoute(zone.id));
-          yield* accessOriginConnector(
+          yield* tunnelConnector(
             accountId,
             route.tunnel.tunnelId,
             Redacted.value(route.tunnel.token),
@@ -312,10 +327,10 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           expect(actual.origin.host).toEqual(ACCESS_ORIGIN_HOST);
 
           // Both binding flavors reach Postgres through Access + the tunnel.
-          expect(yield* queryThroughAccess(deployed.effectWorker.url!)).toEqual({
+          expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({
             via: "through-access",
           });
-          expect(yield* queryThroughAccess(deployed.asyncWorker.url!)).toEqual({
+          expect(yield* queryThroughOrigin(deployed.asyncWorker.url!)).toEqual({
             via: "through-access",
           });
           return deployed;
@@ -333,6 +348,84 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
       "provider:cloudflare:hyperdrive",
       "provider:cloudflare:tunnel",
       "provider:cloudflare:access",
+      "live",
+    ],
+    timeout: 300_000,
+  },
+);
+
+// ── Workers VPC origin ──────────────────────────────────────────────────────
+// A private origin reached through Workers VPC: Postgres in Docker, exposed
+// as a TCP VPC Service over a Cloudflare Tunnel whose connector
+// (`cloudflared`) runs here — the same topology as an Aurora/RDS instance
+// inside an AWS VPC with `cloudflared` running in the VPC. Both binding
+// flavors must query through it.
+
+const VPC_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-vpc-origin";
+
+test.provider.skipIf(!cloudflaredBin || !dockerBin)(
+  "deploys and queries a private origin through a Workers VPC Service",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* localPostgres(VPC_ORIGIN_CONTAINER, VPC_ORIGIN_PORT, VPC_ORIGIN_PASSWORD);
+
+          // The tunnel must have a live connector before Hyperdrive is
+          // created: Cloudflare connects to the origin when it creates it.
+          const tunnel = yield* stack.deploy(VpcOriginTunnel);
+          yield* tunnelConnector(accountId, tunnel.tunnelId, Redacted.value(tunnel.token));
+
+          // The VPC Service is created in the same deploy as Hyperdrive, so
+          // Hyperdrive's create must ride out the service's propagation.
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* VpcOriginTunnel;
+              const service = yield* VpcOriginService;
+              const connection = yield* VpcOriginConnection;
+              const effectWorker = yield* HyperdriveVpcEffectWorker;
+              const asyncWorker = yield* Cloudflare.Worker("HyperdriveVpcAsyncWorker", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
+                env: { HD: VpcOriginConnection },
+              });
+              return { service, connection, effectWorker, asyncWorker };
+            }),
+          );
+
+          const actual = yield* hyperdrive.getConfig({
+            accountId,
+            hyperdriveId: deployed.connection.hyperdriveId,
+          });
+          assert("serviceId" in actual.origin, "origin must be a VPC Service origin");
+          expect(actual.origin.serviceId).toEqual(deployed.service.serviceId);
+          expect(actual.origin.database).toEqual("postgres");
+
+          // Both binding flavors reach Postgres through the VPC Service.
+          expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({
+            via: "through-vpc",
+          });
+          expect(yield* queryThroughOrigin(deployed.asyncWorker.url!)).toEqual({
+            via: "through-vpc",
+          });
+          return deployed;
+        }),
+      );
+
+      yield* stack.destroy();
+      yield* waitForConfigToBeDeleted(deployed.connection.hyperdriveId, accountId);
+      yield* waitForWorkerToBeDeleted(deployed.effectWorker.workerName, accountId);
+      yield* waitForWorkerToBeDeleted(deployed.asyncWorker.workerName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:tunnel",
+      "provider:cloudflare:connectivity",
       "live",
     ],
     timeout: 300_000,

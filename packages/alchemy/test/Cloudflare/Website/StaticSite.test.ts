@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -863,19 +864,28 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 /**
- * Inverse of `expectUrlContains`: succeeds if the marker is *absent*
- * from the response within the timeout. We drive this off the same
- * primitive by inverting the check at the call site.
+ * Inverse of `expectUrlContains`: succeeds once the marker is *absent*
+ * from the response, polling (bounded) for up to ~30s. A redeploy reaches
+ * Cloudflare's edge eventually: right after the new version first answers,
+ * an individual request can still land on a colo serving the previous
+ * version, so a single sample is not a valid "old content is gone" check.
  */
 const expectUrlAbsent = (url: string, marker: string, options: { timeout?: Duration.Input }) =>
   Effect.gen(function* () {
     yield* expectUrlContains(url, "<", { ...options, label: "page exists" });
-    const u = new URL(url);
-    u.searchParams.set("__alchemy_cb", String(Date.now()));
-    const body = yield* Effect.promise(() =>
-      fetch(u, { cache: "no-store", headers: { "cache-control": "no-cache" } }).then((r) =>
+    const fetchBody = Effect.tryPromise(() => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      return fetch(u, { cache: "no-store", headers: { "cache-control": "no-cache" } }).then((r) =>
         r.text(),
-      ),
+      );
+    }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 3 }));
+    const body = yield* fetchBody.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("3 seconds"),
+        until: (b) => !b.includes(marker),
+        times: 10,
+      }),
     );
     expect(
       body.includes(marker),

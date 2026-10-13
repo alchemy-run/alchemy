@@ -203,6 +203,9 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *       InstanceType: "ml.t3.medium",
  *       InstanceCount: 1,
  *       ExecutionRole: role.roleArn,
+ *       // HyperPod now provisions Slurm clusters in Continuous mode, which
+ *       // requires a Slurm node type on at least one instance group.
+ *       SlurmConfig: { NodeType: "Controller" },
  *       LifeCycleConfig: {
  *         SourceS3Uri: `s3://${bucket.bucketName}/lifecycle`,
  *         OnCreate: "on_create.sh",
@@ -483,35 +486,27 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
           node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );
         if (blocked !== undefined) {
-          return yield* Effect.fail(
-            new ClusterTeardownBlocked({
-              clusterName: name,
-              message: blocked.InstanceStatus?.Message ?? "",
-            }),
-          );
-        }
-        return yield* Effect.fail(
-          new ClusterNotReady({
+          return yield* new ClusterTeardownBlocked({
             clusterName: name,
-            status: described.ClusterStatus,
-          }),
-        );
+            message: blocked.InstanceStatus?.Message ?? "",
+          });
+        }
+        return yield* new ClusterNotReady({
+          clusterName: name,
+          status: described.ClusterStatus,
+        });
       }
       if (described?.ClusterStatus === "InService") return;
       if (described?.ClusterStatus === "Failed") {
-        return yield* Effect.fail(
-          new ClusterFailed({
-            clusterName: name,
-            message: described.FailureMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new ClusterNotReady({
+        return yield* new ClusterFailed({
           clusterName: name,
-          status: described?.ClusterStatus,
-        }),
-      );
+          message: described.FailureMessage,
+        });
+      }
+      return yield* new ClusterNotReady({
+        clusterName: name,
+        status: described?.ClusterStatus,
+      });
     }),
   );
 
@@ -739,8 +734,10 @@ export const ClusterProvider = () =>
               Effect.catchTag(["ClusterFailed", "ClusterNotReady"], () => Effect.void),
             );
             yield* sagemaker.deleteCluster({ ClusterName: output.clusterName }).pipe(
-              Effect.catchTag("ResourceNotFound", () => Effect.void),
-              Effect.catchTag("ConflictException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFound: () => Effect.void,
+                ConflictException: () => Effect.void,
+              }),
             );
           }
           yield* waitForCluster(output.clusterName, "Gone");

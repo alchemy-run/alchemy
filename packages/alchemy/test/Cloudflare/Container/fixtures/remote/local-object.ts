@@ -26,21 +26,18 @@ export class LocalRemoteContainerObject extends Cloudflare.DurableObject<LocalRe
     const container = yield* LocalRemoteContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: () =>
           Effect.gen(function* () {
+            yield* start;
             const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(LocalRemoteContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

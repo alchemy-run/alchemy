@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -217,15 +218,39 @@ export const workerLayer = (options: WorkerOptions) =>
           ),
           Effect.andThen(event(client, "response-finished")),
         );
-        if (request.url === "/stream")
-          return HttpServerResponse.stream(
-            Stream.make("first\n".repeat(32768)).pipe(
-              Stream.concat(Stream.fromEffect(afterStop.pipe(Effect.as("last\n".repeat(32768))))),
-              Stream.mapEffect((chunk) => Effect.sync(() => new TextEncoder().encode(chunk))),
+        // Fly's proxy may close a connection that moves no bytes for 60s, and a held
+        // request spans green readiness, promotion, cordon and the old stop grace.
+        // Emit whitespace heartbeats (valid JSON padding / blank stream lines) until
+        // the post-stop tail resolves, as a real long-poll or stream behind Fly would.
+        const heartbeat = (tail: Effect.Effect<string>, beat: string) =>
+          tail.pipe(
+            Effect.forkScoped,
+            Effect.map((fiber) =>
+              Stream.paginate(undefined, () =>
+                Fiber.join(fiber).pipe(
+                  Effect.timeoutOption("10 seconds"),
+                  Effect.map((last) =>
+                    Option.isSome(last)
+                      ? ([[last.value], Option.none()] as const)
+                      : ([[beat], Option.some(undefined)] as const),
+                  ),
+                ),
+              ),
             ),
           );
-        yield* afterStop;
-        return yield* HttpServerResponse.json(identity);
+        const encode = Stream.mapEffect((chunk: string) =>
+          Effect.sync(() => new TextEncoder().encode(chunk)),
+        );
+        if (request.url === "/stream") {
+          const tail = yield* heartbeat(afterStop.pipe(Effect.as("last\n".repeat(32768))), "\n");
+          return HttpServerResponse.stream(
+            Stream.make("first\n".repeat(32768)).pipe(Stream.concat(tail), encode),
+          );
+        }
+        const tail = yield* heartbeat(afterStop.pipe(Effect.as(JSON.stringify(identity))), " ");
+        return HttpServerResponse.stream(Stream.make(" ").pipe(Stream.concat(tail), encode), {
+          contentType: "application/json",
+        });
       });
       const host = yield* ServerHost;
       if (count > 1) yield* host.run(runWorker("b"));

@@ -135,7 +135,7 @@ export const AddressProvider = () =>
         })
         .pipe(
           Effect.map((r) => toAttrs(acct, r)),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -152,7 +152,7 @@ export const AddressProvider = () =>
             })
             .pipe(
               Effect.map((r) => toAttrs(acct, r)),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.orElseSucceed(() => undefined),
             )
         : undefined;
 
@@ -164,7 +164,7 @@ export const AddressProvider = () =>
           })
           .pipe(
             Effect.map((r) => toAttrs(acct, r)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
 

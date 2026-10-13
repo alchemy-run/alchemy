@@ -324,11 +324,9 @@ export const ScalingPolicyProvider = () =>
             scalableDimension: news.scalableDimension,
           });
           if (policy === undefined) {
-            return yield* Effect.fail(
-              new aas.ObjectNotFoundException({
-                message: `Scaling policy '${policyName}' was not readable after PutScalingPolicy`,
-              }),
-            );
+            return yield* aas.ObjectNotFoundException.make({
+              message: `Scaling policy '${policyName}' was not readable after PutScalingPolicy`,
+            });
           }
 
           yield* session.note(policy.PolicyARN);

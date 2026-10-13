@@ -206,14 +206,12 @@ export const CloudControlResourceProvider = () =>
             }),
           );
         if (event?.OperationStatus !== "SUCCESS") {
-          return yield* Effect.fail(
-            new ResourceRequestFailed({
-              typeName,
-              operation: event?.Operation ?? "UNKNOWN",
-              errorCode: event?.ErrorCode,
-              statusMessage: event?.StatusMessage,
-            }),
-          );
+          return yield* new ResourceRequestFailed({
+            typeName,
+            operation: event?.Operation ?? "UNKNOWN",
+            errorCode: event?.ErrorCode,
+            statusMessage: event?.StatusMessage,
+          });
         }
         return event;
       });

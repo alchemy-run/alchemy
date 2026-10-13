@@ -87,7 +87,7 @@ export const login = Effect.gen(function* () {
 
   const openFailed = yield* Interaction.openUrl(authorization.auth_url).pipe(
     Effect.as(false),
-    Effect.catch(() => Effect.succeed(true)),
+    Effect.orElseSucceed(() => true),
   );
 
   // Show the "waiting" prompt for as long as polling takes; the prompt itself
@@ -115,12 +115,11 @@ export const login = Effect.gen(function* () {
   };
   return config;
 }).pipe(
-  Effect.mapError(
-    () =>
-      new AuthError({
-        message:
-          "Doppler login did not complete. Run `alchemy profile edit --add Doppler` to try again, or configure an API token.",
-      }),
+  Effect.mapError(() =>
+    AuthError.make({
+      message:
+        "Doppler login did not complete. Run `alchemy profile edit --add Doppler` to try again, or configure an API token.",
+    }),
   ),
 );
 
@@ -171,11 +170,10 @@ const revokeLoginToken = (config: DopplerAuthConfig) =>
         Retry.none,
         Effect.timeout(API_TIMEOUT),
         Effect.asVoid,
-        Effect.mapError(
-          () =>
-            new AuthError({
-              message: "Could not revoke the Doppler login token. Try logging out again.",
-            }),
+        Effect.mapError(() =>
+          AuthError.make({
+            message: "Could not revoke the Doppler login token. Try logging out again.",
+          }),
         ),
       )
     : Effect.void;
@@ -198,12 +196,11 @@ export const mintTokenFromOidc = (config: {
     Effect.map((response): DopplerResolvedCredentials => ({
       token: Redacted.isRedacted(response.token) ? response.token : Redacted.make(response.token),
     })),
-    Effect.mapError(
-      (cause) =>
-        new AuthError({
-          message: `Doppler rejected the OIDC login for identity '${config.identityId}': ${cause.message}. Check that the service account identity trusts this platform's issuer, subject, and audience, and that the workplace plan includes identities.`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      AuthError.make({
+        message: `Doppler rejected the OIDC login for identity '${config.identityId}': ${cause.message}. Check that the service account identity trusts this platform's issuer, subject, and audience, and that the workplace plan includes identities.`,
+        cause,
+      }),
     ),
   );
 
@@ -218,7 +215,7 @@ const readEnvironment = Effect.gen(function* () {
   }
   const identityId = yield* getEnv(DOPPLER_IDENTITY_ID_ENV);
   if (!identityId) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: `Doppler credentials are missing. In CI set ${DOPPLER_TOKEN_ENV}, or set ${DOPPLER_IDENTITY_ID_ENV} to log in with the platform's OIDC token; locally run \`alchemy profile edit --add Doppler\` and choose Login.`,
     });
   }
@@ -227,7 +224,7 @@ const readEnvironment = Effect.gen(function* () {
     audience: DOPPLER_OIDC_AUDIENCE_ENV,
   });
   if (oidc === undefined) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: `${DOPPLER_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: ${SUPPORTED_OIDC_PLATFORMS}; elsewhere pass the token in ${DOPPLER_OIDC_TOKEN_ENV}.`,
     });
   }
@@ -250,7 +247,7 @@ export const DopplerAuth = AuthProviderLayer<DopplerAuthConfig, DopplerResolvedC
             })),
           )
         : Effect.fail(
-            new AuthError({
+            AuthError.make({
               message:
                 "Doppler: use method 'api-token' for flag-driven configuration. Login requires interactive profile setup.",
             }),

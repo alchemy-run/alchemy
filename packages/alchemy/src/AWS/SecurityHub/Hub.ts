@@ -96,8 +96,10 @@ const buildAttrs = (hub: securityhub.DescribeHubResponse) => ({
 // subscribed and `ResourceNotFoundException` transiently right after enable —
 // both mean "no Hub", so collapse them to `undefined`.
 const describeHub = securityhub.describeHub({}).pipe(
-  Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTags({
+    InvalidAccessException: () => Effect.succeed(undefined),
+    ResourceNotFoundException: () => Effect.succeed(undefined),
+  }),
 );
 
 export const HubProvider = () =>
@@ -107,7 +109,7 @@ export const HubProvider = () =>
       const readTags = (arn: string) =>
         securityhub.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) => tagRecord(r.Tags)),
-          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+          Effect.orElseSucceed(() => ({})),
         );
 
       return {
@@ -180,8 +182,10 @@ export const HubProvider = () =>
 
         delete: Effect.fn(function* () {
           yield* securityhub.disableSecurityHub({}).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("InvalidAccessException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              InvalidAccessException: () => Effect.void,
+            }),
           );
         }),
       };

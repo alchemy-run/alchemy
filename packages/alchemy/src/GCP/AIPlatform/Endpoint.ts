@@ -22,7 +22,7 @@ import {
   userLabels,
 } from "./helpers.ts";
 import { listLocations } from "./names.ts";
-import { waitForOperation } from "./operations.ts";
+import { settlePendingCreates, waitForOperation } from "./operations.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 const MAX_NAME_LENGTH = 63;
@@ -350,6 +350,25 @@ const getByName = (name: string) =>
     .getProjectsLocationsEndpoints({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/**
+ * Look an endpoint up by name. An endpoint is invisible while its create
+ * operation is pending (minutes on a fresh project), so on a miss wait for
+ * any pending create of this endpoint id and look again — otherwise an
+ * interrupted create's recovery read / delete reports it gone and leaks it.
+ */
+const getSettled = (name: string) =>
+  Effect.gen(function* () {
+    const existing = yield* getByName(name);
+    if (existing !== undefined) return existing;
+    const parts = name.split("/");
+    const settled = yield* settlePendingCreates({
+      parent: parts.slice(0, 4).join("/"),
+      collection: "endpoints",
+      resourceId: parts[5],
+    });
+    return settled ? yield* getByName(name) : undefined;
+  });
+
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
@@ -440,7 +459,7 @@ export const EndpointProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, endpointId);
-      const existing = yield* getByName(name);
+      const existing = yield* getSettled(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
@@ -449,23 +468,20 @@ export const EndpointProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* Stream.fromIterable(listLocations(env.region))
-          .pipe(
-            Stream.flatMap((location) =>
-              aiplatform.listProjectsLocationsEndpoints.pages({
-                parent: `projects/${env.project}/locations/${location}`,
-                pageSize: 100,
-              }),
-            ),
-          )
-          .pipe(
-            Stream.flatMap((page) => Stream.fromIterable(page.endpoints ?? [])),
-            Stream.filter((endpoint) => hasAlchemyLabelMap(endpoint.labels)),
-            Stream.map((endpoint) => toAttrs(endpoint, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () => Effect.succeed([])),
-          );
+        return yield* Stream.fromIterable(listLocations(env.region)).pipe(
+          Stream.flatMap((location) =>
+            aiplatform.listProjectsLocationsEndpoints.pages({
+              parent: `projects/${env.project}/locations/${location}`,
+              pageSize: 100,
+            }),
+          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.endpoints ?? [])),
+          Stream.filter((endpoint) => hasAlchemyLabelMap(endpoint.labels)),
+          Stream.map((endpoint) => toAttrs(endpoint, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFound", () => Effect.succeed([])),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -484,7 +500,7 @@ export const EndpointProvider = () =>
       };
       const displayName = news.displayName ?? endpointId;
 
-      let current = yield* getByName(output?.name ?? name);
+      let current = yield* getSettled(output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -592,6 +608,9 @@ export const EndpointProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // Settle a still-pending create first: deleting an endpoint whose
+      // create hasn't finished reports NotFound and would leak it.
+      if ((yield* getSettled(output.name)) === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsEndpoints({ name: output.name })
         .pipe(

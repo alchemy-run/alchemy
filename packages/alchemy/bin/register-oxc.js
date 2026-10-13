@@ -28,7 +28,7 @@ import { enableCompileCache } from "node:module";
 // too. Enabled before the loader is imported so the loader's own dependency
 // graph (rolldown) is covered. Honours `NODE_COMPILE_CACHE` (directory) and
 // `NODE_DISABLE_COMPILE_CACHE`; defaults to Node's per-user temp directory.
-// The loader flushes it after lazy imports settle (see register-oxc.ts).
+// The loader flushes it after lazy imports settle (see node-utils loader/hooks.ts).
 enableCompileCache();
 
 const { registerOxc } = await import("@alchemy.run/node-utils/register-oxc");

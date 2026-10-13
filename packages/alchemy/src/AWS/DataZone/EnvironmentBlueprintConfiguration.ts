@@ -212,8 +212,10 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             environmentBlueprintIdentifier: blueprintId,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.succeed(undefined),
+              AccessDeniedException: () => Effect.succeed(undefined),
+            }),
           );
       });
 
@@ -234,13 +236,13 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               }
             : olds?.environmentBlueprint
               ? yield* resolveBlueprint(domainId, olds.environmentBlueprint).pipe(
-                  Effect.catchTag("AWS.DataZone.EnvironmentBlueprintNotFound", () =>
-                    Effect.succeed(undefined),
-                  ),
-                  // the domain itself may already be gone (reported as
-                  // NotFound or as AccessDenied — auth precedes existence)
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+                  Effect.catchTags({
+                    "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.succeed(undefined),
+                    // the domain itself may already be gone (reported as
+                    // NotFound or as AccessDenied — auth precedes existence)
+                    ResourceNotFoundException: () => Effect.succeed(undefined),
+                    AccessDeniedException: () => Effect.succeed(undefined),
+                  }),
                 )
               : undefined;
           if (blueprint === undefined) return undefined;
@@ -322,10 +324,12 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               environmentBlueprintIdentifier: output.environmentBlueprintId,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // deleting a configuration whose domain is already gone
-              // surfaces as AccessDenied — auth is checked before existence.
-              Effect.catchTag("AccessDeniedException", () => Effect.void),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // deleting a configuration whose domain is already gone
+                // surfaces as AccessDenied — auth is checked before existence.
+                AccessDeniedException: () => Effect.void,
+              }),
             );
         }),
       });

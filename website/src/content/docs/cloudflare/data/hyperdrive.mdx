@@ -18,7 +18,8 @@ cold-start connection storms.
 
 Reach for Hyperdrive whenever your app needs a real relational
 database: managed Postgres/MySQL providers like Neon and
-PlanetScale, or a database you already run. (For serverless SQLite
+PlanetScale, or a database you already run — including one in a
+[private network](/cloudflare/data/hyperdrive-private-database). (For serverless SQLite
 inside Cloudflare, use [D1](/cloudflare/data/d1) instead.) This page
 provisions a serverless database, fronts it with Hyperdrive, and
 binds the connection into your Worker.
@@ -680,6 +681,9 @@ driver configuration so `poolConfig` options reach mysql2.
 
 Guides that build on Hyperdrive:
 
+- [Private database (Workers VPC)](/cloudflare/data/hyperdrive-private-database)
+  — reach a database with no public endpoint, such as Aurora in an
+  AWS VPC, through a Cloudflare Tunnel.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — swap the raw
   driver for typed schemas and alchemy-managed migrations.
 - [Shared database across stages](/cloudflare/data/shared-database)

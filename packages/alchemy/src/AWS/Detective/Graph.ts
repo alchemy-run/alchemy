@@ -67,7 +67,7 @@ export const GraphProvider = () =>
       const readTags = (arn: string) =>
         detective.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) => (r.Tags ?? {}) as Record<string, string>),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       return {

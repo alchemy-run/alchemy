@@ -306,7 +306,7 @@ export const ProjectProvider = () =>
             Effect.catchTag("ProjectAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const existing = yield* getProject(accountId, name);
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return existing;
               }),
             ),

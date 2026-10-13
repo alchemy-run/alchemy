@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Box } from "@alchemy.run/sigil";
 import { runMain } from "alchemy/Util/PlatformServices";

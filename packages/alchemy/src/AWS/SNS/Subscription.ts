@@ -187,8 +187,10 @@ export const SubscriptionProvider = () =>
             SubscriptionArn: output.subscriptionArn,
           })
           .pipe(
-            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotFoundException: () => Effect.succeed(undefined),
+              InvalidParameterException: () => Effect.succeed(undefined),
+            }),
           );
         if (observed) {
           subscriptionArn = output.subscriptionArn;
@@ -233,8 +235,10 @@ export const SubscriptionProvider = () =>
       const attrsResponse = yield* sns
         .getSubscriptionAttributes({ SubscriptionArn: subscriptionArn })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-          Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            NotFoundException: () => Effect.succeed(undefined),
+            InvalidParameterException: () => Effect.succeed(undefined),
+          }),
         );
       const observedAttributes = toAttributeMap(attrsResponse?.Attributes);
 
@@ -296,8 +300,10 @@ export const SubscriptionProvider = () =>
           SubscriptionArn: subscriptionArn,
         })
         .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.void),
-          Effect.catchTag("InvalidParameterException", () => Effect.void),
+          Effect.catchTags({
+            NotFoundException: () => Effect.void,
+            InvalidParameterException: () => Effect.void,
+          }),
         );
     }),
   });
@@ -396,8 +402,10 @@ const readSubscription = Effect.fn(function* ({
       SubscriptionArn: resolvedSubscriptionArn,
     })
     .pipe(
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+      Effect.catchTags({
+        NotFoundException: () => Effect.succeed(undefined),
+        InvalidParameterException: () => Effect.succeed(undefined),
+      }),
     );
 
   if (!response) {

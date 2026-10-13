@@ -516,10 +516,11 @@ export const SecretProvider = () =>
                 : { RecoveryWindowInDays: recoveryWindowInDays }),
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("InvalidRequestException", (error) =>
-                isDeletionInProgress(error.message) ? Effect.void : Effect.fail(error),
-              ),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                InvalidRequestException: (error) =>
+                  isDeletionInProgress(error.message) ? Effect.void : Effect.fail(error),
+              }),
             );
           // With a recovery window the secret intentionally stays visible to
           // `DescribeSecret` (scheduled for deletion) until the window ends.

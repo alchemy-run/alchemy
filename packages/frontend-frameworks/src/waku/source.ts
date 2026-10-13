@@ -713,12 +713,10 @@ export const makeWakuSourceProvider = (
       );
 
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: integration.provider,
-            message: `${integration.displayName} build produced no server modules`,
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: integration.provider,
+          message: `${integration.displayName} build produced no server modules`,
+        });
       }
       const [entry, ...rest] = output.serverModules;
       const files: [BundleFile, ...Array<BundleFile>] = [entry!, ...rest].map((file) => ({

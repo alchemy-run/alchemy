@@ -18,9 +18,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // by the virtual-entry plugin rather than found from the project root. With
 // them left external bun dies at module load and the job FAILS.
 //
-// Heavy (Docker build + ECR push + compute environment + Fargate job run),
-// so gated behind AWS_TEST_SLOW=1 like the platform e2e.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Heavy (Docker build + ECR push + compute environment + Fargate job run,
+// ~2.5 minutes), so skipped under --fast like the platform e2e.
+test.provider.skipIf(!!process.env.FAST)(
   "job bundled from an isolated project runs to SUCCEEDED",
   (stack) =>
     Effect.gen(function* () {

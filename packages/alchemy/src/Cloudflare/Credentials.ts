@@ -71,9 +71,8 @@ export const fromAuthProvider = () =>
             Match.exhaustive,
           ),
         ),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
+        Effect.mapError((e) =>
+          ConfigError.make({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
         ),
         deferUntilFirstUse,
       );

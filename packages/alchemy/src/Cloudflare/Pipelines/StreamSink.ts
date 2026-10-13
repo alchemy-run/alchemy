@@ -52,9 +52,9 @@ export interface StreamSink extends Binding.Service<
   "Cloudflare.Pipelines.StreamSink",
   (stream: Stream<any>) => Effect.Effect<StreamSinkClient<any>>
 > {
-  <A, Req = never>(
-    stream: Stream<A> | Effect.Effect<Stream<A>, never, Req>,
-  ): Effect.Effect<StreamSinkClient<StreamRecord<A>>, never, StreamSink | Req>;
+  <A, E = never, Req = never>(
+    stream: Stream<A> | Effect.Effect<Stream<A>, E, Req>,
+  ): Effect.Effect<StreamSinkClient<StreamRecord<A>>, E, StreamSink | Req>;
 }
 
 export const StreamSink = Binding.Service<StreamSink>("Cloudflare.Pipelines.StreamSink");

@@ -160,20 +160,16 @@ const waitForBaselineOperation = (operationIdentifier: string) =>
         return;
       }
       if (baselineOperation.status === "FAILED") {
-        return yield* Effect.fail(
-          new BaselineOperationFailed({
-            operationIdentifier,
-            status: baselineOperation.status,
-            statusMessage: baselineOperation.statusMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new BaselineOperationPending({
+        return yield* new BaselineOperationFailed({
           operationIdentifier,
           status: baselineOperation.status,
-        }),
-      );
+          statusMessage: baselineOperation.statusMessage,
+        });
+      }
+      return yield* new BaselineOperationPending({
+        operationIdentifier,
+        status: baselineOperation.status,
+      });
     }),
   );
 

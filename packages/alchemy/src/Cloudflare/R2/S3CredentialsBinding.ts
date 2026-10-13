@@ -71,7 +71,9 @@ export const bindS3Credentials = Effect.fn(function* (
     bucket.jurisdiction,
   ).pipe(
     Output.mapEffect(([tokenId, value, bucketName, jurisdiction]) =>
-      sha256(Redacted.value(value)).pipe(
+      value.pipe(
+        Redacted.value,
+        sha256,
         Effect.map((secretAccessKey): WorkerBinding => ({
           type: "secret_text",
           name: bindingName,

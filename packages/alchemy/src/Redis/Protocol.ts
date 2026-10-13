@@ -264,12 +264,10 @@ const readReplies = (
     while (replies.length < count) {
       const event = yield* Queue.take(events);
       if (event._tag === "Fail") {
-        return yield* Effect.fail(commandError(command, event.cause));
+        return yield* commandError(command, event.cause);
       }
       if (event._tag === "End") {
-        return yield* Effect.fail(
-          commandError(command, new ProtocolError({ message: "connection closed" })),
-        );
+        return yield* commandError(command, new ProtocolError({ message: "connection closed" }));
       }
       parser.push(event.bytes);
       while (replies.length < count) {

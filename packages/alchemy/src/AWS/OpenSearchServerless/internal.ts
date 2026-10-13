@@ -15,7 +15,13 @@ export class OpenSearchServerlessProvisioningFailed extends Data.TaggedError(
   readonly status: string | undefined;
   readonly failureCode: string | undefined;
   readonly failureMessage: string | undefined;
-}> {}
+}> {
+  override get message() {
+    return `${this.resource} ${this.id} did not reach ACTIVE (status: ${this.status ?? "unknown"}${
+      this.failureCode !== undefined ? `, ${this.failureCode}` : ""
+    }${this.failureMessage !== undefined ? `: ${this.failureMessage}` : ""})`;
+  }
+}
 
 /**
  * Serialize a security/access policy document to the compact JSON string the
@@ -82,15 +88,13 @@ export const awaitCollectionActive = Effect.fn("AWS.OpenSearchServerless.awaitCo
   function* (id: string) {
     const detail = yield* untilCollectionTerminal(aoss.batchGetCollection({ ids: [id] }));
     if (detail?.status !== "ACTIVE") {
-      return yield* Effect.fail(
-        new OpenSearchServerlessProvisioningFailed({
-          resource: "Collection",
-          id,
-          status: detail?.status,
-          failureCode: detail?.failureCode,
-          failureMessage: detail?.failureMessage,
-        }),
-      );
+      return yield* new OpenSearchServerlessProvisioningFailed({
+        resource: "Collection",
+        id,
+        status: detail?.status,
+        failureCode: detail?.failureCode,
+        failureMessage: detail?.failureMessage,
+      });
     }
     return detail;
   },
@@ -117,15 +121,13 @@ export const awaitVpcEndpointActive = Effect.fn("AWS.OpenSearchServerless.awaitV
   function* (id: string) {
     const detail = yield* untilVpcEndpointTerminal(aoss.batchGetVpcEndpoint({ ids: [id] }));
     if (detail?.status !== "ACTIVE") {
-      return yield* Effect.fail(
-        new OpenSearchServerlessProvisioningFailed({
-          resource: "VpcEndpoint",
-          id,
-          status: detail?.status,
-          failureCode: detail?.failureCode,
-          failureMessage: detail?.failureMessage,
-        }),
-      );
+      return yield* new OpenSearchServerlessProvisioningFailed({
+        resource: "VpcEndpoint",
+        id,
+        status: detail?.status,
+        failureCode: detail?.failureCode,
+        failureMessage: detail?.failureMessage,
+      });
     }
     return detail;
   },

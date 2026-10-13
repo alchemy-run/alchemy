@@ -133,13 +133,11 @@ export const EnablerProvider = () =>
           }),
         );
         if (!types.every((type) => statusOfType(account?.resourceState, type) === "ENABLED")) {
-          return yield* Effect.fail(
-            new Inspector2NotConverged({
-              accountId,
-              expected: "ENABLED",
-              actual: statusesOf(account?.resourceState, types),
-            }),
-          );
+          return yield* new Inspector2NotConverged({
+            accountId,
+            expected: "ENABLED",
+            actual: statusesOf(account?.resourceState, types),
+          });
         }
         return account;
       });

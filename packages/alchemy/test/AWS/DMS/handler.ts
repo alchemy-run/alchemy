@@ -22,7 +22,7 @@ export default DmsTestFunction.make(
     // ARN injection + IAM grants without a live database or replication
     // instance. (Instance-scoped bindings — TestConnection, RefreshSchemas,
     // RebootReplicationInstance, DescribeReplicationInstanceTaskLogs — need
-    // a replication instance, which is AWS_TEST_SLOW territory.)
+    // a replication instance, which belongs in the slow lane.)
     const endpoint = yield* DMS.Endpoint("BindingsSource", {
       endpointType: "source",
       engineName: "mysql",

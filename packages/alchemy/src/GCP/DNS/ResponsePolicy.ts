@@ -380,7 +380,8 @@ export const ResponsePolicyProvider = () =>
           responsePolicy: responsePolicyName,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      yield* detach.pipe(Effect.andThen(attempt)).pipe(
+      yield* detach.pipe(
+        Effect.andThen(attempt),
         Effect.catchIf(
           (error) => error._tag === "Conflict" || error._tag === "BadRequest",
           () => detach.pipe(Effect.andThen(attempt)),

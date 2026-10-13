@@ -209,9 +209,9 @@ const waitForRetrieverActive = (applicationId: string, retrieverId: string) =>
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(new RetrieverProvisioningFailed({ retrieverId }));
+        return yield* new RetrieverProvisioningFailed({ retrieverId });
       }
-      return yield* Effect.fail(new RetrieverNotReady({ retrieverId, status: described?.status }));
+      return yield* new RetrieverNotReady({ retrieverId, status: described?.status });
     }),
   );
 

@@ -9,7 +9,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  * D1 binding.
  */
 
-const LinkedPrs = Schema.fromJsonString(Schema.Array(Schema.String));
+const LinkedPrs = Schema.String.pipe(Schema.Array, Schema.fromJsonString);
 
 export const TagRow = Schema.Struct({
   package: Schema.String,

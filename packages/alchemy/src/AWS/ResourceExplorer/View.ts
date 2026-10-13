@@ -291,11 +291,9 @@ export const ViewProvider = () =>
           if (found === undefined || view?.ViewArn === undefined) {
             // Unreachable in practice: create either succeeded or the
             // conflicting peer exists; observation just raced a delete.
-            return yield* Effect.fail(
-              new ViewUnobservable({
-                message: `ResourceExplorer view ${name} could not be created or observed`,
-              }),
-            );
+            return yield* new ViewUnobservable({
+              message: `ResourceExplorer view ${name} could not be created or observed`,
+            });
           }
 
           // 3. SYNC — UpdateView REPLACES both Filters and
