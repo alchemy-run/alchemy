@@ -403,10 +403,13 @@ export const gateway = (egress: ReadonlyArray<EgressDeclaration>) =>
 
 ## 9. Revocation
 
-| | When it stops working |
-| --- | --- |
-| The sandbox, after `setEgress` / `stop` | at once: the proxy gets the new (or empty) grant |
-| A grant copied out of the sandbox | at its expiry, at most 5 minutes |
+```ts
+// The sandbox loses access at once: the proxy swaps to the new grant before the call returns.
+yield* sandbox.setEgress([model]); // GitHub hosts go straight out, without a token
+yield* sandbox.stop(); // the proxy gets "", then the microVM stops
+
+// A grant copied out of the sandbox keeps working until its `expires` caveat: at most 5 minutes.
+```
 
 If 5 minutes is too long for writes, the next step is a revocation list owned
 by the gateway (keyed by grant id, written by the Durable Object, checked on
