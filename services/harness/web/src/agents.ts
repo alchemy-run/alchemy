@@ -154,6 +154,16 @@ export const agents = {
     call(id, (c) => c.respond({ sessionId: id, requestId, answer })),
 };
 
+//#region sessions
+
+/** Every session (newest first), from the server: the same list in any browser. */
+export const listSessions = (): Promise<ReadonlyArray<string>> =>
+  fetch(`${API_URL}/agents`)
+    .then((res) => (res.ok ? res.json() : []))
+    .then((rows: ReadonlyArray<{ id: string }>) => rows.map((row) => row.id));
+
+//#endregion
+
 //#region terminal
 
 /** Keystrokes waiting to be sent, per session: sent one batch at a time, in order. */

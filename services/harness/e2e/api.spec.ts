@@ -29,6 +29,17 @@ test("a prompt runs a turn and returns its result", async ({ request }) => {
   expect(info.cursor).toBeGreaterThan(0);
 });
 
+test("sessions are listed by the server", async ({ request }) => {
+  const id = sessionId("listed");
+  const res = await request.post(`${API_URL}/agents/${id}`, {
+    data: { prompt: "Reply with exactly the word: listed" },
+    timeout: 5 * 60_000,
+  });
+  expect(res.status(), await res.text()).toBe(200);
+  const listed = (await (await request.get(`${API_URL}/agents`)).json()) as Array<{ id: string }>;
+  expect(listed.map((session) => session.id)).toContain(id);
+});
+
 test("the agent works in its own checkout of the repository", async ({ request }) => {
   const id = sessionId("repo");
   const res = await request.post(`${API_URL}/agents/${id}`, {

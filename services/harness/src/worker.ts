@@ -4,6 +4,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
 import { Agent } from "./Agent.ts";
+import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
 
 const encoder = new TextEncoder();
 
@@ -17,6 +18,7 @@ const cors = {
 /**
  * A small HTTP API over many coding agents:
  *
+ *   GET  /agents                          every session, newest first
  *   POST /agents/:id          { prompt }  start the session (idempotent) and run a turn → result
  *                                         (`?wait=false` returns as soon as the turn starts)
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
@@ -36,11 +38,15 @@ export default Cloudflare.Worker(
   { main: import.meta.url, dev: { port: 1338 } },
   Effect.gen(function* () {
     const agents = yield* Agent;
+    const sessions = yield* Sessions;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
         const url = new URL(request.url, "http://agents");
+        if (request.method === "GET" && url.pathname === "/agents") {
+          return yield* HttpServerResponse.json(yield* sessions.getByName(SESSIONS_INDEX).list());
+        }
         const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model))?$/.exec(
           url.pathname,
         );

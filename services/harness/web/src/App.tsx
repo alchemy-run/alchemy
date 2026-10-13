@@ -13,7 +13,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { agents, useSession, useSnapshot } from "./agents.ts";
+import { agents, listSessions, useSession, useSnapshot } from "./agents.ts";
 import {
   Confirmation,
   ConfirmationAction,
@@ -65,18 +65,32 @@ const MODELS = [
 /** The repository each session's container has checked out. */
 const WORKDIR = "/workspace/alchemy";
 
-//#region sessions list (persisted in the browser)
+//#region sessions list (kept on the server)
 
+/**
+ * Every session, from the server (refreshed every 10 seconds). Sessions
+ * created here show at once, before the server lists them.
+ */
 const useSessionIds = () => {
-  const [ids, setIds] = useState<string[]>(() =>
-    JSON.parse(localStorage.getItem("sessions") ?? "[]"),
-  );
-  const add = (id: string) =>
-    setIds((prev) => {
-      const next = [id, ...prev.filter((x) => x !== id)];
-      localStorage.setItem("sessions", JSON.stringify(next));
-      return next;
-    });
+  const [listed, setListed] = useState<ReadonlyArray<string>>([]);
+  const [created, setCreated] = useState<ReadonlyArray<string>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () =>
+      void listSessions()
+        .then((ids) => {
+          if (!cancelled) setListed(ids);
+        })
+        .catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+  const ids = [...created.filter((id) => !listed.includes(id)), ...listed];
+  const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
   return [ids, add] as const;
 };
 
@@ -547,7 +561,18 @@ function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
 
 export function App() {
   const [ids, addId] = useSessionIds();
-  const [current, setCurrent] = useState<string | undefined>(ids[0]);
+  // The open session is in the URL, so a reload (or a link) opens it again.
+  const [current, setCurrentState] = useState<string | undefined>(
+    () => decodeURIComponent(location.hash.slice(1)) || undefined,
+  );
+  const setCurrent = (id: string | undefined) => {
+    setCurrentState(id);
+    history.replaceState(null, "", id ? `#${encodeURIComponent(id)}` : location.pathname);
+  };
+  // Nothing in the URL: open the newest session once the list arrives.
+  useEffect(() => {
+    if (current === undefined && ids[0] !== undefined) setCurrent(ids[0]);
+  }, [current, ids[0]]);
   const [inspector, setInspector] = useState(true);
   const [terminalOpen, setTerminalOpen] = useStored(TERMINAL_OPEN, false);
 

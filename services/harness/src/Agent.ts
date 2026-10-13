@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AgentRpcs } from "./rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
+import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
 import { makeTerminals } from "./terminals.ts";
 
 /**
@@ -71,6 +72,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
     );
 
     const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
+    const sessions = yield* Sessions;
 
     return Effect.sync(() => {
       const claude = harness
@@ -93,6 +95,10 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           claude.pipe(
             Effect.flatMap((h) => h.start({ id: sessionId, ...(model ? { model } : {}) })),
             Effect.flatMap((session) => session.info()),
+            // Listed for every browser.
+            Effect.tap(() =>
+              sessions.getByName(SESSIONS_INDEX).register(sessionId).pipe(Effect.ignore),
+            ),
             Effect.scoped,
           ),
         prompt: ({ sessionId, prompt }) => call(sessionId, (s) => s.prompt(prompt)),

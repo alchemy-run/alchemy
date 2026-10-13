@@ -86,3 +86,22 @@ test("thinking streams as 'Thinking…', then settles as an expandable thought",
   await thought.getByRole("button").first().click();
   await expect(thought).toContainText("17");
 });
+
+test("another browser sees the same sessions", async ({ page, browser }) => {
+  await send(page, "Reply with exactly the word: shared");
+  await expect(page.locator(".is-assistant").filter({ hasText: /shared/i })).toBeVisible();
+  const id = decodeURIComponent(new URL(page.url()).hash.slice(1));
+  expect(id).not.toBe("");
+
+  // A fresh context: no storage, like another laptop.
+  const other = await browser.newContext({ baseURL: test.info().project.use.baseURL });
+  const elsewhere = await other.newPage();
+  await elsewhere.goto("/");
+  await expect(elsewhere.getByText(id, { exact: true })).toBeVisible({ timeout: 30_000 });
+  // And a link opens the session with its transcript.
+  await elsewhere.goto(`/#${encodeURIComponent(id)}`);
+  await expect(elsewhere.locator(".is-user").filter({ hasText: "shared" })).toBeVisible({
+    timeout: 60_000,
+  });
+  await other.close();
+});
