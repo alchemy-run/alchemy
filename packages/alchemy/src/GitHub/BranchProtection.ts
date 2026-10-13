@@ -1,5 +1,4 @@
 import type { Octokit as GitHubClient } from "@octokit/rest";
-import type { EndpointKeys } from "@octokit/types";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -398,7 +397,7 @@ type BranchProtectionUpdate = Omit<UpdateBranchProtectionParams, "required_statu
 // `request` accepts the body that is serialized. `BranchProtectionUpdate`
 // still checks every other field against the endpoint.
 const UPDATE_BRANCH_PROTECTION: string =
-  "PUT /repos/{owner}/{repo}/branches/{branch}/protection" satisfies EndpointKeys;
+  "PUT /repos/{owner}/{repo}/branches/{branch}/protection";
 
 const requiredStatusChecksOf = (
   checks: BranchProtectionProps["requiredStatusChecks"],
