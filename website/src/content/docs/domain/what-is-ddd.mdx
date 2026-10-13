@@ -213,6 +213,13 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 }) {}
 ```
 
+A client reads a view in one of two ways: fetch its current state once, or watch it for the state now and after every change.
+
+```typescript title="test/readSummary.ts"
+const summary = yield* bank.AccountSummary.get(accountId); // once
+const changes = bank.AccountSummary.watch(accountId); // a stream of every change
+```
+
 Views are updated after events are recorded, not in the same step. A view is always correct, but it may be a moment behind the aggregate. That delay is called **eventual consistency**. A screen that has just sent a command and wants to show its effect waits until the view has caught up with it.
 
 Not every read model belongs in the model's own storage. A search index, a reporting database or a data warehouse is built the same way, by consuming events, but lives in a store you choose. That's a **projection**: a read model the model feeds and you own. The bank's ledger copies every money movement into a database table:
