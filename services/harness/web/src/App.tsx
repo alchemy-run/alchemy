@@ -95,10 +95,10 @@ const useSessionIds = () => {
   }, [refreshes]);
   const listedIds = listed.map((session) => session.id);
   const ids = [...created.filter((id) => !listedIds.includes(id)), ...listedIds];
-  const states = Object.fromEntries(listed.map((session) => [session.id, session.state]));
+  const byId = Object.fromEntries(listed.map((session) => [session.id, session]));
   const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
   const refresh = () => setRefreshes((n) => n + 1);
-  return { ids, states, add, refresh };
+  return { ids, listed: byId, add, refresh };
 };
 
 const bytes = (n: number) =>
@@ -194,14 +194,29 @@ function SessionStatus({ transcript, now }: { transcript: AI.Transcript; now: nu
   }
 }
 
+/** A session's status as the server last recorded it (not open in this tab). */
+function ListedStatus({ agent }: { agent: ListedSession["agent"] }) {
+  switch (agent) {
+    case "running":
+      return <span className="text-info">Working</span>;
+    case "awaiting_input":
+      return <span className="text-warning">Needs input</span>;
+    case undefined:
+      return null;
+    default:
+      return <span className="text-muted-foreground capitalize">{agent}</span>;
+  }
+}
+
 function SidebarRow(props: {
   id: string;
-  state: ListedSession["state"] | undefined;
+  listed: ListedSession | undefined;
   active: boolean;
   onSelect: () => void;
 }) {
   const snapshot = useSnapshot(props.id);
   const now = useNow(snapshot?.transcript.state === "running");
+  const cost = snapshot?.transcript.usage.costUsd ?? props.listed?.costUsd;
   return (
     <button
       type="button"
@@ -218,24 +233,21 @@ function SidebarRow(props: {
           </span>
           coding-agents
         </span>
+        {/* Live when open in this tab; otherwise as the server last recorded it. */}
         {snapshot ? (
           <SessionStatus transcript={snapshot.transcript} now={now} />
         ) : (
-          <span className="text-muted-foreground">Settled</span>
+          <ListedStatus agent={props.listed?.agent} />
         )}
       </div>
       <div className="flex items-center gap-2">
-        <MachineDot state={props.state} />
+        <MachineDot state={props.listed?.state} />
         <span className="truncate text-[15px] text-foreground">{props.id}</span>
       </div>
       <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
         <FolderGit2Icon className="size-3" />
         <span className="truncate">{WORKDIR}</span>
-        {snapshot && snapshot.transcript.usage.costUsd ? (
-          <span className="ml-auto tabular-nums">
-            ${snapshot.transcript.usage.costUsd.toFixed(3)}
-          </span>
-        ) : null}
+        {cost ? <span className="ml-auto tabular-nums">${cost.toFixed(3)}</span> : null}
       </div>
     </button>
   );
@@ -243,7 +255,7 @@ function SidebarRow(props: {
 
 function Sidebar(props: {
   ids: ReadonlyArray<string>;
-  states: Record<string, ListedSession["state"]>;
+  listed: Record<string, ListedSession>;
   current: string | undefined;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -264,7 +276,7 @@ function Sidebar(props: {
           <SidebarRow
             key={id}
             id={id}
-            state={props.states[id]}
+            listed={props.listed[id]}
             active={id === props.current}
             onSelect={() => props.onSelect(id)}
           />
@@ -721,7 +733,7 @@ function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
 //#endregion
 
 export function App() {
-  const { ids, states, add: addId, refresh: refreshSessions } = useSessionIds();
+  const { ids, listed, add: addId, refresh: refreshSessions } = useSessionIds();
   // The open session is in the URL, so a reload (or a link) opens it again.
   const [current, setCurrentState] = useState<string | undefined>(
     () => decodeURIComponent(location.hash.slice(1)) || undefined,
@@ -771,7 +783,7 @@ export function App() {
     <div className="flex h-full">
       <Sidebar
         ids={ids}
-        states={states}
+        listed={listed}
         current={current}
         onSelect={setCurrent}
         onCreate={create}

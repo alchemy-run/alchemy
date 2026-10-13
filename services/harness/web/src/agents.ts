@@ -164,6 +164,9 @@ export interface ListedSession {
   readonly id: string;
   /** Its machine: running, suspended, or unknown (unreachable). */
   readonly state: Machine["state"] | "unknown";
+  /** Its agent's state (idle, running, …), as last recorded. */
+  readonly agent?: AI.SessionInfo["state"];
+  readonly costUsd?: number;
 }
 
 /** Every session (newest first), from the server: the same list in any browser. */

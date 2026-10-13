@@ -45,15 +45,25 @@ export default Cloudflare.Worker(
         if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
         const url = new URL(request.url, "http://agents");
         if (request.method === "GET" && url.pathname === "/agents") {
-          // Each session with its machine's state (running or suspended).
+          // Each session with its agent's and machine's state, from the
+          // session's records (no machine is started).
           const listed = yield* sessions.getByName(SESSIONS_INDEX).list();
           return yield* HttpServerResponse.json(
             yield* Effect.forEach(
               listed,
               (session) =>
                 agents.getByName(session.id).pipe(
-                  Effect.flatMap((agent) => agent.machine({ sessionId: session.id })),
-                  Effect.map((machine) => ({ ...session, state: machine.state })),
+                  Effect.flatMap((agent) => agent.summary({ sessionId: session.id })),
+                  Effect.map((summary) => ({
+                    ...session,
+                    state: summary.machine,
+                    ...(summary.session
+                      ? {
+                          agent: summary.session.state,
+                          costUsd: summary.session.usage.costUsd,
+                        }
+                      : {}),
+                  })),
                   // Unreachable, or still on an older version: list it anyway.
                   Effect.catchCause(() =>
                     Effect.succeed({ ...session, state: "unknown" as const }),

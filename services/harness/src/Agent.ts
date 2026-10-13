@@ -119,6 +119,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
             Effect.scoped(claude).pipe(Effect.as(terminals.output(sessionId, cols, rows))),
           ),
         machine: ({ stats }) => machine({ stats }),
+        summary: ({ sessionId }) =>
+          Effect.all([machine(), harness.list()]).pipe(
+            Effect.map(([m, listed]) => {
+              const session = listed.find((info) => info.id === sessionId);
+              return { machine: m.state, ...(session ? { session } : {}) };
+            }),
+          ),
         // Checkpoint and snapshot the work, then stop the container.
         suspend: () => harness.stop().pipe(Effect.andThen(machine())),
         resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),

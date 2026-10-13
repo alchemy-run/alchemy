@@ -84,6 +84,18 @@ export class AgentRpcs extends RpcGroup.make(
     success: Machine,
     error: Failure,
   }),
+  /**
+   * The session's agent and machine state, from this object's records only:
+   * never starts the machine. What session lists show.
+   */
+  Rpc.make("summary", {
+    payload: Session,
+    success: Schema.Struct({
+      machine: Machine.fields.state,
+      session: Schema.optional(AI.SessionInfo),
+    }),
+    error: Failure,
+  }),
   /** Snapshot the machine's work and stop it. */
   Rpc.make("suspend", { payload: Session, success: Machine, error: Failure }),
   /** Start the machine again (a turn also does). */
