@@ -67,15 +67,15 @@ interface Props {
 
 const { nodes, edges, direction = "LR", caption } = Astro.props as Props;
 
-// One hue per domain kind, from the site palette where it has one.
+// One hue per domain kind, distinct from each other; rejections are red.
 const KINDS: Record<Kind, { name: string; hue: string }> = {
-  command: { name: "Command", hue: "var(--alc-info)" },
-  aggregate: { name: "Aggregate", hue: "var(--alc-warn)" },
-  event: { name: "Event", hue: "#e5833a" },
-  view: { name: "View", hue: "var(--alc-accent)" },
-  policy: { name: "Policy", hue: "#9a7fc0" },
-  rejection: { name: "Rejection", hue: "var(--alc-danger)" },
-  port: { name: "Port", hue: "#c9789b" },
+  command: { name: "Command", hue: "#4f9fd8" },
+  aggregate: { name: "Aggregate", hue: "#e3b341" },
+  event: { name: "Event", hue: "#f0782f" },
+  view: { name: "View", hue: "#7fb069" },
+  policy: { name: "Policy", hue: "#a78bdb" },
+  rejection: { name: "Rejection", hue: "#e5484d" },
+  port: { name: "Port", hue: "#d97aa8" },
 };
 const kindsShown = (Object.keys(KINDS) as Kind[]).filter((k) => nodes.some((n) => n.kind === k));
 
@@ -440,7 +440,7 @@ const edgeShapes = buildEdges();
 
   .alc-dag__node--kind .alc-dag__node-bg {
     stroke: var(--hue);
-    fill: color-mix(in srgb, var(--hue) 14%, var(--alc-bg-elev-2));
+    fill: color-mix(in srgb, var(--hue) 22%, var(--alc-bg-elev-2));
   }
 
   .alc-dag__node--kind .alc-dag__node-type {
