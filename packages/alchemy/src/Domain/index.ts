@@ -20,9 +20,9 @@ import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
 import * as EventModule from "./Event.ts";
+import * as ExternalSystemModule from "./ExternalSystem.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
-import * as PortModule from "./Port.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as ViewModule from "./View.ts";
@@ -109,16 +109,16 @@ export declare namespace Policy {
   /** What a policy reacts to: the event, its source and the source's state. */
   export type Trigger<From extends ViewModule.Source, E> = PolicyModule.Trigger<From, E>;
 }
-/** A reaction to events that sends commands and calls ports. See {@link PolicyModule.make}. */
+/** A standing business rule: on an event, decide what to do next. See {@link PolicyModule.make}. */
 export const Policy = PolicyModule.make;
 
-export declare namespace Port {
-  /** Any Port class. */
-  export type Any = PortModule.Any;
-  export type Op<Args = unknown, Success = unknown> = PortModule.Op<Args, Success>;
+export declare namespace ExternalSystem {
+  /** Any ExternalSystem class. */
+  export type Any = ExternalSystemModule.Any;
+  export type Op<Args = unknown, Success = unknown> = ExternalSystemModule.Op<Args, Success>;
 }
-/** A typed boundary to the outside world, implemented by a Layer. See {@link PortModule.make}. */
-export const Port = PortModule.make;
+/** An outside system the model calls, as an Effect service. See {@link ExternalSystemModule.make}. */
+export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
   /** What an Api may expose: commands, views, and aggregates with a `read` contract. */

@@ -56,8 +56,9 @@ export interface PolicyKey<Name extends string> {
 }
 
 /**
- * "Whenever this happens, do that": a reaction to events from an aggregate or
- * a view that sends commands and calls ports. Policies run shortly after the
+ * "Whenever this happens, do that": one of the business's standing rules. On
+ * an event from an aggregate or a view, it decides what to do next and acts by
+ * sending commands and calling external systems. Policies run shortly after the
  * event, never in the same step, so use them only for eventually consistent
  * work. Delivery is at least once; the commands a policy sends get ids
  * derived from the event, so a second run sends the same commands.
@@ -87,7 +88,7 @@ export interface PolicyKey<Name extends string> {
  * );
  * ```
  *
- * ### Calling a port
+ * ### Calling an external system
  * **Example:** Score risky withdrawals
  * ```typescript
  * import * as Domain from "alchemy/Domain";

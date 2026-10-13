@@ -17,7 +17,7 @@ import { MfaChallengeLive } from "../src/MfaChallenge.ts";
 import { SessionLive } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
 
-// The model, its ports, and the middleware its Apis declare: what a Worker would serve.
+// The model, its external systems, and the middleware its Apis declare: what a Worker would serve.
 export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankPolicies)),
   Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments)),
@@ -53,7 +53,7 @@ Each test that provides `BankInMemory` gets a fresh, empty bank.
 
 ## Keep stories separate
 
-Stories run on their own in-memory model with a controlled clock and scripted ports, so you don't provide `Domain.InMemory` to them. See [Stories](/domain/stories).
+Stories run on their own in-memory model with a controlled clock and scripted external systems, so you don't provide `Domain.InMemory` to them. See [Stories](/domain/stories).
 
 :::note
 Test more of an Api in [Testing an Api](/domain/testing-apis).

@@ -135,7 +135,10 @@ import { Username } from "../src/Customer/Username.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
-const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+const story = Story.make(Bank, {
+  layer: BankPolicies,
+  externalSystems: [FraudCheck, Payments],
+});
 const sam = Username.make("sam");
 const samsClaim = UsernameClaim.ref("sam");
 

@@ -4,6 +4,6 @@ import { AccountId } from "../Account/AccountId.ts";
 import { Cents } from "../Money.ts";
 
 /** The external fraud-scoring system. */
-export class FraudCheck extends Domain.Port("FraudCheck", {
+export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
   score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
 }) {}

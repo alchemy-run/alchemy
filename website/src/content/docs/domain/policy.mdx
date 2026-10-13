@@ -109,7 +109,7 @@ export class FraudReview extends Domain.Policy("FraudReview", {
     { id: "account", label: "Account a-1", type: "aggregate", kind: "aggregate" },
     { id: "outflow", label: "DailyOutflow a-1", type: "view", kind: "view" },
     { id: "review", label: "FraudReview", type: "policy", kind: "policy" },
-    { id: "check", label: "FraudCheck", type: "port", kind: "port" },
+    { id: "check", label: "FraudCheck", type: "external system", kind: "external" },
     { id: "freeze", label: "FreezeAccount", type: "command", kind: "command" },
   ]}
   edges={[
@@ -121,17 +121,17 @@ export class FraudReview extends Domain.Policy("FraudReview", {
   caption="DailyOutflow emits DailyOutflowExceeded; FraudReview scores the account and freezes it if it's risky."
 />
 
-## Call outside systems through a port
+## Call an external system
 
-To decide whether the account is risky, the policy asks a fraud-scoring service. It doesn't call a vendor's SDK directly. It depends on a `Domain.Port`, which names the outside system and the calls the model makes to it.
+To decide whether the account is risky, the policy asks a fraud-scoring service. It doesn't call a vendor's SDK directly. It depends on a `Domain.ExternalSystem`, which names the outside system and the calls the model makes to it.
 
 ```typescript title="src/Fraud/FraudCheck.ts"
-export class FraudCheck extends Domain.Port("FraudCheck", {
+export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
   score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
 }) {}
 ```
 
-The policy resolves the port like any other service, then calls it per event.
+The policy resolves it like any other service, then calls it per event.
 
 ```typescript title="src/Fraud/FraudReview.ts"
 const fraud = yield* FraudCheck;
@@ -140,7 +140,7 @@ return Effect.fn(function* ({ source, event }) {
   const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
 ```
 
-A port is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/stories), each port call waits until the test resolves it, so you can check what the policy does with every possible answer. See [External systems](/domain/external-systems).
+An external system is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/stories), each call waits until the test resolves it, so you can check what the policy does with every possible answer. See [External systems](/domain/external-systems).
 
 ## Act as the system
 

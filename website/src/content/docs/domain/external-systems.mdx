@@ -1,13 +1,13 @@
 ---
 title: External systems
-description: Call outside systems through ports, and turn their events into commands.
+description: Declare the outside systems your model calls, implement them with Layers, and turn their events into commands.
 ---
 
-A bank talks to a fraud scorer and a payment processor. Your model talks to them through ports, so it depends on what it asks for and never on a vendor. Events from outside become commands.
+A bank talks to a fraud scorer and a payment processor. Your model declares each one as an external system, so it depends on what it asks for and never on a vendor. Events from outside become commands.
 
-## Name the call with a port
+## Declare an external system
 
-A port lists the calls you make to one outside system, with their arguments and results.
+A `Domain.ExternalSystem` lists the calls you make to one outside system, with their arguments and results. It's an Effect service, like a `Context.Service`: policies `yield*` it, and a Layer implements it.
 
 ```typescript
 // src/Settlement/Payments.ts
@@ -16,7 +16,7 @@ import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 
 /** The external payment processor. */
-export class Payments extends Domain.Port("Payments", {
+export class Payments extends Domain.ExternalSystem("Payments", {
   refund: {
     args: { settlementId: Schema.String, amount: Cents },
     success: { refundId: Schema.String },
@@ -24,7 +24,7 @@ export class Payments extends Domain.Port("Payments", {
 }) {}
 ```
 
-## Implement the port
+## Implement it with a Layer
 
 An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
 
@@ -46,7 +46,7 @@ export const StripePayments = Payments.toLayer(
 
 ## Call it from a policy
 
-A policy uses the port like any other service. This one refunds money that settled on an account that had already closed.
+A policy uses it like any other service. This one refunds money that settled on an account that had already closed.
 
 ```typescript
 // src/Settlement/SettlementRefund.ts
@@ -141,9 +141,9 @@ export const StripeSettlements = Effect.gen(function* () {
 });
 ```
 
-## Test port calls
+## Test external system calls
 
-In a story, a port call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it.
+In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it.
 
 ```typescript
 // test/settlements.test.ts
@@ -158,7 +158,10 @@ import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
-const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+const story = Story.make(Bank, {
+  layer: BankPolicies,
+  externalSystems: [FraudCheck, Payments],
+});
 const account = Account.ref("a-1");
 
 it.effect("money that settles on a closed account is refunded", () =>
@@ -176,8 +179,8 @@ it.effect("money that settles on a closed account is refunded", () =>
 );
 ```
 
-`Story.make` replaces every port you list with one you control. A story fails if a port call is left unresolved, so every outside call is accounted for.
+`Story.make` replaces every external system you list with one you control. A story fails if a call is left unresolved, so every outside call is accounted for.
 
 :::note
-Ports are declared and implemented like the fraud check in [Policy](/domain/policy#call-outside-systems-through-ports).
+See how a policy uses one in [Policy](/domain/policy#call-an-external-system).
 :::

@@ -185,7 +185,7 @@ const CapWhenOverdrawnLive = CapWhenOverdrawn.toLayer(
   }),
 );
 
-class Approval extends Domain.Port("Approval", {
+class Approval extends Domain.ExternalSystem("Approval", {
   check: { args: { total: Schema.Number }, success: { ok: Schema.Boolean } },
 }) {}
 
@@ -221,7 +221,7 @@ class Counters extends Domain.Model("Counters", {
 
 const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
-  ports: [Approval],
+  externalSystems: [Approval],
 });
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
@@ -247,7 +247,7 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("suspends a policy on a Port call until it is resolved", () =>
+  it.effect("suspends a policy on an external system call until it is resolved", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
@@ -266,14 +266,14 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("fails on an unresolved Port call", () =>
+  it.effect("fails on an unresolved external system call", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 9 })),
     ).pipe(
       Effect.flip,
       Effect.map((failure) =>
-        expect(String((failure as any).message)).toContain("unresolved Port calls"),
+        expect(String((failure as any).message)).toContain("unresolved external system calls"),
       ),
     ),
   );

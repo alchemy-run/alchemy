@@ -1,6 +1,6 @@
 # cloudflare-domain
 
-A bank built with `alchemy/Domain`: aggregates, views, policies and ports declared as pure, typed definitions, exposed through two Apis, hosted on Cloudflare Durable Objects, and driven from a foldkit app.
+A bank built with `alchemy/Domain`: aggregates, views, policies and external systems declared as pure, typed definitions, exposed through two Apis, hosted on Cloudflare Durable Objects, and driven from a foldkit app.
 
 An Api exposes commands (writes) and views and aggregates (reads). Each one is a security boundary: its middleware authenticates the caller, and its `decide` or `validate` decides what that caller may do or see.
 
@@ -1108,9 +1108,9 @@ src/
                 ExpireTransfer, CompleteTransfer, FailTransfer, TransferExecution (policy),
                 TransferApprovalDeadline (schedules the expiry), TransferStatus (multi-source
                 view), AccountTransfers (one event routed to two accounts)
-  Fraud/        FraudCheck (port), SiftFraudCheck (adapter), DailyOutflow (stateful view emitting
+  Fraud/        FraudCheck (external system), SiftFraudCheck (adapter), DailyOutflow (stateful view emitting
                 DailyOutflowExceeded), FraudReview (policy on that view)
-  Settlement/   Payments (port), StripePayments (adapter), SettlementRefund (policy),
+  Settlement/   Payments (external system), StripePayments (adapter), SettlementRefund (policy),
                 StripeSettlements (Stripe.consumeEvents: payment_intent.succeeded → RecordSettlement)
   CustomerApi/  the customer app's Api
   SupportApi/   the support console's Api, over the same Bank
@@ -1180,7 +1180,7 @@ export default Alchemy.Stack(
 ## Tests
 
 ```sh
-pnpm vitest run test/Bank.story.test.ts     # stories: given / when / then, ports resolved, no mocks
+pnpm vitest run test/Bank.story.test.ts     # stories: given / when / then, external system calls resolved, no mocks
 pnpm vitest run test/CustomerApi.test.ts    # both Apis in-process, principals via the session
 pnpm vitest run test/HttpTransport.test.ts  # the Worker's HTTP surface on a real HTTP server
 pnpm vitest run test/web.test.ts            # the foldkit app's update, with foldkit stories

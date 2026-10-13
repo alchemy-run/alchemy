@@ -93,7 +93,7 @@ export interface Any {
  * and view as a service.
  *
  * ### Declaring and hosting a model
- * **Example:** In memory, with its policies and ports
+ * **Example:** In memory, with its policies and external systems
  * ```typescript
  * import * as Domain from "alchemy/Domain";
  * import * as Layer from "effect/Layer";

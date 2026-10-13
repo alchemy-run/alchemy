@@ -40,7 +40,7 @@ export interface Control {
   readonly drain: Effect.Effect<void>;
   /** `true` when nothing is queued and every running policy is suspended. */
   readonly idle: Effect.Effect<boolean>;
-  /** Mark the current policy run as suspended while `effect` runs (story ports). */
+  /** Mark the current policy run as suspended while `effect` runs (story external systems). */
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   /** Defects raised by policy runs. */
   readonly failures: ReadonlyArray<unknown>;

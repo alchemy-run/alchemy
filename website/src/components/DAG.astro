@@ -45,7 +45,7 @@ export interface NodeIn {
   kind?: Kind;
 }
 
-export type Kind = "command" | "aggregate" | "event" | "view" | "policy" | "rejection" | "port";
+export type Kind = "command" | "aggregate" | "event" | "view" | "policy" | "rejection" | "external";
 
 export interface EdgeIn {
   from: string;
@@ -75,7 +75,7 @@ const KINDS: Record<Kind, { name: string; hue: string }> = {
   view: { name: "View", hue: "#7fb069" },
   policy: { name: "Policy", hue: "#a78bdb" },
   rejection: { name: "Rejection", hue: "#e5484d" },
-  port: { name: "Port", hue: "#d97aa8" },
+  external: { name: "External system", hue: "#d97aa8" },
 };
 const kindsShown = (Object.keys(KINDS) as Kind[]).filter((k) => nodes.some((n) => n.kind === k));
 

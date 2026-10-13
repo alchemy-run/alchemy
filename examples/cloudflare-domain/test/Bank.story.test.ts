@@ -64,7 +64,10 @@ const {
 /** Act as this actor for the following commands, as their session middleware would. */
 const as = (actor: Actor) => provide(CurrentActor, actor);
 
-const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+const story = Story.make(Bank, {
+  layer: BankPolicies,
+  externalSystems: [FraudCheck, Payments],
+});
 
 const a1 = Account.ref("a-1");
 const a2 = Account.ref("a-2");
@@ -187,18 +190,20 @@ it.effect("freezing twice records nothing", () =>
   ),
 );
 
-it.effect("a risky withdrawal freezes the account (a Port call suspends until resolved)", () =>
-  story(
-    given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
-    as(sam),
-    when(a1, new WithdrawMoney({ amount: 60_000 })),
-    then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
-    expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-    resolve(FraudCheck.score, { risk: 0.95 }),
-    then(a1, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
-    when(a1, new WithdrawMoney({ amount: 10 })),
-    rejected(new Frozen({ reason: "fraud risk 0.95" })),
-  ),
+it.effect(
+  "a risky withdrawal freezes the account (an external system call suspends until resolved)",
+  () =>
+    story(
+      given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
+      as(sam),
+      when(a1, new WithdrawMoney({ amount: 60_000 })),
+      then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
+      expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
+      resolve(FraudCheck.score, { risk: 0.95 }),
+      then(a1, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
+      when(a1, new WithdrawMoney({ amount: 10 })),
+      rejected(new Frozen({ reason: "fraud risk 0.95" })),
+    ),
 );
 
 it.effect(
@@ -423,13 +428,13 @@ it.effect("an unasserted rejection fails the story", () =>
   ),
 );
 
-it.effect("an unresolved Port call fails the story", () =>
+it.effect("an unresolved external system call fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
     as(sam),
     when(a1, new WithdrawMoney({ amount: 60_000 })),
   ).pipe(
     Effect.flip,
-    Effect.map((failure) => expect(failure.message).toMatch(/unresolved Port calls/)),
+    Effect.map((failure) => expect(failure.message).toMatch(/unresolved external system calls/)),
   ),
 );

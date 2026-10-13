@@ -7,9 +7,9 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
+import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
-import type * as Port from "./Port.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -58,8 +58,8 @@ export type Step =
       readonly key: Aggregate.Ref;
       readonly expected: unknown;
     }
-  | { readonly _tag: "ExpectCall"; readonly op: Port.Op; readonly args: unknown }
-  | { readonly _tag: "Resolve"; readonly op: Port.Op; readonly value: unknown }
+  | { readonly _tag: "ExpectCall"; readonly op: ExternalSystem.Op; readonly args: unknown }
+  | { readonly _tag: "Resolve"; readonly op: ExternalSystem.Op; readonly value: unknown }
   | { readonly _tag: "Clock"; readonly at: string | number }
   | {
       readonly _tag: "Provide";
@@ -77,7 +77,7 @@ const given = <A extends Aggregate.Any>(
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** Send a command. Its policies run until they finish or suspend on a Port call. */
+/** Send a command. Its policies run until they finish or suspend on an external system call. */
 const when = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   command: Aggregate.CommandOf<A>,
@@ -137,15 +137,15 @@ const emitted = <V extends View.Any>(
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
 ): Step => ({ _tag: "Emitted", view, key, expected });
 
-/** A policy called this Port operation with these (partial) arguments and is waiting. */
-const expectCall = <Args>(op: Port.Op<Args, any>, args: Partial<Args>): Step => ({
+/** A policy called this external system operation with these (partial) arguments and is waiting. */
+const expectCall = <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step => ({
   _tag: "ExpectCall",
   op,
   args,
 });
 
-/** Complete the oldest pending call to this Port operation. */
-const resolve = <Success>(op: Port.Op<any, Success>, value: Success): Step => ({
+/** Complete the oldest pending call to this external system operation. */
+const resolve = <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step => ({
   _tag: "Resolve",
   op,
   value,
@@ -195,7 +195,7 @@ const partial = (expected: unknown, actual: unknown): boolean => {
 };
 
 interface PendingCall {
-  readonly port: string;
+  readonly system: string;
   readonly op: string;
   readonly args: unknown;
   readonly deferred: Deferred.Deferred<unknown>;
@@ -203,21 +203,24 @@ interface PendingCall {
 }
 
 /** Options for {@link make}. */
-interface StoryOptions<Policies, LE, LR, Ports> {
+interface StoryOptions<Policies, LE, LR, Systems> {
   /** The policies' Layers. Required when the model has policies. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
-  /** Ports the policies call. Each is replaced by a scripted implementation. */
-  readonly ports?: ReadonlyArray<Ports>;
+  /** External systems the policies call. Each is replaced by a scripted implementation. */
+  readonly externalSystems?: ReadonlyArray<Systems>;
 }
 
 /**
  * Create a story runner for a Domain. A story is a sequence of steps run
- * against an in-memory host: policies run for real, Port calls suspend until
+ * against an in-memory host: policies run for real, external system calls suspend until
  * `resolve`, and nothing outside the Domain is executed.
  *
  * **Example:** A story
  * ```typescript
- * const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+ * const story = Story.make(Bank, {
+ *   layer: BankPolicies,
+ *   externalSystems: [FraudCheck, Payments],
+ * });
  *
  * it.effect("withdraw replies with the new balance", () =>
  *   story(
@@ -231,30 +234,41 @@ interface StoryOptions<Policies, LE, LR, Ports> {
  * ```
  */
 const make =
-  <Name extends string, Provided, Policies, LE = never, LR = never, Ports extends Port.Any = never>(
+  <
+    Name extends string,
+    Provided,
+    Policies,
+    LE = never,
+    LR = never,
+    Systems extends ExternalSystem.Any = never,
+  >(
     domain: Model.ModelClass<Name, Provided, Policies>,
     ...[options = {}]: [Policies] extends [never]
-      ? [options?: StoryOptions<Policies, LE, LR, Ports>]
-      : [options: StoryOptions<Policies, LE, LR, Ports> & { readonly layer: unknown }]
+      ? [options?: StoryOptions<Policies, LE, LR, Systems>]
+      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
   (
     ...steps: ReadonlyArray<Step>
-  ): Effect.Effect<void, StoryFailure | LE, Exclude<LR, Provided | Port.Identifier<Ports>>> =>
+  ): Effect.Effect<
+    void,
+    StoryFailure | LE,
+    Exclude<LR, Provided | ExternalSystem.Identifier<Systems>>
+  > =>
     Effect.gen(function* () {
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
       const platform = InMemory.make({ manual: true, now: () => clockState.now });
       const calls: Array<PendingCall> = [];
-      const portLayers = (options.ports ?? []).map((port) =>
+      const systemLayers = (options.externalSystems ?? []).map((system) =>
         Layer.succeed(
-          port as Context.Key<unknown, unknown>,
+          system as Context.Key<unknown, unknown>,
           Object.fromEntries(
-            Object.keys(port.ops).map((op) => [
+            Object.keys(system.ops).map((op) => [
               op,
               (args: unknown) =>
                 platform.control.suspended(
                   Effect.gen(function* () {
                     const deferred = yield* Deferred.make<unknown>();
-                    calls.push({ port: port.portName, op, args, deferred, expected: false });
+                    calls.push({ system: system.systemName, op, args, deferred, expected: false });
                     return yield* Deferred.await(deferred);
                   }),
                 ),
@@ -262,13 +276,13 @@ const make =
           ),
         ),
       );
-      const ports = Layer.mergeAll(Layer.empty, ...portLayers);
+      const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
       const policies = (
         options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
-      ).pipe(Layer.provide(ports));
+      ).pipe(Layer.provide(systems));
       const hosted = domain
         .layer(policies)
-        .pipe(Layer.provide(Layer.mergeAll(platform.layer, ports)));
+        .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
 
       const run = Effect.gen(function* () {
         const internals = yield* Model.Internals;
@@ -463,24 +477,24 @@ const make =
             }
             case "ExpectCall": {
               const call = calls.find(
-                (c) => c.port === s.op.port && c.op === s.op.op && !c.expected,
+                (c) => c.system === s.op.system && c.op === s.op.op && !c.expected,
               );
               if (!call) {
                 return yield* fail(
-                  `no pending call to ${s.op.port}.${s.op.op}; pending: ${show(calls.map((c) => `${c.port}.${c.op}`))}`,
+                  `no pending call to ${s.op.system}.${s.op.op}; pending: ${show(calls.map((c) => `${c.system}.${c.op}`))}`,
                 );
               }
               if (!partial(s.args, call.args)) {
                 return yield* fail(
-                  `${s.op.port}.${s.op.op} was called with ${show(call.args)}, expected ${show(s.args)}`,
+                  `${s.op.system}.${s.op.op} was called with ${show(call.args)}, expected ${show(s.args)}`,
                 );
               }
               call.expected = true;
               break;
             }
             case "Resolve": {
-              const index = calls.findIndex((c) => c.port === s.op.port && c.op === s.op.op);
-              if (index === -1) return yield* fail(`no pending call to ${s.op.port}.${s.op.op}`);
+              const index = calls.findIndex((c) => c.system === s.op.system && c.op === s.op.op);
+              if (index === -1) return yield* fail(`no pending call to ${s.op.system}.${s.op.op}`);
               const [call] = calls.splice(index, 1);
               yield* Deferred.succeed(call!.deferred, s.value);
               yield* settle(step);
@@ -497,7 +511,7 @@ const make =
         if (calls.length > 0) {
           return yield* new StoryFailure({
             step: steps.length,
-            message: `unresolved Port calls at the end of the story: ${show(calls.map((c) => `${c.port}.${c.op}(${show(c.args)})`))}`,
+            message: `unresolved external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
       });
@@ -505,13 +519,17 @@ const make =
       // `hosted` satisfies the Domain, the platform and the scripted Ports; what
       // remains is whatever the policy Layers need from outside (`LR`'s rest).
       return yield* run.pipe(Effect.provide(hosted));
-    }) as Effect.Effect<void, StoryFailure | LE, Exclude<LR, Provided | Port.Identifier<Ports>>>;
+    }) as Effect.Effect<
+      void,
+      StoryFailure | LE,
+      Exclude<LR, Provided | ExternalSystem.Identifier<Systems>>
+    >;
 
 /**
  * Given / when / then specifications of a domain model, run against the real
- * model in memory: policies run for real, port calls wait until you resolve
+ * model in memory: policies run for real, external system calls wait until you resolve
  * them, and a clock you control stamps commands and fires scheduled ones. A
- * story fails on any rejection or port call it doesn't account for.
+ * story fails on any rejection or external system call it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -536,8 +554,8 @@ const make =
  * );
  * ```
  *
- * ### Ports and the clock
- * **Example:** Answer a port call, then move the clock
+ * ### External systems and the clock
+ * **Example:** Answer an external system call, then move the clock
  * ```typescript
  * Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.resolve(FraudCheck.score, { risk: 0.95 }),

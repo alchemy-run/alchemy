@@ -46,7 +46,7 @@ export class Bank extends Domain.Model("Bank", {
   ],
 }) {}
 
-/** The policies' implementations. They require the FraudCheck and Payments ports. */
+/** The policies' implementations. They require the FraudCheck and Payments external systems. */
 export const BankPolicies = Layer.mergeAll(
   UsernameReservationLive,
   MainAccountProvisioningLive,

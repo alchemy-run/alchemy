@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import type { Fields } from "./Event.ts";
 
 /**
- * One operation of a Port: its arguments, success value and business errors.
+ * One operation of an external system: its arguments, success value and business errors.
  */
 export interface OpSpec {
   readonly args?: Fields;
@@ -22,7 +22,7 @@ type SuccessOf<S extends OpSpec> = S["success"] extends Schema.Top
 type ErrorOf<S extends OpSpec> = S["error"] extends Schema.Top ? S["error"]["Type"] : never;
 
 /**
- * The service shape of a Port: one Effect-returning function per operation.
+ * The service shape of an external system: one Effect-returning function per operation.
  */
 export type Shape<Ops extends Record<string, OpSpec>> = {
   readonly [K in keyof Ops]: (
@@ -31,33 +31,33 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 };
 
 /**
- * A reference to one Port operation, used by stories (`expectCall`, `resolve`).
+ * A reference to one external system operation, used by stories (`expectCall`, `resolve`).
  */
 export interface Op<Args = unknown, Success = unknown> {
-  readonly kind: "PortOp";
-  readonly port: string;
+  readonly kind: "ExternalSystemOp";
+  readonly system: string;
   readonly op: string;
   readonly "~args"?: Args;
   readonly "~success"?: Success;
 }
 
 /**
- * Structural constraint satisfied by every port class.
+ * Structural constraint satisfied by every external system class.
  */
 export interface Any extends Context.Key<unknown, unknown> {
-  readonly kind: "Port";
-  readonly portName: string;
+  readonly kind: "ExternalSystem";
+  readonly systemName: string;
   readonly ops: Record<string, OpSpec>;
 }
 
-/** The requirement identifier of a port class. */
+/** The requirement identifier of an external system class. */
 export type Identifier<P extends Any> = P extends Context.Key<infer I, unknown> ? I : never;
 
 /**
- * Type-level identity of a port in an Effect's requirements.
+ * Type-level identity of an external system in an Effect's requirements.
  */
-export interface PortKey<Name extends string> {
-  readonly "~alchemy/Domain/Port": Name;
+export interface ExternalSystemKey<Name extends string> {
+  readonly "~alchemy/Domain/ExternalSystem": Name;
 }
 
 const RESERVED = new Set([
@@ -65,24 +65,27 @@ const RESERVED = new Set([
   "length",
   "prototype",
   "kind",
-  "portName",
+  "systemName",
   "ops",
   "toLayer",
   "key",
 ]);
 
 /**
- * A typed boundary to an outside system: the calls your policies make to it.
- * Adapters implement it as a Layer, and stories answer its calls themselves.
+ * An outside system your model calls, such as a payment provider or a fraud
+ * scorer, declared as the operations the model uses. It's an Effect service:
+ * policies `yield*` it, an adapter implements it with `toLayer`, and stories
+ * answer its calls themselves, so the model depends on what it asks for and
+ * never on a vendor.
  *
- * ### Declaring a port and an adapter
+ * ### Declaring an external system and an adapter
  * **Example:** A fraud scorer
  * ```typescript
  * import * as Domain from "alchemy/Domain";
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
  *
- * export class FraudCheck extends Domain.Port("FraudCheck", {
+ * export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
  *   score: { args: { accountId: Schema.String, amount: Schema.Int }, success: { risk: Schema.Number } },
  * }) {}
  *
@@ -98,41 +101,45 @@ const RESERVED = new Set([
 export const make = <const Name extends string, const Ops extends Record<string, OpSpec>>(
   name: Name,
   ops: Ops,
-): PortClass<Name, Ops> => {
-  const Tag = Context.Service<PortKey<Name>, Shape<Ops>>()(`alchemy/Domain/Port/${name}`);
+): ExternalSystemClass<Name, Ops> => {
+  const Tag = Context.Service<ExternalSystemKey<Name>, Shape<Ops>>()(
+    `alchemy/Domain/ExternalSystem/${name}`,
+  );
   const cls = class extends Tag {
-    static readonly kind = "Port" as const;
-    static readonly portName: Name = name;
+    static readonly kind = "ExternalSystem" as const;
+    static readonly systemName: Name = name;
     static readonly ops: Ops = ops;
-    /** Implement the port with an Effect that builds its service. */
-    static toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<PortKey<Name>, E, R> {
+    /** Implement the external system with an Effect that builds its service. */
+    static toLayer<E, R>(
+      build: Effect.Effect<Shape<Ops>, E, R>,
+    ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(Tag, build);
     }
   };
   for (const op of Object.keys(ops)) {
     if (RESERVED.has(op)) {
-      throw new Error(`Port '${name}' cannot declare an operation named '${op}'`);
+      throw new Error(`ExternalSystem '${name}' cannot declare an operation named '${op}'`);
     }
     Object.defineProperty(cls, op, {
-      value: { kind: "PortOp", port: name, op } satisfies Op,
+      value: { kind: "ExternalSystemOp", system: name, op } satisfies Op,
       enumerable: true,
     });
   }
-  return cls as unknown as PortClass<Name, Ops>;
+  return cls as unknown as ExternalSystemClass<Name, Ops>;
 };
 
 /**
  * The class type returned by {@link make}.
  */
-export type PortClass<
+export type ExternalSystemClass<
   Name extends string,
   Ops extends Record<string, OpSpec>,
-> = Context.ServiceClass<PortKey<Name>, string, Shape<Ops>> & {
-  readonly kind: "Port";
-  readonly portName: Name;
+> = Context.ServiceClass<ExternalSystemKey<Name>, string, Shape<Ops>> & {
+  readonly kind: "ExternalSystem";
+  readonly systemName: Name;
   readonly ops: Ops;
-  /** Implement the port with an Effect that builds its service. */
-  toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<PortKey<Name>, E, R>;
+  /** Implement the external system with an Effect that builds its service. */
+  toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<ExternalSystemKey<Name>, E, R>;
 } & {
   readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>>;
 };

@@ -124,7 +124,10 @@ import { TransferFailed } from "../src/Transfer/FailTransfer.ts";
 import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTransfer.ts";
 import { Transfer } from "../src/Transfer/Transfer.ts";
 
-const story = Story.make(Bank, { layer: BankPolicies, ports: [FraudCheck, Payments] });
+const story = Story.make(Bank, {
+  layer: BankPolicies,
+  externalSystems: [FraudCheck, Payments],
+});
 const sam = customer("c-1");
 const from = Account.ref("a-1");
 const to = Account.ref("a-2");
