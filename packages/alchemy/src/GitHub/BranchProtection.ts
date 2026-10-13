@@ -420,9 +420,9 @@ export const BranchProtectionProvider = () =>
       // A set `checks` array is the request; `contexts` is sent only when
       // `checks` is omitted. Octokit's parameter type still requires
       // `contexts`, so the checks-only body is asserted at the boundary.
-      type UpdateBranchProtectionParams = Parameters<
-        typeof octokit.rest.repos.updateBranchProtection
-      >[0];
+      type UpdateBranchProtectionParams = NonNullable<
+        Parameters<typeof octokit.rest.repos.updateBranchProtection>[0]
+      >;
       const requiredStatusChecks = (
         checks === undefined
           ? null
