@@ -103,7 +103,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
             ),
             Effect.scoped,
           ),
-        prompt: ({ sessionId, prompt }) => call(sessionId, (s) => s.prompt(prompt)),
+        prompt: ({ sessionId, prompt }) =>
+          call(sessionId, (s) => s.prompt(prompt)).pipe(
+            // New work brings a settled session back.
+            Effect.tap(() =>
+              sessions.getByName(SESSIONS_INDEX).unsettle(sessionId).pipe(Effect.ignore),
+            ),
+          ),
         steer: ({ sessionId, prompt }) => call(sessionId, (s) => s.steer(prompt)),
         interrupt: ({ sessionId }) => call(sessionId, (s) => s.interrupt()),
         setModel: ({ sessionId, model }) => call(sessionId, (s) => s.setModel(model)),
@@ -126,6 +132,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
               return { machine: m.state, ...(session ? { session } : {}) };
             }),
           ),
+        settle: ({ sessionId }) =>
+          harness
+            .stop()
+            .pipe(
+              Effect.andThen(sessions.getByName(SESSIONS_INDEX).settle(sessionId)),
+              Effect.andThen(machine()),
+            ),
         // Checkpoint and snapshot the work, then stop the container.
         suspend: () => harness.stop().pipe(Effect.andThen(machine())),
         resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),

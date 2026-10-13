@@ -6,6 +6,9 @@ import {
   CpuIcon,
   FolderGit2Icon,
   GitBranchIcon,
+  ArchiveIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   PanelRightIcon,
   PauseIcon,
   PlayIcon,
@@ -95,10 +98,32 @@ const useSessionIds = () => {
   }, [refreshes]);
   const listedIds = listed.map((session) => session.id);
   const ids = [...created.filter((id) => !listedIds.includes(id)), ...listedIds];
-  const byId = Object.fromEntries(listed.map((session) => [session.id, session]));
+  // Settled here: shown as settled before the server lists it so.
+  const [settled, setSettled] = useState<Record<string, number>>({});
+  const byId: Record<string, ListedSession> = Object.fromEntries(
+    listed.map((session) => [
+      session.id,
+      settled[session.id] && !session.settledAt
+        ? { ...session, settledAt: settled[session.id] }
+        : session,
+    ]),
+  );
   const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
   const refresh = () => setRefreshes((n) => n + 1);
-  return { ids, listed: byId, add, refresh };
+  const markSettled = (id: string) => setSettled((prev) => ({ ...prev, [id]: Date.now() }));
+  return { ids, listed: byId, add, refresh, markSettled };
+};
+
+/** How long ago, briefly: "now", "5m", "3h", "2d". */
+const ago = (at: number, now: number) => {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  return s < 60
+    ? "now"
+    : s < 3600
+      ? `${Math.floor(s / 60)}m`
+      : s < 86_400
+        ? `${Math.floor(s / 3600)}h`
+        : `${Math.floor(s / 86_400)}d`;
 };
 
 const bytes = (n: number) =>
@@ -213,42 +238,79 @@ function SidebarRow(props: {
   listed: ListedSession | undefined;
   active: boolean;
   onSelect: () => void;
+  onSettle: () => void;
 }) {
   const snapshot = useSnapshot(props.id);
   const now = useNow(snapshot?.transcript.state === "running");
   const cost = snapshot?.transcript.usage.costUsd ?? props.listed?.costUsd;
   return (
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={props.onSelect}
+        className={cn(
+          "flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent",
+          props.active && "bg-sidebar-accent",
+        )}
+      >
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="grid size-4 place-items-center rounded bg-white/8 font-semibold text-[9px] text-foreground">
+              CA
+            </span>
+            coding-agents
+          </span>
+          {/* Live when open in this tab; otherwise as the server last recorded it. */}
+          {snapshot ? (
+            <SessionStatus transcript={snapshot.transcript} now={now} />
+          ) : (
+            <ListedStatus agent={props.listed?.agent} />
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <MachineDot state={props.listed?.state} />
+          <span className="truncate text-[15px] text-foreground">{props.id}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+          <FolderGit2Icon className="size-3" />
+          <span className="truncate">{WORKDIR}</span>
+          {cost ? <span className="ml-auto tabular-nums">${cost.toFixed(3)}</span> : null}
+        </div>
+      </button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-1.5 right-2 hidden h-6 gap-1 bg-sidebar px-2 text-muted-foreground text-xs group-hover:flex"
+        onClick={props.onSettle}
+        aria-label={`Settle ${props.id}`}
+      >
+        <ArchiveIcon className="size-3" /> Settle
+      </Button>
+    </div>
+  );
+}
+
+/** A settled session: one compact line, out of the way. */
+function SettledRow(props: {
+  id: string;
+  settledAt: number;
+  now: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
     <button
       type="button"
       onClick={props.onSelect}
       className={cn(
-        "flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent",
-        props.active && "bg-sidebar-accent",
+        "flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-muted-foreground text-sm transition-colors hover:bg-sidebar-accent",
+        props.active && "bg-sidebar-accent text-foreground",
       )}
+      data-testid="settled-session"
     >
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="grid size-4 place-items-center rounded bg-white/8 font-semibold text-[9px] text-foreground">
-            CA
-          </span>
-          coding-agents
-        </span>
-        {/* Live when open in this tab; otherwise as the server last recorded it. */}
-        {snapshot ? (
-          <SessionStatus transcript={snapshot.transcript} now={now} />
-        ) : (
-          <ListedStatus agent={props.listed?.agent} />
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        <MachineDot state={props.listed?.state} />
-        <span className="truncate text-[15px] text-foreground">{props.id}</span>
-      </div>
-      <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-        <FolderGit2Icon className="size-3" />
-        <span className="truncate">{WORKDIR}</span>
-        {cost ? <span className="ml-auto tabular-nums">${cost.toFixed(3)}</span> : null}
-      </div>
+      <ArchiveIcon className="size-3.5 shrink-0 opacity-70" />
+      <span className="flex-1 truncate">{props.id}</span>
+      <span className="shrink-0 text-xs tabular-nums">{ago(props.settledAt, props.now)}</span>
     </button>
   );
 }
@@ -259,7 +321,14 @@ function Sidebar(props: {
   current: string | undefined;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onSettle: (id: string) => void;
 }) {
+  const [showSettled, setShowSettled] = useStored("harness:show-settled", false);
+  const now = useNow(true);
+  const active = props.ids.filter((id) => !props.listed[id]?.settledAt);
+  const settled = props.ids
+    .filter((id) => props.listed[id]?.settledAt)
+    .sort((a, b) => props.listed[b]!.settledAt! - props.listed[a]!.settledAt!);
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r bg-sidebar">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
@@ -272,15 +341,45 @@ function Sidebar(props: {
         </Button>
       </div>
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
-        {props.ids.map((id) => (
+        {active.map((id) => (
           <SidebarRow
             key={id}
             id={id}
             listed={props.listed[id]}
             active={id === props.current}
             onSelect={() => props.onSelect(id)}
+            onSettle={() => props.onSettle(id)}
           />
         ))}
+        {settled.length > 0 && (
+          <div className="mt-auto pt-4" data-testid="settled">
+            <button
+              type="button"
+              onClick={() => setShowSettled((open) => !open)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-muted-foreground text-xs"
+            >
+              <span>Settled</span>
+              <span className="tabular-nums">{settled.length}</span>
+              <span className="h-px flex-1 bg-border" />
+              {showSettled ? (
+                <ChevronDownIcon className="size-3.5" />
+              ) : (
+                <ChevronRightIcon className="size-3.5" />
+              )}
+            </button>
+            {showSettled &&
+              settled.map((id) => (
+                <SettledRow
+                  key={id}
+                  id={id}
+                  settledAt={props.listed[id]!.settledAt!}
+                  now={now}
+                  active={id === props.current}
+                  onSelect={() => props.onSelect(id)}
+                />
+              ))}
+          </div>
+        )}
       </nav>
       <div className="border-t px-4 py-3 text-muted-foreground text-xs">
         Each session runs in its own container.
@@ -733,7 +832,14 @@ function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
 //#endregion
 
 export function App() {
-  const { ids, listed, add: addId, refresh: refreshSessions } = useSessionIds();
+  const { ids, listed, add: addId, refresh: refreshSessions, markSettled } = useSessionIds();
+  const settle = (id: string) => {
+    markSettled(id);
+    void agents
+      .settle(id)
+      .catch(() => {})
+      .finally(refreshSessions);
+  };
   // The open session is in the URL, so a reload (or a link) opens it again.
   const [current, setCurrentState] = useState<string | undefined>(
     () => decodeURIComponent(location.hash.slice(1)) || undefined,
@@ -787,16 +893,33 @@ export function App() {
         current={current}
         onSelect={setCurrent}
         onCreate={create}
+        onSettle={settle}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm">
           <span className="text-muted-foreground">coding-agents</span>
           <span className="text-muted-foreground">/</span>
           <span className="font-medium">{current ?? "No session"}</span>
+          {current &&
+            (listed[current]?.settledAt ? (
+              <span className="ml-auto flex items-center gap-1.5 text-muted-foreground text-xs">
+                <ArchiveIcon className="size-3.5" /> Settled
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-8 gap-1.5 text-muted-foreground"
+                onClick={() => settle(current)}
+                data-testid="settle"
+              >
+                <ArchiveIcon className="size-3.5" /> Settle
+              </Button>
+            ))}
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto size-8"
+            className={cn("size-8", !current && "ml-auto")}
             onClick={() => setTerminalOpen((open) => !open)}
             aria-label="Toggle terminal"
             aria-pressed={terminalOpen}

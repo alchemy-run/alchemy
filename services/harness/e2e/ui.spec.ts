@@ -132,3 +132,43 @@ test("a session's machine shows its stats and can be paused and resumed", async 
   await machine.getByTestId("machine-toggle").click();
   await expect(machine.getByTestId("machine-state")).toHaveText("Running", { timeout: 180_000 });
 });
+
+test("settling a session stops its machine and archives it until a new prompt", async ({
+  page,
+  request,
+}) => {
+  await send(page, "Reply with exactly the word: settle");
+  await expect(page.locator(".is-assistant").filter({ hasText: /settle/i })).toBeVisible();
+  const id = decodeURIComponent(new URL(page.url()).hash.slice(1));
+
+  await page.getByTestId("settle").click();
+  // Out of the active list, into Settled.
+  await expect(page.locator("aside nav > div.group").filter({ hasText: id })).toHaveCount(0);
+  const settled = page.getByTestId("settled");
+  await settled.getByRole("button", { name: /Settled/ }).click();
+  await expect(settled.getByTestId("settled-session").filter({ hasText: id })).toBeVisible();
+  // Its machine stops; the server lists it as settled.
+  await expect(page.getByTestId("machine-state")).toHaveText("Suspended", { timeout: 180_000 });
+  const API_URL = process.env.API_URL ?? "http://localhost:1338";
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (await request.get(`${API_URL}/agents`)).json()) as Array<{
+            id: string;
+            settledAt?: number;
+          }>
+        ).find((session) => session.id === id)?.settledAt,
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(0);
+
+  // A new prompt brings it back.
+  await send(page, "Reply with exactly the word: back");
+  await expect(page.locator(".is-assistant").filter({ hasText: /back/i })).toBeVisible({
+    timeout: 180_000,
+  });
+  await expect(page.locator("aside nav > div.group").filter({ hasText: id })).toBeVisible({
+    timeout: 30_000,
+  });
+});

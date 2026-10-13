@@ -96,6 +96,8 @@ export class AgentRpcs extends RpcGroup.make(
     }),
     error: Failure,
   }),
+  /** Stop the session's machine (its work saved) and archive it; a new prompt brings it back. */
+  Rpc.make("settle", { payload: Session, success: Machine, error: Failure }),
   /** Snapshot the machine's work and stop it. */
   Rpc.make("suspend", { payload: Session, success: Machine, error: Failure }),
   /** Start the machine again (a turn also does). */

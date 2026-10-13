@@ -156,6 +156,7 @@ export const agents = {
   machine: (id: string, stats = false) => call(id, (c) => c.machine({ sessionId: id, stats })),
   suspend: (id: string) => call(id, (c) => c.suspend({ sessionId: id })),
   resume: (id: string) => call(id, (c) => c.resume({ sessionId: id })),
+  settle: (id: string) => call(id, (c) => c.settle({ sessionId: id })),
 };
 
 //#region sessions
@@ -167,6 +168,8 @@ export interface ListedSession {
   /** Its agent's state (idle, running, …), as last recorded. */
   readonly agent?: AI.SessionInfo["state"];
   readonly costUsd?: number;
+  /** When it was settled (archived, its machine stopped). */
+  readonly settledAt?: number;
 }
 
 /** Every session (newest first), from the server: the same list in any browser. */
