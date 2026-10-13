@@ -5,11 +5,13 @@ description: How a policy reacts to events with commands and calls to outside sy
 
 import DAG from "../../../components/DAG.astro";
 
-A policy is a standing rule of the form "whenever this happens, do that". Whenever a customer registers, open their main account. Whenever an account's withdrawals for the day cross a threshold, check it for fraud.
+A policy is one of the business's standing rules about what to do when something happens. Whenever a customer registers, the bank opens their main account. Whenever an account's withdrawals for the day cross a threshold, the bank has it scored for fraud, and freezes it if the risk is high.
 
-Where a view remembers what happened, a policy acts on it: it sends commands to aggregates and calls systems outside the model. This page covers how to declare one, how to implement it, and the one property every policy must have, which is that running it twice does no harm.
+The name comes from business policy, and that's the point: a policy doesn't just react, it decides. It's triggered by an event, works out whether and how to act, and acts by sending commands to aggregates or calling systems outside the model.
 
-## Declare what it reacts to
+That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. This page covers how to declare one, how to implement it, and the one property every policy must have, which is that running it twice does no harm.
+
+## Declare what triggers it
 
 A policy names one source, an aggregate or a view, and the events from it that it reacts to.
 
