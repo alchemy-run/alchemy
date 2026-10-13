@@ -7,13 +7,16 @@ import {
   FolderGit2Icon,
   GitBranchIcon,
   PanelRightIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   SquareIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { agents, listSessions, useSession, useSnapshot } from "./agents.ts";
+import type { Machine } from "../../src/rpcs.ts";
+import { agents, type ListedSession, listSessions, useSession, useSnapshot } from "./agents.ts";
 import {
   Confirmation,
   ConfirmationAction,
@@ -72,14 +75,15 @@ const WORKDIR = "/workspace/alchemy";
  * created here show at once, before the server lists them.
  */
 const useSessionIds = () => {
-  const [listed, setListed] = useState<ReadonlyArray<string>>([]);
+  const [listed, setListed] = useState<ReadonlyArray<ListedSession>>([]);
   const [created, setCreated] = useState<ReadonlyArray<string>>([]);
+  const [refreshes, setRefreshes] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const refresh = () =>
       void listSessions()
-        .then((ids) => {
-          if (!cancelled) setListed(ids);
+        .then((sessions) => {
+          if (!cancelled) setListed(sessions);
         })
         .catch(() => {});
     refresh();
@@ -88,10 +92,67 @@ const useSessionIds = () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
-  const ids = [...created.filter((id) => !listed.includes(id)), ...listed];
+  }, [refreshes]);
+  const listedIds = listed.map((session) => session.id);
+  const ids = [...created.filter((id) => !listedIds.includes(id)), ...listedIds];
+  const states = Object.fromEntries(listed.map((session) => [session.id, session.state]));
   const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
-  return [ids, add] as const;
+  const refresh = () => setRefreshes((n) => n + 1);
+  return { ids, states, add, refresh };
+};
+
+const bytes = (n: number) =>
+  n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`;
+
+const duration = (seconds: number) =>
+  seconds < 60
+    ? `${seconds}s`
+    : seconds < 3600
+      ? `${Math.floor(seconds / 60)}m`
+      : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+
+/** A running or suspended machine, as a dot. */
+function MachineDot({ state }: { state: ListedSession["state"] | undefined }) {
+  return (
+    <span
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        state === "running" ? "bg-success" : "bg-muted-foreground/40",
+      )}
+      title={
+        state === "running"
+          ? "Machine running"
+          : state === "suspended"
+            ? "Machine suspended"
+            : "Machine state unknown"
+      }
+      data-testid="machine-dot"
+      data-state={state ?? "unknown"}
+    />
+  );
+}
+
+/** The session's machine, polled while shown (with live usage when it runs). */
+const useMachine = (id: string) => {
+  const [machine, setMachine] = useState<Machine | undefined>();
+  const [polls, setPolls] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () =>
+      void agents
+        .machine(id, true)
+        .then((m) => {
+          if (!cancelled) setMachine(m);
+        })
+        .catch(() => {});
+    poll();
+    const timer = setInterval(poll, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [id, polls]);
+  return [machine, setMachine, () => setPolls((n) => n + 1)] as const;
 };
 
 /** Re-render every second while something is running (elapsed timers). */
@@ -133,7 +194,12 @@ function SessionStatus({ transcript, now }: { transcript: AI.Transcript; now: nu
   }
 }
 
-function SidebarRow(props: { id: string; active: boolean; onSelect: () => void }) {
+function SidebarRow(props: {
+  id: string;
+  state: ListedSession["state"] | undefined;
+  active: boolean;
+  onSelect: () => void;
+}) {
   const snapshot = useSnapshot(props.id);
   const now = useNow(snapshot?.transcript.state === "running");
   return (
@@ -158,7 +224,10 @@ function SidebarRow(props: { id: string; active: boolean; onSelect: () => void }
           <span className="text-muted-foreground">Settled</span>
         )}
       </div>
-      <div className="truncate text-[15px] text-foreground">{props.id}</div>
+      <div className="flex items-center gap-2">
+        <MachineDot state={props.state} />
+        <span className="truncate text-[15px] text-foreground">{props.id}</span>
+      </div>
       <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
         <FolderGit2Icon className="size-3" />
         <span className="truncate">{WORKDIR}</span>
@@ -173,7 +242,8 @@ function SidebarRow(props: { id: string; active: boolean; onSelect: () => void }
 }
 
 function Sidebar(props: {
-  ids: string[];
+  ids: ReadonlyArray<string>;
+  states: Record<string, ListedSession["state"]>;
   current: string | undefined;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -194,6 +264,7 @@ function Sidebar(props: {
           <SidebarRow
             key={id}
             id={id}
+            state={props.states[id]}
             active={id === props.current}
             onSelect={() => props.onSelect(id)}
           />
@@ -435,14 +506,104 @@ function Row(props: { icon: React.ReactNode; label: string; value: React.ReactNo
   );
 }
 
-function Inspector({ id }: { id: string }) {
+/** The machine behind the session, with a pause / resume button. */
+function MachineSection({ id, onChange }: { id: string; onChange: () => void }) {
+  const [machine, setMachine, poll] = useMachine(id);
+  const [busy, setBusy] = useState(false);
+  const running = machine?.state === "running";
+  const toggle = () => {
+    setBusy(true);
+    void (running ? agents.suspend(id) : agents.resume(id))
+      .then(setMachine)
+      .catch(() => {})
+      .finally(() => {
+        setBusy(false);
+        poll();
+        onChange();
+      });
+  };
+  return (
+    <div data-testid="machine">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm">
+        <MachineDot state={machine?.state} />
+        <span className="flex-1 font-medium" data-testid="machine-state">
+          {machine === undefined
+            ? "Machine"
+            : busy
+              ? running
+                ? "Suspending…"
+                : "Resuming…"
+              : running
+                ? "Running"
+                : "Suspended"}
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-7 gap-1.5"
+          disabled={machine === undefined || busy}
+          onClick={toggle}
+          data-testid="machine-toggle"
+        >
+          {running ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+          {running ? "Pause" : "Resume"}
+        </Button>
+      </div>
+      {machine && (
+        <>
+          <Row icon={<CpuIcon className="size-4" />} label="Platform" value={machine.platform} />
+          <Row
+            icon={<span className="text-xs">▣</span>}
+            label="Instance"
+            value={`${machine.instance} · ${machine.vcpus} vCPU`}
+          />
+          <Row
+            icon={<span className="text-xs">≡</span>}
+            label="Memory"
+            value={
+              <span className="tabular-nums">
+                {machine.usage ? `${bytes(machine.usage.memoryUsedBytes)} / ` : ""}
+                {bytes(machine.memoryBytes)}
+              </span>
+            }
+          />
+          <Row
+            icon={<span className="text-xs">◫</span>}
+            label="Disk"
+            value={
+              <span className="tabular-nums">
+                {machine.usage ? `${bytes(machine.usage.diskUsedBytes)} / ` : ""}
+                {bytes(machine.diskBytes)}
+              </span>
+            }
+          />
+          <Row
+            icon={<span className="text-xs">⌖</span>}
+            label="Location"
+            value={machine.location ?? "—"}
+          />
+          {machine.usage && (
+            <Row
+              icon={<span className="text-xs">◷</span>}
+              label="Uptime"
+              value={<span className="tabular-nums">{duration(machine.usage.uptimeSeconds)}</span>}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Inspector({ id, onMachineChange }: { id: string; onMachineChange: () => void }) {
   const { transcript, connected } = useSession(id);
   const now = useNow(transcript.state === "running");
   const { usage } = transcript;
   return (
     <aside className="hidden w-80 shrink-0 p-4 xl:block">
       <div className="rounded-2xl border bg-card">
-        <Row icon={<CpuIcon className="size-4" />} label="Container" value={id} />
+        <MachineSection id={id} onChange={onMachineChange} />
+        <div className="border-t" />
         <Row icon={<FolderGit2Icon className="size-4" />} label="Workspace" value={WORKDIR} />
         <Row icon={<GitBranchIcon className="size-4" />} label="Branch" value="main" />
         <div className="border-t" />
@@ -560,7 +721,7 @@ function TerminalPanel({ id, onClose }: { id: string; onClose: () => void }) {
 //#endregion
 
 export function App() {
-  const [ids, addId] = useSessionIds();
+  const { ids, states, add: addId, refresh: refreshSessions } = useSessionIds();
   // The open session is in the URL, so a reload (or a link) opens it again.
   const [current, setCurrentState] = useState<string | undefined>(
     () => decodeURIComponent(location.hash.slice(1)) || undefined,
@@ -601,7 +762,13 @@ export function App() {
 
   return (
     <div className="flex h-full">
-      <Sidebar ids={ids} current={current} onSelect={setCurrent} onCreate={create} />
+      <Sidebar
+        ids={ids}
+        states={states}
+        current={current}
+        onSelect={setCurrent}
+        onCreate={create}
+      />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm">
           <span className="text-muted-foreground">coding-agents</span>
@@ -637,7 +804,7 @@ export function App() {
               </Button>
             </div>
           )}
-          {current && inspector && <Inspector id={current} />}
+          {current && inspector && <Inspector id={current} onMachineChange={refreshSessions} />}
         </div>
         {current && terminalOpen && (
           <TerminalPanel id={current} onClose={() => setTerminalOpen(false)} />

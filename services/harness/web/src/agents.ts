@@ -12,7 +12,7 @@ import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { useSyncExternalStore } from "react";
-import { AgentRpcs } from "../../src/rpcs.ts";
+import { AgentRpcs, type Machine } from "../../src/rpcs.ts";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:1338";
 
@@ -152,15 +152,23 @@ export const agents = {
   setModel: (id: string, model: string) => call(id, (c) => c.setModel({ sessionId: id, model })),
   respond: (id: string, requestId: string, answer: AI.Answer) =>
     call(id, (c) => c.respond({ sessionId: id, requestId, answer })),
+  /** The session's machine, with live usage when `stats` (and it's running). */
+  machine: (id: string, stats = false) => call(id, (c) => c.machine({ sessionId: id, stats })),
+  suspend: (id: string) => call(id, (c) => c.suspend({ sessionId: id })),
+  resume: (id: string) => call(id, (c) => c.resume({ sessionId: id })),
 };
 
 //#region sessions
 
+export interface ListedSession {
+  readonly id: string;
+  /** Its machine: running, suspended, or unknown (unreachable). */
+  readonly state: Machine["state"] | "unknown";
+}
+
 /** Every session (newest first), from the server: the same list in any browser. */
-export const listSessions = (): Promise<ReadonlyArray<string>> =>
-  fetch(`${API_URL}/agents`)
-    .then((res) => (res.ok ? res.json() : []))
-    .then((rows: ReadonlyArray<{ id: string }>) => rows.map((row) => row.id));
+export const listSessions = (): Promise<ReadonlyArray<ListedSession>> =>
+  fetch(`${API_URL}/agents`).then((res) => (res.ok ? res.json() : []));
 
 //#endregion
 

@@ -107,3 +107,24 @@ test("another browser sees the same sessions", async ({ page, browser }) => {
   });
   await other.close();
 });
+
+test("a session's machine shows its stats and can be paused and resumed", async ({ page }) => {
+  await send(page, "Reply with exactly the word: machine");
+  await expect(page.locator(".is-assistant").filter({ hasText: /machine/i })).toBeVisible();
+
+  const machine = page.getByTestId("machine");
+  await expect(machine.getByTestId("machine-state")).toHaveText("Running", { timeout: 30_000 });
+  await expect(machine).toContainText("Cloudflare Container");
+  await expect(machine).toContainText("standard-4");
+  // Live usage from inside the machine: memory used of total.
+  await expect(machine).toContainText(/\d+(\.\d)? [MG]B \/ \d+(\.\d)? GB/, { timeout: 30_000 });
+
+  await machine.getByTestId("machine-toggle").click();
+  await expect(machine.getByTestId("machine-state")).toHaveText("Suspended", { timeout: 180_000 });
+  await expect(
+    page.locator("aside nav [data-testid=machine-dot][data-state=suspended]").first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await machine.getByTestId("machine-toggle").click();
+  await expect(machine.getByTestId("machine-state")).toHaveText("Running", { timeout: 180_000 });
+});

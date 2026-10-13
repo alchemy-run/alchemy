@@ -18,7 +18,7 @@ const cors = {
 /**
  * A small HTTP API over many coding agents:
  *
- *   GET  /agents                          every session, newest first
+ *   GET  /agents                          every session, newest first, with its machine's state
  *   POST /agents/:id          { prompt }  start the session (idempotent) and run a turn → result
  *                                         (`?wait=false` returns as soon as the turn starts)
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
@@ -45,7 +45,20 @@ export default Cloudflare.Worker(
         if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
         const url = new URL(request.url, "http://agents");
         if (request.method === "GET" && url.pathname === "/agents") {
-          return yield* HttpServerResponse.json(yield* sessions.getByName(SESSIONS_INDEX).list());
+          // Each session with its machine's state (running or suspended).
+          const listed = yield* sessions.getByName(SESSIONS_INDEX).list();
+          return yield* HttpServerResponse.json(
+            yield* Effect.forEach(
+              listed,
+              (session) =>
+                agents.getByName(session.id).pipe(
+                  Effect.flatMap((agent) => agent.machine({ sessionId: session.id })),
+                  Effect.map((machine) => ({ ...session, state: machine.state })),
+                  Effect.orElseSucceed(() => ({ ...session, state: "unknown" as const })),
+                ),
+              { concurrency: 16 },
+            ),
+          );
         }
         const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model))?$/.exec(
           url.pathname,

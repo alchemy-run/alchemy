@@ -5,6 +5,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { INSTANCE, makeMachine } from "./machine.ts";
 import { AgentRpcs } from "./rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
@@ -73,6 +74,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
 
     const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
     const sessions = yield* Sessions;
+    const machine = makeMachine(sandbox);
 
     return Effect.sync(() => {
       const claude = harness
@@ -80,7 +82,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           egress: [model, github],
           // Package registries and docs; GitHub and the model go through egress.
           enableInternet: true,
-          instance: "standard-4",
+          instance: INSTANCE,
         })
         .pipe(Effect.tap(() => ensureWorkspace));
       const call = <A, E, R>(sessionId: string, f: (session: Session) => Effect.Effect<A, E, R>) =>
@@ -116,6 +118,10 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           Stream.unwrap(
             Effect.scoped(claude).pipe(Effect.as(terminals.output(sessionId, cols, rows))),
           ),
+        machine: ({ stats }) => machine({ stats }),
+        // Checkpoint and snapshot the work, then stop the container.
+        suspend: () => harness.stop().pipe(Effect.andThen(machine())),
+        resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),
         terminalInput: ({ sessionId, data }) => terminals.input(sessionId, data),
         terminalResize: ({ sessionId, cols, rows }) => terminals.resize(sessionId, cols, rows),
       });

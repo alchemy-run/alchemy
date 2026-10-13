@@ -5,6 +5,30 @@ import * as Schema from "effect/Schema";
 
 const Failure = Schema.Union([AI.SessionError, AI.Unsupported]);
 
+/** The machine a session runs on. */
+export const Machine = Schema.Struct({
+  /** `suspended`: stopped, its workspace snapshotted; resumes on the next turn. */
+  state: Schema.Literals(["running", "suspended"]),
+  /** Where it runs, e.g. "Cloudflare Container". */
+  platform: Schema.String,
+  /** The platform's size for it, e.g. "standard-4". */
+  instance: Schema.String,
+  vcpus: Schema.Number,
+  memoryBytes: Schema.Number,
+  diskBytes: Schema.Number,
+  /** Where it last ran, e.g. "SJC (US)". */
+  location: Schema.optional(Schema.String),
+  /** Live, while running. */
+  usage: Schema.optional(
+    Schema.Struct({
+      memoryUsedBytes: Schema.Number,
+      diskUsedBytes: Schema.Number,
+      uptimeSeconds: Schema.Number,
+    }),
+  ),
+});
+export type Machine = typeof Machine.Type;
+
 /** Every call names the session it acts on. */
 const Session = { sessionId: Schema.String };
 
@@ -54,6 +78,16 @@ export class AgentRpcs extends RpcGroup.make(
     error: Failure,
     stream: true,
   }),
+  /** The session's machine; `stats` reads live usage from it (when running). */
+  Rpc.make("machine", {
+    payload: { ...Session, stats: Schema.optional(Schema.Boolean) },
+    success: Machine,
+    error: Failure,
+  }),
+  /** Snapshot the machine's work and stop it. */
+  Rpc.make("suspend", { payload: Session, success: Machine, error: Failure }),
+  /** Start the machine again (a turn also does). */
+  Rpc.make("resume", { payload: Session, success: Machine, error: Failure }),
   /** Keystrokes for the session's shell. */
   Rpc.make("terminalInput", { payload: { ...Session, data: Schema.String }, error: Failure }),
   Rpc.make("terminalResize", {
