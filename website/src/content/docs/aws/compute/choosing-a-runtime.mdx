@@ -40,6 +40,16 @@ Choose Lambda unless you have a specific reason not to.
 
 → [Lambda](/aws/compute/lambda)
 
+## Lambda Web Functions — HTTP servers
+
+For HTTP, a [`WebFunction`](/providers/aws/lambda#webfunction) runs your
+server as a Lambda Web Function. Each environment serves up to 128 requests
+at once, responses stream, and you get an HTTPS endpoint with no Function
+URL. Bring an Effect `fetch` handler or any Node server. Web Functions only
+receive HTTP, so event sources stay on a Lambda Function.
+
+→ [Lambda Web Functions](/aws/compute/web-functions)
+
 ## ECS — long-running containers
 
 When your workload doesn't fit a request/response window — a

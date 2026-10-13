@@ -1,0 +1,1235 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as iam from "@distilled.cloud/aws/iam";
+import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
+import type { Region } from "@distilled.cloud/aws/Region";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import type { LogLine, LogsInput } from "../../Provider.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { createHostRuntimeContext, type HostRuntimeContext } from "../../Server/Process.ts";
+import { Stack } from "../../Stack.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
+import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
+import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
+
+export const WebFunctionTypeId = "AWS.Lambda.WebFunction" as const;
+export type WebFunctionTypeId = typeof WebFunctionTypeId;
+
+/**
+ * The single endpoint Alchemy manages on every Web Function. Its domain is
+ * the function's {@link WebFunction} `url`.
+ */
+const ENDPOINT_NAME = "default";
+
+/** Entry file inside the archive (see `zipCode`). */
+const ENTRY_FILE = "index.mjs";
+
+/** Address shim written into prebuilt (`bundle: false`) archives. */
+const PREBUILT_ENTRY_FILE = "__alchemy_web_entry.mjs";
+
+/** Inline policy denying the execution role `logs:CreateLogGroup` on its own groups. */
+const LOG_GROUP_GUARD_POLICY = "AlchemyDenyLogGroupCreate";
+
+const DEFAULT_TIMEOUT_SECONDS = 30;
+const DEFAULT_MAX_CONCURRENCY = 64;
+
+export const isWebFunction = (value: unknown): value is WebFunction =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  (value as { Type?: unknown }).Type === WebFunctionTypeId;
+
+class WebFunctionNotReady extends Data.TaggedError("WebFunctionNotReady")<{
+  functionName: string;
+  resource: string;
+  state?: string;
+}> {
+  override get message() {
+    return `Lambda web function ${this.functionName}: ${this.resource} is ${this.state ?? "not ready"}`;
+  }
+}
+
+class WebFunctionFailed extends Data.TaggedError("WebFunctionFailed")<{
+  functionName: string;
+  resource: string;
+  reason?: string;
+}> {
+  override get message() {
+    return `Lambda web function ${this.functionName}: ${this.resource} failed: ${this.reason ?? "unknown reason"}`;
+  }
+}
+
+export interface WebFunctionProps extends PlatformProps {
+  /**
+   * Entry module of the web server.
+   *
+   * With an Effect implementation (the class form), Alchemy serves the
+   * returned `fetch` handler. Without one, `main` is an ordinary Node
+   * module that either starts its own server on `process.env.PORT` /
+   * `process.env.HOST` (Express, Fastify, `@hono/node-server`, …) or
+   * default-exports an object with a Web-standard `fetch(request)` method
+   * (Hono, the Cloudflare Worker shape), which Alchemy serves.
+   */
+  main: string;
+  /**
+   * Set to `false` to skip bundling and deploy `main`'s directory as-is,
+   * e.g. a framework's standalone server output (`.output/server`,
+   * Next.js `.next/standalone`). Alchemy adds a small entry that exports
+   * Lambda's listen address as `PORT` / `HOST` / `HOSTNAME` /
+   * `NITRO_PORT` / `NITRO_HOST` and then imports `main`.
+   * @default true
+   */
+  bundle?: false;
+  /**
+   * Name of the Web Function. If omitted, a unique name is generated from
+   * the stack, stage, and logical ID. Changing it replaces the function.
+   */
+  functionName?: string;
+  /**
+   * Description recorded on each revision.
+   */
+  description?: string;
+  /**
+   * Node.js runtime of the revision. Web Functions run on Arm64.
+   * @default "nodejs24.x"
+   */
+  runtime?: "nodejs24.x";
+  /**
+   * Environment variables available to the server. Each change creates a
+   * new revision.
+   */
+  env?: Record<string, any>;
+  /**
+   * Maximum time a single HTTP request can run, rounded up to whole
+   * seconds. Valid range: 3 seconds to 15 minutes.
+   * @default 30 seconds
+   */
+  timeout?: Duration.Duration;
+  /**
+   * Maximum number of concurrent HTTP requests one execution environment
+   * serves. Valid range: 1–128. Lower it for CPU-bound servers.
+   * @default 64
+   */
+  maxConcurrency?: number;
+  /**
+   * Who may call the HTTPS endpoint. `"ApplicationManaged"` forwards every
+   * request (a public endpoint; authenticate in your application).
+   * `"IamAuth"` requires SigV4-signed requests from principals with
+   * `lambda:InvokeWebFunctionEndpoint`.
+   * @default "ApplicationManaged"
+   */
+  authType?: "ApplicationManaged" | "IamAuth";
+  /**
+   * Additional AWS Regions to serve from. When set, the endpoint is
+   * `MultiRegion`: one global domain with latency-based routing across the
+   * home Region and these Regions. Changing it replaces the function.
+   */
+  regions?: string[];
+  /**
+   * Maximum number of execution environments per Region.
+   */
+  maxEnvironments?: number;
+  /**
+   * Maximum requests per second the endpoint accepts (enforced per
+   * Region). Excess requests receive HTTP 429. `0` blocks all traffic.
+   */
+  rateLimit?: number;
+  /**
+   * Tags applied to the Web Function.
+   */
+  tags?: Record<string, string>;
+  /**
+   * Bundler configuration for {@link main}: rolldown input options,
+   * `output` overrides, `install` for native packages (built for Linux
+   * Arm64), `pure`, and the bundle analyzer.
+   */
+  build?: FunctionBuildOptions;
+  /**
+   * Ship source maps with the bundle and enable `--enable-source-maps`.
+   * @default true
+   */
+  uploadSourceMap?: boolean;
+  exports?: string[];
+}
+
+export interface WebFunction extends Resource<
+  WebFunctionTypeId,
+  WebFunctionProps,
+  {
+    /** Name of the Web Function. */
+    functionName: string;
+    /** ARN of the Web Function (`arn:aws:lambda:…:web-function/<name>`). */
+    functionArn: string;
+    /** Name of the managed endpoint. */
+    endpointName: string;
+    /** ARN of the managed endpoint, the resource for `lambda:InvokeWebFunctionEndpoint`. */
+    endpointArn: string;
+    /** Lambda-allocated domain of the endpoint. */
+    domainName: string;
+    /** HTTPS URL of the endpoint (`https://<domainName>`). */
+    url: string;
+    /** Revision currently receiving all traffic. */
+    revisionId: string;
+    /** Name of the execution role. */
+    roleName: string;
+    /** ARN of the execution role. */
+    roleArn: string;
+    code: {
+      hash: string;
+    };
+  },
+  {
+    env?: Record<string, any>;
+    policyStatements?: PolicyStatement[];
+  },
+  Providers
+> {}
+
+export type WebFunctionServices = Credentials | Region | AWSEnvironment | WebFunction;
+
+export type WebFunctionShape = Main<WebFunctionServices>;
+
+/**
+ * An AWS Lambda Web Function: a serverless HTTP server. Lambda runs your
+ * Node.js server in execution environments that each serve many concurrent
+ * requests (up to 128), streams responses to the client as they are
+ * produced, scales to zero, and gives every function an HTTPS endpoint.
+ *
+ * Use a Web Function for anything that answers HTTP — APIs, server-rendered
+ * apps, streaming AI responses. Use `AWS.Lambda.Function` for event sources
+ * (SQS, DynamoDB Streams, S3 notifications, schedules) and direct invokes;
+ * a Web Function only receives HTTP. Web Functions are available in
+ * `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, and `ap-northeast-1`.
+ *
+ * Every deploy uploads the bundle to the Alchemy assets bucket, creates an
+ * immutable revision, and shifts the endpoint's traffic to it. Lambda keeps
+ * the 50 most recent revisions.
+ *
+ * ### Effect Web Functions
+ * Return a `fetch` handler. Alchemy serves it with Effect's Node HTTP
+ * server on the address Lambda assigns, so streamed `HttpServerResponse`
+ * bodies reach the client chunk by chunk. Bindings grant IAM permissions to
+ * the function's execution role exactly as on `AWS.Lambda.Function`.
+ *
+ * **Example:** Effect Web Function with a DynamoDB binding
+ * ```typescript
+ * // src/api.ts
+ * import * as AWS from "alchemy/AWS";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export default class Api extends AWS.Lambda.WebFunction<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const table = yield* AWS.DynamoDB.Table("Items", {
+ *       partitionKey: "pk",
+ *       attributes: { pk: "S" },
+ *     });
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const id = new URL(request.originalUrl).searchParams.get("id")!;
+ *         const { Item } = yield* getItem({ Key: { pk: { S: id } } });
+ *         return yield* HttpServerResponse.json(Item ?? null);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Streaming a response
+ * ```typescript
+ * export default class Chat extends AWS.Lambda.WebFunction<Chat>()(
+ *   "Chat",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(
+ *         HttpServerResponse.stream(
+ *           Stream.make("Hello", " from", " Lambda").pipe(
+ *             Stream.tap(() => Effect.sleep("100 millis")),
+ *             Stream.encodeText,
+ *           ),
+ *           { contentType: "text/plain" },
+ *         ),
+ *       ),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Async Web Functions
+ * Point `main` at an ordinary Node server. No Effect runtime is included.
+ *
+ * **Example:** A `fetch` export (Hono, Cloudflare Worker shape)
+ * ```typescript
+ * // alchemy.run.ts
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ * });
+ *
+ * // src/server.ts
+ * export default {
+ *   async fetch(request: Request) {
+ *     return new Response(`Hello from ${new URL(request.url).pathname}`);
+ *   },
+ * };
+ * ```
+ *
+ * **Example:** A server that listens on its own (Express)
+ * ```typescript
+ * // src/server.ts
+ * import express from "express";
+ *
+ * const app = express();
+ * app.get("/", (_req, res) => res.send("Hello from Express"));
+ * // Alchemy mirrors Lambda's listen address into PORT and HOST.
+ * app.listen(Number(process.env.PORT), process.env.HOST!);
+ * ```
+ *
+ * **Example:** A framework's standalone server output
+ * ```typescript
+ * const site = yield* AWS.Lambda.WebFunction("Site", {
+ *   main: "./.output/server/index.mjs",
+ *   bundle: false,
+ * });
+ * ```
+ *
+ * ### Configuration
+ * **Example:** Concurrency, timeout, and traffic limits
+ * ```typescript
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   maxConcurrency: 128,
+ *   timeout: Duration.minutes(5),
+ *   maxEnvironments: 10,
+ *   rateLimit: 500,
+ * });
+ * ```
+ *
+ * **Example:** Serving from several Regions behind one domain
+ * ```typescript
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   regions: ["us-east-1", "eu-west-1"],
+ * });
+ * ```
+ *
+ * **Example:** Requiring SigV4-signed callers
+ * ```typescript
+ * const internal = yield* AWS.Lambda.WebFunction("Internal", {
+ *   main: "./src/server.ts",
+ *   authType: "IamAuth",
+ * });
+ * ```
+ *
+ * @resource
+ */
+export const WebFunction: Platform<
+  WebFunction,
+  WebFunctionServices,
+  WebFunctionShape,
+  HostRuntimeContext,
+  {},
+  WebFunctionProps
+> = Platform(WebFunctionTypeId, {
+  createRuntimeContext: createHostRuntimeContext(WebFunctionTypeId),
+});
+
+/** Generated entry for Effect web functions. */
+const effectEntry = (importPath: string) => `
+import { bootstrap } from "alchemy/Runtime/Bootstrap/LambdaWeb";
+import entrypoint from ${JSON.stringify(importPath)};
+
+bootstrap(entrypoint);
+`;
+
+/**
+ * Generated entry for async web functions: mirror the listen address into
+ * `PORT` / `HOST` before `main` evaluates, then serve a `fetch` export if
+ * the module has one.
+ */
+const asyncEntry = (importPath: string) => `
+import { listenAddress } from "alchemy/Runtime/Bootstrap/LambdaWebEnv";
+import * as entrypoint from ${JSON.stringify(importPath)};
+import { serve } from "alchemy/Runtime/Bootstrap/LambdaWebAsync";
+
+serve(entrypoint, listenAddress);
+`;
+
+/** Address shim for a prebuilt directory; it cannot import `alchemy`. */
+const prebuiltEntry = (mainFile: string) => `
+const endpoint = process.env.AWS_LAMBDA_HTTP_ENDPOINT;
+if (endpoint) {
+  const separator = endpoint.lastIndexOf(":");
+  const host = endpoint.slice(0, separator);
+  const port = endpoint.slice(separator + 1);
+  process.env.PORT = port;
+  process.env.HOST = host;
+  process.env.HOSTNAME = host;
+  process.env.NITRO_PORT = port;
+  process.env.NITRO_HOST = host;
+}
+await import(${JSON.stringify(`./${mainFile}`)});
+`;
+
+const mainBasename = (main: string) =>
+  main.slice(Math.max(main.lastIndexOf("/"), main.lastIndexOf("\\")) + 1);
+
+const bundleOptions = (props: WebFunctionProps): FunctionBundleOptions => ({
+  entry: (importPath, isExternal) =>
+    isExternal ? asyncEntry(importPath) : effectEntry(importPath),
+  prebuiltFiles:
+    props.bundle === false
+      ? [{ path: PREBUILT_ENTRY_FILE, content: prebuiltEntry(mainBasename(props.main)) }]
+      : undefined,
+});
+
+/** The bundler reads the Event Function zip props; Web Functions run on Arm64. */
+const toZipProps = (props: WebFunctionProps): FunctionZipProps =>
+  ({ ...props, architecture: "arm64" }) as FunctionZipProps;
+
+const toTimeoutSeconds = (timeout: Duration.Duration | undefined): number => {
+  if (timeout === undefined) return DEFAULT_TIMEOUT_SECONDS;
+  // State JSON flattens a Duration to its `toJSON` shape.
+  const json = timeout as { _id?: unknown; _tag?: string; millis?: number; nanos?: string };
+  const input: Duration.Input =
+    json._id === "Duration"
+      ? json._tag === "Millis"
+        ? json.millis!
+        : json._tag === "Nanos"
+          ? BigInt(json.nanos!)
+          : "Infinity"
+      : timeout;
+  return Math.max(1, Math.ceil(Duration.toSeconds(input)));
+};
+
+type EndpointType = "HomeRegion" | "MultiRegion";
+
+const endpointTypeOf = (props: WebFunctionProps): EndpointType =>
+  props.regions !== undefined && props.regions.length > 0 ? "MultiRegion" : "HomeRegion";
+
+const normalizeRegions = (regions: readonly string[] | undefined) =>
+  [...new Set(regions ?? [])].sort();
+
+export const WebFunctionProvider = () =>
+  Provider.effect(
+    WebFunction,
+    Effect.gen(function* () {
+      const stack = yield* Stack;
+      const { bundleCode } = yield* makeFunctionBundler;
+      const assets = yield* Assets;
+
+      const alchemyEnv = {
+        ALCHEMY_STACK_NAME: stack.name,
+        ALCHEMY_STAGE: stack.stage,
+        ALCHEMY_PHASE: "runtime",
+      };
+
+      const bundle = (id: string, props: WebFunctionProps) =>
+        bundleCode(id, toZipProps(props), bundleOptions(props));
+
+      const createNames = Effect.fn(function* (id: string, functionName: string | undefined) {
+        return {
+          functionName: functionName ?? (yield* createPhysicalName({ id, maxLength: 64 })),
+          roleName: yield* createPhysicalName({ id, maxLength: 64 }),
+          policyName: yield* createPhysicalName({ id, maxLength: 128 }),
+        };
+      });
+
+      const ensureRole = Effect.fn(function* (id: string, roleName: string) {
+        const existing = yield* iam
+          .getRole({ RoleName: roleName })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        const role =
+          existing ??
+          (yield* iam
+            .createRole({
+              RoleName: roleName,
+              AssumeRolePolicyDocument: JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "lambda.amazonaws.com" },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              }),
+              Tags: createTagsList(yield* createInternalTags(id)),
+            })
+            .pipe(
+              Effect.catchTag("EntityAlreadyExistsException", () =>
+                iam.getRole({ RoleName: roleName }),
+              ),
+            ));
+        yield* iam.attachRolePolicy({
+          RoleName: roleName,
+          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        });
+        return role.Role.Arn;
+      });
+
+      const syncBindings = Effect.fn(function* ({
+        roleName,
+        policyName,
+        bindings,
+      }: {
+        roleName: string;
+        policyName: string;
+        bindings: ResourceBinding<WebFunction["Binding"]>[];
+      }) {
+        const active = bindings.filter(
+          (binding: ResourceBinding<WebFunction["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
+        );
+        const env = active
+          .map((binding) => binding?.data?.env)
+          .reduce((acc, env) => ({ ...acc, ...env }), {});
+        const policyStatements = active.flatMap(
+          (binding) =>
+            binding?.data?.policyStatements?.map((stmt: PolicyStatement) => ({
+              ...stmt,
+              Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+            })) ?? [],
+        );
+        if (policyStatements.length > 0) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: policyName,
+            PolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: policyStatements,
+            } satisfies PolicyDocument),
+          });
+        } else {
+          yield* iam
+            .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+        return env;
+      });
+
+      const getFunction = (functionName: string) =>
+        LambdaWeb.getWebFunction({ functionName }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+
+      const getEndpoint = (functionName: string) =>
+        LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName: ENDPOINT_NAME }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+
+      const getRevision = (functionName: string, revisionId: string) =>
+        LambdaWeb.getWebFunctionRevision({ functionName, revisionId }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+
+      const waitForFunctionActive = (
+        functionName: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) =>
+        Effect.gen(function* () {
+          const fn = yield* getFunction(functionName);
+          if (fn?.state === "Active") return fn;
+          if (fn?.state === "Failed") {
+            return yield* new WebFunctionFailed({
+              functionName,
+              resource: "function",
+              reason: fn.stateReason,
+            });
+          }
+          return yield* new WebFunctionNotReady({
+            functionName,
+            resource: "function",
+            state: fn?.state,
+          });
+        }).pipe(
+          Effect.tapError((e) =>
+            e._tag === "WebFunctionNotReady" ? session.note(e.message) : Effect.void,
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "WebFunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 45,
+          }),
+        );
+
+      const waitForRevisionActive = (
+        functionName: string,
+        revisionId: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) =>
+        Effect.gen(function* () {
+          const revision = yield* getRevision(functionName, revisionId);
+          if (revision?.state === "Active") return revision;
+          if (revision?.state === "Failed") {
+            return yield* new WebFunctionFailed({
+              functionName,
+              resource: `revision ${revisionId}`,
+              reason: [
+                revision.stateReason,
+                ...(revision.errors ?? []).map(
+                  (e) => `${e.attribute}: ${e.errorCode} ${e.errorMessage}`,
+                ),
+              ].join("; "),
+            });
+          }
+          return yield* new WebFunctionNotReady({
+            functionName,
+            resource: `revision ${revisionId}`,
+            state: revision?.state,
+          });
+        }).pipe(
+          Effect.tapError((e) =>
+            e._tag === "WebFunctionNotReady" ? session.note(e.message) : Effect.void,
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "WebFunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 60,
+          }),
+        );
+
+      const waitForEndpointSettled = (
+        functionName: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) =>
+        Effect.gen(function* () {
+          const endpoint = yield* getEndpoint(functionName);
+          if (endpoint?.state === "Failed" || endpoint?.updateStatus === "Failed") {
+            return yield* new WebFunctionFailed({
+              functionName,
+              resource: `endpoint ${ENDPOINT_NAME}`,
+              reason: endpoint.updateStatusReason ?? endpoint.stateReason,
+            });
+          }
+          if (endpoint?.state === "Active" && endpoint.updateStatus !== "InProgress") {
+            return endpoint;
+          }
+          return yield* new WebFunctionNotReady({
+            functionName,
+            resource: `endpoint ${ENDPOINT_NAME}`,
+            state:
+              endpoint?.updateStatus === "InProgress" ? "updating" : (endpoint?.state ?? "missing"),
+          });
+        }).pipe(
+          Effect.tapError((e) =>
+            e._tag === "WebFunctionNotReady" ? session.note(e.message) : Effect.void,
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "WebFunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 90,
+          }),
+        );
+
+      const waitForEndpointGone = (functionName: string) =>
+        Effect.gen(function* () {
+          const endpoint = yield* getEndpoint(functionName);
+          if (endpoint === undefined) return;
+          return yield* new WebFunctionNotReady({
+            functionName,
+            resource: `endpoint ${ENDPOINT_NAME}`,
+            state: endpoint.state,
+          });
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "WebFunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 45,
+          }),
+        );
+
+      const waitForFunctionGone = (functionName: string) =>
+        Effect.gen(function* () {
+          const fn = yield* getFunction(functionName);
+          if (fn === undefined) return;
+          return yield* new WebFunctionNotReady({
+            functionName,
+            resource: "function",
+            state: fn.state,
+          });
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "WebFunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 45,
+          }),
+        );
+
+      /** A just-created execution role is not assumable by Lambda yet. */
+      const isRolePropagationError = (e: { _tag: string; message?: string }) =>
+        e._tag === "ValidationException" &&
+        /role|assume/i.test(e.message ?? "") &&
+        !/reserved/i.test(e.message ?? "");
+
+      const retryRolePropagation = <A, E extends { _tag: string; message?: string }, R>(
+        effect: Effect.Effect<A, E, R>,
+        session: { note: (note: string) => Effect.Effect<void> },
+        functionName: string,
+      ) =>
+        effect.pipe(
+          Effect.tapError((e) =>
+            isRolePropagationError(e)
+              ? session.note(`Waiting for execution role to propagate: ${functionName}`)
+              : Effect.void,
+          ),
+          Effect.retry({
+            while: (e) => isRolePropagationError(e) || e._tag === "ConflictException",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 20,
+          }),
+        );
+
+      /** Observed revision matches the desired build and service config. */
+      const revisionMatches = (
+        observed: LambdaWeb.GetWebFunctionRevisionResponse,
+        desired: LambdaWeb.RevisionConfig,
+      ) =>
+        observed.state !== "Failed" &&
+        observed.buildConfig.codeConfig.s3Object.bucket ===
+          desired.buildConfig.codeConfig.s3Object.bucket &&
+        observed.buildConfig.codeConfig.s3Object.key ===
+          desired.buildConfig.codeConfig.s3Object.key &&
+        observed.buildConfig.runtimeConfig.runtime === desired.buildConfig.runtimeConfig.runtime &&
+        (observed.description ?? "") === (desired.description ?? "") &&
+        observed.serviceConfig.executionRoleArn === desired.serviceConfig.executionRoleArn &&
+        (observed.serviceConfig.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) ===
+          desired.serviceConfig.timeoutSeconds &&
+        (observed.serviceConfig.maxConcurrencyPerEnvironment ?? DEFAULT_MAX_CONCURRENCY) ===
+          desired.serviceConfig.maxConcurrencyPerEnvironment &&
+        deepEqual(
+          observed.serviceConfig.environmentVariables ?? {},
+          desired.serviceConfig.environmentVariables ?? {},
+        );
+
+      /** Endpoint settings that `UpdateWebFunctionEndpoint` can change in place. */
+      const desiredEndpointSettings = (news: WebFunctionProps, revisionId: string) => ({
+        authType: news.authType ?? "ApplicationManaged",
+        autoDeploymentMode: "Disabled" as const,
+        revisionWeights: [{ revisionId, weight: 100 }],
+        scalingConfig:
+          news.maxEnvironments === undefined ? {} : { maxEnvironments: news.maxEnvironments },
+        throttleConfig: news.rateLimit === undefined ? {} : { rateLimit: news.rateLimit },
+      });
+
+      const endpointSettingsMatch = (
+        observed: LambdaWeb.GetWebFunctionEndpointResponse,
+        desired: ReturnType<typeof desiredEndpointSettings>,
+      ) =>
+        observed.authType === desired.authType &&
+        observed.autoDeploymentMode === desired.autoDeploymentMode &&
+        deepEqual(
+          observed.revisionWeights.filter((w) => w.weight > 0),
+          desired.revisionWeights,
+        ) &&
+        (observed.scalingConfig?.maxEnvironments ?? undefined) ===
+          desired.scalingConfig.maxEnvironments &&
+        (observed.throttleConfig?.rateLimit ?? undefined) === desired.throttleConfig.rateLimit;
+
+      const toAttributes = (
+        fn: { functionName: string; functionArn: string },
+        endpoint: LambdaWeb.GetWebFunctionEndpointResponse,
+        role: { roleName: string; roleArn: string },
+        code: WebFunction["Attributes"]["code"],
+      ): WebFunction["Attributes"] => ({
+        functionName: fn.functionName,
+        functionArn: fn.functionArn,
+        endpointName: endpoint.endpointName,
+        endpointArn: endpoint.endpointArn,
+        domainName: endpoint.domainName,
+        url: `https://${endpoint.domainName}`,
+        revisionId:
+          endpoint.revisionWeights.find((w) => w.weight === 100)?.revisionId ??
+          endpoint.revisionWeights[0]?.revisionId ??
+          "",
+        roleName: role.roleName,
+        roleArn: role.roleArn,
+        code,
+      });
+
+      const logGroupNames = (functionName: string) => [
+        `/aws/lambda/web/${functionName}`,
+        `/aws/lambda/web/${functionName}.local`,
+      ];
+
+      /**
+       * Alchemy owns the home-Region log groups: it creates them before the
+       * first request and denies the execution role `logs:CreateLogGroup`
+       * on them, so a log flush that lands after `delete` cannot re-create
+       * a group that was just removed.
+       */
+      const syncLogGroups = Effect.fn(function* ({
+        id,
+        functionName,
+        roleName,
+      }: {
+        id: string;
+        functionName: string;
+        roleName: string;
+      }) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        const document = JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Deny",
+              Action: "logs:CreateLogGroup",
+              Resource: logGroupNames(functionName).map(
+                (name) => `arn:aws:logs:${region}:${accountId}:log-group:${name}:*`,
+              ),
+            },
+          ],
+        });
+        const observed = yield* iam
+          .getRolePolicy({ RoleName: roleName, PolicyName: LOG_GROUP_GUARD_POLICY })
+          .pipe(
+            Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          );
+        if (observed !== document) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: LOG_GROUP_GUARD_POLICY,
+            PolicyDocument: document,
+          });
+        }
+        const tags = yield* createInternalTags(id);
+        yield* Effect.forEach(logGroupNames(functionName), (logGroupName) =>
+          logs
+            .createLogGroup({ logGroupName, tags })
+            .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void)),
+        );
+      });
+
+      return {
+        stables: ["functionArn", "functionName", "roleName"],
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during
+          // planning; the bundle hash below represents them.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? ({ ...desired, exports: stripEffects(desired.exports) } as typeof desired)
+              : desired;
+          if (!isResolved(news)) return;
+          // Creating, or adopted without prior props: reconcile converges.
+          if (!output || !olds) return undefined;
+          // Generated names are engine-owned; only an explicit functionName
+          // change replaces.
+          if ((news.functionName ?? output.functionName) !== output.functionName) {
+            return { action: "replace" };
+          }
+          // Endpoint type and Regions are immutable on the endpoint, whose
+          // domain is this resource's identity.
+          if (
+            endpointTypeOf(olds) !== endpointTypeOf(news) ||
+            !deepEqual(normalizeRegions(olds.regions), normalizeRegions(news.regions))
+          ) {
+            return { action: "replace", deleteFirst: news.functionName !== undefined };
+          }
+          if ((yield* bundle(id, news)).identityHash !== output.code.hash) {
+            return { action: "update" };
+          }
+          if (!havePropsChanged(olds, news)) {
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
+            return { action: "noop" };
+          }
+        }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const functionName =
+            output?.functionName ?? (yield* createNames(id, olds?.functionName)).functionName;
+          const fn = yield* getFunction(functionName);
+          const names = yield* createNames(id, olds?.functionName);
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const roleName = output?.roleName ?? names.roleName;
+          if (fn === undefined) {
+            // A create that failed after the execution role was made (e.g.
+            // the function create was rejected) leaves only the role. Report
+            // it so the engine can re-drive the create or delete the role on
+            // destroy instead of orphaning it.
+            const role = yield* iam
+              .getRole({ RoleName: roleName })
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            if (output !== undefined || role === undefined) return undefined;
+            const attrs = {
+              functionName,
+              functionArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}`,
+              endpointName: ENDPOINT_NAME,
+              endpointArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${ENDPOINT_NAME}`,
+              domainName: "",
+              url: "",
+              revisionId: "",
+              roleName,
+              roleArn: role.Role.Arn,
+              code: { hash: "" },
+            } satisfies WebFunction["Attributes"];
+            return (yield* hasAlchemyTags(id, role.Role.Tags)) ? attrs : Unowned(attrs);
+          }
+          const endpoint = yield* getEndpoint(functionName);
+          const tags = yield* LambdaWeb.listTags({ resource: fn.functionArn }).pipe(
+            Effect.map((r) => r.tags ?? {}),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string | undefined>),
+            ),
+          );
+          const attrs = {
+            ...output,
+            functionName: fn.functionName,
+            functionArn: fn.functionArn,
+            endpointName: endpoint?.endpointName ?? ENDPOINT_NAME,
+            endpointArn: endpoint?.endpointArn ?? `${fn.functionArn}/endpoint/${ENDPOINT_NAME}`,
+            domainName: endpoint?.domainName ?? output?.domainName ?? "",
+            url: endpoint ? `https://${endpoint.domainName}` : (output?.url ?? ""),
+            revisionId:
+              endpoint?.revisionWeights.find((w) => w.weight === 100)?.revisionId ??
+              output?.revisionId ??
+              "",
+            roleName,
+            roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
+            code: output?.code ?? { hash: "" },
+          } satisfies WebFunction["Attributes"];
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+        }),
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const names = yield* createNames(id, news.functionName);
+          // Prefer deployed identifiers over regenerated ones.
+          const functionName = output?.functionName ?? names.functionName;
+          const roleName = output?.roleName ?? names.roleName;
+
+          // Execution role + binding grants.
+          const roleArn = yield* ensureRole(id, roleName);
+          const bindingEnv = yield* syncBindings({
+            roleName,
+            policyName: names.policyName,
+            bindings,
+          });
+          yield* syncLogGroups({ id, functionName, roleName });
+
+          // Code: bundle, then upload to the versioned assets bucket Lambda
+          // reads revisions from.
+          const { identityHash, buildArchive } = yield* bundle(id, news);
+          const { archive, archiveHash } = yield* buildArchive;
+          const bucket = yield* assets.bucketName;
+          yield* ensureLambdaWebCodeAccess(bucket);
+          const key = yield* assets.uploadAsset(`web/${archiveHash}`, archive);
+
+          const sourcemap = news.build?.output?.sourcemap ?? true;
+          const enableSourceMaps =
+            news.bundle !== false &&
+            (sourcemap === "inline" ||
+              ((news.uploadSourceMap ?? true) && (sourcemap === true || sourcemap === "hidden")));
+          const userEnv = Object.fromEntries(
+            Object.entries({ ...bindingEnv, ...news.env }).map(([k, v]) => [
+              k,
+              typeof v === "string" ? v : JSON.stringify(v),
+            ]),
+          );
+          const nodeOptions = [
+            userEnv.NODE_OPTIONS,
+            enableSourceMaps ? "--enable-source-maps" : undefined,
+          ]
+            .filter((v): v is string => !!v)
+            .join(" ");
+          const desiredRevision: LambdaWeb.RevisionConfig = {
+            description: news.description,
+            buildConfig: {
+              codeConfig: { s3Object: { bucket, key } },
+              runtimeConfig: { runtime: news.runtime ?? "nodejs24.x" },
+            },
+            serviceConfig: {
+              executionRoleArn: roleArn,
+              timeoutSeconds: toTimeoutSeconds(news.timeout),
+              maxConcurrencyPerEnvironment: news.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+              environmentVariables: {
+                ...userEnv,
+                ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}),
+                ...alchemyEnv,
+                AWS_LAMBDA_NODEJS_ENTRYPOINT:
+                  news.bundle === false ? PREBUILT_ENTRY_FILE : ENTRY_FILE,
+              },
+            },
+          };
+
+          const endpointType = endpointTypeOf(news);
+          const regions = normalizeRegions(news.regions);
+
+          // Observe → ensure the function. `CreateWebFunction` creates the
+          // first revision and the endpoint together; both are re-observed
+          // and synced below like any existing function.
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...news.tags, ...internalTags };
+          let created: LambdaWeb.CreateWebFunctionResponse | undefined;
+          if ((yield* getFunction(functionName)) === undefined) {
+            created = yield* retryRolePropagation(
+              LambdaWeb.createWebFunction({
+                functionName,
+                revisionConfig: desiredRevision,
+                endpointConfig: {
+                  endpointName: ENDPOINT_NAME,
+                  endpointType,
+                  ...(endpointType === "MultiRegion" ? { regions } : {}),
+                  authType: news.authType ?? "ApplicationManaged",
+                  autoDeploymentMode: "Disabled",
+                  ...(news.maxEnvironments === undefined
+                    ? {}
+                    : { scalingConfig: { maxEnvironments: news.maxEnvironments } }),
+                  ...(news.rateLimit === undefined
+                    ? {}
+                    : { throttleConfig: { rateLimit: news.rateLimit } }),
+                },
+                tags: desiredTags,
+              }),
+              session,
+              functionName,
+            ).pipe(
+              // Lost a create race: the function exists, converge on it.
+              Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+            );
+          }
+          const fn = yield* waitForFunctionActive(functionName, session);
+
+          // Sync the revision: reuse the one the endpoint (or the create)
+          // points at when it already matches the desired config.
+          let endpoint = yield* getEndpoint(functionName);
+          const candidateIds = [
+            ...(endpoint?.revisionWeights.filter((w) => w.weight > 0).map((w) => w.revisionId) ??
+              []),
+            ...(created?.revision ? [created.revision.revisionId] : []),
+          ];
+          let revisionId: string | undefined;
+          for (const candidate of candidateIds) {
+            const observed = yield* getRevision(functionName, candidate);
+            if (observed !== undefined && revisionMatches(observed, desiredRevision)) {
+              revisionId = candidate;
+              break;
+            }
+          }
+          if (revisionId === undefined) {
+            const revision = yield* retryRolePropagation(
+              LambdaWeb.createWebFunctionRevision({
+                functionName,
+                description: desiredRevision.description,
+                buildConfig: desiredRevision.buildConfig,
+                serviceConfig: desiredRevision.serviceConfig,
+              }),
+              session,
+              functionName,
+            );
+            revisionId = revision.revisionId;
+          }
+          yield* waitForRevisionActive(functionName, revisionId, session);
+
+          // Sync the endpoint. Type and Regions are immutable: an endpoint
+          // that disagrees (adoption) is recreated.
+          // Lambda adds the home Region to a MultiRegion endpoint itself.
+          const { region: homeRegion } = yield* AWSEnvironment.current;
+          const remoteRegions = (rs: readonly string[] | undefined) =>
+            normalizeRegions(rs?.filter((r) => r !== homeRegion));
+          if (
+            endpoint !== undefined &&
+            (endpoint.endpointType !== endpointType ||
+              (endpointType === "MultiRegion" &&
+                !deepEqual(remoteRegions(endpoint.regions), remoteRegions(news.regions))))
+          ) {
+            yield* LambdaWeb.deleteWebFunctionEndpoint({
+              functionName,
+              endpointName: ENDPOINT_NAME,
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+            yield* waitForEndpointGone(functionName);
+            endpoint = undefined;
+          }
+          const settings = desiredEndpointSettings(news, revisionId);
+          if (endpoint === undefined) {
+            yield* LambdaWeb.createWebFunctionEndpoint({
+              functionName,
+              endpointName: ENDPOINT_NAME,
+              endpointType,
+              ...(endpointType === "MultiRegion" ? { regions } : {}),
+              authType: settings.authType,
+              autoDeploymentMode: settings.autoDeploymentMode,
+              revisionWeights: settings.revisionWeights,
+              ...(news.maxEnvironments === undefined
+                ? {}
+                : { scalingConfig: settings.scalingConfig }),
+              ...(news.rateLimit === undefined ? {} : { throttleConfig: settings.throttleConfig }),
+            }).pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ConflictException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 15,
+              }),
+            );
+          } else if (!endpointSettingsMatch(endpoint, settings)) {
+            yield* LambdaWeb.updateWebFunctionEndpoint({
+              functionName,
+              endpointName: ENDPOINT_NAME,
+              ...settings,
+            }).pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ConflictException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 15,
+              }),
+            );
+          }
+          const settled = yield* waitForEndpointSettled(functionName, session);
+
+          // Sync tags against the observed cloud tags.
+          const observedTags = yield* LambdaWeb.listTags({ resource: fn.functionArn }).pipe(
+            Effect.map((r) => r.tags ?? {}),
+          );
+          const { removed, upsert } = diffTags(
+            Object.fromEntries(
+              Object.entries(observedTags).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            ),
+            desiredTags,
+          );
+          if (upsert.length > 0) {
+            yield* LambdaWeb.tagResource({
+              resource: fn.functionArn,
+              tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
+            });
+          }
+          if (removed.length > 0) {
+            yield* LambdaWeb.untagResource({ resource: fn.functionArn, tagKeys: removed });
+          }
+
+          yield* session.note(`https://${settled.domainName}`);
+          return toAttributes(fn, settled, { roleName, roleArn }, { hash: identityHash });
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          // The role may already be gone — every step is idempotent. Grants
+          // go first; the log-group guard stays until the function is gone.
+          yield* iam.listRolePolicies({ RoleName: output.roleName }).pipe(
+            Effect.flatMap((policies) =>
+              Effect.forEach(
+                (policies.PolicyNames ?? []).filter((name) => name !== LOG_GROUP_GUARD_POLICY),
+                (policyName) =>
+                  iam
+                    .deleteRolePolicy({ RoleName: output.roleName, PolicyName: policyName })
+                    .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+              ),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
+          yield* iam.listAttachedRolePolicies({ RoleName: output.roleName }).pipe(
+            Effect.flatMap((policies) =>
+              Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+                iam
+                  .detachRolePolicy({ RoleName: output.roleName, PolicyArn: policy.PolicyArn! })
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+              ),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
+
+          yield* LambdaWeb.deleteWebFunction({ functionName: output.functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 15,
+            }),
+          );
+          yield* waitForFunctionGone(output.functionName);
+
+          yield* iam
+            .deleteRolePolicy({ RoleName: output.roleName, PolicyName: LOG_GROUP_GUARD_POLICY })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+          yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "DeleteConflictException" ||
+                error._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          );
+
+          // The role could never create these groups (see `syncLogGroups`),
+          // so one delete is final.
+          yield* Effect.forEach(logGroupNames(output.functionName), (logGroupName) =>
+            logs
+              .deleteLogGroup({ logGroupName })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+          );
+        }),
+        tail: ({ output }) => {
+          const session = Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const response = yield* logs.startLiveTail({
+              logGroupIdentifiers: [
+                `arn:aws:logs:${region}:${accountId}:log-group:${logGroupNames(output.functionName)[0]}`,
+              ],
+            });
+            if (!response.responseStream) {
+              return Stream.empty as Stream.Stream<LogLine>;
+            }
+            return response.responseStream.pipe(
+              Stream.flatMap((event) =>
+                "sessionUpdate" in event && event.sessionUpdate
+                  ? Stream.fromIterable(
+                      (event.sessionUpdate.sessionResults ?? []).flatMap((result): LogLine[] =>
+                        result.message
+                          ? [
+                              {
+                                timestamp: new Date(result.timestamp ?? Date.now()),
+                                message: result.message.trimEnd(),
+                              },
+                            ]
+                          : [],
+                      ),
+                    )
+                  : Stream.empty,
+              ),
+            );
+          });
+          return Stream.unwrap(session).pipe(Stream.retry(Schedule.spaced("1 second")));
+        },
+        logs: ({ output, options }: { output: WebFunction["Attributes"]; options: LogsInput }) =>
+          logs
+            .filterLogEvents({
+              logGroupName: logGroupNames(output.functionName)[0],
+              startTime: options.since?.getTime(),
+              limit: options.limit ?? 100,
+            })
+            .pipe(
+              Effect.map((response) =>
+                (response.events ?? []).flatMap((event): LogLine[] =>
+                  event.message
+                    ? [
+                        {
+                          timestamp: new Date(event.timestamp ?? Date.now()),
+                          message: event.message.trimEnd(),
+                        },
+                      ]
+                    : [],
+                ),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as LogLine[])),
+            ),
+      };
+    }),
+  );

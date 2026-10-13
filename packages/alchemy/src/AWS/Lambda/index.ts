@@ -76,5 +76,6 @@ export * from "./UpdateMicrovmImageVersion.ts";
 export * from "./UpdateMicrovmImageVersionHttp.ts";
 export * from "./UserPoolTriggerEventSource.ts";
 export * from "./Version.ts";
+export * from "./WebFunction.ts";
 export * from "./WebSocketEventSource.ts";
 export * from "./WirelessDestinationEventSource.ts";

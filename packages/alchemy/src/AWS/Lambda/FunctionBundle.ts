@@ -82,6 +82,22 @@ export interface FunctionBundleResult {
 
 type BundleServices = FileSystem.FileSystem | Path.Path | ChildProcessSpawner;
 
+/**
+ * Per-host overrides for the generated archive. The Event Function defaults
+ * apply when omitted; `AWS.Lambda.WebFunction` supplies its own HTTP-server
+ * entry and the address shim for prebuilt directories.
+ */
+export interface FunctionBundleOptions {
+  /**
+   * Source of the generated entry module that imports `main`. Replaces the
+   * Event Function `bootstrap` entry — and, unlike it, also wraps external
+   * (`isExternal`) modules.
+   */
+  readonly entry?: (importPath: string, isExternal: boolean) => string;
+  /** Extra files added to a prebuilt (`bundle: false`) archive. */
+  readonly prebuiltFiles?: ReadonlyArray<ZipFile>;
+}
+
 export const makeFunctionBundler = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -114,33 +130,43 @@ export const makeFunctionBundler = Effect.gen(function* () {
   // like nitro's `.output/server` are complete deployment units (entry +
   // chunks + their own `node_modules`); re-bundling them can orphan
   // CJS `require`s of exports-mapped subpaths.
-  const prebuiltCode: (realMain: string) => Effect.Effect<FunctionBundleResult, PlatformError> =
-    Effect.fn(function* (realMain: string) {
-      const lastSlash = realMain.lastIndexOf("/");
-      const dir = realMain.slice(0, lastSlash);
-      const files = yield* walkFiles(dir);
-      const archiveFiles: ZipFile[] = [];
-      const fileHashes: Record<string, string> = {};
-      for (const rel of files) {
-        const content = yield* fs.readFile(`${dir}/${rel}`);
-        archiveFiles.push({ path: rel, content });
-        fileHashes[rel] = yield* sha256(content);
-      }
-      const identityHash = yield* sha256Object(fileHashes);
-      const buildArchive = Effect.gen(function* () {
-        const archive = yield* zipFiles(archiveFiles);
-        return { archive, archiveHash: identityHash };
-      });
-      return { identityHash, buildArchive };
+  const prebuiltCode: (
+    realMain: string,
+    extraFiles?: ReadonlyArray<ZipFile>,
+  ) => Effect.Effect<FunctionBundleResult, PlatformError> = Effect.fn(function* (
+    realMain: string,
+    extraFiles?: ReadonlyArray<ZipFile>,
+  ) {
+    const lastSlash = realMain.lastIndexOf("/");
+    const dir = realMain.slice(0, lastSlash);
+    const files = yield* walkFiles(dir);
+    const archiveFiles: ZipFile[] = [];
+    const fileHashes: Record<string, string> = {};
+    for (const rel of files) {
+      const content = yield* fs.readFile(`${dir}/${rel}`);
+      archiveFiles.push({ path: rel, content });
+      fileHashes[rel] = yield* sha256(content);
+    }
+    for (const file of extraFiles ?? []) {
+      archiveFiles.push(file);
+      fileHashes[file.path] = yield* sha256(file.content);
+    }
+    const identityHash = yield* sha256Object(fileHashes);
+    const buildArchive = Effect.gen(function* () {
+      const archive = yield* zipFiles(archiveFiles);
+      return { archive, archiveHash: identityHash };
     });
+    return { identityHash, buildArchive };
+  });
 
   const resolveBundlePlan: (
     props: FunctionZipProps,
+    options?: FunctionBundleOptions,
   ) => Effect.Effect<
     FunctionBundlePlan,
     Bundle.BundleError | PlatformError,
     FileSystem.FileSystem | Path.Path
-  > = Effect.fn(function* (props: FunctionZipProps) {
+  > = Effect.fn(function* (props: FunctionZipProps, options?: FunctionBundleOptions) {
     const {
       output: buildOutput,
       install,
@@ -175,16 +201,19 @@ export const makeFunctionBundler = Effect.gen(function* () {
       return matchesConfiguredExternal(configuredExternal, moduleId, parentId, isResolved);
     };
 
-    const entryPlugin = props.isExternal
-      ? undefined
-      : virtualEntryPlugin(
-          (importPath) => `
+    const entry = options?.entry;
+    const entryPlugin = entry
+      ? virtualEntryPlugin((importPath) => entry(importPath, props.isExternal === true))
+      : props.isExternal
+        ? undefined
+        : virtualEntryPlugin(
+            (importPath) => `
 import { bootstrap } from "alchemy/Runtime/Bootstrap/Lambda";
 import entrypoint from ${JSON.stringify(importPath)};
 
 export default await bootstrap(entrypoint);
 `,
-        );
+          );
 
     return {
       inputOptions: {
@@ -287,13 +316,14 @@ export default await bootstrap(entrypoint);
   const bundleCode: (
     id: string,
     props: FunctionZipProps,
+    options?: FunctionBundleOptions,
   ) => Effect.Effect<FunctionBundleResult, Bundle.BundleError | PlatformError, BundleServices> =
-    Effect.fn(function* (_id: string, props: FunctionZipProps) {
+    Effect.fn(function* (_id: string, props: FunctionZipProps, options?: FunctionBundleOptions) {
       if (props.bundle === false) {
         const realMain = yield* TempRoot.resolveMainPath(props.main);
-        return yield* prebuiltCode(realMain);
+        return yield* prebuiltCode(realMain, options?.prebuiltFiles);
       }
-      const plan = yield* resolveBundlePlan(props);
+      const plan = yield* resolveBundlePlan(props, options);
       const bundleOutput = yield* Bundle.build(plan.inputOptions, plan.outputOptions, plan.extra);
       return yield* finishBundle(plan, bundleOutput);
     });
