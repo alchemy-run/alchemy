@@ -6,8 +6,10 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Drizzle on Durable Object SQLite; becomes an integration subpath */
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
 import type { SqlMigrations } from "../Cloudflare/Workers/SqlMigrations.ts";
+/* oxlint-enable alchemy/package-boundaries */
 
 /**
  * Migrations for {@link DurableObject} — the shape of the `migrations.js`

@@ -46,6 +46,7 @@ import { isBindingHost } from "./Function.ts";
 
 // The Worker is recognised structurally by its Type id so this module never
 // imports the Cloudflare module graph.
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 1: AWS bindings special-case Worker hosts; becomes a host-accepts-contract check
 const WORKER_TYPE_ID = "Cloudflare.Worker";
 export type WorkerHost = ResourceLike & {
   bind: (

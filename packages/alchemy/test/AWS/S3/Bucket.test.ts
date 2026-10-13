@@ -27,7 +27,7 @@ import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { resourceContext } from "../../Utils/ResourceContext.ts";
+import { resourceContext } from "../../Util/ResourceContext.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

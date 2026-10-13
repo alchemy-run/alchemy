@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { RecordsSink, type RecordsSinkProps, type RecordsSinkRecord } from "./RecordsSink.ts";
 import type { Table } from "./Table.ts";

@@ -19,8 +19,10 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: floci test services; become plugin `testServices` */
 import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
 import { flociServices } from "../AWS/Local/FlociServices.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";

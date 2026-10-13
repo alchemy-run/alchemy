@@ -17,6 +17,7 @@ import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: static auth provider list; becomes plugin `auth` */
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
@@ -33,6 +34,7 @@ import { RailwayAuth } from "../Railway/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { StripeAuth } from "../Stripe/AuthProvider.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import {
   loadConfigProvider,
   stackConfigLayer,

@@ -1,9 +1,12 @@
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { apiKeyCredentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as user from "@distilled.cloud/cloudflare/user";
+/* oxlint-enable alchemy/package-boundaries */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
 import {
   selectableScopes,
   tokenPolicies,
@@ -11,6 +14,7 @@ import {
   type TokenPolicy,
 } from "../../Cloudflare/Auth/TokenPolicy.ts";
 import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import { AlchemistInvalidInput, type Diagnostic } from "../Errors.ts";
 
 export interface GlobalCredentials {
@@ -23,6 +27,7 @@ export interface Account {
   readonly name: string;
 }
 
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
 export type { PermissionGroup, TokenPolicy } from "../../Cloudflare/Auth/TokenPolicy.ts";
 
 export interface TokenCatalog {

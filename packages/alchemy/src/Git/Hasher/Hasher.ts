@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths
 import { WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
 import { Random } from "../../Random.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
