@@ -87,12 +87,10 @@ export const finishNeonOutput = (output: BuildOutput) =>
     const entry = output.serverModules?.[0];
     if (entry?.name.endsWith(NEON_SERVE_ENTRY_FILE_NAME)) return output;
     if (!output.distDirectory || !entry || !output.nodeServe) {
-      return yield* Effect.fail(
-        new DeployTargetError({
-          platform: "neon",
-          message: "The framework did not provide a portable Node handler description for Neon.",
-        }),
-      );
+      return yield* new DeployTargetError({
+        platform: "neon",
+        message: "The framework did not provide a portable Node handler description for Neon.",
+      });
     }
     const name = path.join(path.dirname(entry.name), NEON_SERVE_ENTRY_FILE_NAME);
     let source = makeNeonServeEntrySource(output.nodeServe);

@@ -9,9 +9,20 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// Amazon FinSpace reached end of support on 2026-10-07
+// (https://docs.aws.amazon.com/finspace/latest/userguide/amazon-finspace-end-of-support.html).
+// The control-plane hostname finspace.<region>.amazonaws.com no longer has
+// A records in any region, so every control-plane call fails before reaching
+// AWS with:
+//   HttpClientError: Transport error (GET https://finspace.us-west-2.amazonaws.com/kx/environments)
+//   (cause: getaddrinfo ENOTFOUND finspace.us-west-2.amazonaws.com)
+// A transport failure can't be patched into a typed tag, so all control-plane
+// tests are gated behind AWS_TEST_FINSPACE=1 for accounts that still have access.
+const finspaceRetired = !process.env.AWS_TEST_FINSPACE;
+
 // Ungated typed-error probes: prove the distilled error union carries the
 // not-found tags the Kx providers' read/delete paths depend on.
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxEnvironment on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -23,7 +34,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxDatabase on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -38,7 +49,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxCluster on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -55,7 +66,7 @@ test.provider(
 
 // Probes for the scaling-group / volume binding operations: prove the typed
 // not-found tag so runtime consumers can catch it without casts.
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxScalingGroup on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -70,7 +81,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:finspace", "live"] },
 );
 
-test.provider(
+test.provider.skipIf(finspaceRetired)(
   "getKxVolume on a nonexistent environment fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
@@ -112,7 +123,7 @@ const assertKxEnvironmentDeleting = (environmentId: string) =>
 // what it created. KxCluster additionally needs a VPC and dedicated
 // capacity (~30+ min, billed per node-hour) — it is covered by the typed
 // probe above and exercised only in onboarded accounts.
-test.provider.skipIf(!process.env.AWS_TEST_FINSPACE)(
+test.provider.skipIf(finspaceRetired)(
   "create kdb environment + database, verify, update, destroy",
   (stack) =>
     Effect.gen(function* () {

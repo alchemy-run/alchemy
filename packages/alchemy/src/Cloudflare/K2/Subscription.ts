@@ -152,9 +152,9 @@ export const SubscriptionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const streamId = streamIdOf(news.stream);
       if (streamId === undefined) {
-        return yield* Effect.fail(
-          new SubscriptionStreamUnresolved({ message: "`stream` did not resolve to a stream ID" }),
-        );
+        return yield* new SubscriptionStreamUnresolved({
+          message: "`stream` did not resolve to a stream ID",
+        });
       }
       const name =
         output?.streamId === streamId

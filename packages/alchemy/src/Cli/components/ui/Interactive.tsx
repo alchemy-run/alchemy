@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import {
   measureElement,
@@ -41,8 +42,8 @@ export interface TerminalKey {
 export const useTerminalInput = (
   handler: (input: string, key: TerminalKey) => void,
   options?: { readonly active?: boolean },
-) => {
-  return useInput(
+) =>
+  useInput(
     (input, key) =>
       handler(input, {
         up: key.upArrow,
@@ -64,7 +65,6 @@ export const useTerminalInput = (
       }),
     { isActive: options?.active ?? true },
   );
-};
 
 /** Bracketed-paste input scoped the same way as {@link useTerminalInput}. */
 export const useTerminalPaste = (
@@ -297,6 +297,8 @@ export function Menu<Value>({
 
 export interface TextFieldProps {
   readonly placeholder?: string;
+  /** Text Tab fills into the empty field, e.g. the prompt's default. */
+  readonly completion?: string;
   readonly initialValue?: string;
   readonly value?: string;
   readonly mask?: string;
@@ -381,6 +383,7 @@ const visibleWindow = (
  */
 export function TextField({
   placeholder,
+  completion,
   initialValue = "",
   value: controlledValue,
   mask,
@@ -441,7 +444,10 @@ export function TextField({
       else if (key.end || (key.ctrl && input === "e")) setCursor(chars.length);
       else if (key.meta && input === "b") setCursor(wordBoundaryLeft(chars, cursor));
       else if (key.meta && input === "f") setCursor(wordBoundaryRight(chars, cursor));
-      else if (!key.ctrl && !key.meta && !key.tab) {
+      else if (key.tab && completion !== undefined && chars.length === 0) {
+        const completed = toGraphemes(completion);
+        update(completed, completed.length);
+      } else if (!key.ctrl && !key.meta && !key.tab) {
         const inserted = toGraphemes(sanitizeTextInsert(input));
         if (inserted.length > 0) {
           update(
@@ -950,8 +956,8 @@ export const filterChoices = <Value,>(choices: ReadonlyArray<Choice<Value>>, que
 export const useSelectedChoices = <Value,>(
   choices: ReadonlyArray<Choice<Value>>,
   initialValues: ReadonlyArray<Value>,
-) => {
-  return useState<ReadonlySet<number>>(
+) =>
+  useState<ReadonlySet<number>>(
     () =>
       new Set(
         initialValues.flatMap((value) => {
@@ -960,4 +966,3 @@ export const useSelectedChoices = <Value,>(
         }),
       ),
   );
-};

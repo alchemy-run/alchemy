@@ -151,8 +151,8 @@ test.provider(
 );
 
 // A live DataBrew job run spins up managed Spark capacity (billed per
-// node-hour, takes several minutes) — gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// node-hour, takes several minutes) — skipped under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
   "run a live recipe job to success",
   (stack) =>
     Effect.gen(function* () {

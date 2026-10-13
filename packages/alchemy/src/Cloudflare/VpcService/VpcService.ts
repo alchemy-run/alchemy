@@ -96,6 +96,10 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
+ *
+ * `VpcService` creates HTTP services. For a TCP service — e.g. a private
+ * database that Hyperdrive connects to — use
+ * `Cloudflare.Connectivity.DirectoryService` with `type: "tcp"`.
  * ### Creating a VPC Service
  * **Example:** Hostname through a tunnel
  * ```typescript
@@ -198,7 +202,7 @@ export const VpcServiceProvider = () =>
             accountId: acct,
             serviceId: output.serviceId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
       }
       if (!observed) {
         const match = yield* findServiceByName(name);
@@ -274,7 +278,7 @@ export const VpcServiceProvider = () =>
           })
           .pipe(
             Effect.map((s) => formatVpcService(s, output.accountId)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           );
       }
       const name = yield* createServiceName(id, olds?.name);

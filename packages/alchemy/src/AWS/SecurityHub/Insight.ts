@@ -82,11 +82,13 @@ export const InsightProvider = () =>
       const getInsight = (arn: string) =>
         securityhub.getInsights({ InsightArns: [arn] }).pipe(
           Effect.map((r) => r.Insights?.[0]),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          // The whole hub may be disabled — the insight is gone too.
-          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
-          // Security Hub reports an unknown insight ARN as invalid input.
-          Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            // The whole hub may be disabled — the insight is gone too.
+            InvalidAccessException: () => Effect.succeed(undefined),
+            // Security Hub reports an unknown insight ARN as invalid input.
+            InvalidInputException: () => Effect.succeed(undefined),
+          }),
         );
 
       const listInsights = securityhub.getInsights.pages({}).pipe(
@@ -176,9 +178,11 @@ export const InsightProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the insight (or the whole hub) may already be gone.
           yield* securityhub.deleteInsight({ InsightArn: output.insightArn }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("InvalidAccessException", () => Effect.void),
-            Effect.catchTag("InvalidInputException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              InvalidAccessException: () => Effect.void,
+              InvalidInputException: () => Effect.void,
+            }),
           );
         }),
       };

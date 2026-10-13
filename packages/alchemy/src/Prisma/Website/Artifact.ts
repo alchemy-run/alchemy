@@ -246,7 +246,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   for (const file of files) {
     if (excluded(path.relative(root, file)) || isPathWithin(dotAlchemy, file, runtimeBase))
       return yield* fail(`A website runtime dependency is a sensitive file: ${file}`);
-    const link = yield* fs.readLink(file).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const link = yield* fs.readLink(file).pipe(Effect.orElseSucceed(() => undefined));
     if (link !== undefined) {
       const target = yield* fs.realPath(file);
       links.set(file, target);

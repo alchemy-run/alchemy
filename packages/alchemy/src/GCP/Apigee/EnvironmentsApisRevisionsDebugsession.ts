@@ -310,9 +310,9 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
               : Effect.succeed([] as apigee.GoogleCloudApigeeV1ApiDebugSession[]),
           { concurrency: 4 },
         );
-        for (const [proxy, listed] of apis.flat().map((proxy, index) => {
-          return [proxy, sessions[index] ?? []] as const;
-        })) {
+        for (const [proxy, listed] of apis
+          .flat()
+          .map((proxy, index) => [proxy, sessions[index] ?? []] as const)) {
           const organizationId = segmentAfter(proxy.name ?? "", "organizations") ?? "";
           const api = lastSegment(proxy.name ?? "");
           for (const session of listed) {

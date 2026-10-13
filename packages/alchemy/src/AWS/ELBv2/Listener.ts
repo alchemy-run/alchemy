@@ -294,8 +294,10 @@ export const ListenerProvider = () =>
               ),
             ),
             // The LB may vanish between enumeration and per-LB listing.
-            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
-            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTags({
+              LoadBalancerNotFoundException: () => Effect.succeed([]),
+              ListenerNotFoundException: () => Effect.succeed([]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -326,8 +328,10 @@ export const ListenerProvider = () =>
             LoadBalancerArn: loadBalancerArn,
           })
           .pipe(
-            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              LoadBalancerNotFoundException: () => Effect.succeed(undefined),
+              ListenerNotFoundException: () => Effect.succeed(undefined),
+            }),
           );
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
       }

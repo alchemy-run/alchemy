@@ -96,9 +96,11 @@ export const ActionTargetProvider = () =>
       const getActionTarget = (arn: string) =>
         securityhub.describeActionTargets({ ActionTargetArns: [arn] }).pipe(
           Effect.map((r) => r.ActionTargets?.[0]),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-          // The whole hub may be disabled — the action target is gone too.
-          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            // The whole hub may be disabled — the action target is gone too.
+            InvalidAccessException: () => Effect.succeed(undefined),
+          }),
         );
 
       const buildAttrs = (arn: string, t: securityhub.ActionTarget) => ({
@@ -181,8 +183,10 @@ export const ActionTargetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the action target (or the whole hub) may be gone.
           yield* securityhub.deleteActionTarget({ ActionTargetArn: output.actionTargetArn }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            Effect.catchTag("InvalidAccessException", () => Effect.void),
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              InvalidAccessException: () => Effect.void,
+            }),
           );
         }),
       };

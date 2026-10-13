@@ -14,6 +14,12 @@ const { test } = Test.make({
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+// Project setup (one-time): the testing project's `(default)` database is
+// Datastore mode (the Datastore suites need it), created with
+//   gcloud firestore databases create --database='(default)' \
+//     --location=us-central1 --type=datastore-mode --project=PROJECT_ID
+// The probes below pin that the Firestore API rejects it with a typed tag.
 const defaultDocOf = (project: string) =>
   `projects/${project}/databases/(default)/documents/_alchemy/alchemy-missing`;
 

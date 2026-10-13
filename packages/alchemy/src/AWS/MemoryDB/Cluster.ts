@@ -474,14 +474,38 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // InvalidClusterStateFault — wait (bounded) for it to settle first.
           // A cluster already deleting (or gone) is success.
-          yield* waitUntilSettled(name).pipe(Effect.catch(() => Effect.void));
-          yield* memorydb.deleteCluster({ ClusterName: name }).pipe(
-            Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
+          const settled = yield* waitUntilSettled(name).pipe(Effect.orElseSucceed(() => undefined));
+          if (settled === undefined) {
+            return;
+          }
+          if (settled.Status !== "deleting") {
+            yield* memorydb.deleteCluster({ ClusterName: name }).pipe(
+              Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
+              Effect.retry({
+                while: (e) => e._tag === "InvalidClusterStateFault",
+                schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
+              }),
+              Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
+            );
+          }
+          // Wait until the cluster is actually gone: a `deleting` cluster
+          // still holds its subnet group and ACL, so dependents deleted right
+          // after fail with SubnetGroupInUseFault / InvalidACLStateFault.
+          // MemoryDB cluster deletion typically takes 5-10 minutes; budget
+          // ~15 min (60 * 15s).
+          yield* readCluster(name).pipe(
+            Effect.flatMap((cluster) =>
+              cluster === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new Error(
+                      `MemoryDB cluster '${name}' still deleting (status: ${cluster.Status})`,
+                    ),
+                  ),
+            ),
             Effect.retry({
-              while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
             }),
-            Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
           );
         }),
 

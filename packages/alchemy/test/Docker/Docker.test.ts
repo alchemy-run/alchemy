@@ -170,6 +170,28 @@ const buildScratchImage = Effect.fn(function* (
   }).pipe(Effect.provide(Layer.fresh(DockerLive)));
 });
 
+describe("Docker.image", (it) => {
+  it.effect(
+    "streams real pull output through deployment notes",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const notes: Array<{ message: string; kind?: string }> = [];
+        const session = {
+          note: (message: string, options?: { kind?: "status" | "output" }) =>
+            Effect.sync(() => {
+              notes.push({ message, kind: options?.kind });
+            }),
+        };
+        yield* docker.image.pull("alpine:3.21", "linux/amd64", undefined, session);
+        expect(notes.length).toBeGreaterThan(0);
+        expect(notes.every((note) => note.kind === "output")).toBe(true);
+        expect(notes.some((note) => note.message.includes("alpine:3.21"))).toBe(true);
+      }),
+    { tags: ["provider:docker", "local"], timeout: 120_000 },
+  );
+});
+
 describe("Docker.image publication", (it) => {
   for (const [name, version, platform] of [
     ["exports straight to the registry on Buildx >= 0.26", "v0.26.1", "linux/amd64"],

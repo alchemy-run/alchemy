@@ -78,6 +78,7 @@ export const QueryDatabaseLocal = Layer.effect(
           // ambient stack-eval context captured above; `Context<never>`
           // can't prove that statically, so erase the leftover R.
           Effect.provideContext(ambient),
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining requirements are satisfied by the captured ambient context
           (eff) => Effect.runPromise(eff as Effect.Effect<never, never>),
         ) as Promise<{
           result: Array<{ results?: unknown; success?: boolean | null; meta?: unknown }>;

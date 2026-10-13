@@ -1,9 +1,11 @@
 import * as NodeHttp from "node:http";
 import type * as NodeStream from "node:stream";
+import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
@@ -22,6 +24,7 @@ import {
   mergeSidecarLoopbackHostConfig,
 } from "./DockerLoopback.ts";
 import { makeDockerLoopbackForwarders } from "./internal/docker-loopback-forwarders.ts";
+import { makeDockerUpgradeRouter } from "./internal/docker-upgrade-router.ts";
 import { listenOnLoopback } from "./internal/listen-on-loopback.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
@@ -183,6 +186,10 @@ export const DockerLive = Layer.effect(
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
     const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
+    // Every container created through the proxy carries this runtime's label.
+    // Native containers can start from images nobody prepared (snapshots,
+    // managed `cloudflare/*` images), so per-image cleanup cannot find them.
+    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -218,7 +225,7 @@ export const DockerLive = Layer.effect(
               return endpoint
                 ? Effect.succeed(endpoint)
                 : Effect.fail(
-                    new ConfigError({
+                    ConfigError.make({
                       subtag: "DockerHostNotFound",
                       message: "Docker host not found",
                     }),
@@ -259,13 +266,24 @@ export const DockerLive = Layer.effect(
           const isCreateRequest =
             req.method === "POST" && req.url?.startsWith("/containers/create");
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
-            const original = yield* readJson<{ Image: string; Env: Array<string> }>(req);
+            const original = yield* readJson<{
+              Image: string;
+              Env: Array<string>;
+              Labels?: Record<string, string>;
+            }>(req);
             const image = registeredImages.get(original.Image);
+            // A native `start({ image })` can name an image that was never
+            // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
+            const pulled = yield* Effect.exit(
+              Cache.get(ensuredImages, image?.tag ?? original.Image),
+            );
+            if (Exit.isFailure(pulled)) return sendError(res, 500, Cause.pretty(pulled.cause));
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
                 Image: image?.tag ?? original.Image,
                 Env: mergeContainerCreateEnv(original.Env, image?.env),
+                Labels: { ...original.Labels, ...runtimeLabels },
               }),
             });
           }
@@ -278,6 +296,7 @@ export const DockerLive = Layer.effect(
             // 127.0.0.1). Native Linux maps it to 127.0.0.1 in this netns and
             // bind-mounts unix sockets; a SYN to the bridge IP is host INPUT (UFW).
             const original = yield* readJson<{
+              Labels?: Record<string, string>;
               HostConfig?: {
                 ExtraHosts?: Array<string>;
                 Binds?: Array<string>;
@@ -289,6 +308,7 @@ export const DockerLive = Layer.effect(
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
+                Labels: { ...original.Labels, ...runtimeLabels },
                 HostConfig: {
                   ...mergeSidecarLoopbackHostConfig(original.HostConfig, ports),
                   Sysctls: {
@@ -382,20 +402,19 @@ export const DockerLive = Layer.effect(
      */
     const pull = ({ imageUri, platform }: ContainerImage.Pull & { readonly platform?: string }) =>
       run(["pull", toPullRef(imageUri), ...(platform ? ["--platform", platform] : [])]).pipe(
-        Effect.mapError(
-          (cause) =>
-            new SystemError({
-              subtag: "DockerPullFailed",
-              message: `Failed to pull image "${imageUri}".`,
-              hint: "Ensure Docker is running and the image is available.",
-              detail: { bin, imageUri },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          SystemError.make({
+            subtag: "DockerPullFailed",
+            message: `Failed to pull image "${imageUri}".`,
+            hint: "Ensure Docker is running and the image is available.",
+            detail: { bin, imageUri },
+            cause,
+          }),
         ),
         Effect.flatMap((result) => {
           if (result.exitCode !== 0) {
             return Effect.fail(
-              new SystemError({
+              SystemError.make({
                 subtag: "DockerPullFailed",
                 message: `Failed to pull image "${imageUri}".`,
                 hint: "Ensure Docker is running and the image is available.",
@@ -415,6 +434,25 @@ export const DockerLive = Layer.effect(
 
     const inspect = (tag: string, format: string) =>
       Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
+
+    // `docker image inspect` prints the image id when present and empty
+    // stdout when absent, so only pull when the image is genuinely missing.
+    const pullIfMissing = (imageUri: string, platform?: string) =>
+      inspect(imageUri, "{{.Id}}").pipe(
+        Effect.orElseSucceed(() => undefined),
+        Effect.flatMap((id) =>
+          id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri, platform })),
+        ),
+      );
+    // workerd may create a container from an image nobody prepared, such as a
+    // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
+    const ensuredImages = yield* Cache.makeWith(
+      (image: string) => pullIfMissing(image, "linux/amd64"),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+      },
+    );
 
     const list = (ancestor: string) =>
       run([
@@ -438,6 +476,25 @@ export const DockerLive = Layer.effect(
         ),
       );
 
+    // Runs after the runtime (and its workerd) has shut down.
+    yield* Effect.addFinalizer(() =>
+      run([
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
+      ]).pipe(
+        Effect.flatMap(({ stdout }) => {
+          const ids = stdout.split("\n").filter((id) => id.trim() !== "");
+          return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
+        }),
+        Effect.timeout("30 seconds"),
+        Effect.withLogSpan("docker: remove runtime containers"),
+        Effect.ignore,
+      ),
+    );
+
     const docker = yield* Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
@@ -445,8 +502,16 @@ export const DockerLive = Layer.effect(
         Effect.flatMap(
           Effect.fnUntraced(function* (socketPath) {
             const forwarders = yield* makeDockerLoopbackForwarders({ bin, socketPath });
-            const port = yield* listenOnLoopback(makeDockerProxyServer(socketPath, forwarders));
-            return `127.0.0.1:${port}`;
+            const httpProxyPort = yield* listenOnLoopback(
+              makeDockerProxyServer(socketPath, forwarders),
+            );
+            // workerd connects to the router, which forwards `docker exec`
+            // streams to Docker directly and everything else to the proxy.
+            const router = yield* makeDockerUpgradeRouter({
+              dockerSocketPath: socketPath,
+              httpProxyPort,
+            });
+            return `127.0.0.1:${yield* listenOnLoopback(router)}`;
           }),
         ),
       ),
@@ -454,20 +519,13 @@ export const DockerLive = Layer.effect(
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
       // local-only tag that exists in the Docker daemon but resolves in no
       // registry (e.g. a locally-built dev image) — an unconditional
-      // `docker pull` there fails, this detached fiber dies, and every
+      // `docker pull` there fails, this startup fiber dies, and every
       // caller of `getWorkerdDockerConfiguration` (joined on first use)
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
       // exit rather than failing the effect), so only pull when the image
-      // is genuinely missing. Any failure to even run `inspect` (unlike
-      // `pull`, it doesn't normalize its error channel) falls back to the
-      // pre-existing pull behavior rather than failing here.
-      inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(
-        Effect.orElseSucceed(() => undefined),
-        Effect.flatMap((imageId) =>
-          imageId?.trim() ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
-        ),
-      ),
+      // is genuinely missing. The sidecar needs the host-native image.
+      pullIfMissing(containerEgressInterceptorImage),
       (socketPath) => ({
         localDocker: {
           socketPath,
@@ -516,24 +574,21 @@ export const DockerLive = Layer.effect(
             ),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
-            Effect.mapError(
-              (cause) =>
-                new SystemError({
-                  subtag: "DockerBuildFailed",
-                  message: `Failed to build image "${tag}".`,
-                  cause,
-                }),
+            Effect.mapError((cause) =>
+              SystemError.make({
+                subtag: "DockerBuildFailed",
+                message: `Failed to build image "${tag}".`,
+                cause,
+              }),
             ),
             Effect.flatMap((result) =>
-              ensureExitZero(
-                result,
-                ({ exitCode, stdout, stderr }) =>
-                  new SystemError({
-                    subtag: "DockerBuildFailed",
-                    message: `Failed to build image "${tag}".`,
-                    hint: buildFailureHint(stderr),
-                    detail: { bin, tag, exitCode, stdout, stderr },
-                  }),
+              ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
+                SystemError.make({
+                  subtag: "DockerBuildFailed",
+                  message: `Failed to build image "${tag}".`,
+                  hint: buildFailureHint(stderr),
+                  detail: { bin, tag, exitCode, stdout, stderr },
+                }),
               ),
             ),
           );
@@ -542,30 +597,27 @@ export const DockerLive = Layer.effect(
         pull({ ...image, platform: "linux/amd64" }).pipe(
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new SystemError({
-                    subtag: "DockerTagFailed",
-                    message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
-                    cause,
-                  }),
+              Effect.mapError((cause) =>
+                SystemError.make({
+                  subtag: "DockerTagFailed",
+                  message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                  cause,
+                }),
               ),
               Effect.flatMap((result) =>
-                ensureExitZero(
-                  result,
-                  ({ exitCode, stdout, stderr }) =>
-                    new SystemError({
-                      subtag: "DockerTagFailed",
-                      message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
-                      detail: {
-                        bin,
-                        imageUri: image.imageUri,
-                        tag,
-                        exitCode,
-                        stdout,
-                        stderr,
-                      },
-                    }),
+                ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
+                  SystemError.make({
+                    subtag: "DockerTagFailed",
+                    message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                    detail: {
+                      bin,
+                      imageUri: image.imageUri,
+                      tag,
+                      exitCode,
+                      stdout,
+                      stderr,
+                    },
+                  }),
                 ),
               ),
             ),
@@ -580,7 +632,7 @@ export const DockerLive = Layer.effect(
           Effect.flatMap((output) =>
             output === "0"
               ? Effect.fail(
-                  new ConfigError({
+                  ConfigError.make({
                     subtag: "ContainerNoExposedPorts",
                     message: `The container for "${tag}" does not expose any ports.`,
                     hint: "Add an EXPOSE instruction to the Dockerfile for any ports you intend to connect to.",
@@ -613,24 +665,26 @@ export const DockerLive = Layer.effect(
             );
           }),
           Effect.withLogSpan(`docker: remove containers for ${tag}`),
-          Effect.mapError(
-            (cause) =>
-              new SystemError({
-                subtag: "DockerRemoveContainerFailed",
-                message: `Failed to remove containers for "${tag}".`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            SystemError.make({
+              subtag: "DockerRemoveContainerFailed",
+              message: `Failed to remove containers for "${tag}".`,
+              cause,
+            }),
           ),
         ),
     });
   }),
 );
 
+/** Label identifying the runtime that created a container through the proxy. */
+export const RUNTIME_LABEL = "alchemy.runtime";
+
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;
 
 const dockerProxyError = (subtag: string, message: string) => (cause: unknown) =>
-  new SystemError({ subtag, message, cause });
+  SystemError.make({ subtag, message, cause });
 
 /** Forward `req` to the Docker socket, replacing its body when one is given. */
 const sendDockerRequest = (

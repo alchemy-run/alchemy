@@ -404,40 +404,34 @@ export const RuleGroupProvider = () =>
           const scope = output.scope;
           // A rule group still referenced by a web ACL (deletion propagation)
           // surfaces WAFAssociatedItemException — retry through it.
-          yield* retryAssociatedItem(
-            retryOptimisticLock(
-              Effect.gen(function* () {
-                const found = yield* withWafScope(
-                  scope,
-                  wafv2
-                    .getRuleGroup({
-                      Name: output.ruleGroupName,
-                      Scope: scope,
-                      Id: output.ruleGroupId,
-                    })
-                    .pipe(
-                      Effect.catchTag("WAFNonexistentItemException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    ),
-                );
-                if (!found?.RuleGroup || found.LockToken === undefined) {
-                  return;
-                }
-                yield* withWafScope(
-                  scope,
-                  wafv2
-                    .deleteRuleGroup({
-                      Name: output.ruleGroupName,
-                      Scope: scope,
-                      Id: output.ruleGroupId,
-                      LockToken: found.LockToken,
-                    })
-                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
-                );
-              }),
-            ),
-          );
+          yield* Effect.gen(function* () {
+            const found = yield* withWafScope(
+              scope,
+              wafv2
+                .getRuleGroup({
+                  Name: output.ruleGroupName,
+                  Scope: scope,
+                  Id: output.ruleGroupId,
+                })
+                .pipe(
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
+                ),
+            );
+            if (!found?.RuleGroup || found.LockToken === undefined) {
+              return;
+            }
+            yield* withWafScope(
+              scope,
+              wafv2
+                .deleteRuleGroup({
+                  Name: output.ruleGroupName,
+                  Scope: scope,
+                  Id: output.ruleGroupId,
+                  LockToken: found.LockToken,
+                })
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
+            );
+          }).pipe(retryOptimisticLock, retryAssociatedItem);
         }),
       };
     }),

@@ -49,14 +49,12 @@ export const awaitOperation = Effect.fn("AWS.CloudMap.awaitOperation")(function*
 ) {
   const operation = yield* untilTerminalStatus(sd.getOperation({ OperationId: operationId }));
   if (operation?.Status !== "SUCCESS") {
-    return yield* Effect.fail(
-      new CloudMapOperationFailed({
-        operationId,
-        status: operation?.Status,
-        errorCode: operation?.ErrorCode,
-        errorMessage: operation?.ErrorMessage,
-      }),
-    );
+    return yield* new CloudMapOperationFailed({
+      operationId,
+      status: operation?.Status,
+      errorCode: operation?.ErrorCode,
+      errorMessage: operation?.ErrorMessage,
+    });
   }
   return operation;
 });
@@ -230,11 +228,9 @@ export const ensureNamespace = <R>(
       }
       const namespace = yield* observeNamespace(type, name, namespaceId);
       if (namespace?.Id === undefined) {
-        return yield* Effect.fail(
-          new sd.NamespaceNotFound({
-            message: `namespace ${name} not visible after create`,
-          }),
-        );
+        return yield* sd.NamespaceNotFound.make({
+          message: `namespace ${name} not visible after create`,
+        });
       }
       return namespace;
     }),
@@ -249,7 +245,7 @@ export const fetchObservedTags = Effect.fn("AWS.CloudMap.fetchObservedTags")(fun
 ) {
   const tags = yield* sd.listTagsForResource({ ResourceARN: resourceArn }).pipe(
     Effect.map((response) => response.Tags ?? []),
-    Effect.catch(() => Effect.succeed([] as sd.Tag[])),
+    Effect.orElseSucceed(() => [] as sd.Tag[]),
   );
   return Object.fromEntries(tags.map((tag) => [tag.Key, tag.Value]));
 });

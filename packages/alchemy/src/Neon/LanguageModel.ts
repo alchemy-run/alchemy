@@ -108,7 +108,7 @@ export const makeLanguageModel = ({
         const response = yield* http.execute(request).pipe(
           Effect.mapError(() =>
             error(
-              new AiError.NetworkError({
+              AiError.NetworkError.make({
                 reason: "TransportError",
                 request: {
                   method: "POST",
@@ -141,7 +141,7 @@ export const makeLanguageModel = ({
           const message = choice.message;
           if (message.refusal)
             return yield* error(
-              new AiError.ContentPolicyError({
+              AiError.ContentPolicyError.make({
                 description: "Model refused the request",
               }),
             );
@@ -184,9 +184,9 @@ const error = (reason: AiError.AiError["reason"]) =>
     reason,
   });
 const invalidOutput = (description: string) =>
-  error(new AiError.InvalidOutputError({ description }));
+  error(AiError.InvalidOutputError.make({ description }));
 const invalidRequest = (description: string) =>
-  error(new AiError.InvalidRequestError({ description }));
+  error(AiError.InvalidRequestError.make({ description }));
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError(() => invalidOutput("Invalid Chat Completions response shape")),
@@ -200,11 +200,13 @@ const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Usage = Schema.Struct({
   prompt_tokens: Schema.optional(TokenCount),
   completion_tokens: Schema.optional(TokenCount),
-  prompt_tokens_details: Schema.optional(
-    Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(TokenCount) })),
+  prompt_tokens_details: Schema.Struct({ cached_tokens: Schema.optional(TokenCount) }).pipe(
+    Schema.NullOr,
+    Schema.optional,
   ),
-  completion_tokens_details: Schema.optional(
-    Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) })),
+  completion_tokens_details: Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) }).pipe(
+    Schema.NullOr,
+    Schema.optional,
   ),
 });
 const Content = Schema.NullOr(
@@ -219,53 +221,45 @@ const Completion = Schema.Struct({
       finish_reason: Schema.NullOr(Schema.String),
       message: Schema.Struct({
         content: Schema.optional(Content),
-        reasoning_content: Schema.optional(Schema.NullOr(Schema.String)),
-        refusal: Schema.optional(Schema.NullOr(Schema.String)),
-        tool_calls: Schema.optional(
-          Schema.Array(
-            Schema.Struct({
-              id: Schema.String,
-              type: Schema.Literal("function"),
-              function: Schema.Struct({
-                name: Schema.String,
-                arguments: Schema.String,
-              }),
-            }),
-          ),
-        ),
+        reasoning_content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        refusal: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        tool_calls: Schema.Struct({
+          id: Schema.String,
+          type: Schema.Literal("function"),
+          function: Schema.Struct({
+            name: Schema.String,
+            arguments: Schema.String,
+          }),
+        }).pipe(Schema.Array, Schema.optional),
       }),
     }),
   ),
-  usage: Schema.optional(Schema.NullOr(Usage)),
+  usage: Usage.pipe(Schema.NullOr, Schema.optional),
 });
 const Chunk = Schema.Struct({
   choices: Schema.Array(
     Schema.Struct({
       index: TokenCount,
-      finish_reason: Schema.optional(Schema.NullOr(Schema.String)),
+      finish_reason: Schema.String.pipe(Schema.NullOr, Schema.optional),
       delta: Schema.Struct({
-        content: Schema.optional(Schema.NullOr(Schema.String)),
-        reasoning_content: Schema.optional(Schema.NullOr(Schema.String)),
-        refusal: Schema.optional(Schema.NullOr(Schema.String)),
-        tool_calls: Schema.optional(
-          Schema.Array(
+        content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        reasoning_content: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        refusal: Schema.String.pipe(Schema.NullOr, Schema.optional),
+        tool_calls: Schema.Struct({
+          index: TokenCount,
+          id: Schema.optional(Schema.String),
+          type: Schema.optional(Schema.Literal("function")),
+          function: Schema.optional(
             Schema.Struct({
-              index: TokenCount,
-              id: Schema.optional(Schema.String),
-              type: Schema.optional(Schema.Literal("function")),
-              function: Schema.optional(
-                Schema.Struct({
-                  name: Schema.optional(Schema.String),
-                  arguments: Schema.optional(Schema.String),
-                }),
-              ),
+              name: Schema.optional(Schema.String),
+              arguments: Schema.optional(Schema.String),
             }),
           ),
-        ),
+        }).pipe(Schema.Array, Schema.optional),
       }),
     }),
   ),
-  usage: Schema.optional(Schema.NullOr(Usage)),
+  usage: Usage.pipe(Schema.NullOr, Schema.optional),
 });
 const ErrorBody = Schema.Struct({
   error: Schema.Struct({
@@ -281,14 +275,14 @@ const httpError = (
     // Never retain upstream bodies, headers or request objects in public errors.
     const body = yield* response.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ErrorBody)),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     const status = response.status;
     if (status === 403 && body?.error.message === "ai gateway not enabled for account")
-      return yield* error(new AiError.QuotaExhaustedError({}));
+      return yield* error(AiError.QuotaExhaustedError.make({}));
     if (status === 401 || status === 403)
       return yield* error(
-        new AiError.AuthenticationError({
+        AiError.AuthenticationError.make({
           kind: status === 401 ? "InvalidKey" : "InsufficientPermissions",
         }),
       );
@@ -297,11 +291,11 @@ const httpError = (
       body?.error.code === "REQUEST_LIMIT_EXCEEDED" ||
       body?.error.code === "insufficient_quota"
     )
-      return yield* error(new AiError.QuotaExhaustedError({}));
+      return yield* error(AiError.QuotaExhaustedError.make({}));
     if (status === 429) {
       const seconds = Number(response.headers["retry-after"]);
       return yield* error(
-        new AiError.RateLimitError({
+        AiError.RateLimitError.make({
           ...(Number.isFinite(seconds) && seconds >= 0
             ? { retryAfter: Duration.seconds(seconds) }
             : {}),
@@ -310,7 +304,7 @@ const httpError = (
     }
     if (status >= 500)
       return yield* error(
-        new AiError.InternalProviderError({
+        AiError.InternalProviderError.make({
           description: `Neon AI Gateway returned HTTP ${status}`,
         }),
       );
@@ -341,7 +335,7 @@ const usage = (value: typeof Usage.Type | null | undefined) => {
   const cached = value?.prompt_tokens_details?.cached_tokens;
   const output = value?.completion_tokens;
   const reasoning = value?.completion_tokens_details?.reasoning_tokens;
-  return new Response.Usage({
+  return Response.Usage.make({
     inputTokens: {
       total: input,
       uncached: input === undefined ? undefined : Math.max(0, input - (cached ?? 0)),
@@ -449,7 +443,7 @@ const requestBody = (
             try: () => toCodecOpenAI(responseFormat.schema).jsonSchema,
             catch: () =>
               error(
-                new AiError.UnsupportedSchemaError({
+                AiError.UnsupportedSchemaError.make({
                   description: "Schema is not supported by OpenAI structured output",
                 }),
               ),
@@ -528,7 +522,7 @@ const completionStream = (
             if (!event.data) return parts;
             if (event.event === "error")
               return yield* error(
-                new AiError.InternalProviderError({
+                AiError.InternalProviderError.make({
                   description: "Neon AI Gateway stream reported an error",
                 }),
               );
@@ -542,7 +536,7 @@ const completionStream = (
               const delta = choice.delta;
               if (delta.refusal)
                 return yield* error(
-                  new AiError.ContentPolicyError({
+                  AiError.ContentPolicyError.make({
                     description: "Model refused the request",
                   }),
                 );

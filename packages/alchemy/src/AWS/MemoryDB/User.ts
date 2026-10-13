@@ -199,8 +199,10 @@ export const UserProvider = () =>
                 })),
               })
               .pipe(
-                Effect.catchTag("UserAlreadyExistsFault", () => Effect.void),
-                Effect.catchTag("DuplicateUserNameFault", () => Effect.void),
+                Effect.catchTags({
+                  UserAlreadyExistsFault: () => Effect.void,
+                  DuplicateUserNameFault: () => Effect.void,
+                }),
               );
             observed = yield* waitUntilActive(name);
           }

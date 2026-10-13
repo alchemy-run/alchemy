@@ -153,7 +153,7 @@ export const makeHandler = (entrypoint: unknown) => {
         ),
       ) as Effect.Effect<unknown>,
     );
-    return Effect.runPromise(Deferred.await(dispatch));
+    return dispatch.pipe(Deferred.await, Effect.runPromise);
   };
 
   const ready = start();

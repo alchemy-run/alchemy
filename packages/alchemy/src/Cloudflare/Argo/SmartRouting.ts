@@ -121,8 +121,10 @@ export const SmartRoutingProvider = () =>
             // subscription reject every read with the typed entitlement
             // tag (code 1015); skip them. Zones deleted out-of-band
             // surface InvalidObjectIdentifier.
-            Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
-            Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotAuthorized: () => Effect.succeed(undefined),
+              InvalidObjectIdentifier: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -145,10 +147,12 @@ export const SmartRoutingProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
-        // Argo subscription removed out-of-band — the setting is no
-        // longer visible or manageable on the zone.
-        Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          InvalidObjectIdentifier: () => Effect.succeed(undefined),
+          // Argo subscription removed out-of-band — the setting is no
+          // longer visible or manageable on the zone.
+          NotAuthorized: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -190,16 +194,20 @@ export const SmartRoutingProvider = () =>
       // Observe — if the zone is gone, or the Argo subscription was
       // removed out-of-band, the setting is no longer ours to restore.
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
-        Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          InvalidObjectIdentifier: () => Effect.succeed(undefined),
+          NotAuthorized: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
       if (toValue(observed.value) === initialValue) return;
       yield* argo.patchSmartRouting({ zoneId, value: initialValue }).pipe(
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.void),
-        Effect.catchTag("NotAuthorized", () => Effect.void),
+        Effect.catchTags({
+          InvalidObjectIdentifier: () => Effect.void,
+          NotAuthorized: () => Effect.void,
+        }),
       );
     }),
   });

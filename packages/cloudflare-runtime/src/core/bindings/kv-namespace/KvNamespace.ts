@@ -49,7 +49,7 @@ export const KvNamespaceLive = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "KvNamespace",
           message: "Cannot configure KV persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
@@ -57,15 +57,14 @@ export const KvNamespaceLive = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "kv");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "KvNamespace",
-              message: `Failed to create KV persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "KvNamespace",
+            message: `Failed to create KV persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -147,7 +146,7 @@ export const KvNamespaceLive = Layer.effect(
 export const local = (props: KvNamespaceProps): BindingHook<KvNamespace> =>
   Plugin.use(KvNamespace, (kv) =>
     Effect.map(
-      kv.api.register({ namespaceId: props.id ?? props.binding }),
+      kv.api.register({ namespaceId: props.id ?? props.binding, mode: props.mode }),
       (service): WorkerdConfig.Worker_Binding => ({
         name: props.binding,
         kvNamespace: service,

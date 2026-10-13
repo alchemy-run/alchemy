@@ -78,6 +78,7 @@ export const makeWorkflowBridge =
         // Step attempts and rollback handlers use separate scopes.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- run outcome is inspected via the Exit; user fn's E/R are erased at the bridge
           fn(event.payload).pipe(
             Effect.provide(
               Layer.mergeAll(
@@ -150,15 +151,13 @@ export const wrapWorkflowStep = (
       ? {
           // Native compensation may run after this step and the run scope have closed.
           rollback: async (context: any) => {
-            const exit = await Effect.runPromiseExit(
-              Effect.scoped(
-                rollbackEffect({ error: context.error, output: context.output }) as Effect.Effect<
-                  void,
-                  unknown,
-                  Scope.Scope
-                >,
-              ),
-            );
+            const exit = await (
+              rollbackEffect({ error: context.error, output: context.output }) as Effect.Effect<
+                void,
+                unknown,
+                Scope.Scope
+              >
+            ).pipe(Effect.scoped, Effect.runPromiseExit);
             if (Exit.isFailure(exit)) throw await callbackFailure(exit.cause, name, identity);
           },
           rollbackConfig: definedStepConfig(options.rollbackConfig),

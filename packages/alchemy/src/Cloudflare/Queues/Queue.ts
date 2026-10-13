@@ -231,7 +231,7 @@ export const ProviderLive = () =>
         Effect.catchTag("QueueInUseByWorkerBinding", (cause) =>
           Effect.gen(function* () {
             const removed = yield* deleteOwnedProducerScripts(output.accountId, output.queueId);
-            if (removed === 0) return yield* Effect.fail(cause);
+            if (removed === 0) return yield* cause;
             return yield* attempt;
           }),
         ),

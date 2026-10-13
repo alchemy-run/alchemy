@@ -299,29 +299,25 @@ const waitForClusterStatus = (
       if (target === "DELETED") {
         if (response === undefined || status === "DELETED") return;
         if (status === "DELETE_FAILED") {
-          return yield* Effect.fail(
-            new KxClusterProvisioningFailed({
-              clusterName,
-              status,
-              statusReason: response.statusReason,
-            }),
-          );
+          return yield* new KxClusterProvisioningFailed({
+            clusterName,
+            status,
+            statusReason: response.statusReason,
+          });
         }
-        return yield* Effect.fail(new KxClusterNotReady({ clusterName, status }));
+        return yield* new KxClusterNotReady({ clusterName, status });
       }
       if (status === "RUNNING") return;
       if (status === "CREATE_FAILED") {
-        return yield* Effect.fail(
-          new KxClusterProvisioningFailed({
-            clusterName,
-            status,
-            statusReason: response?.statusReason,
-          }),
-        );
+        return yield* new KxClusterProvisioningFailed({
+          clusterName,
+          status,
+          statusReason: response?.statusReason,
+        });
       }
       // response === undefined right after create is eventual consistency —
       // keep polling on the bounded schedule.
-      return yield* Effect.fail(new KxClusterNotReady({ clusterName, status }));
+      return yield* new KxClusterNotReady({ clusterName, status });
     }),
   );
 

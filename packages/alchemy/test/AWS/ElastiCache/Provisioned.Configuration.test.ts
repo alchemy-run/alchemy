@@ -22,7 +22,7 @@ const listTagsWhenAvailable = (resourceName: string) =>
     }),
   );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "updates replication-group tags and VPC security groups in place",
   (stack) =>
     Effect.gen(function* () {

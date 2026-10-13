@@ -280,7 +280,7 @@ export const PipelineProvider = () =>
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codepipeline
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         const { removed, upsert } = diffTags(toTagRecord(observed?.tags), desiredTags);
         if (upsert.length > 0) {
           yield* codepipeline.tagResource({
@@ -319,7 +319,7 @@ export const PipelineProvider = () =>
             .listTagsForResource({ resourceArn: attrs.pipelineArn })
             .pipe(
               Effect.map((res) => toTagRecord(res.tags)),
-              Effect.catch(() => Effect.succeed({})),
+              Effect.orElseSucceed(() => ({})),
             );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),

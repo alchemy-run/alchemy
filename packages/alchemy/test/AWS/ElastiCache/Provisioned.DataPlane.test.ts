@@ -32,7 +32,7 @@ type ConnectionProbe = {
   };
 };
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "connects from a VPC Lambda to provisioned Valkey and Memcached",
   (stack) =>
     Effect.gen(function* () {

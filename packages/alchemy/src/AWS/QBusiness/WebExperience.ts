@@ -205,30 +205,24 @@ const waitForWebExperienceSettled = (
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new WebExperienceNotReady({
-            webExperienceId,
-            status: described.status,
-          }),
-        );
+        return yield* new WebExperienceNotReady({
+          webExperienceId,
+          status: described.status,
+        });
       }
       if (described?.status === "ACTIVE" || described?.status === "PENDING_AUTH_CONFIG") {
         return;
       }
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(
-          new WebExperienceProvisioningFailed({
-            webExperienceId,
-            message: described.error?.errorMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new WebExperienceNotReady({
+        return yield* new WebExperienceProvisioningFailed({
           webExperienceId,
-          status: described?.status,
-        }),
-      );
+          message: described.error?.errorMessage,
+        });
+      }
+      return yield* new WebExperienceNotReady({
+        webExperienceId,
+        status: described?.status,
+      });
     }),
   );
 

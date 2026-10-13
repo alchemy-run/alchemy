@@ -125,8 +125,10 @@ export const SettingsProvider = () =>
             // Plan-gated or partial zones reject the route; a zone the token
             // still can't read (persistent 403) isn't ours to enumerate —
             // skip both rather than failing the whole listing.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              InvalidRoute: () => Effect.succeed(undefined),
+              Forbidden: () => Effect.succeed(undefined),
+            }),
           ),
         { concurrency: 10 },
       );

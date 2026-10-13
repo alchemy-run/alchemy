@@ -243,6 +243,7 @@ export const makeBlobStoreR2 = (bucket: ReadWriteBucketClient): BlobStoreShape =
 export const BlobStoreR2 = (
   bucket: Parameters<typeof Cloudflare.R2.ReadWriteBucket>[0],
 ): Layer.Layer<BlobStore, never, Cloudflare.R2.ReadWriteBucket> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- declaration-Effect requirement is resolved at stack eval, see comment at the cast below
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {

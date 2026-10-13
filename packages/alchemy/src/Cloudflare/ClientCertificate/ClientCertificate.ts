@@ -323,8 +323,10 @@ export const ClientCertificateProvider = () =>
         .pipe(
           // Races with an out-of-band revoke/delete are convergence, not
           // failure.
-          Effect.catchTag("ClientCertificateNotFound", () => Effect.void),
-          Effect.catchTag("ClientCertificateAlreadyRevoked", () => Effect.void),
+          Effect.catchTags({
+            ClientCertificateNotFound: () => Effect.void,
+            ClientCertificateAlreadyRevoked: () => Effect.void,
+          }),
         );
     }),
   });

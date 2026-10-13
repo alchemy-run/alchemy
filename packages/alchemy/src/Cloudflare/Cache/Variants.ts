@@ -217,9 +217,11 @@ export const VariantsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* cache.getVariant({ zoneId }).pipe(
         // The setting has never been written (or was deleted) — gone.
-        Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)),
-        // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTags({
+          VariantsNotConfigured: () => Effect.succeed(undefined),
+          // Zone deleted out-of-band — the setting is gone with it.
+          InvalidRoute: () => Effect.succeed(undefined),
+        }),
       );
       if (observed === undefined) return undefined;
       // The setting is a zone singleton with no ownership tags — a cold
@@ -253,8 +255,10 @@ export const VariantsProvider = () =>
       // re-delete after a crashed run (or an out-of-band zone delete)
       // succeeds idempotently.
       yield* cache.deleteVariant({ zoneId }).pipe(
-        Effect.catchTag("VariantsNotConfigured", () => Effect.void),
-        Effect.catchTag("InvalidRoute", () => Effect.void),
+        Effect.catchTags({
+          VariantsNotConfigured: () => Effect.void,
+          InvalidRoute: () => Effect.void,
+        }),
       );
     }),
   });

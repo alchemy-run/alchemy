@@ -377,9 +377,11 @@ export const WaitingRoomProvider = () =>
         })
         .pipe(
           // Already gone (code 1001) — deletion is idempotent.
-          Effect.catchTag("WaitingRoomNotFound", () => Effect.void),
-          // Zone deleted out-of-band — the room is gone with it.
-          Effect.catchTag("InvalidRoute", () => Effect.void),
+          Effect.catchTags({
+            WaitingRoomNotFound: () => Effect.void,
+            // Zone deleted out-of-band — the room is gone with it.
+            InvalidRoute: () => Effect.void,
+          }),
         );
     }),
 
@@ -401,8 +403,10 @@ export const WaitingRoomProvider = () =>
             ),
             // Plan-gated / partial-permission zones reject the route, and a
             // zone deleted out-of-band has no rooms; skip both.
-            Effect.catchTag("Forbidden", () => Effect.succeed([] as Attributes[])),
-            Effect.catchTag("InvalidRoute", () => Effect.succeed([] as Attributes[])),
+            Effect.catchTags({
+              Forbidden: () => Effect.succeed([] as Attributes[]),
+              InvalidRoute: () => Effect.succeed([] as Attributes[]),
+            }),
           ),
         { concurrency: 10 },
       );
@@ -420,8 +424,10 @@ type ObservedRoom = waitingRooms.GetWaitingRoomResponse;
 const getRoom = (zoneId: string, waitingRoomId: string) =>
   waitingRooms.getWaitingRoom({ zoneId, waitingRoomId }).pipe(
     Effect.map((room): ObservedRoom | undefined => room),
-    Effect.catchTag("WaitingRoomNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTags({
+      WaitingRoomNotFound: () => Effect.succeed(undefined),
+      InvalidRoute: () => Effect.succeed(undefined),
+    }),
   );
 
 /**

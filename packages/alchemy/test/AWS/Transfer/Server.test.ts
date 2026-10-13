@@ -40,9 +40,9 @@ const assertServerGone = (serverId: string) =>
   );
 
 // A running Transfer server is billed hourly. Provisioning to ONLINE takes a
-// few minutes. The full lifecycle is gated behind AWS_TEST_SLOW=1 and always
+// few minutes. The full lifecycle is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create SFTP server + service-managed user, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
