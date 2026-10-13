@@ -11,7 +11,8 @@ description: Run a domain model in a single process, for tests and for apps that
 // test/bankInMemory.ts
 import * as Domain from "alchemy/Domain";
 import * as Layer from "effect/Layer";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
 import { SessionLive } from "../src/Session.ts";
@@ -19,12 +20,12 @@ import { StripePayments } from "../src/Settlement/StripePayments.ts";
 
 // The model, its external systems, and the middleware its Apis declare: what a Worker would serve.
 export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
-  Layer.provideMerge(Bank.layer(BankPolicies)),
-  Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments)),
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments, MemoryLedgerStore)),
 );
 ```
 
-Policies run for real, and views catch up just after each command, as they do on Cloudflare.
+Policies and projections run for real, and views catch up just after each command, as they do on Cloudflare.
 
 ## Call it through an Api
 

@@ -110,14 +110,15 @@ const fromAuthorization = (headers: Headers.Headers): Option.Option<Actor> =>
  * production, sign the cookie (or keep sessions server-side) and verify a
  * Cloudflare Access JWT for agents.
  */
+/** Who a request is from: its session cookie (browsers), or `Authorization` (scripts). */
+export const actorOf = (headers: Headers.Headers): Option.Option<Actor> =>
+  Option.orElse(fromCookie(headers), () => fromAuthorization(headers));
+
 export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
-  Option.match(
-    Option.orElse(fromCookie(headers), () => fromAuthorization(headers)),
-    {
-      onNone: () => Effect.fail(new Unauthorized()),
-      onSome: (actor) => Effect.provideService(effect, CurrentActor, actor),
-    },
-  ),
+  Option.match(actorOf(headers), {
+    onNone: () => Effect.fail(new Unauthorized()),
+    onSome: (actor) => Effect.provideService(effect, CurrentActor, actor),
+  }),
 );
 
 const SignIn = Schema.Struct({ customerId: CustomerId });

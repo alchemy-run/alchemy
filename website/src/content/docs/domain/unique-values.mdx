@@ -123,7 +123,9 @@ See [Sagas and compensation](/domain/sagas) for why the claim comes first.
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
 import { customer } from "../src/Actor.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
 import { ClaimUsername, UsernameClaimed, UsernameTaken } from "../src/Customer/ClaimUsername.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
@@ -136,7 +138,7 @@ import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 const sam = Username.make("sam");

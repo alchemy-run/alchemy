@@ -114,7 +114,9 @@ import { Account } from "../src/Account/Account.ts";
 import { MoneyDeposited } from "../src/Account/DepositMoney.ts";
 import { AccountOpened } from "../src/Account/OpenAccount.ts";
 import { agent, customer } from "../src/Actor.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
@@ -125,7 +127,7 @@ import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTrans
 import { Transfer } from "../src/Transfer/Transfer.ts";
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 const sam = customer("c-1");

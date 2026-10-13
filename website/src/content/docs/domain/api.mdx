@@ -5,7 +5,7 @@ description: How an Api publishes a model to one kind of client, how it's served
 
 import DAG from "../../../components/DAG.astro";
 
-An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views and aggregates it may read. Everything else in the model stays private.
+An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views, streams and aggregates it may read. Everything else in the model stays private.
 
 An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers declaring one, serving it, and calling it.
 

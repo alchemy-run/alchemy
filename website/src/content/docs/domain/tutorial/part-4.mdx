@@ -294,7 +294,7 @@ A view guards its reads the same way. `validate` runs on every read, and again o
 ```diff lang="typescript"
 // test/Account.test.ts
 import { Account } from "../src/Account.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
 +import { CustomerId } from "../src/CustomerId.ts";
 import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
@@ -304,7 +304,7 @@ import { NotOpen } from "../src/NotOpen.ts";
 ```diff lang="typescript"
 // test/Account.test.ts
 
-const story = Story.make(Bank, { layer: BankPolicies });
+const story = Story.make(Bank, { layer: BankHandlers });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
 const account = Account.ref("a-1");
 
@@ -355,7 +355,7 @@ it.effect("refuses to withdraw more than the balance", () =>
 ```diff lang="typescript"
 // test/views.test.ts
 import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
 +import { CustomerId } from "../src/CustomerId.ts";
 import { DepositMoney } from "../src/DepositMoney.ts";
@@ -365,7 +365,7 @@ import { AccountOpened } from "../src/OpenAccount.ts";
 ```diff lang="typescript"
 // test/views.test.ts
 
-const story = Story.make(Bank, { layer: BankPolicies });
+const story = Story.make(Bank, { layer: BankHandlers });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
 const account = Account.ref("a-1");
 
@@ -388,7 +388,7 @@ it.effect("the statement has one line per movement", () =>
 ```diff lang="typescript"
 // test/registration.test.ts
 import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 +import { CurrentActor } from "../src/CurrentActor.ts";
 import { Customer } from "../src/Customer.ts";
 +import { CustomerId } from "../src/CustomerId.ts";
@@ -396,7 +396,7 @@ import { AccountOpened } from "../src/OpenAccount.ts";
 -import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.ts";
 +import { CustomerRegistered, NotYou, RegisterCustomer } from "../src/RegisterCustomer.ts";
 
-const story = Story.make(Bank, { layer: BankPolicies });
+const story = Story.make(Bank, { layer: BankHandlers });
 const sam = Customer.ref("c-1");
 const samsAccount = Account.ref("c-1-main");
 +const as = (customerId: string) =>
@@ -453,14 +453,14 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AccountId } from "../src/AccountId.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 import { BankApi } from "../src/BankApi.ts";
 import { CustomerId } from "../src/CustomerId.ts";
 import { SessionLive, sessionClient } from "../src/Session.ts";
 
 // The bank in memory, with the same middleware a Worker would serve.
 const World = SessionLive.pipe(
-  Layer.provideMerge(Bank.layer(BankPolicies).pipe(Layer.provide(Domain.InMemory))),
+  Layer.provideMerge(Bank.layer(BankHandlers).pipe(Layer.provide(Domain.InMemory))),
 );
 
 const signedInAs = (customerId: string) =>

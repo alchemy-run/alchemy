@@ -179,4 +179,6 @@ validate: Effect.fn(function* (_request, summary) {
 
 `validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
 
-Next, [Policy](/domain/policy) reacts to events by doing something, rather than remembering something.
+Every key keeps an input log: each delivery it applied, in order, kept for good. A view's state is a fold of that log.
+
+Next, [Projection](/domain/projection) writes events into a store you own, when a view's built-in store isn't the right one.

@@ -153,13 +153,15 @@ import { Account } from "../src/Account/Account.ts";
 import { AccountClosed } from "../src/Account/CloseAccount.ts";
 import { AccountOpened } from "../src/Account/OpenAccount.ts";
 import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");

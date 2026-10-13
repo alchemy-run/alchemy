@@ -13,7 +13,7 @@ That's a different kind of rule from an aggregate's. An aggregate enforces invar
 
 ## Declare what triggers it
 
-A policy names one source, an aggregate or a view, and the events from it that it reacts to.
+A policy names its source, an aggregate or a view, and the events from it that it reacts to.
 
 ```typescript title="src/MainAccountProvisioning.ts"
 export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
@@ -23,6 +23,8 @@ export class MainAccountProvisioning extends Domain.Policy("MainAccountProvision
 ```
 
 The declaration is all the model needs to deliver the right events. Add it to the model's `policies`.
+
+`from` can also list several sources. Each source's events still arrive in that source's order, but there is no order between them: see [Partition it by key](#partition-it-by-key).
 
 ## Implement it as a Layer
 
@@ -43,7 +45,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 The handler receives the event and its `source`, the instance that recorded it. Here the source is the customer who registered, and the policy opens an account whose id is derived from theirs.
 
-You pass the implementation to the model when you run it: `Bank.layer(BankPolicies)`. See [Domain model](/domain/model#declare-the-model).
+You pass the implementation to the model when you run it: `Bank.layer(BankHandlers)`. See [Domain model](/domain/model#declare-the-model).
 
 <DAG
   nodes={[
@@ -90,6 +92,55 @@ Second, a policy handles the rejections it expects from a repeat. Opening an acc
 ```
 
 Calls to outside systems need the same care. Pass them an idempotency key derived from the event, so the payment provider charges once however many times it's asked.
+
+## Partition it by key
+
+By default, a policy is partitioned by source instance: everything one customer records is handled in order, one event at a time, and different customers run in parallel.
+
+When a rule spans several sources, choose the partition yourself with `key`, and route each event to it with `keyOf`, exactly as a view does. Here one welcome flow per customer hears both the registration and every account the customer opens, in one ordered queue.
+
+```typescript title="src/Welcome.ts"
+export class Welcome extends Domain.Policy("Welcome", {
+  from: [Customer, Account],
+  key: Customer,
+  keyOf: {
+    AccountOpened: ({ event }) => Customer.ref(CustomerId.make(event.owner)),
+  },
+  on: [CustomerRegistered, AccountOpened],
+}) {}
+```
+
+`CustomerRegistered` comes from a customer, so it needs no route. `AccountOpened` comes from an account, so `keyOf` names the customer it belongs to. The handler receives that customer as `key`.
+
+<DAG
+  nodes={[
+    { id: "customer", label: "Customer c-1", type: "CustomerRegistered", kind: "aggregate", layer: 0 },
+    { id: "account", label: "Account c-1-main", type: "AccountOpened", kind: "aggregate", layer: 0 },
+    { id: "policy", label: "Welcome c-1", type: "one ordered queue", kind: "policy", layer: 1 },
+  ]}
+  edges={[
+    { from: "customer", to: "policy", dashed: true },
+    { from: "account", to: "policy", dashed: true },
+  ]}
+  caption="Two sources, one partition per customer. Within it, events from different sources have no order between them."
+/>
+
+The key is also the policy's unit of concurrency. Pick the narrowest thing whose events must be handled in sequence: everything for one key runs one at a time, and more keys mean more parallelism.
+
+## Tune it on its Layer
+
+What a policy means lives on its declaration. How it runs lives on its Layer. `toLayer` takes options, such as a retry schedule for a run that fails before the platform's own redelivery takes over.
+
+```typescript title="src/Welcome.ts"
+export const WelcomeLive = Welcome.toLayer(
+  Effect.succeed(
+    Effect.fn(function* ({ key, event }) {
+      yield* Effect.log(`welcome ${key.id}: ${event._tag}`);
+    }),
+  ),
+  { retry: Schedule.exponential("1 second").pipe(Schedule.upTo({ duration: "1 minute" })) },
+);
+```
 
 ## React to a view
 

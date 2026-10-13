@@ -21,14 +21,16 @@ import { AccountOpened } from "../src/Account/OpenAccount.ts";
 import { Statement } from "../src/Account/Statement.ts";
 import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
 import { customer } from "../src/Actor.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");
@@ -75,6 +77,7 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 | `state(ref, assert)` | Checks an instance's current state |
 | `view(view, ref, expected)` | Checks a view key's state, or part of it |
 | `emitted(view, ref, expected)` | Checks every event a view key has emitted |
+| `streamed(stream, ref, ...events)` | Checks the next entries a projection appended to a stream key |
 | `expectCall(op, args)` | Checks a policy called an external system and is waiting for the answer |
 | `resolve(op, value)` | Answers the oldest waiting call to an external system |
 | `clock(at)` | Moves the clock; scheduled commands that are now due fire |
@@ -93,14 +96,16 @@ import { AccountFrozen } from "../src/Account/FreezeAccount.ts";
 import { AccountOpened } from "../src/Account/OpenAccount.ts";
 import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
 import { customer, system } from "../src/Actor.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");

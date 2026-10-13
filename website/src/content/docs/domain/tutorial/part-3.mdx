@@ -139,10 +139,10 @@ export class Bank extends Domain.Model("Bank", {
 +  policies: [MainAccountProvisioning],
 }) {}
 +
-+export const BankPolicies = MainAccountProvisioningLive;
++export const BankHandlers = MainAccountProvisioningLive;
 ```
 
-The model lists the policy, and `BankPolicies` is its implementation. You provide it wherever you host the model.
+The model lists the policy, and `BankHandlers` is its implementation. You provide it wherever you host the model.
 
 ## Give every story the policies
 
@@ -151,7 +151,7 @@ The model lists the policy, and `BankPolicies` is its implementation. You provid
 import { Story } from "alchemy/Domain/Story";
 import { Account } from "../src/Account.ts";
 -import { Bank } from "../src/Bank.ts";
-+import { Bank, BankPolicies } from "../src/Bank.ts";
++import { Bank, BankHandlers } from "../src/Bank.ts";
 import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
 import { NotOpen } from "../src/NotOpen.ts";
 ```
@@ -161,7 +161,7 @@ import { NotOpen } from "../src/NotOpen.ts";
 import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.ts";
 
 -const story = Story.make(Bank);
-+const story = Story.make(Bank, { layer: BankPolicies });
++const story = Story.make(Bank, { layer: BankHandlers });
 const account = Account.ref("a-1");
 
 ```
@@ -171,7 +171,7 @@ const account = Account.ref("a-1");
 import { Account } from "../src/Account.ts";
 import { AccountSummary } from "../src/AccountSummary.ts";
 -import { Bank } from "../src/Bank.ts";
-+import { Bank, BankPolicies } from "../src/Bank.ts";
++import { Bank, BankHandlers } from "../src/Bank.ts";
 import { DepositMoney } from "../src/DepositMoney.ts";
 import { AccountOpened } from "../src/OpenAccount.ts";
 ```
@@ -181,12 +181,12 @@ import { AccountOpened } from "../src/OpenAccount.ts";
 import { WithdrawMoney } from "../src/WithdrawMoney.ts";
 
 -const story = Story.make(Bank);
-+const story = Story.make(Bank, { layer: BankPolicies });
++const story = Story.make(Bank, { layer: BankHandlers });
 const account = Account.ref("a-1");
 
 ```
 
-A story runs the whole model, policies included, so every story now takes `BankPolicies`. Leave it out and the type checker tells you.
+A story runs the whole model, policies included, so every story now takes `BankHandlers`. Leave it out and the type checker tells you.
 
 ## Test registration
 
@@ -196,12 +196,12 @@ import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
 import { Account } from "../src/Account.ts";
 import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 import { Customer } from "../src/Customer.ts";
 import { AccountOpened } from "../src/OpenAccount.ts";
 import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.ts";
 
-const story = Story.make(Bank, { layer: BankPolicies });
+const story = Story.make(Bank, { layer: BankHandlers });
 const sam = Customer.ref("c-1");
 const samsAccount = Account.ref("c-1-main");
 

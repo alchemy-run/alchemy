@@ -11,7 +11,7 @@ If the words aggregate, view and policy are new, read [What is Domain-Driven Des
 
 ## What a model contains
 
-Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to views, which answer reads, and to policies, which send further commands.
+Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
 
 <DAG
   nodes={[
@@ -19,19 +19,21 @@ Every model has the same shape. Commands enter on the left and are decided by ag
     { id: "aggregates", label: "Aggregates", type: "decide", layer: 1, kind: "aggregate" },
     { id: "events", label: "Events", type: "the record", layer: 2, kind: "event" },
     { id: "views", label: "Views", type: "answer reads", layer: 3, kind: "view" },
+    { id: "projections", label: "Projections", type: "write stores", layer: 3, kind: "projection" },
     { id: "policies", label: "Policies", type: "act next", layer: 3, kind: "policy" },
   ]}
   edges={[
     { from: "commands", to: "aggregates" },
     { from: "aggregates", to: "events" },
     { from: "events", to: "views", dashed: true },
+    { from: "events", to: "projections", dashed: true },
     { from: "events", to: "policies", dashed: true },
     { from: "policies", to: "commands" },
   ]}
   caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-A model declares which aggregates, views and policies it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
+A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
 
 ```typescript title="src/Bank.ts"
 export class Bank extends Domain.Model("Bank", {
@@ -103,9 +105,9 @@ DepositMoney: (s, cmd) =>
     : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
 ```
 
-## Views and policies catch up
+## Consumers catch up
 
-After the commit, the deliveries are sent. Every view and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views ignore events they've already applied; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
+After the commit, the deliveries are sent. Every view, projection and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views and projections drop events they've already accepted; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
 
 Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version.
 
@@ -128,6 +130,22 @@ And a client that has just deposited reads the summary at that receipt, so it se
 ```typescript title="src/depositAndRead.ts"
 return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
 ```
+
+## Order and partitions
+
+Every consumer works the same way underneath. At commit, each event is routed to a key of each consumer that wants it: by default its source instance, or whatever the consumer's `key` and `keyOf` say. Each key has an ordered input log, and its inputs are handled one at a time, or a batch at a time for a projection. Keys run in parallel.
+
+That gives a precise guarantee. Within a key, events from one source arrive in that source's order. Between keys, and between different sources feeding one key, there is no order: an account can be a day ahead of the customer that owns it. The model is distributed on purpose, so design consumers to correlate by id, use the envelope's `at` for business time, and let an aggregate decide whenever the order between two facts matters.
+
+## Choose a consumer
+
+All three consumers receive the same events. They differ in what they do with them.
+
+A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with `validate` and read-your-own-write. Reach for it first when clients need to read something.
+
+A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
+
+A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
 ## Declare the model
 
@@ -176,20 +194,20 @@ export class Bank extends Domain.Model("Bank", {
   policies: [MainAccountProvisioning],
 }) {}
 
-export const BankPolicies = MainAccountProvisioningLive;
+export const BankHandlers = MainAccountProvisioningLive;
 ```
 
 ## Run it
 
-A declaration doesn't run anything. `Bank.layer(BankPolicies)` turns it into a Layer that hosts the model, and a platform underneath decides where its state lives.
+A declaration doesn't run anything. `Bank.layer(BankHandlers)` turns it into a Layer that hosts the model, and a platform underneath decides where its state lives.
 
 ```typescript
 // src/BankInMemory.ts
 import * as Domain from "alchemy/Domain";
 import * as Layer from "effect/Layer";
-import { Bank, BankPolicies } from "./Bank.ts";
+import { Bank, BankHandlers } from "./Bank.ts";
 
-export const BankInMemory = Bank.layer(BankPolicies).pipe(Layer.provide(Domain.InMemory));
+export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.InMemory));
 ```
 
 `Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Hosting](/domain/cloudflare).

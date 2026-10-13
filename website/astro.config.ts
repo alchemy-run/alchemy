@@ -1488,6 +1488,8 @@ export default defineConfig({
                 { label: "Event", link: "/domain/event" },
                 { label: "Aggregate", link: "/domain/aggregate" },
                 { label: "View", link: "/domain/view" },
+                { label: "Projection", link: "/domain/projection" },
+                { label: "Stream", link: "/domain/stream" },
                 { label: "Policy", link: "/domain/policy" },
                 { label: "Api", link: "/domain/api" },
               ],
