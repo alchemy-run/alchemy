@@ -97,7 +97,9 @@ test("another browser sees the same sessions", async ({ page, browser }) => {
   const other = await browser.newContext({ baseURL: test.info().project.use.baseURL });
   const elsewhere = await other.newPage();
   await elsewhere.goto("/");
-  await expect(elsewhere.getByText(id, { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(elsewhere.locator("aside").getByText(id, { exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
   // And a link opens the session with its transcript.
   await elsewhere.goto(`/#${encodeURIComponent(id)}`);
   await expect(elsewhere.locator(".is-user").filter({ hasText: "shared" })).toBeVisible({
