@@ -75,12 +75,28 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
 
     const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
     const sessions = yield* Sessions;
-    const machine = makeMachine(sandbox);
+    /** A start or stop in progress: reported as the machine's state meanwhile. */
+    let transition: "starting" | "suspending" | undefined;
+    const during = <A, E, R>(
+      state: "starting" | "suspending",
+      effect: Effect.Effect<A, E, R>,
+    ): Effect.Effect<A, E, R> =>
+      Effect.suspend(() => {
+        transition = state;
+        return effect;
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (transition === state) transition = undefined;
+          }),
+        ),
+      );
+    const machine = makeMachine(sandbox, () => transition);
     /** Work that must outlive the call that started it (a caller may disconnect). */
     const background = yield* Scope.make();
 
     return Effect.sync(() => {
-      const claude = harness
+      const startHarness = harness
         .start({
           egress: [model, github],
           // Package registries and docs; GitHub and the model go through egress.
@@ -88,6 +104,21 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           instance: INSTANCE,
         })
         .pipe(Effect.tap(() => ensureWorkspace));
+      // Reported as `starting` while a stopped machine comes up.
+      const claude = sandbox.running.pipe(
+        Effect.orElseSucceed(() => false),
+        Effect.flatMap((running) => (running ? startHarness : during("starting", startHarness))),
+      );
+      /** Checkpoint and snapshot the work, then stop the container — in the
+       * background, so a caller that leaves can't cancel it. */
+      const stopInBackground = Effect.sync(() => {
+        // Reported at once, before the background fiber gets going.
+        transition = "suspending";
+      }).pipe(
+        Effect.andThen(
+          during("suspending", harness.stop()).pipe(Effect.ignore, Effect.forkIn(background)),
+        ),
+      );
       const call = <A, E, R>(sessionId: string, f: (session: Session) => Effect.Effect<A, E, R>) =>
         claude.pipe(
           Effect.flatMap((h) => h.get(sessionId)),
@@ -156,11 +187,10 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
             // Settled at once; stopping the machine (checkpoint, snapshot)
             // takes a while, and must not be cancelled if the caller leaves.
             yield* sessions.getByName(SESSIONS_INDEX).settle(sessionId);
-            yield* harness.stop().pipe(Effect.ignore, Effect.forkIn(background));
+            yield* stopInBackground;
             return yield* machine();
           }),
-        // Checkpoint and snapshot the work, then stop the container.
-        suspend: () => harness.stop().pipe(Effect.andThen(machine())),
+        suspend: () => stopInBackground.pipe(Effect.andThen(machine())),
         resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),
         terminalInput: ({ sessionId, data }) => terminals.input(sessionId, data),
         terminalResize: ({ sessionId, cols, rows }) => terminals.resize(sessionId, cols, rows),

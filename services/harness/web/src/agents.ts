@@ -141,6 +141,10 @@ export const agents = {
     void runtime.runPromise(Scope.close(live.scope, Exit.void));
   },
   prompt: (id: string, text: string) => {
+    // A prompt starts a stopped machine: show it starting at once.
+    if (lastKnown.get(id) === "suspended" && !machineIntent.get(id)) {
+      machineIntent.set(id, "starting");
+    }
     const queued = !sessions.get(id)?.snapshot.connected;
     if (queued) update(id, (s) => ({ ...s, pending: [...s.pending, text] }));
     return call(id, (c) => c.prompt({ sessionId: id, prompt: text })).finally(() => {
@@ -179,6 +183,61 @@ export interface ListedSession {
 /** Every session (newest first), from the server: the same list in any browser. */
 export const listSessions = (): Promise<ReadonlyArray<ListedSession>> =>
   fetch(`${API_URL}/agents`).then((res) => (res.ok ? res.json() : []));
+
+//#endregion
+
+//#region machine intents
+
+/**
+ * What the user just asked a session's machine to do — shown at once, until
+ * the server reports the state it was heading for (or 3 minutes pass).
+ */
+export type MachineIntent = "starting" | "suspending";
+
+const intents = new Map<string, { readonly state: MachineIntent; readonly at: number }>();
+/** The machine state the server last reported, per session. */
+const lastKnown = new Map<string, Machine["state"] | "unknown">();
+const intentListeners = new Set<() => void>();
+const INTENT_MS = 3 * 60_000;
+
+export const machineIntent = {
+  set: (id: string, state: MachineIntent) => {
+    intents.set(id, { state, at: Date.now() });
+    intentListeners.forEach((l) => l());
+  },
+  /** Drop an intent that won't happen (the request failed). */
+  clear: (id: string) => {
+    if (intents.delete(id)) intentListeners.forEach((l) => l());
+  },
+  /** The intent, if the server hasn't caught up with it yet. */
+  get: (id: string): MachineIntent | undefined => {
+    const intent = intents.get(id);
+    return intent && Date.now() - intent.at < INTENT_MS ? intent.state : undefined;
+  },
+  /** The server reported `state`: drop an intent it fulfils. */
+  observe: (id: string, state: Machine["state"] | "unknown") => {
+    lastKnown.set(id, state);
+    const intent = intents.get(id);
+    if (!intent) return;
+    const done =
+      (intent.state === "suspending" && state === "suspended") ||
+      (intent.state === "starting" && state === "running");
+    if (done) {
+      intents.delete(id);
+      intentListeners.forEach((l) => l());
+    }
+  },
+};
+
+/** The machine state to show: a pending intent wins over what the server last said. */
+export const useMachineIntent = (id: string) =>
+  useSyncExternalStore(
+    (listener) => {
+      intentListeners.add(listener);
+      return () => intentListeners.delete(listener);
+    },
+    () => machineIntent.get(id),
+  );
 
 //#endregion
 

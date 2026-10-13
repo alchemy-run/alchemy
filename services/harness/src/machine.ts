@@ -21,7 +21,11 @@ if [ -z "$KNOWN_LOCATION" ]; then
 fi`;
 
 /** The session's machine: whether it runs, its size, where, and live usage. */
-export const makeMachine = (sandbox: ContainerClient) => {
+export const makeMachine = (
+  sandbox: ContainerClient,
+  /** A start or stop in progress, if any. */
+  transition: () => "starting" | "suspending" | undefined,
+) => {
   /** Where it last ran (read once per container, kept across suspends). */
   let location: string | undefined;
 
@@ -45,7 +49,7 @@ export const makeMachine = (sandbox: ContainerClient) => {
     Effect.gen(function* () {
       const running = yield* sandbox.running.pipe(Effect.orElseSucceed(() => false));
       const base: Machine = {
-        state: running ? "running" : "suspended",
+        state: transition() ?? (running ? "running" : "suspended"),
         platform: "Cloudflare Container",
         instance: INSTANCE,
         ...SPECS,

@@ -19,7 +19,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Machine } from "../../src/rpcs.ts";
-import { agents, type ListedSession, listSessions, useSession, useSnapshot } from "./agents.ts";
+import {
+  agents,
+  type ListedSession,
+  listSessions,
+  machineIntent,
+  useMachineIntent,
+  useSession,
+  useSnapshot,
+} from "./agents.ts";
 import {
   Confirmation,
   ConfirmationAction,
@@ -86,7 +94,9 @@ const useSessionIds = () => {
     const refresh = () =>
       void listSessions()
         .then((sessions) => {
-          if (!cancelled) setListed(sessions);
+          if (cancelled) return;
+          for (const session of sessions) machineIntent.observe(session.id, session.state);
+          setListed(sessions);
         })
         .catch(() => {});
     refresh();
@@ -161,14 +171,22 @@ function MachineDot({ state }: { state: ListedSession["state"] | undefined }) {
     <span
       className={cn(
         "size-1.5 shrink-0 rounded-full",
-        state === "running" ? "bg-success" : "bg-muted-foreground/40",
+        state === "running"
+          ? "bg-success"
+          : state === "starting" || state === "suspending"
+            ? "animate-pulse bg-warning"
+            : "bg-muted-foreground/40",
       )}
       title={
         state === "running"
           ? "Machine running"
-          : state === "suspended"
-            ? "Machine suspended"
-            : "Machine state unknown"
+          : state === "starting"
+            ? "Machine starting"
+            : state === "suspending"
+              ? "Machine suspending"
+              : state === "suspended"
+                ? "Machine suspended"
+                : "Machine state unknown"
       }
       data-testid="machine-dot"
       data-state={state ?? "unknown"}
@@ -179,24 +197,31 @@ function MachineDot({ state }: { state: ListedSession["state"] | undefined }) {
 /** The session's machine, polled while shown (with live usage when it runs). */
 const useMachine = (id: string) => {
   const [machine, setMachine] = useState<Machine | undefined>();
-  const [polls, setPolls] = useState(0);
+  const intent = useMachineIntent(id);
+  // Poll fast while a start or stop is on its way.
+  const transitioning =
+    intent !== undefined || machine?.state === "starting" || machine?.state === "suspending";
   useEffect(() => {
     let cancelled = false;
     const poll = () =>
       void agents
         .machine(id, true)
         .then((m) => {
-          if (!cancelled) setMachine(m);
+          if (cancelled) return;
+          machineIntent.observe(id, m.state);
+          setMachine(m);
         })
         .catch(() => {});
     poll();
-    const timer = setInterval(poll, 5_000);
+    const timer = setInterval(poll, transitioning ? 1_000 : 5_000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [id, polls]);
-  return [machine, setMachine, () => setPolls((n) => n + 1)] as const;
+  }, [id, transitioning]);
+  // What the user asked for shows until the server catches up.
+  const state = intent ?? machine?.state;
+  return { machine, state };
 };
 
 /** Re-render every second while something is running (elapsed timers). */
@@ -262,6 +287,7 @@ function SidebarRow(props: {
   const snapshot = useSnapshot(props.id);
   const now = useNow(snapshot?.transcript.state === "running");
   const cost = snapshot?.transcript.usage.costUsd ?? props.listed?.costUsd;
+  const intent = useMachineIntent(props.id);
   return (
     <div className="group relative">
       <button
@@ -287,7 +313,7 @@ function SidebarRow(props: {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <MachineDot state={props.listed?.state} />
+          <MachineDot state={intent ?? props.listed?.state} />
           <span className="truncate text-[15px] text-foreground">{props.id}</span>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
@@ -647,40 +673,36 @@ function Row(props: { icon: React.ReactNode; label: string; value: React.ReactNo
 
 /** The machine behind the session, with a pause / resume button. */
 function MachineSection({ id, onChange }: { id: string; onChange: () => void }) {
-  const [machine, setMachine, poll] = useMachine(id);
-  const [busy, setBusy] = useState(false);
-  const running = machine?.state === "running";
+  const { machine, state } = useMachine(id);
+  const running = state === "running";
+  const transitioning = state === "starting" || state === "suspending";
   const toggle = () => {
-    setBusy(true);
+    machineIntent.set(id, running ? "suspending" : "starting");
     void (running ? agents.suspend(id) : agents.resume(id))
-      .then(setMachine)
-      .catch(() => {})
-      .finally(() => {
-        setBusy(false);
-        poll();
-        onChange();
-      });
+      // Didn't happen: show the machine's real state again.
+      .catch(() => machineIntent.clear(id))
+      .finally(onChange);
   };
   return (
     <div data-testid="machine">
       <div className="flex items-center gap-2 px-3 py-2 text-sm">
-        <MachineDot state={machine?.state} />
+        <MachineDot state={state} />
         <span className="flex-1 font-medium" data-testid="machine-state">
-          {machine === undefined
+          {state === undefined
             ? "Machine"
-            : busy
-              ? running
+            : state === "starting"
+              ? "Starting…"
+              : state === "suspending"
                 ? "Suspending…"
-                : "Resuming…"
-              : running
-                ? "Running"
-                : "Suspended"}
+                : running
+                  ? "Running"
+                  : "Suspended"}
         </span>
         <Button
           variant="secondary"
           size="sm"
           className="h-7 gap-1.5"
-          disabled={machine === undefined || busy}
+          disabled={state === undefined || transitioning}
           onClick={toggle}
           data-testid="machine-toggle"
         >
@@ -870,10 +892,14 @@ export function App() {
   } = useSessionIds();
   const settle = (id: string) => {
     markSettled(id);
+    machineIntent.set(id, "suspending");
     void agents
       .settle(id)
       // Didn't settle: put it back.
-      .catch(() => unmarkSettled(id))
+      .catch(() => {
+        unmarkSettled(id);
+        machineIntent.clear(id);
+      })
       .finally(refreshSessions);
   };
   // The open session is in the URL, so a reload (or a link) opens it again.

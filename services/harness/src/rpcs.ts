@@ -7,8 +7,11 @@ const Failure = Schema.Union([AI.SessionError, AI.Unsupported]);
 
 /** The machine a session runs on. */
 export const Machine = Schema.Struct({
-  /** `suspended`: stopped, its workspace snapshotted; resumes on the next turn. */
-  state: Schema.Literals(["running", "suspended"]),
+  /**
+   * `suspended`: stopped, its workspace snapshotted; resumes on the next turn.
+   * `starting` / `suspending`: on its way to running / suspended.
+   */
+  state: Schema.Literals(["running", "suspended", "starting", "suspending"]),
   /** Where it runs, e.g. "Cloudflare Container". */
   platform: Schema.String,
   /** The platform's size for it, e.g. "standard-4". */

@@ -124,12 +124,15 @@ test("a session's machine shows its stats and can be paused and resumed", async 
   await expect(machine).toContainText(/\d+(\.\d)? [MG]B \/ \d+(\.\d)? GB/, { timeout: 30_000 });
 
   await machine.getByTestId("machine-toggle").click();
+  // The click shows at once; the machine catches up.
+  await expect(machine.getByTestId("machine-state")).toHaveText("Suspending…", { timeout: 1_000 });
   await expect(machine.getByTestId("machine-state")).toHaveText("Suspended", { timeout: 180_000 });
   await expect(
     page.locator("aside nav [data-testid=machine-dot][data-state=suspended]").first(),
   ).toBeVisible({ timeout: 30_000 });
 
   await machine.getByTestId("machine-toggle").click();
+  await expect(machine.getByTestId("machine-state")).toHaveText("Starting…", { timeout: 1_000 });
   await expect(machine.getByTestId("machine-state")).toHaveText("Running", { timeout: 180_000 });
 });
 
@@ -142,6 +145,7 @@ test("settling a session stops its machine and archives it until a new prompt", 
   const id = decodeURIComponent(new URL(page.url()).hash.slice(1));
 
   await page.getByTestId("settle").click();
+  await expect(page.getByTestId("machine-state")).toHaveText("Suspending…", { timeout: 1_000 });
   // Settled at once on the server: a refresh straight away keeps it settled.
   await page.waitForTimeout(500);
   await page.reload();

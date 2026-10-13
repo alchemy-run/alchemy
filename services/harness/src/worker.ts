@@ -23,6 +23,8 @@ const cors = {
  *                                         (`?wait=false` returns as soon as the turn starts)
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
  *   POST /agents/:id/interrupt            stop the running turn
+ *   POST /agents/:id/suspend              stop its machine (its work saved)
+ *   POST /agents/:id/resume               start its machine again
  *   POST /agents/:id/settle               stop its machine and archive it
  *   POST /agents/:id/model    { model }   switch models mid-session
  *   GET  /agents/:id                      session info (state, model, usage)
@@ -74,9 +76,10 @@ export default Cloudflare.Worker(
             ),
           );
         }
-        const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model|settle))?$/.exec(
-          url.pathname,
-        );
+        const match =
+          /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model|settle|suspend|resume))?$/.exec(
+            url.pathname,
+          );
         if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
         const [, id, action] = match;
 
@@ -107,6 +110,12 @@ export default Cloudflare.Worker(
         const agent = yield* agents.getByName(id!);
         if (request.method === "GET" && action === undefined) {
           return yield* HttpServerResponse.json(yield* agent.info({ sessionId: id! }));
+        }
+        if (action === "suspend") {
+          return yield* HttpServerResponse.json(yield* agent.suspend({ sessionId: id! }));
+        }
+        if (action === "resume") {
+          return yield* HttpServerResponse.json(yield* agent.resume({ sessionId: id! }));
         }
         if (action === "settle") {
           return yield* HttpServerResponse.json(yield* agent.settle({ sessionId: id! }));
