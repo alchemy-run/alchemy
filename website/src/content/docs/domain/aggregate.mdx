@@ -3,6 +3,8 @@ title: Aggregate
 description: How an aggregate holds state, decides commands, applies events, and keeps its rules consistent.
 ---
 
+import DAG from "../../../components/DAG.astro";
+
 An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
 This page builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use.

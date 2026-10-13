@@ -3,6 +3,8 @@ title: Event
 description: What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.
 ---
 
+import DAG from "../../../components/DAG.astro";
+
 An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
 
 Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This page covers how to declare an event, what to put in it, and what happens to it after it's recorded.
