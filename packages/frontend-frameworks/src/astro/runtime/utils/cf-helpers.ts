@@ -54,9 +54,7 @@ export async function fallbackToAssets(
  * Creates a fetch function for prerendered error pages via the ASSETS binding.
  */
 export function createErrorPageFetch(env: Env): (url: string) => Promise<Response> {
-  return async (url: string) => {
-    return env.ASSETS.fetch(url.replace(/\.html$/, "")) as unknown as Response;
-  };
+  return async (url: string) => env.ASSETS.fetch(url.replace(/\.html$/, "")) as unknown as Response;
 }
 
 /**

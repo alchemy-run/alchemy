@@ -62,7 +62,10 @@ const s3RolePermissions = Effect.fn(function* (roleName: string) {
   ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
   const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
-    pages.flatMap((page) => page.PolicyNames),
+    // Skip the function's log-group guard; only binding grants count.
+    pages
+      .flatMap((page) => page.PolicyNames)
+      .filter((name) => name !== "AlchemyDenyLogGroupCreate"),
     Effect.fn(function* (PolicyName) {
       const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });
       const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));

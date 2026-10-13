@@ -714,6 +714,7 @@ const resolveVinextCacheEnv = (env: Record<string, unknown>) =>
     for (const key of [VINEXT_KV_CACHE_BINDING, VINEXT_CACHE_BINDING]) {
       const value = env[key];
       if (value == null || isBindingMarker(value)) continue;
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- cache bindings are pre-resolved resource Effects
       resolved[key] = Effect.isEffect(value) ? yield* value as Effect.Effect<unknown> : value;
     }
     return resolved;
@@ -728,6 +729,7 @@ const seedVinextPrerenderCache = (
   rootDir: string,
   env: Record<string, unknown>,
 ): Effect.Effect<void> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- closed so the source contract stays SourceRequirements, see JSDoc
   Effect.gen(function* () {
     const namespace = kvHttpNamespaceFromEnv(env);
     if (namespace === undefined) return;
@@ -779,12 +781,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         ),
       );
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext build produced no server modules",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext build produced no server modules",
+        });
       }
       const files = output.serverModules.map((file) => ({
         path: file.name.replaceAll("\\", "/"),
@@ -878,12 +878,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
       );
       const local = server.resolvedUrls?.local[0];
       if (!local) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext dev server started without a local URL",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext dev server started without a local URL",
+        });
       }
       return { mode: "server", url: new URL(local) } satisfies ServerDevHandle;
     }),

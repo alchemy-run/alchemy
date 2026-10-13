@@ -3,7 +3,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { logLevel, currentProject, waitUntilGone } from "./common.ts";
+import { logLevel, currentProject, testServiceAccount, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -31,6 +31,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const serviceAccount = yield* testServiceAccount;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -38,7 +39,7 @@ test.provider(
             location: "us-central1",
             displayName: "release-repo",
             labels: { env: "test" },
-            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount,
           });
           const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Prod", {
             repository: repo.name,
@@ -68,7 +69,7 @@ test.provider(
             location: "us-central1",
             displayName: "release-repo",
             labels: { env: "test" },
-            serviceAccount: "alchemy-testing@alchemy-gcp-testing-83661.iam.gserviceaccount.com",
+            serviceAccount,
           });
           const release = yield* GCP.Dataform.RepositoriesReleaseConfig("Prod", {
             repository: repo.name,

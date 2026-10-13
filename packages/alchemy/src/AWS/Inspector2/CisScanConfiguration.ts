@@ -152,10 +152,11 @@ export const CisScanConfigurationProvider = () =>
           return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
         list: () =>
-          inspector2.listCisScanConfigurations
-            .items({})
-            .pipe(Stream.map(buildAttrs), Stream.runCollect)
-            .pipe(Effect.map((c) => Array.from(c))),
+          inspector2.listCisScanConfigurations.items({}).pipe(
+            Stream.map(buildAttrs),
+            Stream.runCollect,
+            Effect.map((c) => Array.from(c)),
+          ),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const scanName = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);

@@ -112,16 +112,14 @@ export const UserGroupMembershipProvider = () =>
             ),
             // Group removed out-of-band between enumeration and member
             // listing — skip it.
-            Effect.catchTag("UserGroupNotFound", () =>
-              Effect.succeed([] as UserGroupMembershipAttributes[]),
-            ),
-            // A group whose policy Cloudflare can't validate rejects the
-            // member listing with a 400 ("Policy validation failed"). It's
-            // not ours to enumerate — contribute nothing rather than failing
-            // the whole account-wide listing.
-            Effect.catchTag("PolicyValidationFailed", () =>
-              Effect.succeed([] as UserGroupMembershipAttributes[]),
-            ),
+            Effect.catchTags({
+              UserGroupNotFound: () => Effect.succeed([] as UserGroupMembershipAttributes[]),
+              // A group whose policy Cloudflare can't validate rejects the
+              // member listing with a 400 ("Policy validation failed"). It's
+              // not ours to enumerate — contribute nothing rather than failing
+              // the whole account-wide listing.
+              PolicyValidationFailed: () => Effect.succeed([] as UserGroupMembershipAttributes[]),
+            }),
           ),
         { concurrency: 10 },
       );

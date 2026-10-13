@@ -34,28 +34,27 @@ export const AccessLive = Layer.effect(
             (response.headers.get("location")?.includes("cloudflareaccess.com") ?? false),
         ),
         Effect.timeout(1000),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       ),
     );
     const login = (domain: string) =>
       ChildProcess.make("cloudflared", ["access", "login", domain]).pipe(
         spawner.spawn,
         Effect.flatMap((process) => Stream.runCollect(process.stdout)),
-        Effect.mapError(
-          (error) =>
-            new AccessError({
-              message:
-                `The domain "${domain}" uses Cloudflare Access, but \`cloudflared\` is not installed. ` +
-                `Please install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation.`,
-              cause: error,
-            }),
+        Effect.mapError((error) =>
+          AccessError.make({
+            message:
+              `The domain "${domain}" uses Cloudflare Access, but \`cloudflared\` is not installed. ` +
+              `Please install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation.`,
+            cause: error,
+          }),
         ),
         Effect.flatMap((stdout) => {
           const matches = stdout.toString().match(/fetched your token:\n\n(.*)/m);
           return matches && matches.length >= 2
             ? Effect.succeed({ Cookie: `CF_Authorization=${matches[1]}` })
             : Effect.fail(
-                new AccessError({
+                AccessError.make({
                   message: "Failed to authenticate with Cloudflare Access",
                 }),
               );

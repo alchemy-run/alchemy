@@ -103,14 +103,12 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
         function* (request: OpenSearchHttpRequest) {
           const endpoint = yield* Endpoint;
           if (endpoint === undefined) {
-            return yield* Effect.fail(
-              new OpenSearchApiError({
-                method: request.method,
-                path: request.path,
-                status: 0,
-                body: "domain has no endpoint (still provisioning, or VPC-only)",
-              }),
-            );
+            return yield* new OpenSearchApiError({
+              method: request.method,
+              path: request.path,
+              status: 0,
+              body: "domain has no endpoint (still provisioning, or VPC-only)",
+            });
           }
 
           const url = new URL(
@@ -180,14 +178,12 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
             (response.status >= 200 && response.status < 300) ||
             (request.allowStatuses?.includes(response.status) ?? false);
           if (!ok) {
-            return yield* Effect.fail(
-              new OpenSearchApiError({
-                method: request.method,
-                path: request.path,
-                status: response.status,
-                body: text,
-              }),
-            );
+            return yield* new OpenSearchApiError({
+              method: request.method,
+              path: request.path,
+              status: response.status,
+              body: text,
+            });
           }
           if (text.trim() === "") {
             return { status: response.status, body: undefined };

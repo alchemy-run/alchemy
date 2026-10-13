@@ -54,12 +54,10 @@ const select = Effect.fn(function* (input: LogInput) {
   ].sort();
   const unknown = [...selected].find((name) => !available.includes(name));
   if (unknown !== undefined) {
-    return yield* Effect.fail(
-      new AlchemistInvalidInput({
-        field: "resources",
-        message: `Unknown resource '${unknown}'. Available: ${available.join(", ") || "(none)"}`,
-      }),
-    );
+    return yield* new AlchemistInvalidInput({
+      field: "resources",
+      message: `Unknown resource '${unknown}'. Available: ${available.join(", ") || "(none)"}`,
+    });
   }
   const rows = yield* Effect.provide(
     Effect.gen(function* () {

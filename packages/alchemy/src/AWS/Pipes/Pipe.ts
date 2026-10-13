@@ -429,13 +429,11 @@ export const PipeProvider = () =>
           ),
         );
         if (described?.CurrentState !== undefined && isFailedState(described.CurrentState)) {
-          return yield* Effect.fail(
-            new PipeFailed({
-              pipeName,
-              state: described.CurrentState,
-              stateReason: described.StateReason,
-            }),
-          );
+          return yield* new PipeFailed({
+            pipeName,
+            state: described.CurrentState,
+            stateReason: described.StateReason,
+          });
         }
         return described;
       });
@@ -571,13 +569,11 @@ export const PipeProvider = () =>
           }
 
           if (observed?.Arn === undefined) {
-            return yield* Effect.fail(
-              new PipeFailed({
-                pipeName,
-                state: "MISSING",
-                stateReason: `describePipe returned no pipe after createPipe('${pipeName}') succeeded`,
-              }),
-            );
+            return yield* new PipeFailed({
+              pipeName,
+              state: "MISSING",
+              stateReason: `describePipe returned no pipe after createPipe('${pipeName}') succeeded`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED cloud state against desired and update
@@ -626,13 +622,11 @@ export const PipeProvider = () =>
           }
 
           if (observed?.Arn === undefined) {
-            return yield* Effect.fail(
-              new PipeFailed({
-                pipeName,
-                state: "MISSING",
-                stateReason: `Pipe '${pipeName}' disappeared during reconciliation`,
-              }),
-            );
+            return yield* new PipeFailed({
+              pipeName,
+              state: "MISSING",
+              stateReason: `Pipe '${pipeName}' disappeared during reconciliation`,
+            });
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption

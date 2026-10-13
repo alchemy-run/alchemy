@@ -423,9 +423,11 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             resizeRequest: output.resizeRequestName,
           })
           .pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(undefined),
+              BadRequest: () => Effect.succeed(undefined),
+              Conflict: () => Effect.succeed(undefined),
+            }),
           );
         if (cancelled !== undefined) {
           yield* waitZoneOperation(env.project, zone, cancelled).pipe(

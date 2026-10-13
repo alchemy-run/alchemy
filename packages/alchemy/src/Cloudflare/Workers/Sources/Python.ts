@@ -96,7 +96,8 @@ export interface PythonWorkerBundleOptions {
   };
 }
 
-const uvError = (message: string) => (cause: unknown) => new Bundle.BundleError({ message, cause });
+const uvError = (message: string) => (cause: unknown) =>
+  Bundle.BundleError.make({ message, cause });
 
 /**
  * Run a `uv` command, failing with a {@link Bundle.BundleError} that
@@ -123,7 +124,7 @@ const runUv = Effect.fn(function* (
     ),
   );
   if (result.exitCode !== 0) {
-    return yield* new Bundle.BundleError({
+    return yield* Bundle.BundleError.make({
       message: `\`uv ${args.join(" ")}\` failed with exit code ${result.exitCode}:\n${result.stdout}\n${result.stderr}`,
     });
   }
@@ -273,7 +274,7 @@ const globFiles = (
         ignore: options.ignore,
       }),
     catch: (error) =>
-      new Bundle.BundleError({
+      Bundle.BundleError.make({
         message: `Failed to list Python worker files in "${options.cwd}"`,
         cause: error,
       }),

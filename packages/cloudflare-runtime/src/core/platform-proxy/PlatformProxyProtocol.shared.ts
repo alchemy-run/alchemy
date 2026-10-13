@@ -115,6 +115,7 @@ export type EnvBindingDescriptor =
       readonly className?: string;
     };
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain wire-protocol code shared with the proxy worker (no Effect); `name` identifies the error
 export class UnsupportedValueError extends Error {
   override readonly name = "UnsupportedValueError";
 }

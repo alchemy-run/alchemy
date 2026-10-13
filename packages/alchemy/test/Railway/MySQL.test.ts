@@ -46,9 +46,11 @@ const selectOne = (url: string) =>
       }
     },
     catch: (cause) => new Error(String(cause)),
-    // Four attempts permit at most 40 seconds of connection/query work
-    // and six seconds of backoff; cleanup never waits on a stuck server.
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 3 }));
+    // A freshly provisioned Railway MySQL can close connections for a while
+    // after it reports ready ("Connection lost: The server closed the
+    // connection"). Eleven attempts, 3s apart: at most ~30s of backoff, and
+    // each attempt is bounded by the 5s connect/query timeouts.
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }));
 
 const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
   RailwayApi.variables({ projectId, environmentId, serviceId, unrendered: true }),
@@ -306,7 +308,8 @@ describe(
       providers: Railway.providers(),
     });
 
-    const fixture = beforeAll(deploy(FixtureStack), { timeout: 120_000 });
+    // Database (30–60s) then a Service build (60–150s) — same budget as Mongo.
+    const fixture = beforeAll(deploy(FixtureStack), { timeout: 240_000 });
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), { timeout: 120_000 });
 
     test(

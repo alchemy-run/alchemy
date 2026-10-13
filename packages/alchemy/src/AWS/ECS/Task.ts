@@ -34,11 +34,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 
-export const isTask = (value: any): value is Task => {
-  return (
-    typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task"
-  );
-};
+export const isTask = (value: any): value is Task =>
+  typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task";
 
 export class TaskEnvironment extends Context.Service<TaskEnvironment, Record<string, any>>()(
   "AWS.ECS.TaskEnvironment",

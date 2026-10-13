@@ -36,10 +36,10 @@ const assertMemoryGone = (memoryId: string) =>
     Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]) }),
   );
 
-// A memory takes ~2.5 minutes to reach ACTIVE — the full lifecycle is gated
-// behind AWS_TEST_SLOW to keep the default CI pass fast. The create path is
+// A memory takes ~2.5 minutes to reach ACTIVE — the full lifecycle is skipped
+// under `--fast` to keep quick runs quick. The create path is
 // also exercised (gated) by the Bindings fixture.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create short-term memory, verify, update expiry, destroy",
   (stack) =>
     Effect.gen(function* () {

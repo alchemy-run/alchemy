@@ -256,13 +256,13 @@ const waitForKxEnvironmentStatus = (environmentId: string, target: "CREATED" | "
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;
-        return yield* Effect.fail(new KxEnvironmentNotReady({ environmentId, status }));
+        return yield* new KxEnvironmentNotReady({ environmentId, status });
       }
       if (status === "CREATED") return;
       if (status === "FAILED_CREATION") {
-        return yield* Effect.fail(new KxEnvironmentProvisioningFailed({ environmentId, status }));
+        return yield* new KxEnvironmentProvisioningFailed({ environmentId, status });
       }
-      return yield* Effect.fail(new KxEnvironmentNotReady({ environmentId, status }));
+      return yield* new KxEnvironmentNotReady({ environmentId, status });
     }),
   );
 

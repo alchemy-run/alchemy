@@ -538,19 +538,16 @@ export const StateMachineProvider = () =>
             type,
             severity: "ERROR",
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(Effect.orElseSucceed(() => undefined));
         if (report !== undefined && report.result === "FAIL") {
-          return yield* Effect.fail(
-            new InvalidStateMachineDefinition({
-              diagnostics: report.diagnostics.map((diagnostic) => ({
-                severity: diagnostic.severity,
-                code: plain(diagnostic.code),
-                message: plain(diagnostic.message),
-                location:
-                  diagnostic.location === undefined ? undefined : plain(diagnostic.location),
-              })),
-            }),
-          );
+          return yield* new InvalidStateMachineDefinition({
+            diagnostics: report.diagnostics.map((diagnostic) => ({
+              severity: diagnostic.severity,
+              code: plain(diagnostic.code),
+              message: plain(diagnostic.message),
+              location: diagnostic.location === undefined ? undefined : plain(diagnostic.location),
+            })),
+          });
         }
       });
 
@@ -774,23 +771,21 @@ export const StateMachineProvider = () =>
           if (observed === undefined) {
             // 2. ENSURE — create; tolerate the concurrent-create race and
             //    wait out a same-name deletion or IAM propagation delay.
-            yield* retryWhileRolePropagates(
-              retryWhileDeleting(
-                sfn
-                  .createStateMachine({
-                    name,
-                    definition,
-                    roleArn,
-                    type,
-                    loggingConfiguration: desiredLogging,
-                    tracingConfiguration: desiredTracing,
-                    tags: toSfnTags(desiredTags),
-                  })
-                  .pipe(
-                    Effect.catchTag("StateMachineAlreadyExists", () => Effect.succeed(undefined)),
-                  ),
-              ),
-            );
+            yield* sfn
+              .createStateMachine({
+                name,
+                definition,
+                roleArn,
+                type,
+                loggingConfiguration: desiredLogging,
+                tracingConfiguration: desiredTracing,
+                tags: toSfnTags(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("StateMachineAlreadyExists", () => Effect.succeed(undefined)),
+                retryWhileDeleting,
+                retryWhileRolePropagates,
+              );
           } else {
             // 3. SYNC — diff OBSERVED cloud state against desired and issue
             //    a single update only when something actually drifted.

@@ -202,7 +202,7 @@ const findAcceleratorByName = Effect.fn(function* (name: string) {
 const fetchTags = Effect.fn(function* (resourceArn: string) {
   return yield* withGaRegion(ga.listTagsForResource({ ResourceArn: resourceArn })).pipe(
     Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 });
 
@@ -241,22 +241,26 @@ const deleteAcceleratorChildren = Effect.fn(function* (acceleratorArn: string) {
         endpointGroups,
         (group) =>
           group.EndpointGroupArn
-            ? retryGaDeletion(
-                withGaRegion(
-                  ga.deleteEndpointGroup({
-                    EndpointGroupArn: group.EndpointGroupArn,
-                  }),
-                ),
-              ).pipe(Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void))
+            ? ga
+                .deleteEndpointGroup({
+                  EndpointGroupArn: group.EndpointGroupArn,
+                })
+                .pipe(
+                  withGaRegion,
+                  retryGaDeletion,
+                  Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void),
+                )
             : Effect.void,
         { discard: true },
       );
 
       // Endpoint-group detachment is asynchronous. The same bounded retry
       // used by the child provider waits until the listener is deletable.
-      yield* retryUntilListenerDeletable(
-        withGaRegion(ga.deleteListener({ ListenerArn: listenerArn })),
-      ).pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
+      yield* ga.deleteListener({ ListenerArn: listenerArn }).pipe(
+        withGaRegion,
+        retryUntilListenerDeletable,
+        Effect.catchTag("ListenerNotFoundException", () => Effect.void),
+      );
     }),
     { discard: true },
   );
@@ -329,21 +333,23 @@ export const AcceleratorProvider = () =>
       // Ensure — create if missing. The idempotency token (derived from the
       // instance id) makes a crashed-and-retried create safe.
       if (!live?.AcceleratorArn) {
-        live = yield* retryGaTransaction(
-          withGaRegion(
-            ga.createAccelerator({
-              Name: name,
-              IpAddressType: news.ipAddressType,
-              IpAddresses: news.ipAddresses,
-              Enabled: desiredEnabled,
-              IdempotencyToken: instanceId,
-              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            }),
-          ),
-        ).pipe(Effect.map((r) => r.Accelerator));
+        live = yield* ga
+          .createAccelerator({
+            Name: name,
+            IpAddressType: news.ipAddressType,
+            IpAddresses: news.ipAddresses,
+            Enabled: desiredEnabled,
+            IdempotencyToken: instanceId,
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            withGaRegion,
+            retryGaTransaction,
+            Effect.map((r) => r.Accelerator),
+          );
       }
       if (!live?.AcceleratorArn) {
         return yield* Effect.die(new Error("CreateAccelerator returned no accelerator"));
@@ -368,7 +374,9 @@ export const AcceleratorProvider = () =>
         dirty = true;
       }
       if (dirty) {
-        const updated = yield* retryGaTransaction(withGaRegion(ga.updateAccelerator(update))).pipe(
+        const updated = yield* ga.updateAccelerator(update).pipe(
+          withGaRegion,
+          retryGaTransaction,
           Effect.map((r) => r.Accelerator),
         );
         if (updated) live = updated;
@@ -385,20 +393,22 @@ export const AcceleratorProvider = () =>
             (news.flowLogs!.prefix !== undefined &&
               flowLogs?.FlowLogsS3Prefix !== news.flowLogs!.prefix)));
       if (flowLogsDrift) {
-        flowLogs = yield* retryGaTransaction(
-          withGaRegion(
-            ga.updateAcceleratorAttributes({
-              AcceleratorArn: acceleratorArn,
-              FlowLogsEnabled: desiredFlowLogsEnabled,
-              ...(desiredFlowLogsEnabled
-                ? {
-                    FlowLogsS3Bucket: news.flowLogs!.bucket,
-                    FlowLogsS3Prefix: news.flowLogs!.prefix,
-                  }
-                : {}),
-            }),
-          ),
-        ).pipe(Effect.map((r) => r.AcceleratorAttributes));
+        flowLogs = yield* ga
+          .updateAcceleratorAttributes({
+            AcceleratorArn: acceleratorArn,
+            FlowLogsEnabled: desiredFlowLogsEnabled,
+            ...(desiredFlowLogsEnabled
+              ? {
+                  FlowLogsS3Bucket: news.flowLogs!.bucket,
+                  FlowLogsS3Prefix: news.flowLogs!.prefix,
+                }
+              : {}),
+          })
+          .pipe(
+            withGaRegion,
+            retryGaTransaction,
+            Effect.map((r) => r.AcceleratorAttributes),
+          );
       }
 
       // Sync tags against OBSERVED cloud tags so adoption converges.
@@ -421,23 +431,25 @@ export const AcceleratorProvider = () =>
         yield* deleteAcceleratorChildren(acceleratorArn);
       }
       // An accelerator must be disabled before it can be deleted.
-      const exists = yield* retryGaTransaction(
-        withGaRegion(
-          ga.updateAccelerator({
-            AcceleratorArn: acceleratorArn,
-            Enabled: false,
-          }),
-        ),
-      ).pipe(
-        Effect.map(() => true),
-        Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(false)),
-      );
+      const exists = yield* ga
+        .updateAccelerator({
+          AcceleratorArn: acceleratorArn,
+          Enabled: false,
+        })
+        .pipe(
+          withGaRegion,
+          retryGaTransaction,
+          Effect.map(() => true),
+          Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(false)),
+        );
       if (!exists) return;
       yield* session.note("waiting for accelerator to disable");
       // The disable propagates asynchronously; deleteAccelerator rejects with
       // AcceleratorNotDisabledException until it lands, so retry bounded.
-      yield* retryUntilAcceleratorDeletable(
-        withGaRegion(ga.deleteAccelerator({ AcceleratorArn: acceleratorArn })),
-      ).pipe(Effect.catchTag("AcceleratorNotFoundException", () => Effect.void));
+      yield* ga.deleteAccelerator({ AcceleratorArn: acceleratorArn }).pipe(
+        withGaRegion,
+        retryUntilAcceleratorDeletable,
+        Effect.catchTag("AcceleratorNotFoundException", () => Effect.void),
+      );
     }),
   });

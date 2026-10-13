@@ -150,14 +150,12 @@ export const AppProvider = () =>
       // Sync — RealtimeKit has no update API. The only mutable-looking prop
       // is the name; fail loudly instead of silently ignoring drift.
       if ((observed.name ?? "") !== name) {
-        return yield* Effect.fail(
-          new AppRenameNotSupported({
-            appId: observed.id ?? "",
-            currentName: observed.name ?? "",
-            desiredName: name,
-            message: `Cloudflare RealtimeKit apps cannot be renamed (no update API) or replaced (no delete API). App ${observed.id} is named "${observed.name}" but "${name}" was requested.`,
-          }),
-        );
+        return yield* new AppRenameNotSupported({
+          appId: observed.id ?? "",
+          currentName: observed.name ?? "",
+          desiredName: name,
+          message: `Cloudflare RealtimeKit apps cannot be renamed (no update API) or replaced (no delete API). App ${observed.id} is named "${observed.name}" but "${name}" was requested.`,
+        });
       }
       return toAttributes(observed, observed.accountId);
     }),

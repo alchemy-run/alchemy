@@ -172,11 +172,9 @@ export const HttpNamespaceProvider = () =>
             );
           }
           if (namespace?.Id === undefined) {
-            return yield* Effect.fail(
-              new sd.NamespaceNotFound({
-                message: `namespace ${name} not visible after create`,
-              }),
-            );
+            return yield* sd.NamespaceNotFound.make({
+              message: `namespace ${name} not visible after create`,
+            });
           }
 
           // 3. SYNC — description (updateHttpNamespace requires Description)
@@ -202,12 +200,12 @@ export const HttpNamespaceProvider = () =>
           const deleted = yield* retryWhileResourceInUse(
             sd.deleteNamespace({ Id: output.namespaceId }),
           ).pipe(
-            Effect.catchTag("NamespaceNotFound", () => Effect.succeed({ OperationId: undefined })),
-            // an identical delete is already in flight — await THAT operation
-            // instead of silently skipping the deletion
-            Effect.catchTag("DuplicateRequest", (e) =>
-              Effect.succeed({ OperationId: e.DuplicateOperationId }),
-            ),
+            Effect.catchTags({
+              NamespaceNotFound: () => Effect.succeed({ OperationId: undefined }),
+              // an identical delete is already in flight — await THAT operation
+              // instead of silently skipping the deletion
+              DuplicateRequest: (e) => Effect.succeed({ OperationId: e.DuplicateOperationId }),
+            }),
           );
           if (deleted.OperationId !== undefined) {
             yield* awaitOperation(deleted.OperationId);

@@ -354,40 +354,34 @@ export const IPSetProvider = () =>
           const scope = output.scope;
           // An IP set still referenced by a web ACL rule (deletion
           // propagation) surfaces WAFAssociatedItemException — retry it.
-          yield* retryAssociatedItem(
-            retryOptimisticLock(
-              Effect.gen(function* () {
-                const found = yield* withWafScope(
-                  scope,
-                  wafv2
-                    .getIPSet({
-                      Name: output.ipSetName,
-                      Scope: scope,
-                      Id: output.ipSetId,
-                    })
-                    .pipe(
-                      Effect.catchTag("WAFNonexistentItemException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    ),
-                );
-                if (!found?.IPSet || found.LockToken === undefined) {
-                  return;
-                }
-                yield* withWafScope(
-                  scope,
-                  wafv2
-                    .deleteIPSet({
-                      Name: output.ipSetName,
-                      Scope: scope,
-                      Id: output.ipSetId,
-                      LockToken: found.LockToken,
-                    })
-                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
-                );
-              }),
-            ),
-          );
+          yield* Effect.gen(function* () {
+            const found = yield* withWafScope(
+              scope,
+              wafv2
+                .getIPSet({
+                  Name: output.ipSetName,
+                  Scope: scope,
+                  Id: output.ipSetId,
+                })
+                .pipe(
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
+                ),
+            );
+            if (!found?.IPSet || found.LockToken === undefined) {
+              return;
+            }
+            yield* withWafScope(
+              scope,
+              wafv2
+                .deleteIPSet({
+                  Name: output.ipSetName,
+                  Scope: scope,
+                  Id: output.ipSetId,
+                  LockToken: found.LockToken,
+                })
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
+            );
+          }).pipe(retryOptimisticLock, retryAssociatedItem);
         }),
       };
     }),

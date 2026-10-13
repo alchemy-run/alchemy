@@ -17,6 +17,7 @@ import {
   type ApiTokenBinding,
   type Props,
 } from "./Common.ts";
+import { uniqueTokens } from "./internal.ts";
 
 export type AccountApiToken = Resource<
   "Cloudflare.ApiToken.AccountApiToken",
@@ -198,8 +199,10 @@ export const AccountApiTokenProvider = () =>
             })
             .pipe(
               Effect.map((token) => token),
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-              Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTags({
+                InvalidRoute: () => Effect.succeed(undefined),
+                TokenNotFound: () => Effect.succeed(undefined),
+              }),
             )
         : undefined;
 
@@ -248,8 +251,10 @@ export const AccountApiTokenProvider = () =>
           // Already gone — Cloudflare may report this as either an
           // `InvalidRoute` (token-id no longer routable) or a generic
           // `TokenNotFound`. Either is fine; we just want the resource gone.
-          Effect.catchTag("InvalidRoute", () => Effect.void),
-          Effect.catchTag("TokenNotFound", () => Effect.void),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.void,
+            TokenNotFound: () => Effect.void,
+          }),
           // Cloudflare-managed tokens (e.g. "Cloudflare Resource Tagging
           // System") can never be deleted (code 1001). We don't own them, so
           // treat the refusal as a no-op rather than a failure.
@@ -262,13 +267,18 @@ export const AccountApiTokenProvider = () =>
       // creation time. The list/get APIs never expose it, so we hydrate an
       // empty redacted placeholder — matching what `read` returns when it
       // re-observes a token whose value we no longer hold.
-      return yield* accounts.listTokens.pages({ accountId }).pipe(
+      //
+      // `GET /accounts/{id}/tokens` is offset-paginated over a name-sorted
+      // list, so any token created or deleted between page fetches (e.g. a
+      // concurrent deploy) shifts the window: tokens get listed twice or
+      // skipped. Request the API's maximum page size (1000) so a typical
+      // account is enumerated in one snapshot, and de-duplicate by id in
+      // case it still spans pages.
+      return yield* accounts.listTokens.pages({ accountId, perPage: 1000 }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) =>
-              buildAttributes(token, Redacted.make(""), accountId),
-            ),
+          uniqueTokens(Array.from(chunk).flatMap((page) => page.result ?? [])).map((token) =>
+            buildAttributes(token, Redacted.make(""), accountId),
           ),
         ),
       );
@@ -282,8 +292,10 @@ export const AccountApiTokenProvider = () =>
         })
         .pipe(
           Effect.map((token) => buildAttributes(token, output.value, output.accountId)),
-          Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-          Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTags({
+            InvalidRoute: () => Effect.succeed(undefined),
+            TokenNotFound: () => Effect.succeed(undefined),
+          }),
         );
     }),
   });

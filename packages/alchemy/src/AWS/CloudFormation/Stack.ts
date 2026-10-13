@@ -271,13 +271,11 @@ export const StackProvider = () =>
           retryUntilStackSettled,
         );
         if (stack !== undefined && isFailure(stack.StackStatus)) {
-          return yield* Effect.fail(
-            new StackOperationFailed({
-              stackName,
-              status: stack.StackStatus ?? "UNKNOWN",
-              reason: stack.StackStatusReason,
-            }),
-          );
+          return yield* new StackOperationFailed({
+            stackName,
+            status: stack.StackStatus ?? "UNKNOWN",
+            reason: stack.StackStatusReason,
+          });
         }
         return stack;
       });
@@ -368,13 +366,11 @@ export const StackProvider = () =>
             });
             const settled = yield* waitForSettled(created.StackId!, name);
             if (settled === undefined) {
-              return yield* Effect.fail(
-                new StackOperationFailed({
-                  stackName: name,
-                  status: "DELETE_COMPLETE",
-                  reason: "Stack disappeared immediately after creation",
-                }),
-              );
+              return yield* new StackOperationFailed({
+                stackName: name,
+                status: "DELETE_COMPLETE",
+                reason: "Stack disappeared immediately after creation",
+              });
             }
             yield* session.note(name);
             return toAttrs(settled);
@@ -401,13 +397,11 @@ export const StackProvider = () =>
 
           const final = didUpdate ? yield* waitForSettled(observed.StackId!, name) : observed;
           if (final === undefined) {
-            return yield* Effect.fail(
-              new StackOperationFailed({
-                stackName: name,
-                status: "DELETE_COMPLETE",
-                reason: "Stack disappeared while updating",
-              }),
-            );
+            return yield* new StackOperationFailed({
+              stackName: name,
+              status: "DELETE_COMPLETE",
+              reason: "Stack disappeared while updating",
+            });
           }
 
           // 4. Return fresh attributes.

@@ -102,7 +102,7 @@ export const toTagRecord = (
 export const readImageBuilderTags = Effect.fn(function* (arn: string) {
   const response = yield* imagebuilder
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 

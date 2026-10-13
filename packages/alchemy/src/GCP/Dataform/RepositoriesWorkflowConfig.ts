@@ -354,8 +354,10 @@ export const RepositoriesWorkflowConfigProvider = () =>
           name: output.name,
         }),
       ).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+        }),
       );
       yield* waitUntilGone(getByName(output.name));
     }),

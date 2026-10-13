@@ -21,13 +21,11 @@ import type { FunctionRuntimeContext } from "./FunctionRuntimeContext.ts";
 import { FunctionUpgradeSockets } from "./FunctionUpgrade.ts";
 
 const closeRequestScope = (scope: Scope.Closeable) => {
-  nativeWaitUntil(
-    Effect.runPromise(
-      Scope.close(scope, Exit.void).pipe(
-        Effect.timeout("15 seconds"),
-        Effect.ignoreCause({ log: "Error" }),
-      ),
-    ),
+  Scope.close(scope, Exit.void).pipe(
+    Effect.timeout("15 seconds"),
+    Effect.ignoreCause({ log: "Error" }),
+    Effect.runPromise,
+    nativeWaitUntil,
   );
 };
 

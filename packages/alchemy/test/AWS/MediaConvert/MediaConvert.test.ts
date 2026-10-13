@@ -274,8 +274,7 @@ test.provider(
 
 // ---------------------------------------------------------------------------
 // Job live lifecycle — slow/billable; needs an IAM role MediaConvert can
-// assume plus S3 access. Gated behind AWS_TEST_SLOW. Requires:
-//   AWS_TEST_SLOW=1
+// assume plus S3 access. Skipped under `--fast`. Requires:
 //   MEDIACONVERT_ROLE_ARN=<role arn>
 //   MEDIACONVERT_TEST_INPUT=s3://bucket/input.mp4
 //   MEDIACONVERT_TEST_OUTPUT=s3://bucket/out/
@@ -283,10 +282,10 @@ test.provider(
 // only asserts submission + a terminal-or-progressing status, then cancels.
 // ---------------------------------------------------------------------------
 
-const runJob = process.env.AWS_TEST_SLOW === "1" && !!process.env.MEDIACONVERT_ROLE_ARN;
+const runJob = !process.env.FAST && !!process.env.MEDIACONVERT_ROLE_ARN;
 
 test.provider.skipIf(!runJob)(
-  "Job: submit a transcode and cancel it (gated AWS_TEST_SLOW=1)",
+  "Job: submit a transcode and cancel it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

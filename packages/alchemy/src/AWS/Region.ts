@@ -23,7 +23,7 @@ export const fromEnvOrElse = (region: string) =>
 // `AWSEnvironment` eagerly at top level hits a temporal-dead-zone error when
 // this module is evaluated mid-cycle.
 export const CurrentRegion = Effect.suspend(() =>
-  AWSEnvironment.use((env) => Effect.flatMap(env, ({ region }) => Effect.succeed(region))),
+  AWSEnvironment.use((env) => Effect.map(env, ({ region }) => region)),
 );
 
 /**

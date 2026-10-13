@@ -200,7 +200,7 @@ describe.sequential(
 // Multi-Region Access Point provisioning is asynchronous and can consume the
 // entire 240s suite ceiling. Keep this explicitly gated; a hard-killed run
 // must be audited by deterministic physical name before it is retried.
-describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
+describe.skipIf(!!process.env.FAST).sequential(
   "AWS.S3Control MRAP route bindings (slow)",
   {
     tags: [

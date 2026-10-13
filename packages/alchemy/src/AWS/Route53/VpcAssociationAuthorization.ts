@@ -168,8 +168,10 @@ export const VpcAssociationAuthorizationProvider = () =>
               },
             })
             .pipe(
-              Effect.catchTag("VPCAssociationAuthorizationNotFound", () => Effect.void),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+              Effect.catchTags({
+                VPCAssociationAuthorizationNotFound: () => Effect.void,
+                NoSuchHostedZone: () => Effect.void,
+              }),
             );
         }),
       };

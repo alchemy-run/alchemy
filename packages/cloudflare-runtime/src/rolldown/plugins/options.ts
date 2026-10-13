@@ -287,30 +287,28 @@ const resolveInputPath = (id: string, root: string): string => {
 const wrapInput = (input: Record<string, string>) =>
   Object.fromEntries(Object.entries(input).map(([key, id]) => [key, workerEntryId(id)]));
 
-const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => {
-  return {
-    "process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    ...(hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)
-      ? {}
-      : {
-          "process.env": "{}",
-          "global.process.env": "{}",
-          "globalThis.process.env": "{}",
-        }),
-    ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
-      ? {
-          "navigator.userAgent": '"Cloudflare-Workers"',
-        }
-      : {}),
-    ...(nodeEnv === "production"
-      ? {
-          "import.meta.hot": "false",
-        }
-      : {}),
-  };
-};
+const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => ({
+  "process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  ...(hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)
+    ? {}
+    : {
+        "process.env": "{}",
+        "global.process.env": "{}",
+        "globalThis.process.env": "{}",
+      }),
+  ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
+    ? {
+        "navigator.userAgent": '"Cloudflare-Workers"',
+      }
+    : {}),
+  ...(nodeEnv === "production"
+    ? {
+        "import.meta.hot": "false",
+      }
+    : {}),
+});
 
 const getOutputDirectory = (userConfig: vite.UserConfig, environmentName: string) => {
   const rootOutputDirectory = userConfig.build?.outDir ?? "dist";

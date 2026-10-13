@@ -326,11 +326,9 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
         while (!step.done) {
           const program: unknown = step.value;
           if (!isSfnEffect(program)) {
-            return yield* Effect.fail(
-              new SimulateError({
-                message: "Sfn.gen may only yield Sfn effects",
-              }),
-            );
+            return yield* new SimulateError({
+              message: "Sfn.gen may only yield Sfn effects",
+            });
           }
           const value = yield* runNode(program.node, env);
           const name = allocVar(env);

@@ -8,7 +8,6 @@ import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
-import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
 import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ScopedPlanStatusSession } from "./Report.ts";
@@ -18,6 +17,7 @@ import type {
   ResourceClassLike,
   ResourceLike,
 } from "./Resource.ts";
+import type { ResourceContext } from "./ResourceContext.ts";
 import type { State } from "./State/State.ts";
 
 export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
@@ -67,7 +67,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
 // Supplied by the engine to every lifecycle operation (the stack's `state`
 // layer is merged into the context lifecycle ops run under), so they are not
 // requirements of the provider layer itself.
-type LifecycleServices = InstanceId | Artifacts | State;
+type LifecycleServices = ResourceContext | Artifacts | State;
 
 export const Provider = <R extends ResourceLike>(type: R["Type"]): Provider<R> =>
   Context.Service<Provider<R>, ProviderService<R>>()(type) as any;
@@ -568,13 +568,10 @@ export const collection = <
     };
   }) as any;
 
-export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService => {
-  return (
-    Predicate.isObject(value) &&
-    Predicate.hasProperty(value, "kind") &&
-    value.kind === "ProviderCollection"
-  );
-};
+export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService =>
+  Predicate.isObject(value) &&
+  Predicate.hasProperty(value, "kind") &&
+  value.kind === "ProviderCollection";
 
 /**
  * Structural check for a {@link ProviderService} living in the Effect
@@ -760,39 +757,36 @@ export const tryFindProviderRegistrationByType: {
     resourceType: R["Type"],
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
 } = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
-  const found = yield* Effect.gen(function* () {
-    const Tag = Provider<R>(resourceType) as unknown as Context.Service<Provider<R>, any>;
-    const direct = yield* Effect.serviceOption(Tag);
-    if (Option.isSome(direct)) {
-      return direct;
-    }
+  const Tag = Provider<R>(resourceType) as unknown as Context.Service<Provider<R>, any>;
+  const direct = yield* Effect.serviceOption(Tag);
+  if (Option.isSome(direct)) {
+    return direct;
+  }
 
-    const context = yield* Effect.context<never>();
-    for (const value of context.mapUnsafe.values()) {
-      if (isProviderCollectionService(value)) {
-        const provider = value.get(resourceType);
-        if (provider) {
+  const context = yield* Effect.context<never>();
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      const provider = value.get(resourceType);
+      if (provider) {
+        return Option.some(provider);
+      }
+    }
+  }
+
+  // State persisted before a type rename carries the legacy name, so no
+  // provider is keyed under it. Fall back to a provider that declares the
+  // name in its `aliases` — scanning both bare Provider layers and the
+  // members of every ProviderCollection.
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const provider of Object.values(value.providers)) {
+        if (provider.aliases?.includes(resourceType)) {
           return Option.some(provider);
         }
       }
+    } else if (isProviderService(value) && value.aliases?.includes(resourceType)) {
+      return Option.some(value);
     }
-
-    // State persisted before a type rename carries the legacy name, so no
-    // provider is keyed under it. Fall back to a provider that declares the
-    // name in its `aliases` — scanning both bare Provider layers and the
-    // members of every ProviderCollection.
-    for (const value of context.mapUnsafe.values()) {
-      if (isProviderCollectionService(value)) {
-        for (const provider of Object.values(value.providers)) {
-          if (provider.aliases?.includes(resourceType)) {
-            return Option.some(provider);
-          }
-        }
-      } else if (isProviderService(value) && value.aliases?.includes(resourceType)) {
-        return Option.some(value);
-      }
-    }
-    return Option.none();
-  });
-  return found;
+  }
+  return Option.none();
 }) as any;

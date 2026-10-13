@@ -50,7 +50,7 @@ export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToke
     const jwt = yield* Effect.try({
       try: () => signJwt(sa, issuedAt),
       catch: (cause) =>
-        new AuthError({
+        AuthError.make({
           message: "Failed to sign Google service-account JWT",
           cause,
         }),
@@ -66,21 +66,19 @@ export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToke
         ),
       )
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new AuthError({
-              message: "Failed to mint Google access token",
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          AuthError.make({
+            message: "Failed to mint Google access token",
+            cause,
+          }),
         ),
       );
     const body = yield* tokenResponse.json.pipe(
-      Effect.mapError(
-        (cause) =>
-          new AuthError({
-            message: "Google token response was not JSON",
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        AuthError.make({
+          message: "Google token response was not JSON",
+          cause,
+        }),
       ),
     );
     if (
@@ -88,7 +86,7 @@ export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToke
       body === null ||
       typeof (body as { access_token?: unknown }).access_token !== "string"
     ) {
-      return yield* new AuthError({
+      return yield* AuthError.make({
         message: `Google token endpoint returned no access_token: ${JSON.stringify(body)}`,
       });
     }
@@ -113,7 +111,7 @@ export const parseServiceAccountKey = (raw: string): Effect.Effect<ServiceAccoun
       return parsed;
     },
     catch: (cause) =>
-      new AuthError({
+      AuthError.make({
         message: "Invalid Google service-account JSON",
         cause,
       }),

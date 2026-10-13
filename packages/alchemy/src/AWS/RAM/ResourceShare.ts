@@ -326,9 +326,11 @@ export const ResourceShareProvider = () =>
               resourceShareArn: output.resourceShareArn,
             })
             .pipe(
-              Effect.catchTag("UnknownResourceException", () => Effect.void),
-              // Already transitioning to DELETED from a prior attempt.
-              Effect.catchTag("InvalidStateTransitionException", () => Effect.void),
+              Effect.catchTags({
+                UnknownResourceException: () => Effect.void,
+                // Already transitioning to DELETED from a prior attempt.
+                InvalidStateTransitionException: () => Effect.void,
+              }),
             );
         }),
       };

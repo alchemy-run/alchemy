@@ -24,7 +24,7 @@ export const toTagRecord = (tags: forecast.Tag[] | undefined): Record<string, st
 export const readForecastTags = Effect.fn(function* (arn: string) {
   const response = yield* forecast
     .listTagsForResource({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

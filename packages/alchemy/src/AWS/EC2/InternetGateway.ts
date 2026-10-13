@@ -360,8 +360,10 @@ export const InternetGatewayProvider = () =>
                   })
                   .pipe(
                     Effect.tapError(Effect.logDebug),
-                    Effect.catchTag("Gateway.NotAttached", () => Effect.void),
-                    Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
+                    Effect.catchTags({
+                      "Gateway.NotAttached": () => Effect.void,
+                      "InvalidInternetGatewayID.NotFound": () => Effect.void,
+                    }),
                   ),
                 {
                   scope: { name: "vpc-id", value: attachment.VpcId! },
@@ -386,12 +388,9 @@ export const InternetGatewayProvider = () =>
               // draining EKS/HyperPod control plane's ENIs can take
               // several minutes to release — 5s x 60 = ~5 min.
               Effect.retry({
-                while: (e) => {
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" && e.message?.includes("DependencyViolation"))
-                  );
-                },
+                while: (e) =>
+                  e._tag === "DependencyViolation" ||
+                  (e._tag === "ValidationError" && e.message?.includes("DependencyViolation")),
                 schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
@@ -435,6 +434,10 @@ const describeInternetGateway = (internetGatewayId: string) =>
       schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(10)]),
     }),
   );
+
+class InternetGatewayStillListed extends Data.TaggedError("InternetGatewayStillListed")<{
+  internetGatewayId: string;
+}> {}
 
 class InternetGatewayNotVisible extends Data.TaggedError("InternetGatewayNotVisible")<{
   internetGatewayId: string;
@@ -484,31 +487,32 @@ const waitForInternetGatewayDeleted = (
   internetGatewayId: string,
   session: ScopedPlanStatusSession,
 ) =>
-  Effect.gen(function* () {
-    yield* Effect.retry(
-      Effect.gen(function* () {
-        const result = yield* ec2
-          .describeInternetGateways({ InternetGatewayIds: [internetGatewayId] })
-          .pipe(
-            Effect.tapError(Effect.logDebug),
-            Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
-              Effect.succeed({ InternetGateways: [] }),
-            ),
-          );
-
-        if (!result.InternetGateways || result.InternetGateways.length === 0) {
-          return; // Successfully deleted
-        }
-
-        // Still exists, fail to trigger retry
-        return yield* Effect.fail(new Error("Internet gateway still exists"));
-      }),
-      {
-        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
-          Schedule.tap(({ attempt }) =>
-            session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
+  Effect.retry(
+    Effect.gen(function* () {
+      const result = yield* ec2
+        .describeInternetGateways({ InternetGatewayIds: [internetGatewayId] })
+        .pipe(
+          Effect.tapError(Effect.logDebug),
+          Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+            Effect.succeed({ InternetGateways: [] }),
           ),
+        );
+
+      if (!result.InternetGateways || result.InternetGateways.length === 0) {
+        return; // Successfully deleted
+      }
+
+      // Still listed: EC2 is eventually consistent after a delete.
+      return yield* new InternetGatewayStillListed({ internetGatewayId });
+    }),
+    {
+      while: (error) => error._tag === "InternetGatewayStillListed",
+      // EC2 can keep listing a deleted gateway for minutes, so bound the
+      // wait like NatGateway: 5s x 60 = ~5 min.
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for internet gateway deletion... (${attempt * 5}s)`),
         ),
-      },
-    );
-  });
+      ),
+    },
+  );

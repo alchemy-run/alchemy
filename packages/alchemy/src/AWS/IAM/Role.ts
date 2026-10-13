@@ -666,7 +666,7 @@ export const RoleProvider = () =>
             if (remaining === undefined) return;
             yield* Effect.sleep("1 second");
           }
-          yield* Effect.die(
+          return yield* Effect.die(
             new Error(`IAM role ${output.roleName} remained observable 30 seconds after delete`),
           );
         }),

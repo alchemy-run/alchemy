@@ -20,7 +20,7 @@ export const toTagRecord = (
 export const readBackupSearchTags = Effect.fn(function* (arn: string) {
   const response = yield* backupsearch
     .listTagsForResource({ ResourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.Tags);
 });
 

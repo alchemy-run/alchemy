@@ -50,8 +50,8 @@ export const makeHttpQueryDatabaseClient = (
  */
 export const makeQueryDatabaseClientFrom = (
   rawEff: Effect.Effect<runtime.D1Database>,
-): QueryDatabaseClient => {
-  return {
+): QueryDatabaseClient =>
+  ({
     raw: rawEff,
     prepare: (query: string) => new PreparedStatement(query, [], rawEff),
     exec: (query: string) => Effect.flatMap(rawEff, (raw) => Effect.promise(() => raw.exec(query))),
@@ -59,8 +59,7 @@ export const makeQueryDatabaseClientFrom = (
       Effect.flatMap(rawEff, (raw) =>
         Effect.promise(() => raw.batch<T>(statements.map((s) => s._build(raw)))),
       ),
-  } satisfies QueryDatabaseClient;
-};
+  }) satisfies QueryDatabaseClient;
 
 const runQuery = (
   auth: D1Auth,

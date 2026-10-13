@@ -21,7 +21,7 @@ export const observeControlTowerTags = (resourceArn: string) =>
       }
       return tags;
     }),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 
 /**

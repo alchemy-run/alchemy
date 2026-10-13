@@ -29,8 +29,11 @@ export const WriteFileDevBox = Layer.effect(
   WriteFile,
   Effect.gen(function* () {
     const devBox = yield* DevBox;
+    // Starting is idempotent: a no-op once the container is running.
+    const start = devBox.start({ enableInternet: true });
 
-    return ({ path, contents }) => devBox.writeFile(path, contents);
+    return ({ path, contents }) =>
+      start.pipe(Effect.andThen(devBox.writeFile(path, contents)), Effect.orDie);
   }),
 );
 

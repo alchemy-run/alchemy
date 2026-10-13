@@ -104,7 +104,7 @@ const [created] = yield* db.insert(Todos).values({
 pnpm deploy --profile testing
 ```
 
-The example's Action performs the initial bootstrap. Neither `AWS.DSQL.Cluster` nor the runtime `Drizzle.Postgres` wrapper applies generated migration files automatically.
+The example's Action performs the initial bootstrap. To apply versioned migrations on deploy instead, pass them to the cluster's `migrations` prop; see [Apply the committed SQL](#apply-the-committed-sql).
 
 ## Verify the connection
 
@@ -182,9 +182,15 @@ This operator connection uses AWS CLI credentials authorized for `dsql:DbConnect
 
 ### Apply the committed SQL
 
-Use a validated DSQL-compatible migration runner in the release process before deploying dependent application code. It must record applied versions, handle partial failures, execute DDL as separate autocommit statements, and wait for asynchronous indexes. A plain `psql --file` has no migration history or safe replay; do not wrap the file in `BEGIN` or `--single-transaction`.
+Pass the committed directory to the cluster. `alchemy deploy` applies pending migrations before anything that depends on the cluster:
 
-Keep an existing validated DSQL migration workflow separate from `alchemy deploy`; the example's bootstrap Action is not its replacement. Do not expose schema administration through an HTTP `/setup` route.
+```typescript
+const database = yield* AWS.DSQL.Cluster("Database", {
+  migrations: "./migrations",
+});
+```
+
+Each statement runs separately, `CREATE INDEX` becomes `CREATE INDEX ASYNC` and is awaited, and applied migrations are recorded in `__alchemy_migrations`. Editing or deleting an applied migration fails the deploy; add a new migration instead. Don't wrap migration files in `BEGIN`/`COMMIT`, and don't expose schema administration through an HTTP `/setup` route.
 
 ## Clean up
 

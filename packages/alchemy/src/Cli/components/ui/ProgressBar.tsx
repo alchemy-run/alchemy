@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import type { ReactNode } from "react";
 import { statusPaint, type StatusVariant } from "../../../Util/Theme.ts";

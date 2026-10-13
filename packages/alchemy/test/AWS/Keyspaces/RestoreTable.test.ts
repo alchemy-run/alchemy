@@ -41,8 +41,8 @@ const deleteRestoredTable = keyspaces
 // keyspaces RestoreTable creates a new table from a source table's
 // point-in-time-recovery backup. The ungated probe asserts the distilled
 // wiring surfaces typed errors; the live restore (which needs a PITR table +
-// a deployed Lambda exercising the RestoreTable binding) is gated behind
-// AWS_TEST_SLOW=1.
+// a deployed Lambda exercising the RestoreTable binding) is skipped under
+// `--fast`.
 describe(
   "AWS.Keyspaces.RestoreTable",
   { tags: ["provider:aws", "provider:aws:keyspaces", "live"] },
@@ -64,7 +64,7 @@ describe(
       { timeout: 60_000 },
     );
 
-    test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    test.provider.skipIf(!!process.env.FAST)(
       "Lambda restores a PITR table into a new table via the binding",
       (stack) =>
         Effect.gen(function* () {

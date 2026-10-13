@@ -32,8 +32,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Bundle from "../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../Docker/Dockerfile.ts";
-import type { InstanceId } from "../InstanceId.ts";
 import type { ResourceBinding } from "../Resource.ts";
+import type { ResourceContext } from "../ResourceContext.ts";
 import type { Stack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import type { Connection } from "./Connection.ts";
@@ -42,10 +42,10 @@ import type { Connection } from "./Connection.ts";
  * Per-resource engine services ambient inside every provider lifecycle
  * operation. Adapter methods run inside the workload providers' lifecycle
  * ops, so they may require these (physical-name generation needs the
- * resource's InstanceId + Stack + Stage) — everything else an adapter
+ * resource's ResourceContext + Stack + Stage) — everything else an adapter
  * needs is captured at its layer build.
  */
-export type AdapterLifecycleServices = InstanceId | Stack | Stage;
+export type AdapterLifecycleServices = ResourceContext | Stack | Stage;
 
 /**
  * The target cluster no longer exists (definitively — e.g. the managed

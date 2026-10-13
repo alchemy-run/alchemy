@@ -1,4 +1,5 @@
 import { useEffect, useState } from "@alchemy.run/sigil/react";
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays

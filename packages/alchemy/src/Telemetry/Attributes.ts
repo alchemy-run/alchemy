@@ -66,7 +66,7 @@ const getOrCreateUserId: Effect.Effect<string> = Effect.gen(function* () {
       await fs.writeFile(idPath(), id);
     },
     catch: () => null as never,
-  }).pipe(Effect.catch(() => Effect.void));
+  }).pipe(Effect.ignore);
   return id;
 });
 

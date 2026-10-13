@@ -120,11 +120,10 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
             Effect.map((creds) =>
               make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
             ),
-            Effect.mapError(
-              (e) =>
-                new AuthError({
-                  message: `Failed to resolve GitHub credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-                }),
+            Effect.mapError((e) =>
+              AuthError.make({
+                message: `Failed to resolve GitHub credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+              }),
             ),
           ),
         ),

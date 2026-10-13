@@ -76,12 +76,10 @@ export const fromAuthProvider = () =>
         PlanetscaleResolvedCredentials
       >(PLANETSCALE_AUTH_PROVIDER_NAME).pipe(
         Effect.flatMap(({ profileName, resolve }) =>
-          Effect.mapError(
-            resolve,
-            (e) =>
-              new ConfigError({
-                message: `Failed to resolve Planetscale credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${e.message}`,
-              }),
+          Effect.mapError(resolve, (e) =>
+            ConfigError.make({
+              message: `Failed to resolve Planetscale credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${e.message}`,
+            }),
           ),
         ),
         deferUntilFirstUse,

@@ -167,10 +167,12 @@ export const ResourceProvider = () =>
                 // service-linked role ("Resource managed by Service Linked
                 // Role") — recreate the registration in place instead.
                 yield* lf.deregisterResource({ ResourceArn: resourceArn }).pipe(
-                  Effect.catchTag("EntityNotFoundException", () => Effect.void),
-                  // spurious error on the last SLR location — the
-                  // deregistration still succeeds (see delete below)
-                  Effect.catchTag("LastServiceLinkedRoleRegistration", () => Effect.void),
+                  Effect.catchTags({
+                    EntityNotFoundException: () => Effect.void,
+                    // spurious error on the last SLR location — the
+                    // deregistration still succeeds (see delete below)
+                    LastServiceLinkedRoleRegistration: () => Effect.void,
+                  }),
                 );
                 yield* register;
               } else {
@@ -199,18 +201,19 @@ export const ResourceProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* lf.deregisterResource({ ResourceArn: output.resourceArn }).pipe(
-            Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            // Deregistering the LAST location registered with the
-            // service-linked role returns "Must manually delete
-            // service-linked role to deregister last S3 location" even
-            // though the registration IS removed (verified live). Verify
-            // and only re-fail if the registration is still present.
-            Effect.catchTag("LastServiceLinkedRoleRegistration", (error) =>
-              lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
-                Effect.flatMap(() => Effect.fail(error)),
-                Effect.catchTag("EntityNotFoundException", () => Effect.void),
-              ),
-            ),
+            Effect.catchTags({
+              EntityNotFoundException: () => Effect.void,
+              // Deregistering the LAST location registered with the
+              // service-linked role returns "Must manually delete
+              // service-linked role to deregister last S3 location" even
+              // though the registration IS removed (verified live). Verify
+              // and only re-fail if the registration is still present.
+              LastServiceLinkedRoleRegistration: (error) =>
+                lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
+                  Effect.flatMap(() => Effect.fail(error)),
+                  Effect.catchTag("EntityNotFoundException", () => Effect.void),
+                ),
+            }),
           );
         }),
       });

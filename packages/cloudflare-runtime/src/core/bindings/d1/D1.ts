@@ -45,7 +45,7 @@ export const D1Live = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "D1",
           message: "Cannot configure D1 persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
@@ -53,15 +53,14 @@ export const D1Live = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "d1");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "D1",
-              message: `Failed to create D1 persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "D1",
+            message: `Failed to create D1 persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
