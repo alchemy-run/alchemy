@@ -16,16 +16,10 @@ export class PgError extends Data.TaggedError("PgError")<{
 }> {}
 
 /**
- * Strip query-string SSL flags from a Neon connection URI. Neon's URIs
- * include `sslmode=require` and `channel_binding=require`, which trigger
- * a deprecation warning from `pg-connection-string`:
- *
- *   SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca'
- *   are treated as aliases for 'verify-full'.
- *
- * We control SSL programmatically via the `ssl` option below, so removing
- * the conflicting query params silences the warning without changing the
- * effective behavior.
+ * Strip `sslmode` and `channel_binding` from Neon connection URIs to avoid
+ * conflicting with the client's explicit TLS settings and triggering the
+ * `pg-connection-string` SSL-mode deprecation warning. TLS and server
+ * certificate verification are enabled below (`rejectUnauthorized: true`).
  */
 const stripSslQueryParams = (uri: string): string => {
   try {
@@ -55,7 +49,7 @@ export const withPgClient = <A, E, R>(
         const { Client } = await importPg();
         const client = new Client({
           connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
-          ssl: { rejectUnauthorized: false },
+          ssl: { rejectUnauthorized: true },
         });
         await client.connect();
         return client;
