@@ -206,6 +206,9 @@ export type WebFunctionServices = Credentials | Region | AWSEnvironment | WebFun
 
 export type WebFunctionShape = Main<WebFunctionServices>;
 
+/** HTTP-only host context: `serve` registers the `fetch` handler. */
+export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
+
 /**
  * An AWS Lambda Web Function: a serverless HTTP server. Lambda runs your
  * Node.js server in execution environments that each serve many concurrent
@@ -215,7 +218,8 @@ export type WebFunctionShape = Main<WebFunctionServices>;
  * Use a Web Function for anything that answers HTTP — APIs, server-rendered
  * apps, streaming AI responses. Use `AWS.Lambda.Function` for event sources
  * (SQS, DynamoDB Streams, S3 notifications, schedules) and direct invokes;
- * a Web Function only receives HTTP. Web Functions are available in
+ * a Web Function only receives HTTP. Event sources and background loops
+ * (`ServerHost.run`) are type errors in a Web Function and fail at plan. Web Functions are available in
  * `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, and `ap-northeast-1`.
  *
  * Every deploy uploads the bundle to the Alchemy assets bucket, creates an
@@ -349,11 +353,20 @@ export const WebFunction: Platform<
   WebFunction,
   WebFunctionServices,
   WebFunctionShape,
-  HostRuntimeContext,
+  WebFunctionRuntimeContext,
   {},
   WebFunctionProps
 > = Platform(WebFunctionTypeId, {
-  createRuntimeContext: createHostRuntimeContext(WebFunctionTypeId),
+  createRuntimeContext: (id: string): WebFunctionRuntimeContext => {
+    // No `run`: environments exist only while HTTP traffic keeps them warm,
+    // so background loops (e.g. queue pollers via `ServerHost`) would stop
+    // at scale-to-zero and multiply per environment. Without `run`, the
+    // platform never provides `ServerHost`, and such code fails to type
+    // check and fails at plan instead of deploying a poller that silently
+    // stops consuming.
+    const { run: _run, ...context } = createHostRuntimeContext(WebFunctionTypeId)(id);
+    return context;
+  },
 });
 
 /** Generated entry for Effect web functions. */

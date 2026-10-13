@@ -3,6 +3,7 @@ import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -13,6 +14,12 @@ import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import EffectWebFunctionLive, { EffectWebFunction } from "./fixtures/web/effect-web.ts";
+import {
+  BackgroundLoopWeb,
+  BackgroundLoopWebLive,
+  EventSourceWeb,
+  EventSourceWebLive,
+} from "./fixtures/web/not-http.ts";
 
 const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
 const asyncListenMain = fileURLToPath(new URL("./fixtures/web/async-listen.ts", import.meta.url));
@@ -298,4 +305,24 @@ test.provider(
       expect(yield* roles).toEqual([]);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "event sources and background loops fail at plan",
+  (stack) =>
+    Effect.gen(function* () {
+      const failure = <A, E, R>(plan: Effect.Effect<A, E, R>) =>
+        plan.pipe(
+          Effect.exit,
+          Effect.map((exit) => (exit._tag === "Failure" ? String(Cause.squash(exit.cause)) : "")),
+        );
+
+      expect(
+        yield* failure(stack.plan(EventSourceWeb.pipe(Effect.provide(EventSourceWebLive)))),
+      ).toContain("AWS.Lambda.Function");
+      expect(
+        yield* failure(stack.plan(BackgroundLoopWeb.pipe(Effect.provide(BackgroundLoopWebLive)))),
+      ).toContain("ServerHost");
+    }),
+  { tags, timeout: 60_000 },
 );
