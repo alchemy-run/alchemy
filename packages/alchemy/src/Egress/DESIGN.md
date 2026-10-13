@@ -196,8 +196,8 @@ export default AWS.MicroVM.Sandbox(
     image: "node:24-bookworm",
     memory: "32 GB",
     cpu: 8,
-    // Where the proxy sends egress traffic. One Worker instead: `{ worker: Api, path: "/egress" }`.
-    gateway: { worker: Gateway },
+    // The Worker the proxy sends egress traffic to. One Worker instead: `gateway: Api, gatewayPath: "/egress"`.
+    gateway: Gateway,
   },
   Effect.gen(function* () {
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" });
@@ -296,9 +296,9 @@ const rootKey = yield* Egress.RootKey; // Random("EgressRootKey", { bytes: 32 })
 yield* worker.bind`EgressRootKey`({ env: { ALCHEMY_EGRESS_ROOT_KEY: rootKey.value } });
 
 // Where sandboxes send egress traffic: the Worker the user named in `gateway`.
-const gateway = yield* options.gateway.worker;
+const gateway = yield* options.gateway;
 yield* worker.bind`EgressGateway`({
-  env: { ALCHEMY_EGRESS_GATEWAY: Output.interpolate`${gateway.url}${options.gateway.path ?? "/"}` },
+  env: { ALCHEMY_EGRESS_GATEWAY: Output.interpolate`${gateway.url}${options.gatewayPath ?? "/"}` },
 });
 
 // Starting microVMs.
