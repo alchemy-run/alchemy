@@ -1,0 +1,136 @@
+---
+/**
+ * `<DomainNode />`: one building block drawn inside an SVG diagram, with its
+ * kind's shape, icon and colour. Draw it at the origin and position it with a
+ * surrounding `transform`.
+ */
+import { KINDS, type Kind } from "./kinds.ts";
+
+interface Props {
+  kind: Kind;
+  width: number;
+  height: number;
+  label: string;
+  type?: string;
+}
+
+const { kind, width: w, height: h, label, type } = Astro.props as Props;
+const style = KINDS[kind];
+
+// Labels are monospace at 13px, so their width is predictable enough to
+// centre the icon and the label together.
+const ICON = 14;
+const GAP = 6;
+const labelWidth = label.length * 7.8;
+const left = (w - (ICON + GAP + labelWidth)) / 2;
+const labelY = type ? h / 2 - 4 : h / 2 + 1;
+
+const TIP = 12; // the arrow's point
+const CUT = 9; // the octagon's corners
+const FOLD = 13; // the record's corner
+
+const outline = (() => {
+  switch (style.shape) {
+    case "arrow":
+      return `M 6 0 H ${w - TIP} L ${w} ${h / 2} L ${w - TIP} ${h} H 6 Q 0 ${h} 0 ${h - 6} V 6 Q 0 0 6 0 Z`;
+    case "record":
+      return `M 4 0 H ${w - FOLD} L ${w} ${FOLD} V ${h - 4} Q ${w} ${h} ${w - 4} ${h} H 4 Q 0 ${h} 0 ${h - 4} V 4 Q 0 0 4 0 Z`;
+    case "octagon":
+      return `M ${CUT} 0 H ${w - CUT} L ${w} ${CUT} V ${h - CUT} L ${w - CUT} ${h} H ${CUT} L 0 ${h - CUT} V ${CUT} Z`;
+    default:
+      return undefined;
+  }
+})();
+const radius = style.shape === "pill" ? h / 2 : 8;
+---
+
+<g class={`alc-dnode alc-dnode--${style.shape}`} style={`--hue:${style.hue}`}>
+  {
+    style.shape === "stack" && (
+      <>
+        <rect x="8" y="8" width={w} height={h} rx="8" class="alc-dnode__behind" />
+        <rect x="4" y="4" width={w} height={h} rx="8" class="alc-dnode__behind" />
+      </>
+    )
+  }
+  {
+    outline ? (
+      <path d={outline} class="alc-dnode__bg" />
+    ) : (
+      <rect width={w} height={h} rx={radius} class="alc-dnode__bg" />
+    )
+  }
+  {
+    style.shape === "boundary" && (
+      <rect x="4" y="4" width={w - 8} height={h - 8} rx="5" class="alc-dnode__inner" />
+    )
+  }
+  {style.shape === "record" && <path d={`M ${w - FOLD} 0 V ${FOLD} H ${w}`} class="alc-dnode__fold" />}
+  <g transform={`translate(${left}, ${labelY - ICON / 2}) scale(${ICON / 24})`} class="alc-dnode__icon">
+    {style.icon.map((d) => <path d={d} />)}
+  </g>
+  <text x={left + ICON + GAP} y={labelY} class="alc-dnode__label" dominant-baseline="middle">
+    {label}
+  </text>
+  {
+    type && (
+      <text x={w / 2} y={h / 2 + 14} class="alc-dnode__type" text-anchor="middle" dominant-baseline="middle">
+        {type}
+      </text>
+    )
+  }
+</g>
+
+<style>
+  .alc-dnode__bg {
+    fill: color-mix(in srgb, var(--hue) 22%, var(--alc-bg-elev-2));
+    stroke: var(--hue);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  .alc-dnode--outside .alc-dnode__bg {
+    stroke-dasharray: 5 4;
+    fill: color-mix(in srgb, var(--hue) 10%, var(--alc-bg-elev-2));
+  }
+
+  .alc-dnode__behind {
+    fill: color-mix(in srgb, var(--hue) 10%, var(--alc-bg-elev-2));
+    stroke: color-mix(in srgb, var(--hue) 55%, transparent);
+    stroke-width: 1.2;
+  }
+
+  .alc-dnode__inner {
+    fill: none;
+    stroke: color-mix(in srgb, var(--hue) 55%, transparent);
+    stroke-width: 1;
+  }
+
+  .alc-dnode__fold {
+    fill: color-mix(in srgb, var(--hue) 40%, var(--alc-bg-elev-2));
+    stroke: var(--hue);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+  }
+
+  .alc-dnode__icon path {
+    fill: none;
+    stroke: var(--hue);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .alc-dnode__label {
+    font-family: var(--alc-font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--alc-fg-1);
+  }
+
+  .alc-dnode__type {
+    font-family: var(--alc-font-mono);
+    font-size: 10.5px;
+    fill: color-mix(in srgb, var(--hue) 80%, var(--alc-fg-2));
+  }
+</style>

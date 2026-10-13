@@ -1,4 +1,8 @@
 ---
+import DomainIcon from "./domain/DomainIcon.astro";
+import DomainNode from "./domain/DomainNode.astro";
+import { KIND_ORDER, KINDS, type Kind } from "./domain/kinds.ts";
+
 /**
  * `<DAG />` — server-rendered SVG of a small directed acyclic graph.
  *
@@ -46,22 +50,13 @@ export interface NodeIn {
   /** Visual tone for the node. Defaults to "default". */
   tone?: "default" | "accent" | "warn" | "danger";
   /**
-   * What the node is in a domain model. Colours the node by kind, the same
-   * way on every diagram, and adds a legend of the kinds shown.
+   * What the node is in a domain model. Draws it with that kind's shape, icon
+   * and colour (see `./domain/kinds.ts`), and adds a legend of the kinds shown.
    */
   kind?: Kind;
 }
 
-export type Kind =
-  | "command"
-  | "aggregate"
-  | "event"
-  | "view"
-  | "projection"
-  | "stream"
-  | "policy"
-  | "rejection"
-  | "external";
+export type { Kind } from "./domain/kinds.ts";
 
 export interface EdgeIn {
   from: string;
@@ -83,23 +78,12 @@ interface Props {
 
 const { nodes, edges, direction = "LR", caption } = Astro.props as Props;
 
-// One hue per domain kind, distinct from each other; rejections are red.
-const KINDS: Record<Kind, { name: string; hue: string }> = {
-  command: { name: "Command", hue: "#4f9fd8" },
-  aggregate: { name: "Aggregate", hue: "#e3b341" },
-  event: { name: "Event", hue: "#f0782f" },
-  view: { name: "View", hue: "#7fb069" },
-  projection: { name: "Projection", hue: "#3fb8af" },
-  stream: { name: "Stream", hue: "#9aa7c7" },
-  policy: { name: "Policy", hue: "#a78bdb" },
-  rejection: { name: "Rejection", hue: "#e5484d" },
-  external: { name: "External system", hue: "#d97aa8" },
-};
-const kindsShown = (Object.keys(KINDS) as Kind[]).filter((k) => nodes.some((n) => n.kind === k));
+const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
 // ---------- Layout ----------
 
-const NODE_W = 140;
+// Domain nodes carry an icon beside their label, so they get a little more room.
+const NODE_W = nodes.some((n) => n.kind) ? 164 : 140;
 const NODE_H = 56;
 const NODE_H_TYPED = 64; // slightly taller when subtitle present
 const COL_GAP = 80;
@@ -412,12 +396,21 @@ const edgeShapes = buildEdges();
     {nodes.map((n) => {
       const p = positions.get(n.id)!;
       const tone = n.tone ?? "default";
+      if (n.kind) {
+        return (
+          <g transform={`translate(${p.x}, ${p.y})`}>
+            <DomainNode
+              kind={n.kind}
+              width={NODE_W}
+              height={p.h}
+              label={n.label ?? n.id}
+              type={n.type}
+            />
+          </g>
+        );
+      }
       return (
-        <g
-          class={`alc-dag__node alc-dag__node--${n.kind ? "kind" : tone}`}
-          style={n.kind ? `--hue:${KINDS[n.kind].hue}` : undefined}
-          transform={`translate(${p.x}, ${p.y})`}
-        >
+        <g class={`alc-dag__node alc-dag__node--${tone}`} transform={`translate(${p.x}, ${p.y})`}>
           <rect
             width={NODE_W}
             height={p.h}
@@ -455,7 +448,7 @@ const edgeShapes = buildEdges();
       <div class="alc-dag__legend">
         {kindsShown.map((k) => (
           <span class="alc-dag__key">
-            <span class="alc-dag__swatch" style={`--hue:${KINDS[k].hue}`} />
+            <DomainIcon kind={k} />
             {KINDS[k].name}
           </span>
         ))}
@@ -504,14 +497,7 @@ const edgeShapes = buildEdges();
     fill: color-mix(in srgb, var(--alc-danger) 10%, var(--alc-bg-elev-2));
   }
 
-  .alc-dag__node--kind .alc-dag__node-bg {
-    stroke: var(--hue);
-    fill: color-mix(in srgb, var(--hue) 22%, var(--alc-bg-elev-2));
-  }
 
-  .alc-dag__node--kind .alc-dag__node-type {
-    fill: color-mix(in srgb, var(--hue) 80%, var(--alc-fg-2));
-  }
 
   .alc-dag__legend {
     display: flex;
@@ -530,13 +516,6 @@ const edgeShapes = buildEdges();
     gap: 0.4rem;
   }
 
-  .alc-dag__swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    border: 1.5px solid var(--hue);
-    background: color-mix(in srgb, var(--hue) 20%, var(--alc-bg-elev-2));
-  }
 
   .alc-dag__node-label {
     font-family: var(--alc-font-mono);
