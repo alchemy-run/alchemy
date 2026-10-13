@@ -763,6 +763,12 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         module: import.meta.url,
         rootDir,
         framework: "vinext",
+        env: Object.fromEntries(
+          Object.entries(ctx.env ?? {}).flatMap(([key, value]) =>
+            key.startsWith("NEXT_PUBLIC_") && typeof value === "string" ? [[key, value]] : [],
+          ),
+        ),
+        excludeEnvPrefixes: ctx.stack.stage === "local" ? undefined : ["NEXT_PUBLIC_"],
         config: {
           rootDir,
           main: options.main,
