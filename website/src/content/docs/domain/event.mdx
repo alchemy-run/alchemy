@@ -78,10 +78,10 @@ In the same commit that stores an event, the instance records a delivery for eve
 
 <DAG
   nodes={[
-    { id: "event", label: "MoneyWithdrawn", type: "Account a-1", tone: "accent" },
-    { id: "summary", label: "AccountSummary", type: "view" },
-    { id: "statement", label: "Statement", type: "view" },
-    { id: "outflow", label: "DailyOutflow", type: "view" },
+    { id: "event", label: "MoneyWithdrawn", type: "Account a-1", kind: "event" },
+    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
+    { id: "statement", label: "Statement", type: "view", kind: "view" },
+    { id: "outflow", label: "DailyOutflow", type: "view", kind: "view" },
   ]}
   edges={[
     { from: "event", to: "summary", dashed: true },

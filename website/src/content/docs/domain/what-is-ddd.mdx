@@ -21,11 +21,11 @@ Here is the shape of the bank's model, which the rest of this page explains piec
 
 <DAG
   nodes={[
-    { id: "commands", label: "Commands", type: "DepositMoney", layer: 0 },
-    { id: "aggregates", label: "Aggregates", type: "Account", layer: 1, tone: "accent" },
-    { id: "events", label: "Events", type: "MoneyDeposited", layer: 2 },
-    { id: "views", label: "Views", type: "AccountSummary", layer: 3 },
-    { id: "policies", label: "Policies", type: "FraudReview", layer: 3 },
+    { id: "commands", label: "Commands", type: "DepositMoney", layer: 0, kind: "command" },
+    { id: "aggregates", label: "Aggregates", type: "Account", layer: 1, kind: "aggregate" },
+    { id: "events", label: "Events", type: "MoneyDeposited", layer: 2, kind: "event" },
+    { id: "views", label: "Views", type: "AccountSummary", layer: 3, kind: "view" },
+    { id: "policies", label: "Policies", type: "FraudReview", layer: 3, kind: "policy" },
   ]}
   edges={[
     { from: "commands", to: "aggregates" },
@@ -94,10 +94,10 @@ Rules like that are called **invariants**: conditions that must be true at every
 
 <DAG
   nodes={[
-    { id: "command", label: "WithdrawMoney", type: "command" },
-    { id: "account", label: "Account a-1", type: "aggregate", tone: "accent" },
-    { id: "event", label: "MoneyWithdrawn", type: "event" },
-    { id: "rejection", label: "InsufficientFunds", type: "rejection", tone: "warn" },
+    { id: "command", label: "WithdrawMoney", type: "command", kind: "command" },
+    { id: "account", label: "Account a-1", type: "aggregate", kind: "aggregate" },
+    { id: "event", label: "MoneyWithdrawn", type: "event", kind: "event" },
+    { id: "rejection", label: "InsufficientFunds", type: "rejection", kind: "rejection" },
   ]}
   edges={[
     { from: "command", to: "account" },
@@ -133,9 +133,9 @@ This is why an aggregate has two parts. **Decide** looks at the current state an
 <DAG
   nodes={[
     { id: "state", label: "balance: 100", type: "state" },
-    { id: "command", label: "WithdrawMoney 30", type: "command" },
+    { id: "command", label: "WithdrawMoney 30", type: "command", kind: "command" },
     { id: "decide", label: "decide", tone: "accent" },
-    { id: "event", label: "MoneyWithdrawn", type: "event" },
+    { id: "event", label: "MoneyWithdrawn", type: "event", kind: "event" },
     { id: "evolve", label: "evolve", tone: "accent" },
     { id: "next", label: "balance: 70", type: "state" },
   ]}
@@ -156,12 +156,12 @@ An account needs its balance to decide a withdrawal. It doesn't need a statement
 
 <DAG
   nodes={[
-    { id: "commands", label: "commands", type: "change something" },
-    { id: "aggregates", label: "aggregates", type: "decide" },
-    { id: "events", label: "events", type: "the record", tone: "accent" },
-    { id: "summary", label: "AccountSummary", type: "view" },
-    { id: "statement", label: "Statement", type: "view" },
-    { id: "dashboard", label: "Dashboard", type: "view" },
+    { id: "commands", label: "commands", type: "change something", kind: "command" },
+    { id: "aggregates", label: "aggregates", type: "decide", kind: "aggregate" },
+    { id: "events", label: "events", type: "the record", kind: "event" },
+    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
+    { id: "statement", label: "Statement", type: "view", kind: "view" },
+    { id: "dashboard", label: "Dashboard", type: "view", kind: "view" },
   ]}
   edges={[
     { from: "commands", to: "aggregates" },
@@ -199,9 +199,9 @@ A policy is triggered by an event, decides whether and how to act, and acts by s
 
 <DAG
   nodes={[
-    { id: "customer", label: "Customer", type: "CustomerRegistered" },
-    { id: "policy", label: "policy", type: "open main account", tone: "accent" },
-    { id: "account", label: "Account", type: "OpenAccount" },
+    { id: "customer", label: "Customer", type: "CustomerRegistered", kind: "aggregate" },
+    { id: "policy", label: "policy", type: "open main account", kind: "policy" },
+    { id: "account", label: "Account", type: "OpenAccount", kind: "aggregate" },
   ]}
   edges={[
     { from: "customer", to: "policy", dashed: true },
@@ -222,9 +222,9 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 
 <DAG
   nodes={[
-    { id: "bank", label: "Account", type: "Banking: holds money", layer: 0, tone: "accent" },
+    { id: "bank", label: "Account", type: "Banking: holds money", layer: 0, kind: "aggregate" },
     { id: "api", label: "BankApi", type: "published interface", layer: 1 },
-    { id: "logins", label: "Account", type: "Identity: a login", layer: 2, tone: "accent" },
+    { id: "logins", label: "Account", type: "Identity: a login", layer: 2, kind: "aggregate" },
   ]}
   edges={[
     { from: "logins", to: "api" },

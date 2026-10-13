@@ -15,12 +15,12 @@ A client deposits 100 into account `a-1`. Here is everything that happens, from 
 
 <DAG
   nodes={[
-    { id: "send", label: "send", type: "DepositMoney" },
-    { id: "account", label: "Account a-1", type: "aggregate", tone: "accent" },
+    { id: "send", label: "DepositMoney", type: "send", kind: "command" },
+    { id: "account", label: "Account a-1", type: "aggregate", kind: "aggregate" },
     { id: "commit", label: "commit", type: "events + state" },
     { id: "receipt", label: "receipt", type: "to the caller" },
-    { id: "summary", label: "AccountSummary", type: "view" },
-    { id: "statement", label: "Statement", type: "view" },
+    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
+    { id: "statement", label: "Statement", type: "view", kind: "view" },
   ]}
   edges={[
     { from: "send", to: "account" },
@@ -44,11 +44,11 @@ Each instance handles one command at a time. If two commands for `a-1` arrive to
 
 <DAG
   nodes={[
-    { id: "d1", label: "DepositMoney", type: "to a-1", layer: 0 },
-    { id: "w1", label: "WithdrawMoney", type: "to a-1", layer: 0 },
-    { id: "d2", label: "DepositMoney", type: "to a-2", layer: 0 },
-    { id: "a1", label: "Account a-1", type: "one at a time", layer: 1, tone: "accent" },
-    { id: "a2", label: "Account a-2", type: "one at a time", layer: 1, tone: "accent" },
+    { id: "d1", label: "DepositMoney", type: "to a-1", layer: 0, kind: "command" },
+    { id: "w1", label: "WithdrawMoney", type: "to a-1", layer: 0, kind: "command" },
+    { id: "d2", label: "DepositMoney", type: "to a-2", layer: 0, kind: "command" },
+    { id: "a1", label: "Account a-1", type: "one at a time", layer: 1, kind: "aggregate" },
+    { id: "a2", label: "Account a-2", type: "one at a time", layer: 1, kind: "aggregate" },
   ]}
   edges={[
     { from: "d1", to: "a1" },
@@ -81,7 +81,7 @@ The new events are appended to the instance's stream, each with the next sequenc
   nodes={[
     { id: "decide", label: "decide", type: "MoneyDeposited", layer: 0 },
     { id: "commit", label: "one atomic write", layer: 1, tone: "accent" },
-    { id: "events", label: "events", type: "seq 3", layer: 2 },
+    { id: "events", label: "events", type: "seq 3", layer: 2, kind: "event" },
     { id: "state", label: "state", type: "version 3", layer: 2 },
     { id: "receipt", label: "receipt", type: "reply", layer: 2 },
     { id: "deliveries", label: "deliveries", type: "views, policies", layer: 2 },

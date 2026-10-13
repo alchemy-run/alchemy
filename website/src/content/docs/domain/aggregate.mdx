@@ -125,11 +125,11 @@ Each instance processes one command at a time. When two withdrawals for the same
 
 <DAG
   nodes={[
-    { id: "first", label: "WithdrawMoney 80", type: "arrives first", layer: 0 },
-    { id: "second", label: "WithdrawMoney 80", type: "arrives second", layer: 0 },
-    { id: "account", label: "Account a-1", type: "balance: 100", layer: 1, tone: "accent" },
-    { id: "ok", label: "MoneyWithdrawn", type: "balance: 20", layer: 2 },
-    { id: "no", label: "InsufficientFunds", type: "balance: 20", layer: 2, tone: "warn" },
+    { id: "first", label: "WithdrawMoney 80", type: "arrives first", layer: 0, kind: "command" },
+    { id: "second", label: "WithdrawMoney 80", type: "arrives second", layer: 0, kind: "command" },
+    { id: "account", label: "Account a-1", type: "balance: 100", layer: 1, kind: "aggregate" },
+    { id: "ok", label: "MoneyWithdrawn", type: "balance: 20", layer: 2, kind: "event" },
+    { id: "no", label: "InsufficientFunds", type: "balance: 20", layer: 2, kind: "rejection" },
   ]}
   edges={[
     { from: "first", to: "account" },

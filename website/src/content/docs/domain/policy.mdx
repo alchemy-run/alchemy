@@ -47,9 +47,9 @@ You pass the implementation to the model when you run it: `Bank.layer(BankPolici
 
 <DAG
   nodes={[
-    { id: "customer", label: "Customer c-1", type: "aggregate" },
-    { id: "policy", label: "policy", type: "on CustomerRegistered", tone: "accent" },
-    { id: "account", label: "Account c-1-main", type: "OpenAccount" },
+    { id: "customer", label: "Customer c-1", type: "aggregate", kind: "aggregate" },
+    { id: "policy", label: "policy", type: "on CustomerRegistered", kind: "policy" },
+    { id: "account", label: "Account c-1-main", type: "OpenAccount", kind: "aggregate" },
   ]}
   edges={[
     { from: "customer", to: "policy", dashed: true },
@@ -66,9 +66,9 @@ So there's a moment when the customer exists and their account doesn't yet. That
 
 <DAG
   nodes={[
-    { id: "c1", label: "commit 1", type: "Customer c-1", layer: 0 },
-    { id: "policy", label: "policy", type: "MainAccountProvisioning", layer: 1, tone: "accent" },
-    { id: "c2", label: "commit 2", type: "Account c-1-main", layer: 2 },
+    { id: "c1", label: "commit 1", type: "Customer c-1", layer: 0, kind: "aggregate" },
+    { id: "policy", label: "policy", type: "MainAccountProvisioning", layer: 1, kind: "policy" },
+    { id: "c2", label: "commit 2", type: "Account c-1-main", layer: 2, kind: "aggregate" },
   ]}
   edges={[
     { from: "c1", to: "policy", dashed: true },
@@ -106,11 +106,11 @@ export class FraudReview extends Domain.Policy("FraudReview", {
 
 <DAG
   nodes={[
-    { id: "account", label: "Account a-1", type: "aggregate" },
-    { id: "outflow", label: "DailyOutflow a-1", type: "view" },
-    { id: "review", label: "FraudReview", type: "policy", tone: "accent" },
-    { id: "check", label: "FraudCheck", type: "port" },
-    { id: "freeze", label: "FreezeAccount", type: "command" },
+    { id: "account", label: "Account a-1", type: "aggregate", kind: "aggregate" },
+    { id: "outflow", label: "DailyOutflow a-1", type: "view", kind: "view" },
+    { id: "review", label: "FraudReview", type: "policy", kind: "policy" },
+    { id: "check", label: "FraudCheck", type: "port", kind: "port" },
+    { id: "freeze", label: "FreezeAccount", type: "command", kind: "command" },
   ]}
   edges={[
     { from: "account", to: "outflow", dashed: true },
@@ -159,10 +159,10 @@ One policy covers one reaction. A process with several steps, like a transfer th
 
 <DAG
   nodes={[
-    { id: "requested", label: "Transfer t-1", type: "TransferRequested", layer: 0 },
-    { id: "debit", label: "Account a-1", type: "DebitTransfer", layer: 1 },
-    { id: "credit", label: "Account a-2", type: "CreditTransfer", layer: 2 },
-    { id: "refund", label: "Account a-1", type: "RefundTransfer", layer: 3, tone: "warn" },
+    { id: "requested", label: "Transfer t-1", type: "TransferRequested", layer: 0, kind: "aggregate" },
+    { id: "debit", label: "Account a-1", type: "DebitTransfer", layer: 1, kind: "aggregate" },
+    { id: "credit", label: "Account a-2", type: "CreditTransfer", layer: 2, kind: "aggregate" },
+    { id: "refund", label: "Account a-1", type: "RefundTransfer", layer: 3, kind: "aggregate" },
   ]}
   edges={[
     { from: "requested", to: "debit", dashed: true },

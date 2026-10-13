@@ -31,10 +31,10 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 <DAG
   nodes={[
-    { id: "a1", label: "Account a-1", type: "aggregate" },
-    { id: "a2", label: "Account a-2", type: "aggregate" },
-    { id: "s1", label: "Summary a-1", type: "AccountSummary", tone: "accent" },
-    { id: "s2", label: "Summary a-2", type: "AccountSummary", tone: "accent" },
+    { id: "a1", label: "Account a-1", type: "aggregate", kind: "aggregate" },
+    { id: "a2", label: "Account a-2", type: "aggregate", kind: "aggregate" },
+    { id: "s1", label: "Summary a-1", type: "AccountSummary", kind: "view" },
+    { id: "s2", label: "Summary a-2", type: "AccountSummary", kind: "view" },
   ]}
   edges={[
     { from: "a1", to: "s1", dashed: true },
@@ -96,10 +96,10 @@ A customer's dashboard shows every account they own, with each balance. No singl
 
 <DAG
   nodes={[
-    { id: "a1", label: "Summary a-1", type: "AccountSummary" },
-    { id: "a2", label: "Summary a-2", type: "AccountSummary" },
-    { id: "c", label: "Customer c-1", type: "aggregate" },
-    { id: "d", label: "Dashboard c-1", type: "CustomerDashboard", tone: "accent" },
+    { id: "a1", label: "Summary a-1", type: "AccountSummary", kind: "view" },
+    { id: "a2", label: "Summary a-2", type: "AccountSummary", kind: "view" },
+    { id: "c", label: "Customer c-1", type: "aggregate", kind: "aggregate" },
+    { id: "d", label: "Dashboard c-1", type: "CustomerDashboard", kind: "view" },
   ]}
   edges={[
     { from: "a1", to: "d", dashed: true },
