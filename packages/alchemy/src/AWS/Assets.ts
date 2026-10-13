@@ -2,6 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -264,6 +265,12 @@ export const ensureAssetsBucketTags = Effect.fn(function* (bucketName: string) {
   });
 });
 
+/** The assets bucket carries a bucket policy that is not valid JSON. */
+export class AssetsBucketPolicyInvalid extends Data.TaggedError("AssetsBucketPolicyInvalid")<{
+  bucketName: string;
+  message: string;
+}> {}
+
 /**
  * Policy statement id granting Lambda read access to Web Function code.
  */
@@ -300,12 +307,16 @@ export const ensureLambdaWebCodeAccess = Effect.fn(function* (bucketName: string
     },
   };
   const observed = yield* s3.getBucketPolicy({ Bucket: bucketName }).pipe(
-    Effect.map((response) =>
-      response.Policy === undefined
-        ? undefined
-        : (JSON.parse(response.Policy) as { Version?: string; Statement?: unknown[] }),
-    ),
+    Effect.map((response) => response.Policy),
     Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed(undefined)),
+    Effect.flatMap((policy) =>
+      policy === undefined
+        ? Effect.succeed(undefined)
+        : Effect.try({
+            try: () => JSON.parse(policy) as { Version?: string; Statement?: unknown[] },
+            catch: (cause) => new AssetsBucketPolicyInvalid({ bucketName, message: String(cause) }),
+          }),
+    ),
   );
   const statements = (observed?.Statement ?? []) as Array<{ Sid?: string }>;
   const existing = statements.find((s) => s.Sid === LAMBDA_WEB_CODE_ACCESS_SID);

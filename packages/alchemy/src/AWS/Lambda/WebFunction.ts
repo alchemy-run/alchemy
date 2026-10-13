@@ -674,25 +674,24 @@ export const WebFunctionProvider = () =>
           }),
         );
 
-      /** A just-created execution role is not assumable by Lambda yet. */
-      const isRolePropagationError = (e: { _tag: string; message?: string }) =>
-        e._tag === "ValidationException" &&
-        /role|assume/i.test(e.message ?? "") &&
-        !/reserved/i.test(e.message ?? "");
-
-      const retryRolePropagation = <A, E extends { _tag: string; message?: string }, R>(
+      /**
+       * Lambda rejects a just-created execution role until IAM propagates
+       * it; a concurrent mutation of the same function is a conflict.
+       */
+      const retryRolePropagation = <A, E extends { _tag: string }, R>(
         effect: Effect.Effect<A, E, R>,
         session: { note: (note: string) => Effect.Effect<void> },
         functionName: string,
       ) =>
         effect.pipe(
           Effect.tapError((e) =>
-            isRolePropagationError(e)
+            e._tag === "WebFunctionRoleNotAssumable"
               ? session.note(`Waiting for execution role to propagate: ${functionName}`)
               : Effect.void,
           ),
           Effect.retry({
-            while: (e) => isRolePropagationError(e) || e._tag === "ConflictException",
+            while: (e) =>
+              e._tag === "WebFunctionRoleNotAssumable" || e._tag === "ConflictException",
             schedule: Schedule.spaced("3 seconds"),
             times: 20,
           }),
