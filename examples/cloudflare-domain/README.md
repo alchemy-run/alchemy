@@ -295,6 +295,169 @@ export const mustOwn = Effect.fn(function* (owner: CustomerId | null) {
 });
 ```
 
+## Projections and streams
+
+A projection consumes events into a store the bank owns, in order per key and at least once. It never sends commands, so it can always be replayed. The ledger is a D1 table: `Ledger` writes every money movement, a batch at a time.
+
+```ts
+// src/Ledger/Ledger.ts
+import * as Domain from "alchemy/Domain";
+import { Account } from "../Account/Account.ts";
+import { TransferCredited } from "../Account/CreditTransfer.ts";
+import { TransferDebited } from "../Account/DebitTransfer.ts";
+import { MoneyDeposited } from "../Account/DepositMoney.ts";
+import { SettlementReceived } from "../Account/RecordSettlement.ts";
+import { TransferRefunded } from "../Account/RefundTransfer.ts";
+import { MoneyWithdrawn } from "../Account/WithdrawMoney.ts";
+
+/** Every money movement, one row each, in a database outside the model. */
+export class Ledger extends Domain.Projection("Ledger", {
+  from: [Account],
+  key: Account,
+  on: [
+    MoneyDeposited,
+    MoneyWithdrawn,
+    TransferDebited,
+    TransferCredited,
+    TransferRefunded,
+    SettlementReceived,
+  ],
+}) {}
+```
+
+The declaration says what it means; the Layer says how it runs. Batching is tuning, so it goes on `toLayer`.
+
+```ts
+// src/Ledger/LedgerLive.ts
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import { Ledger } from "./Ledger.ts";
+import { LedgerStore } from "./LedgerStore.ts";
+
+/** Writes each batch of an account's movements in one database round-trip. */
+export const LedgerLive = Ledger.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;
+    return Effect.fn(function* (batch) {
+      yield* store.record(
+        batch.map(({ key, event, envelope }) => ({
+          id: `${envelope.stream}:${envelope.seq}`,
+          accountId: key.id,
+          kind: event._tag,
+          amount: event.amount,
+          balanceAfter: event.balanceAfter,
+          at: DateTime.toEpochMillis(envelope.at),
+        })),
+      );
+    });
+  }),
+  { batch: { size: 100, wait: "1 second" } },
+);
+```
+
+The projection depends on `LedgerStore`, not on D1, so stories run it against memory. The Worker serves the ledger from a plain route: the store is yours, so the API is too.
+
+A `Domain.Stream` is a keyed, append-only log that clients read through an Api, with the same middleware and `validate` as a view. Its latest entry is its current value.
+
+```ts
+// src/Account/AccountCard.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { CustomerId } from "../Customer/CustomerId.ts";
+import { Cents } from "../Money.ts";
+import { Session } from "../Session.ts";
+import { Account } from "./Account.ts";
+import { mustOwn } from "./mustOwn.ts";
+import { NotOwner } from "./NotOwner.ts";
+
+/** What an account's card shows, as of one change. */
+export class CardChanged extends Domain.Event("CardChanged", {
+  data: {
+    customerId: CustomerId,
+    owner: Schema.String,
+    balance: Cents,
+    frozen: Schema.Boolean,
+  },
+}) {}
+
+/**
+ * Every version of an account's card, in order. The latest entry is the card
+ * now (`peek`, `watch`); the log is its history (`events`, `list`). Written by
+ * the AccountCards projection.
+ */
+export class AccountCard extends Domain.Stream("AccountCard", {
+  key: Account,
+  entries: [CardChanged],
+  middleware: [Session],
+  rejects: [NotOwner],
+  // Judged on the latest card: only its owner (or an agent) may read it.
+  validate: Effect.fn(function* (_request, latest) {
+    yield* mustOwn(latest?.event.customerId ?? null);
+  }),
+}) {}
+```
+
+`AccountCards` writes it: it reads `AccountSummary`, whose events arrive with the summary's state, and appends a card for each change. A stream has exactly one writer, named in its projection's `writes`.
+
+```ts
+// src/Account/AccountCards.ts
+import * as Domain from "alchemy/Domain";
+import * as Effect from "effect/Effect";
+import { AccountCard, CardChanged } from "./AccountCard.ts";
+import { TransferCredited } from "./CreditTransfer.ts";
+import { TransferDebited } from "./DebitTransfer.ts";
+import { MoneyDeposited } from "./DepositMoney.ts";
+import { AccountFrozen } from "./FreezeAccount.ts";
+import { AccountSummary } from "./AccountSummary.ts";
+import { Account } from "./Account.ts";
+import { SettlementReceived } from "./RecordSettlement.ts";
+import { TransferRefunded } from "./RefundTransfer.ts";
+import { MoneyWithdrawn } from "./WithdrawMoney.ts";
+
+/**
+ * Appends a new card whenever an account's summary changes: each input
+ * arrives with the summary's state after it.
+ */
+export class AccountCards extends Domain.Projection("AccountCards", {
+  from: [AccountSummary],
+  key: Account,
+  on: [
+    MoneyDeposited,
+    MoneyWithdrawn,
+    TransferDebited,
+    TransferCredited,
+    TransferRefunded,
+    SettlementReceived,
+    AccountFrozen,
+  ],
+  writes: [AccountCard],
+}) {}
+
+export const AccountCardsLive = AccountCards.toLayer(
+  Effect.gen(function* () {
+    const cards = yield* AccountCard;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        const summary = input.state;
+        if (!summary?.customerId || !summary.owner) continue;
+        yield* cards.append(
+          input,
+          new CardChanged({
+            customerId: summary.customerId,
+            owner: summary.owner,
+            balance: summary.balance,
+            frozen: summary.frozen,
+          }),
+        );
+      }
+    });
+  }),
+);
+```
+
+A client reads it like a view: `bank.AccountCard.peek(accountId)` for the card now, `watch` for every new one (pushed over a WebSocket by the stream's Durable Object), and `events` or `list` for its history.
+
 ## The Api
 
 Nothing in an Api needs a handler: aggregates implement commands and the model hosts views.
@@ -1099,7 +1262,8 @@ src/
   Account/      Account (aggregate: state, decide, evolve, reply, read), one file per command
                 (WithdrawMoney: WithdrawMoney + MoneyWithdrawn + DailyLimitExceeded), shared
                 rejections (NotOpen, NotOwner, Frozen, InsufficientFunds), mustOwn (read rule),
-                AccountSummary, Statement, AccountActivity (views), AccountId
+                AccountSummary, Statement, AccountActivity (views), AccountId,
+                AccountCard (stream), AccountCards (projection writing it)
   Customer/     Customer, RegisterCustomer, ConfirmRegistration, RejectRegistration,
                 UsernameClaim (uniqueness as an aggregate), ClaimUsername,
                 UsernameReservation (reserve-first policy), CustomerDashboard (view of a
@@ -1112,11 +1276,14 @@ src/
                 DailyOutflowExceeded), FraudReview (policy on that view)
   Settlement/   Payments (external system), StripePayments (adapter), SettlementRefund (policy),
                 StripeSettlements (Stripe.consumeEvents: payment_intent.succeeded → RecordSettlement)
+  Ledger/       Ledger (projection), LedgerLive (its batched Layer), LedgerStore (D1 and
+                memory), LedgerDatabase (the D1 database and its migrations)
   CustomerApi/  the customer app's Api
   SupportApi/   the support console's Api, over the same Bank
   Session.ts, CurrentActor.ts, MfaChallenge.ts   authentication and step-up
   Bank.ts       the domain model (Domain.Model)
-  BankWorker.ts the Worker: both Apis + Stripe events, hosted on Durable Objects
+  BankWorker.ts the Worker: both Apis, the ledger route and Stripe events, hosted on
+                Durable Objects
   web/          the foldkit app: Bank.ts (model, messages, commands, subscriptions, view;
                 optimistic and offline intents)
                 entry.ts (signs in, then boots it with the bank client as a resource)

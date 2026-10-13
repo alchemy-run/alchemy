@@ -2,6 +2,8 @@ import * as Domain from "alchemy/Domain";
 import * as Layer from "effect/Layer";
 import { Account } from "./Account/Account.ts";
 import { AccountActivity } from "./Account/AccountActivity.ts";
+import { AccountCard } from "./Account/AccountCard.ts";
+import { AccountCards, AccountCardsLive } from "./Account/AccountCards.ts";
 import { AccountSummary } from "./Account/AccountSummary.ts";
 import { Statement } from "./Account/Statement.ts";
 import { Customer } from "./Customer/Customer.ts";
@@ -14,6 +16,8 @@ import { UsernameClaim } from "./Customer/UsernameClaim.ts";
 import { UsernameReservation, UsernameReservationLive } from "./Customer/UsernameReservation.ts";
 import { DailyOutflow } from "./Fraud/DailyOutflow.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.ts";
+import { Ledger } from "./Ledger/Ledger.ts";
+import { LedgerLive } from "./Ledger/LedgerLive.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
 import { Transfer } from "./Transfer/Transfer.ts";
@@ -24,7 +28,7 @@ import {
 import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.ts";
 
-/** The bank: every aggregate, view and policy, hosted together. */
+/** The bank: every aggregate, view, policy, projection and stream, hosted together. */
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
   views: [
@@ -44,14 +48,21 @@ export class Bank extends Domain.Model("Bank", {
     FraudReview,
     SettlementRefund,
   ],
+  projections: [Ledger, AccountCards],
+  streams: [AccountCard],
 }) {}
 
-/** The policies' implementations. They require the FraudCheck and Payments external systems. */
-export const BankPolicies = Layer.mergeAll(
+/**
+ * The policies' and projections' implementations. They require the FraudCheck
+ * and Payments external systems, and the LedgerStore.
+ */
+export const BankHandlers = Layer.mergeAll(
   UsernameReservationLive,
   MainAccountProvisioningLive,
   TransferExecutionLive,
   TransferApprovalDeadlineLive,
   FraudReviewLive,
   SettlementRefundLive,
+  LedgerLive,
+  AccountCardsLive,
 );

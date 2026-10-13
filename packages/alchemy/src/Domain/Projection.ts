@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -29,10 +30,11 @@ export interface Input<Key extends Aggregate.Any, S, E> {
 /**
  * A projection's handler: one run of a key's inputs, in order. It runs at
  * least once per input, so make its writes idempotent (an upsert keyed by
- * `envelope.stream` and `envelope.seq` is). It requires nothing: resolve your
- * store, and any stream it writes, while building it, in `toLayer`.
+ * `envelope.stream` and `envelope.seq` is). Resolve your store, and any stream
+ * it writes, while building it, in `toLayer`; the handler itself may only need
+ * the runtime it runs in (`RuntimeContext`), as a database binding does.
  */
-export type Handler<I> = (batch: ReadonlyArray<I>) => Effect.Effect<void>;
+export type Handler<I> = (batch: ReadonlyArray<I>) => Effect.Effect<void, never, RuntimeContext>;
 
 /**
  * How a projection's Layer tunes it. These are variants: they change how it

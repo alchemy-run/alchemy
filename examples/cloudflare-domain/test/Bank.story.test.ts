@@ -1,8 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Account } from "../src/Account/Account.ts";
 import { AccountActivity } from "../src/Account/AccountActivity.ts";
+import { AccountCard, CardChanged } from "../src/Account/AccountCard.ts";
 import { mainAccountId } from "../src/Account/AccountId.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "../src/Account/ChangeOwner.ts";
@@ -20,7 +22,7 @@ import { TransferRefunded } from "../src/Account/RefundTransfer.ts";
 import { Statement } from "../src/Account/Statement.ts";
 import { DailyLimitExceeded, MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
 import { type Actor, agent, customer, system } from "../src/Actor.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 import { CurrentActor } from "../src/CurrentActor.ts";
 import { UsernameClaimed } from "../src/Customer/ClaimUsername.ts";
 import { CustomerRegistered } from "../src/Customer/ConfirmRegistration.ts";
@@ -33,6 +35,7 @@ import { Username } from "../src/Customer/Username.ts";
 import { UsernameClaim } from "../src/Customer/UsernameClaim.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
+import { MemoryLedgerStore, memoryLedger } from "../src/Ledger/LedgerStore.ts";
 import { Payments } from "../src/Settlement/Payments.ts";
 import { AccountTransfers } from "../src/Transfer/AccountTransfers.ts";
 import {
@@ -56,6 +59,7 @@ const {
   replied,
   resolve,
   state,
+  streamed,
   then,
   view,
   when,
@@ -65,7 +69,7 @@ const {
 const as = (actor: Actor) => provide(CurrentActor, actor);
 
 const story = Story.make(Bank, {
-  layer: BankPolicies,
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],
 });
 
@@ -436,5 +440,49 @@ it.effect("an unresolved external system call fails the story", () =>
   ).pipe(
     Effect.flip,
     Effect.map((failure) => expect(failure.message).toMatch(/unresolved external system calls/)),
+  ),
+);
+
+// ---------------------------------------------------------------- projections
+
+/** A story whose projections write a ledger the test can read. */
+const ledgerStory = Story.make(Bank, {
+  layer: BankHandlers,
+  externalSystems: [FraudCheck, Payments],
+});
+
+it.effect("the Ledger projection records each movement in a store outside the model", () =>
+  Effect.gen(function* () {
+    const ledger = memoryLedger();
+    yield* ledgerStory(
+      given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
+      as(sam),
+      when(a1, new WithdrawMoney({ amount: 2_500 })),
+      then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
+    ).pipe(Effect.provide(ledger.layer));
+    const rows = yield* ledger.forAccount("a-1");
+    expect(rows.map((row) => [row.kind, row.amount, row.balanceAfter])).toEqual([
+      ["MoneyDeposited", 10_000, 10_000],
+      ["MoneyWithdrawn", 2_500, 7_500],
+    ]);
+  }),
+);
+
+it.effect("the AccountCards projection appends a card on every balance change", () =>
+  story(
+    given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
+    streamed(
+      AccountCard,
+      a1,
+      new CardChanged({ customerId: c1.id, owner: "sam", balance: 10_000, frozen: false }),
+    ),
+    as(sam),
+    when(a1, new WithdrawMoney({ amount: 2_500 })),
+    then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
+    streamed(
+      AccountCard,
+      a1,
+      new CardChanged({ customerId: c1.id, owner: "sam", balance: 7_500, frozen: false }),
+    ),
   ),
 );

@@ -6,12 +6,13 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { mainAccountId } from "../src/Account/AccountId.ts";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { Username } from "../src/Customer/Username.ts";
 import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
 import { SessionLive, sessionClient } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
@@ -19,8 +20,8 @@ import { SupportApi } from "../src/SupportApi/SupportApi.ts";
 import { mfa, register, transfer } from "./flows.ts";
 
 // The whole bank in one process: the same Layers the Worker uses, on the in-memory platform.
-const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments);
-const BankInMemory = Bank.layer(BankPolicies).pipe(
+const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+const BankInMemory = Bank.layer(BankHandlers).pipe(
   Layer.provide(Layer.mergeAll(Ports, Domain.InMemory)),
 );
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));

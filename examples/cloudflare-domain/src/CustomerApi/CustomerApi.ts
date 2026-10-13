@@ -1,5 +1,6 @@
 import * as Domain from "alchemy/Domain";
 import { Account } from "../Account/Account.ts";
+import { AccountCard } from "../Account/AccountCard.ts";
 import { AccountSummary } from "../Account/AccountSummary.ts";
 import { CloseAccount } from "../Account/CloseAccount.ts";
 import { DepositMoney } from "../Account/DepositMoney.ts";
@@ -26,6 +27,7 @@ export class CustomerApi extends Domain.Api(
   Account,
   CustomerDashboard,
   AccountSummary,
+  AccountCard,
   Statement,
   AccountTransfers,
   TransferStatus,

@@ -272,7 +272,10 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
           options: { batch: Projection.batchMillis(implementation.options) },
           run: (key, batch) =>
             Effect.gen(function* () {
-              yield* implementation.handle(kernel.projectionInputs(projection, key, batch));
+              // Platforms run handlers inside their runtime (a Durable Object, or this process).
+              yield* implementation.handle(
+                kernel.projectionInputs(projection, key, batch),
+              ) as Effect.Effect<void>;
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};

@@ -5,24 +5,39 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Bank, BankPolicies } from "./Bank.ts";
+import * as Option from "effect/Option";
+import { Account } from "./Account/Account.ts";
+import { AccountSummary } from "./Account/AccountSummary.ts";
+import { Bank, BankHandlers } from "./Bank.ts";
 import { CustomerApi } from "./CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+import { D1LedgerStore, LedgerStore } from "./Ledger/LedgerStore.ts";
 import { MfaChallengeLive } from "./MfaChallenge.ts";
-import { SessionLive, sessionRoute } from "./Session.ts";
+import { actorOf, SessionLive, sessionRoute } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 import { SupportApi } from "./SupportApi/SupportApi.ts";
 
 /**
  * Everything the Worker serves: the middleware both Apis declare, and the
- * Bank hosted on Durable Objects. Swap `DomainCloudflare.DurableObjects` for
- * `Domain.InMemory` and nothing else changes.
+ * Bank hosted on Durable Objects, with the ledger in D1. Swap
+ * `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes.
  */
 const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive, Stripe.ConsumeEventsLive).pipe(
-  Layer.provideMerge(Bank.layer(BankPolicies)),
-  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, StripePayments)),
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provideMerge(D1LedgerStore),
+  Layer.provide(
+    Layer.mergeAll(
+      DomainCloudflare.DurableObjects,
+      SiftFraudCheck,
+      StripePayments,
+      Cloudflare.D1.QueryDatabaseBinding,
+    ),
+  ),
 );
+
+/** `/api/ledger/<account>`: the ledger is a store the bank owns, so it is served by a plain route. */
+const LEDGER = /^\/api\/ledger\/([^/]+)$/;
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
@@ -30,6 +45,20 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   Effect.gen(function* () {
     const customerApi = yield* CustomerApi.httpEffect;
     const supportApi = yield* SupportApi.httpEffect;
+    const ledger = yield* LedgerStore;
+    const summaries = yield* AccountSummary;
+    const ledgerRoute = (accountId: string) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const actor = actorOf(request.headers);
+        if (Option.isNone(actor)) return HttpServerResponse.empty({ status: 401 });
+        const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
+        const owner = Option.getOrNull(summary)?.customerId;
+        if (actor.value._tag === "Customer" && owner !== actor.value.customerId) {
+          return HttpServerResponse.empty({ status: 404 });
+        }
+        return yield* HttpServerResponse.json(yield* ledger.forAccount(accountId));
+      });
     // Claims POST /webhooks/stripe and provisions the Stripe webhook endpoint.
     yield* StripeSettlements;
     return {
@@ -39,6 +68,8 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         if (path === "/api/session") return yield* sessionRoute;
+        const ledgerPath = LEDGER.exec(path);
+        if (ledgerPath) return yield* ledgerRoute(decodeURIComponent(ledgerPath[1]!));
         if (path.startsWith("/api")) return yield* customerApi;
         if (path.startsWith("/support")) return yield* supportApi;
         return HttpServerResponse.text("Not Found", { status: 404 });

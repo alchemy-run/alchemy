@@ -6,21 +6,22 @@ import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { Bank, BankPolicies } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
 import { CustomerId } from "../src/Customer/CustomerId.ts";
 import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
 import { SessionLive, sessionClient } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
 import { register } from "./flows.ts";
 
 // The Worker's HTTP surface (`CustomerApi.httpEffect`) on a real HTTP server, over the in-memory platform.
-const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments);
+const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(
-    Bank.layer(BankPolicies).pipe(Layer.provide(Layer.mergeAll(Ports, Domain.InMemory))),
+    Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(Ports, Domain.InMemory))),
   ),
 );
 

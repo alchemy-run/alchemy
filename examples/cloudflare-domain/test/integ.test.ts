@@ -134,6 +134,38 @@ test(
       "deposit",
     ]);
 
+    // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
+    const card = yield* sam.AccountCard.watch(samMain).pipe(
+      Stream.filter((latest) => latest?.event.balance === 50),
+      Stream.runHead,
+      Effect.timeout("20 seconds"),
+    );
+    expect(Option.getOrThrow(card)?.event).toMatchObject({ owner: "sam", balance: 50 });
+    // the stream's validate: only the owner reads the card
+    expect((yield* alex.AccountCard.peek(samMain).pipe(Effect.flip))._tag).toBe("NotOwner");
+
+    // a projection (Ledger) writes D1 in batches; the ledger is served by a plain route
+    const ledger = yield* HttpClient.execute(
+      HttpClientRequest.get(`${base}/api/ledger/${samMain}`).pipe(
+        HttpClientRequest.setHeader("authorization", "Bearer customer:c-1"),
+      ),
+    ).pipe(
+      Effect.flatMap((res) => res.json),
+      Effect.map(
+        (rows) => rows as ReadonlyArray<{ readonly kind: string; readonly amount: number }>,
+      ),
+      Effect.filterOrFail(
+        (rows) => rows.length === 3,
+        () => "not projected yet",
+      ),
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+    );
+    expect(ledger.map((row) => [row.kind, row.amount])).toEqual([
+      ["MoneyDeposited", 100],
+      ["MoneyWithdrawn", 10],
+      ["TransferDebited", 40],
+    ]);
+
     // a live view (AccountSummary → CustomerDashboard, view to view), pushed by its Durable Object
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 50),
