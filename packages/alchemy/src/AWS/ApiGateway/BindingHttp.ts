@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 
 /**
  * Shared HTTP-binding scaffolding for the ApiGateway capabilities
@@ -44,7 +44,7 @@ export const registerApiGatewayBinding = Effect.fn(function* (opts: {
   const { region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
     region: string;
   }>;
-  yield* HostAccess.bind`${opts.cap}(${opts.target})`({
+  yield* AWSBindings.bind`${opts.cap}(${opts.target})`({
     policyStatements: [
       {
         Effect: "Allow",

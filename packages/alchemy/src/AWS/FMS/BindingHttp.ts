@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { pinFms } from "./AdminAccount.ts";
 
 /**
@@ -43,12 +43,12 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
 }) =>
   Effect.gen(function* () {
     const op = options.pinToAdminRegion
-      ? yield* options.operation.pipe(pinFms, HostAccess.withCredentials)
-      : yield* HostAccess.withCredentials(options.operation);
+      ? yield* options.operation.pipe(pinFms, AWSBindings.withCredentials)
+      : yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.FMS.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.FMS.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Accelerator } from "./Accelerator.ts";
 import { withGaRegion } from "./common.ts";
@@ -38,12 +38,12 @@ export const makeGaAcceleratorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(withGaRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (accelerator: Accelerator) {
       const AcceleratorArn = yield* accelerator.acceleratorArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${accelerator})`({
+        yield* AWSBindings.bind`${options.tag}(${accelerator})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -92,12 +92,12 @@ export const makeGaEndpointGroupHttpBinding = <
   extraStatements?: readonly PolicyStatement[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(withGaRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (endpointGroup: EndpointGroup) {
       const EndpointGroupArn = yield* endpointGroup.endpointGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${endpointGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${endpointGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -38,13 +38,13 @@ export const makeIvsChatRoomHttpBinding = <
   prepare?: (request: Req) => Omit<I, "roomIdentifier">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (room: Room) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const RoomArn = yield* room.roomArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${room})`({
+        yield* AWSBindings.bind`${options.tag}(${room})`({
           policyStatements: [
             {
               Effect: "Allow",

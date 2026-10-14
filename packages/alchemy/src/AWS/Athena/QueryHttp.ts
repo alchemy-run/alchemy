@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { AthenaQueryFailed, Query, type QueryResult, type RunQueryRequest } from "./Query.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
@@ -28,14 +28,14 @@ const glueTableArn = (workGroupArn: OutputType<string>) =>
 export const QueryHttp = Layer.effect(
   Query,
   Effect.gen(function* () {
-    const startQueryExecution = yield* HostAccess.withCredentials(athena.startQueryExecution);
-    const getQueryExecution = yield* HostAccess.withCredentials(athena.getQueryExecution);
-    const getQueryResults = yield* HostAccess.withCredentials(athena.getQueryResults);
+    const startQueryExecution = yield* AWSBindings.withCredentials(athena.startQueryExecution);
+    const getQueryExecution = yield* AWSBindings.withCredentials(athena.getQueryExecution);
+    const getQueryResults = yield* AWSBindings.withCredentials(athena.getQueryResults);
 
     return Effect.fn(function* (workGroup: WorkGroup, resultsBucket: Bucket) {
       const WorkGroupName = yield* workGroup.workGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Athena.Query(${workGroup}, ${resultsBucket})`({
+        yield* AWSBindings.bind`AWS.Athena.Query(${workGroup}, ${resultsBucket})`({
           policyStatements: [
             {
               Effect: "Allow",

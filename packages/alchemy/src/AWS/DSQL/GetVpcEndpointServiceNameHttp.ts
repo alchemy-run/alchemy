@@ -1,7 +1,7 @@
 import * as dsql from "@distilled.cloud/aws/dsql";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import { GetVpcEndpointServiceName } from "./GetVpcEndpointServiceName.ts";
 
@@ -14,12 +14,12 @@ import { GetVpcEndpointServiceName } from "./GetVpcEndpointServiceName.ts";
 export const GetVpcEndpointServiceNameHttp = Layer.effect(
   GetVpcEndpointServiceName,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(dsql.getVpcEndpointServiceName);
+    const op = yield* AWSBindings.withCredentials(dsql.getVpcEndpointServiceName);
 
     return Effect.fn(function* <R extends Cluster>(cluster: R) {
       const Identifier = yield* cluster.clusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.DSQL.GetVpcEndpointServiceName(${cluster})`({
+        yield* AWSBindings.bind`AWS.DSQL.GetVpcEndpointServiceName(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",

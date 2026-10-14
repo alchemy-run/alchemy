@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataSet } from "./DataSet.ts";
 import type { Revision } from "./Revision.ts";
 
@@ -69,12 +69,12 @@ export const makeDataSetHttpBinding = <I extends { DataSetId: string }, A, E, R>
   resources?: (dataSet: DataSet) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dataSet})`({
+        yield* AWSBindings.bind`${options.tag}(${dataSet})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -115,13 +115,13 @@ export const makeRevisionHttpBinding = <
   resources?: (revision: Revision) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (revision: Revision) {
       const DataSetId = yield* revision.dataSetId;
       const RevisionId = yield* revision.revisionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${revision})`({
+        yield* AWSBindings.bind`${options.tag}(${revision})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -160,11 +160,11 @@ export const makeDataExchangeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

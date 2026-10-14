@@ -2,7 +2,7 @@ import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { App } from "./App.ts";
 import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts";
 
@@ -12,11 +12,11 @@ import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts"
 export const GetArtifactUrlHttp = Layer.effect(
   GetArtifactUrl,
   Effect.gen(function* () {
-    const getArtifactUrl = yield* HostAccess.withCredentials(amplify.getArtifactUrl);
+    const getArtifactUrl = yield* AWSBindings.withCredentials(amplify.getArtifactUrl);
 
     return Effect.fn(function* (app: App) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Amplify.GetArtifactUrl(${app})`({
+        yield* AWSBindings.bind`AWS.Amplify.GetArtifactUrl(${app})`({
           policyStatements: [
             {
               Effect: "Allow",

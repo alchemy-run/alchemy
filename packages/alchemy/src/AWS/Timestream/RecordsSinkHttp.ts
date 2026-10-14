@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { RecordsSink, type RecordsSinkProps, type RecordsSinkRecord } from "./RecordsSink.ts";
 import type { Table } from "./Table.ts";
 import { WriteRecords } from "./WriteRecords.ts";
@@ -30,7 +30,7 @@ export const RecordsSinkHttp = Layer.effect(
 
     return Effect.fn(function* (table: Table, props?: RecordsSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Timestream.RecordsSink(${table})`({
+        yield* AWSBindings.bind`AWS.Timestream.RecordsSink(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

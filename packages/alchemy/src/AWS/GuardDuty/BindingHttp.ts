@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -42,12 +42,12 @@ export const makeGuardDutyDetectorHttpBinding = <
   resourceLevel?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (detector: Detector) {
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${detector})`({
+        yield* AWSBindings.bind`${options.tag}(${detector})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -84,11 +84,11 @@ export const makeGuardDutyAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,20 +1,20 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { type AlarmResource, sortAlarmResources } from "./binding-common.ts";
 import { DescribeAlarms, type DescribeAlarmsRequest } from "./DescribeAlarms.ts";
 
 export const DescribeAlarmsHttp = Layer.effect(
   DescribeAlarms,
   Effect.gen(function* () {
-    const describeAlarms = yield* HostAccess.withCredentials(cloudwatch.describeAlarms);
+    const describeAlarms = yield* AWSBindings.withCredentials(cloudwatch.describeAlarms);
 
     return Effect.fn(function* (...alarms: AlarmResources) {
       const sorted = sortAlarmResources(alarms);
       const AlarmNames = yield* Effect.forEach(sorted, (alarm) => alarm.alarmName.asEffect());
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CloudWatch.DescribeAlarms(${sorted})`({
+        yield* AWSBindings.bind`AWS.CloudWatch.DescribeAlarms(${sorted})`({
           policyStatements: [
             {
               Effect: "Allow",

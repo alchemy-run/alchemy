@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Service } from "./Service.ts";
 
@@ -30,12 +30,12 @@ export const makeCloudMapServiceHttpBinding = <I extends { ServiceId: string }, 
   extraStatements?: readonly PolicyStatement[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (service: Service) {
       const ServiceId = yield* service.serviceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${service})`({
+        yield* AWSBindings.bind`${options.tag}(${service})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -78,13 +78,13 @@ export const makeCloudMapDiscoveryHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (service: Service) {
       const NamespaceName = yield* service.namespaceName;
       const ServiceName = yield* service.serviceName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${service})`({
+        yield* AWSBindings.bind`${options.tag}(${service})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -120,11 +120,11 @@ export const makeCloudMapAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

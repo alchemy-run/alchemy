@@ -2,7 +2,7 @@ export * from "./Arn.ts";
 export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
 export * from "./Environment.ts";
-export * as HostAccess from "./HostAccess.ts";
+export * as AWSBindings from "./AWSBindings.ts";
 export { isNativeHost, type NativeHost } from "./NativeHost.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";

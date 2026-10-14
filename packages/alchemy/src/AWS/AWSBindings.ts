@@ -22,10 +22,10 @@ import { isNativeHost, type NativeHost } from "./NativeHost.ts";
  *
  * ```ts
  * Effect.gen(function* () {
- *   const sendMessage = yield* HostAccess.withCredentials(sqs.sendMessage);
+ *   const sendMessage = yield* AWSBindings.withCredentials(sqs.sendMessage);
  *   return Effect.fn(function* (queue: Queue) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
- *       yield* HostAccess.bind`AWS.SQS.SendMessage(${queue})`({
+ *       yield* AWSBindings.bind`AWS.SQS.SendMessage(${queue})`({
  *         policyStatements: [
  *           { Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [queue.queueArn] },
  *         ],

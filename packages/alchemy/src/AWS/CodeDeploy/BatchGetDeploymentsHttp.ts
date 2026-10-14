@@ -1,7 +1,7 @@
 import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetDeployments } from "./BatchGetDeployments.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
@@ -14,11 +14,11 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 export const BatchGetDeploymentsHttp = Layer.effect(
   BatchGetDeployments,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(codedeploy.batchGetDeployments);
+    const op = yield* AWSBindings.withCredentials(codedeploy.batchGetDeployments);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CodeDeploy.BatchGetDeployments(${group})`({
+        yield* AWSBindings.bind`AWS.CodeDeploy.BatchGetDeployments(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

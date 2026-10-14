@@ -1,7 +1,7 @@
 import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetInstrumentationConfigurationStatus } from "./GetInstrumentationConfigurationStatus.ts";
 import type { InstrumentationConfiguration } from "./InstrumentationConfiguration.ts";
 
@@ -14,7 +14,7 @@ import type { InstrumentationConfiguration } from "./InstrumentationConfiguratio
 export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
   GetInstrumentationConfigurationStatus,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(appsignals.getInstrumentationConfigurationStatus);
+    const op = yield* AWSBindings.withCredentials(appsignals.getInstrumentationConfigurationStatus);
     const tag = "AWS.ApplicationSignals.GetInstrumentationConfigurationStatus";
 
     return Effect.fn(function* (configuration: InstrumentationConfiguration) {
@@ -24,7 +24,7 @@ export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
       const SignalType = yield* configuration.signalType;
       const LocationHash = yield* configuration.locationHash;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${tag}(${configuration})`({
+        yield* AWSBindings.bind`${tag}(${configuration})`({
           policyStatements: [
             {
               Effect: "Allow",

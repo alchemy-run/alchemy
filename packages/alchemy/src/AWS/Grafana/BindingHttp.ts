@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -25,11 +25,11 @@ export const makeGrafanaAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -64,12 +64,12 @@ export const makeGrafanaWorkspaceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workspace: Workspace) {
       const workspaceId = yield* workspace.workspaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${workspace})`({
+        yield* AWSBindings.bind`${options.tag}(${workspace})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -24,7 +24,7 @@ import { CurrentRegion } from "./Region.ts";
 /**
  * How an external host (a Cloudflare Worker, Cloud Run, …) reaches AWS: an
  * IAM User + AccessKey allowed to assume a least-privilege Role, which every
- * AWS binding on the host grants its statements to. Only `HostAccess.ts`
+ * AWS binding on the host grants its statements to. Only `AWSBindings.ts`
  * imports this module, behind the native-host check, so bundles built for an
  * AWS host drop it.
  */

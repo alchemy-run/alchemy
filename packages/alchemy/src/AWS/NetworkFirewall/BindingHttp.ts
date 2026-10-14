@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Firewall } from "./Firewall.ts";
 import type { FirewallPolicy } from "./FirewallPolicy.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
@@ -43,12 +43,12 @@ export const makeNetworkFirewallFirewallHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (firewall: Firewall) {
       const FirewallArn = yield* firewall.firewallArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${firewall})`({
+        yield* AWSBindings.bind`${options.tag}(${firewall})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,12 +89,12 @@ export const makeNetworkFirewallFirewallPolicyHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: FirewallPolicy) {
       const FirewallPolicyArn = yield* policy.firewallPolicyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${policy})`({
+        yield* AWSBindings.bind`${options.tag}(${policy})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -135,12 +135,12 @@ export const makeNetworkFirewallRuleGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (ruleGroup: RuleGroup) {
       const RuleGroupArn = yield* ruleGroup.ruleGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${ruleGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${ruleGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

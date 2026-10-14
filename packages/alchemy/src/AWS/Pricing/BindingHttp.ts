@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { withPricingRegion } from "./internal.ts";
 
 /**
@@ -29,11 +29,11 @@ export const makePricingHttpBinding = <I extends object, A, E, R>(options: {
   Effect.gen(function* () {
     // Capture the client with the region pinned to us-east-1 — the Price
     // List Query API is not served from most regions.
-    const op = yield* options.operation.pipe(withPricingRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(withPricingRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Pricing.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.Pricing.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

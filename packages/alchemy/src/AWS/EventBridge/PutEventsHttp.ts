@@ -2,8 +2,8 @@ import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 
@@ -16,7 +16,7 @@ import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 export const PutEventsHttp = Layer.effect(
   PutEvents,
   Effect.gen(function* () {
-    const putEvents = yield* HostAccess.withCredentials(eventbridge.putEvents);
+    const putEvents = yield* AWSBindings.withCredentials(eventbridge.putEvents);
 
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
@@ -33,7 +33,7 @@ export const PutEventsHttp = Layer.effect(
           ? Output.interpolate`${bus.eventBusArn}`
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-        yield* HostAccess.bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
+        yield* AWSBindings.bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",

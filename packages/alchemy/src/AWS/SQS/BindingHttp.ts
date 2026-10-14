@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -17,7 +17,7 @@ import type { Queue } from "./Queue.ts";
 const grantOnQueue = (tag: string, queue: Queue, actions: readonly string[]) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`${tag}(${queue})`({
+      yield* AWSBindings.bind`${tag}(${queue})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -44,7 +44,7 @@ export const makeQueueUrlHttpBinding = <I extends { QueueUrl?: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const QueueUrl = yield* queue.queueUrl;
@@ -75,7 +75,7 @@ export const makeQueueArnHttpBinding = <I extends { SourceArn?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const SourceArn = yield* queue.queueArn;
@@ -106,7 +106,7 @@ export const makeQueueGrantHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       yield* grantOnQueue(options.tag, queue, options.actions);

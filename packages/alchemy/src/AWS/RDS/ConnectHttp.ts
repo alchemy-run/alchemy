@@ -5,9 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import * as HostAccess from "../HostAccess.ts";
 import { Connect, type ConnectOptions, type ConnectResource } from "./Connect.ts";
 
 /**
@@ -47,10 +47,10 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getSecretValue = yield* HostAccess.withCredentials(secretsmanager.getSecretValue);
+    const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
     // Ambient AWS identity for the IAM-auth token presign — captured at
     // layer build so the runtime client stays `RuntimeContext`-colored.
-    const services = yield* HostAccess.withCredentials(
+    const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
@@ -81,7 +81,7 @@ export const ConnectHttp = Layer.effect(
               }
             : {};
         if (options.auth === "iam") {
-          yield* HostAccess.bind`AWS.RDS.Connect(${resource})`({
+          yield* AWSBindings.bind`AWS.RDS.Connect(${resource})`({
             policyStatements: [
               {
                 Effect: "Allow",
@@ -92,7 +92,7 @@ export const ConnectHttp = Layer.effect(
             ...vpc,
           });
         } else {
-          yield* HostAccess.bind`AWS.RDS.Connect(${options.secret})`({
+          yield* AWSBindings.bind`AWS.RDS.Connect(${options.secret})`({
             policyStatements: [
               {
                 Effect: "Allow",

@@ -1,7 +1,7 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { cognitoMethods } from "./BindingHttp.ts";
 import { UserPoolAuth, type UserPoolAuthClient } from "./UserPoolAuth.ts";
 import type { UserPoolClient } from "./UserPoolClient.ts";
@@ -19,38 +19,38 @@ type ClientIdField = Pick<cip.SignUpRequest, "ClientId">;
 export const UserPoolAuthHttp = Layer.effect(
   UserPoolAuth,
   Effect.gen(function* () {
-    const signUp = yield* HostAccess.withCredentials(cip.signUp);
-    const confirmSignUp = yield* HostAccess.withCredentials(cip.confirmSignUp);
-    const resendConfirmationCode = yield* HostAccess.withCredentials(cip.resendConfirmationCode);
-    const initiateAuth = yield* HostAccess.withCredentials(cip.initiateAuth);
-    const respondToAuthChallenge = yield* HostAccess.withCredentials(cip.respondToAuthChallenge);
-    const forgotPassword = yield* HostAccess.withCredentials(cip.forgotPassword);
-    const confirmForgotPassword = yield* HostAccess.withCredentials(cip.confirmForgotPassword);
-    const getUser = yield* HostAccess.withCredentials(cip.getUser);
-    const globalSignOut = yield* HostAccess.withCredentials(cip.globalSignOut);
-    const revokeToken = yield* HostAccess.withCredentials(cip.revokeToken);
-    const getTokensFromRefreshToken = yield* HostAccess.withCredentials(
+    const signUp = yield* AWSBindings.withCredentials(cip.signUp);
+    const confirmSignUp = yield* AWSBindings.withCredentials(cip.confirmSignUp);
+    const resendConfirmationCode = yield* AWSBindings.withCredentials(cip.resendConfirmationCode);
+    const initiateAuth = yield* AWSBindings.withCredentials(cip.initiateAuth);
+    const respondToAuthChallenge = yield* AWSBindings.withCredentials(cip.respondToAuthChallenge);
+    const forgotPassword = yield* AWSBindings.withCredentials(cip.forgotPassword);
+    const confirmForgotPassword = yield* AWSBindings.withCredentials(cip.confirmForgotPassword);
+    const getUser = yield* AWSBindings.withCredentials(cip.getUser);
+    const globalSignOut = yield* AWSBindings.withCredentials(cip.globalSignOut);
+    const revokeToken = yield* AWSBindings.withCredentials(cip.revokeToken);
+    const getTokensFromRefreshToken = yield* AWSBindings.withCredentials(
       cip.getTokensFromRefreshToken,
     );
-    const changePassword = yield* HostAccess.withCredentials(cip.changePassword);
-    const updateUserAttributes = yield* HostAccess.withCredentials(cip.updateUserAttributes);
-    const deleteUserAttributes = yield* HostAccess.withCredentials(cip.deleteUserAttributes);
-    const getUserAttributeVerificationCode = yield* HostAccess.withCredentials(
+    const changePassword = yield* AWSBindings.withCredentials(cip.changePassword);
+    const updateUserAttributes = yield* AWSBindings.withCredentials(cip.updateUserAttributes);
+    const deleteUserAttributes = yield* AWSBindings.withCredentials(cip.deleteUserAttributes);
+    const getUserAttributeVerificationCode = yield* AWSBindings.withCredentials(
       cip.getUserAttributeVerificationCode,
     );
-    const verifyUserAttribute = yield* HostAccess.withCredentials(cip.verifyUserAttribute);
-    const setUserMFAPreference = yield* HostAccess.withCredentials(cip.setUserMFAPreference);
-    const associateSoftwareToken = yield* HostAccess.withCredentials(cip.associateSoftwareToken);
-    const verifySoftwareToken = yield* HostAccess.withCredentials(cip.verifySoftwareToken);
-    const getUserAuthFactors = yield* HostAccess.withCredentials(cip.getUserAuthFactors);
-    const deleteUser = yield* HostAccess.withCredentials(cip.deleteUser);
+    const verifyUserAttribute = yield* AWSBindings.withCredentials(cip.verifyUserAttribute);
+    const setUserMFAPreference = yield* AWSBindings.withCredentials(cip.setUserMFAPreference);
+    const associateSoftwareToken = yield* AWSBindings.withCredentials(cip.associateSoftwareToken);
+    const verifySoftwareToken = yield* AWSBindings.withCredentials(cip.verifySoftwareToken);
+    const getUserAuthFactors = yield* AWSBindings.withCredentials(cip.getUserAuthFactors);
+    const deleteUser = yield* AWSBindings.withCredentials(cip.deleteUser);
 
     return Effect.fn(function* <C extends UserPoolClient>(client: C) {
       const ClientId = yield* client.clientId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // No IAM is required for the public auth flows; the binding is
         // recorded so the app client deploys before the function.
-        yield* HostAccess.bind`AWS.Cognito.UserPoolAuth(${client})`({
+        yield* AWSBindings.bind`AWS.Cognito.UserPoolAuth(${client})`({
           policyStatements: [],
         });
       }

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Stream } from "./Stream.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
 
@@ -30,11 +30,11 @@ export const makeKinesisAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -74,12 +74,12 @@ export const makeStreamHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stream: Stream) {
       const identity = yield* options.key === "StreamName" ? stream.streamName : stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${stream})`({
+        yield* AWSBindings.bind`${options.tag}(${stream})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -113,12 +113,12 @@ export const makeConsumerHttpBinding = <I extends { ConsumerARN?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (consumer: StreamConsumer) {
       const ConsumerARN = yield* consumer.consumerArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${consumer})`({
+        yield* AWSBindings.bind`${options.tag}(${consumer})`({
           policyStatements: [
             {
               Effect: "Allow",

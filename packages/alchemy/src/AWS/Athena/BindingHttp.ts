@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataCatalog } from "./DataCatalog.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
@@ -33,12 +33,12 @@ export const makeWorkGroupScopedHttpBinding = <I, A, E, R>(options: {
   injectWorkGroup?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workGroup: WorkGroup) {
       const WorkGroupName = yield* workGroup.workGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${workGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${workGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -97,12 +97,12 @@ export const makeDataCatalogScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (catalog: DataCatalog) {
       const CatalogName = yield* catalog.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${catalog})`({
+        yield* AWSBindings.bind`${options.tag}(${catalog})`({
           policyStatements: [
             {
               Effect: "Allow",

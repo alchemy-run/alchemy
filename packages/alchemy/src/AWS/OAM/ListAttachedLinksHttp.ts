@@ -1,7 +1,7 @@
 import * as oam from "@distilled.cloud/aws/oam";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { ListAttachedLinks, type ListAttachedLinksRequest } from "./ListAttachedLinks.ts";
 import type { Sink } from "./Sink.ts";
 
@@ -14,12 +14,12 @@ import type { Sink } from "./Sink.ts";
 export const ListAttachedLinksHttp = Layer.effect(
   ListAttachedLinks,
   Effect.gen(function* () {
-    const listAttachedLinks = yield* HostAccess.withCredentials(oam.listAttachedLinks);
+    const listAttachedLinks = yield* AWSBindings.withCredentials(oam.listAttachedLinks);
 
     return Effect.fn(function* (sink: Sink) {
       const SinkIdentifier = yield* sink.sinkArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.OAM.ListAttachedLinks(${sink})`({
+        yield* AWSBindings.bind`AWS.OAM.ListAttachedLinks(${sink})`({
           policyStatements: [
             {
               Effect: "Allow",

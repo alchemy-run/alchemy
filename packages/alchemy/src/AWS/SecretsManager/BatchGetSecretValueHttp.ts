@@ -2,7 +2,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Accessor } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetSecretValue, type BatchGetSecretValueRequest } from "./BatchGetSecretValue.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -15,7 +15,7 @@ import type { Secret } from "./Secret.ts";
 export const BatchGetSecretValueHttp = Layer.effect(
   BatchGetSecretValue,
   Effect.gen(function* () {
-    const batchGetSecretValue = yield* HostAccess.withCredentials(
+    const batchGetSecretValue = yield* AWSBindings.withCredentials(
       secretsmanager.batchGetSecretValue,
     );
 
@@ -25,7 +25,7 @@ export const BatchGetSecretValueHttp = Layer.effect(
         SecretIds.push(yield* secret.secretArn);
       }
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.SecretsManager.BatchGetSecretValue()`({
+        yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -35,7 +35,7 @@ export const BatchGetSecretValueHttp = Layer.effect(
           ],
         });
         for (const secret of secrets) {
-          yield* HostAccess.bind`AWS.SecretsManager.BatchGetSecretValue(${secret})`({
+          yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue(${secret})`({
             policyStatements: [
               {
                 Effect: "Allow",

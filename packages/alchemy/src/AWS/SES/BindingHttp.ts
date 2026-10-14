@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
 import type { EmailTemplate } from "./EmailTemplate.ts";
@@ -31,11 +31,11 @@ export const makeSESHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -70,12 +70,12 @@ export const makeTemplateScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (template: EmailTemplate) {
       const TemplateName = yield* template.templateName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${template})`({
+        yield* AWSBindings.bind`${options.tag}(${template})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -153,7 +153,7 @@ export const makeVerificationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (
       identity: EmailIdentity | EmailIdentityRef,
@@ -202,7 +202,7 @@ export const makeVerificationScopedHttpBinding = <
         if (configurationSet) {
           resources.push(configurationSet.configurationSetArn);
         }
-        yield* HostAccess.bind`${options.tag}(${label}, ${configurationSet ?? "none"})`({
+        yield* AWSBindings.bind`${options.tag}(${label}, ${configurationSet ?? "none"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -251,7 +251,7 @@ export const makeSendScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Identity extends EmailIdentity>(
       identity: Identity,
@@ -277,7 +277,7 @@ export const makeSendScopedHttpBinding = <
               : identityArn.replace(/:identity\//, ":identity/*@"),
           ),
         );
-        yield* HostAccess.bind`${options.tag}(${identity}, ${configurationSet ?? "none"})`({
+        yield* AWSBindings.bind`${options.tag}(${identity}, ${configurationSet ?? "none"})`({
           policyStatements: [
             {
               Effect: "Allow",

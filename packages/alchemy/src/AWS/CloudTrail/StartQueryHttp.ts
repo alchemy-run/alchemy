@@ -1,7 +1,7 @@
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 import { StartQuery, type StartQueryRequest } from "./StartQuery.ts";
 
@@ -14,12 +14,12 @@ import { StartQuery, type StartQueryRequest } from "./StartQuery.ts";
 export const StartQueryHttp = Layer.effect(
   StartQuery,
   Effect.gen(function* () {
-    const startQuery = yield* HostAccess.withCredentials(cloudtrail.startQuery);
+    const startQuery = yield* AWSBindings.withCredentials(cloudtrail.startQuery);
 
     return Effect.fn(function* (store: EventDataStore) {
       const Arn = yield* store.eventDataStoreArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CloudTrail.StartQuery(${store})`({
+        yield* AWSBindings.bind`AWS.CloudTrail.StartQuery(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

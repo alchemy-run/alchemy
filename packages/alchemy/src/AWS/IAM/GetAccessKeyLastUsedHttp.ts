@@ -1,7 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AccessKey } from "./AccessKey.ts";
 import { GetAccessKeyLastUsed } from "./GetAccessKeyLastUsed.ts";
 
@@ -13,12 +13,12 @@ import { GetAccessKeyLastUsed } from "./GetAccessKeyLastUsed.ts";
 export const GetAccessKeyLastUsedHttp = Layer.effect(
   GetAccessKeyLastUsed,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(iam.getAccessKeyLastUsed);
+    const op = yield* AWSBindings.withCredentials(iam.getAccessKeyLastUsed);
 
     return Effect.fn(function* <K extends AccessKey>(accessKey: K) {
       const AccessKeyId = yield* accessKey.accessKeyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IAM.GetAccessKeyLastUsed(${accessKey})`({
+        yield* AWSBindings.bind`AWS.IAM.GetAccessKeyLastUsed(${accessKey})`({
           policyStatements: [
             {
               Effect: "Allow",

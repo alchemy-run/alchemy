@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
@@ -35,7 +35,7 @@ export const ConnectHttp = Layer.effect(
               }
             : {};
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* HostAccess.bind`AWS.MemoryDB.Connect(${cluster})`({
+        yield* AWSBindings.bind`AWS.MemoryDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpointAddress,
             // Lambda environment variables are strings — stringify the port.

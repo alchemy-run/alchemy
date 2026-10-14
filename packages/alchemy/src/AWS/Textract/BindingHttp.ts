@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Adapter } from "./Adapter.ts";
 
 /**
@@ -32,11 +32,11 @@ export const makeTextractHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Textract.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.Textract.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -68,12 +68,12 @@ export const makeTextractAdapterHttpBinding = <I extends { AdapterId?: string },
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Ad extends Adapter>(adapter: Ad) {
       const AdapterId = yield* adapter.adapterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Textract.${options.capability}(${adapter})`({
+        yield* AWSBindings.bind`AWS.Textract.${options.capability}(${adapter})`({
           policyStatements: [
             {
               Effect: "Allow",

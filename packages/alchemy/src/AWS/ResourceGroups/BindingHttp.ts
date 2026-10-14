@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Group } from "./Group.ts";
 
@@ -35,7 +35,7 @@ export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string },
   supportingActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: Group) {
       const GroupName = yield* group.groupName;
@@ -51,7 +51,7 @@ export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string },
                 },
               ]
             : [];
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,11 +86,11 @@ export const makeResourceGroupsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

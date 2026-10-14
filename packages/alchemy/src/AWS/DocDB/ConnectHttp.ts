@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   Connect,
   connectEnvPrefix,
@@ -15,7 +15,7 @@ import type { DBCluster } from "./DBCluster.ts";
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getSecretValue = yield* HostAccess.withCredentials(secretsmanager.getSecretValue);
+    const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
 
     return Effect.fn(function* (cluster: DBCluster, options?: ConnectOptions) {
       const Host = yield* cluster.endpoint;
@@ -51,7 +51,7 @@ export const ConnectHttp = Layer.effect(
               return arn;
             });
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* HostAccess.bind`AWS.DocDB.Connect(${cluster})`({
+        yield* AWSBindings.bind`AWS.DocDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpoint,
             // Lambda environment variables are strings — stringify the port.

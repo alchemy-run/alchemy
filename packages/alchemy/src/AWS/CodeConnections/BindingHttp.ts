@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Connection } from "./Connection.ts";
 import type { RepositoryLink } from "./RepositoryLink.ts";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
@@ -37,12 +37,12 @@ export const makeConnectionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (connection: Connection) {
       const ConnectionArn = yield* connection.connectionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${connection})`({
+        yield* AWSBindings.bind`${options.tag}(${connection})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +83,12 @@ export const makeRepositoryLinkScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repositoryLink: RepositoryLink) {
       const RepositoryLinkId = yield* repositoryLink.repositoryLinkId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${repositoryLink})`({
+        yield* AWSBindings.bind`${options.tag}(${repositoryLink})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -130,13 +130,13 @@ export const makeSyncConfigurationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (syncConfiguration: SyncConfiguration) {
       const ResourceName = yield* syncConfiguration.resourceName;
       const SyncType = yield* syncConfiguration.syncType;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${syncConfiguration})`({
+        yield* AWSBindings.bind`${options.tag}(${syncConfiguration})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -171,11 +171,11 @@ export const makeCodeConnectionsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

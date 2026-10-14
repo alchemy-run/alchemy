@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
 
 /**
@@ -26,12 +26,12 @@ export const makeDlmPolicyHttpBinding = <I extends { PolicyId: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: LifecyclePolicy) {
       const PolicyId = yield* policy.policyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${policy})`({
+        yield* AWSBindings.bind`${options.tag}(${policy})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -65,11 +65,11 @@ export const makeDlmAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { EventBus } from "./EventBus.ts";
 import type { Rule } from "./Rule.ts";
 
@@ -54,7 +54,7 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -62,7 +62,7 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
           accountId: string;
           region: string;
         }>;
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,7 +103,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
@@ -120,7 +120,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
           ? Output.interpolate`${bus.eventBusArn}`
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-        yield* HostAccess.bind`${options.tag}(${bus ?? "default"})`({
+        yield* AWSBindings.bind`${options.tag}(${bus ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -160,13 +160,13 @@ export const makeEventBridgeRuleHttpBinding = <I, A, E, R>(options: {
   ruleNameKey: string;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: Rule) {
       const RuleName = yield* rule.ruleName;
       const EventBusName = yield* rule.eventBusName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${rule})`({
+        yield* AWSBindings.bind`${options.tag}(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

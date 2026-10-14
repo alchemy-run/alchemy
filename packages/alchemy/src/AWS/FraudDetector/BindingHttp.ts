@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Detector } from "./Detector.ts";
 import type { EventType } from "./EventType.ts";
 import type { List } from "./List.ts";
@@ -33,13 +33,13 @@ export const makeFraudDetectorDetectorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (detector: Detector) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${detector})`({
+        yield* AWSBindings.bind`${options.tag}(${detector})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -80,13 +80,13 @@ export const makeFraudDetectorListHttpBinding = <I extends { name: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (list: List) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ListName = yield* list.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${list})`({
+        yield* AWSBindings.bind`${options.tag}(${list})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -117,13 +117,13 @@ export const makeFraudDetectorEventTypeHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (eventType: EventType) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const EventTypeName = yield* eventType.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${eventType})`({
+        yield* AWSBindings.bind`${options.tag}(${eventType})`({
           policyStatements: [
             {
               Effect: "Allow",

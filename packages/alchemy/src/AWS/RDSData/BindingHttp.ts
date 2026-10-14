@@ -13,7 +13,7 @@ import * as Effect from "effect/Effect";
  * `database`/`schema`) into the wire request. Everything except the
  * operation, the IAM action, and the request shaping is boilerplate.
  */
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
 
@@ -57,13 +57,13 @@ export const makeRDSDataHttpBinding = <Req, I, A, E, R>(options: {
   ) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster, bindOptions: RDSDataBindingOptions) {
       const resourceArn = yield* cluster.dbClusterArn;
       const secretArn = yield* bindOptions.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${cluster}, ${bindOptions.secret})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster}, ${bindOptions.secret})`({
           policyStatements: [
             {
               Effect: "Allow",

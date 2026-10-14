@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Domain } from "./Domain.ts";
 import type { Environment } from "./Environment.ts";
 
@@ -33,12 +33,12 @@ export const makeDataZoneDomainHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (domain: Domain) {
       const DomainId = yield* domain.domainId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${domain})`({
+        yield* AWSBindings.bind`${options.tag}(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -77,13 +77,13 @@ export const makeDataZoneEnvironmentHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment) {
       const DomainId = yield* environment.domainId;
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${environment})`({
+        yield* AWSBindings.bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",

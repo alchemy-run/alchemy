@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 /**
@@ -44,12 +44,12 @@ export const makeACMPCAHttpBinding = <Req extends { CertificateAuthorityArn: str
   options: ACMPCAHttpBindingOptions<Req, A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const operation = yield* HostAccess.withCredentials(options.operation);
+    const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (certificateAuthority: CertificateAuthority) {
       const Arn = yield* certificateAuthority.certificateAuthorityArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ACMPCA.${options.action}(${certificateAuthority})`({
+        yield* AWSBindings.bind`AWS.ACMPCA.${options.action}(${certificateAuthority})`({
           policyStatements: [
             {
               Effect: "Allow",

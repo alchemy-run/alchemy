@@ -2,7 +2,7 @@ import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Queue } from "./Queue.ts";
 import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartMessageMoveTask.ts";
 
@@ -14,14 +14,14 @@ import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartM
 export const StartMessageMoveTaskHttp = Layer.effect(
   StartMessageMoveTask,
   Effect.gen(function* () {
-    const startMessageMoveTask = yield* HostAccess.withCredentials(sqs.startMessageMoveTask);
+    const startMessageMoveTask = yield* AWSBindings.withCredentials(sqs.startMessageMoveTask);
 
     return Effect.fn(function* (source: Queue, options?: { destination?: Queue }) {
       const SourceArn = yield* source.queueArn;
       const destination = options?.destination;
       const DestinationArn = destination ? yield* destination.queueArn : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.SQS.StartMessageMoveTask(${source})`({
+        yield* AWSBindings.bind`AWS.SQS.StartMessageMoveTask(${source})`({
           policyStatements: [
             {
               Effect: "Allow",

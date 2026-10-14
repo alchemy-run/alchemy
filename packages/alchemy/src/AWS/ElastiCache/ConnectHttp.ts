@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { Connect, connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCache } from "./ServerlessCache.ts";
 
@@ -24,7 +24,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cache.LogicalId);
-        yield* HostAccess.bind`AWS.ElastiCache.Connect(${cache})`({
+        yield* AWSBindings.bind`AWS.ElastiCache.Connect(${cache})`({
           env: {
             [`${prefix}_HOST`]: cache.endpointAddress,
             // Lambda environment variables are strings — stringify the port.

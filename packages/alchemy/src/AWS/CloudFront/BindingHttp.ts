@@ -1,6 +1,6 @@
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { KVS_REGION, withKvsRegion } from "./common.ts";
 import type { Distribution } from "./Distribution.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
@@ -34,12 +34,12 @@ export const makeDistributionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (distribution: Distribution) {
       const DistributionId = yield* distribution.distributionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${distribution})`({
+        yield* AWSBindings.bind`${options.tag}(${distribution})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -81,14 +81,14 @@ export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string },
   Effect.gen(function* () {
     // The distilled Region service value is `Effect<RegionName>`, not a raw
     // string (see `withKvsRegion` in common.ts).
-    const op = yield* HostAccess.withCredentials(options.operation).pipe(
+    const op = yield* AWSBindings.withCredentials(options.operation).pipe(
       Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)),
     );
 
     return Effect.fn(function* (store: KeyValueStore) {
       const KvsARN = yield* store.keyValueStoreArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${store})`({
+        yield* AWSBindings.bind`${options.tag}(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

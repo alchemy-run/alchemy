@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Export } from "./Export.ts";
 
 /**
@@ -41,12 +41,12 @@ export const makeExportHttpBinding = <I extends { ExportArn: string }, A, E, R>(
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataExport: Export) {
       const ExportArn = yield* dataExport.exportArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.BCMDataExports.${options.capability}(${dataExport})`({
+        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}(${dataExport})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,11 +86,11 @@ export const makeDataExportsAccountHttpBinding = <I extends object, A, E, R>(opt
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.BCMDataExports.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

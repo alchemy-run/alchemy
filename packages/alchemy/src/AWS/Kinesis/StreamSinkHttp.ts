@@ -2,7 +2,7 @@ import type * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PutRecords } from "./PutRecords.ts";
 import type { Stream } from "./Stream.ts";
 import { StreamSink, type StreamSinkRecord } from "./StreamSink.ts";
@@ -16,7 +16,7 @@ export const StreamSinkHttp = Layer.effect(
 
     return Effect.fn(function* (stream: Stream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Kinesis.StreamSink(${stream})`({
+        yield* AWSBindings.bind`AWS.Kinesis.StreamSink(${stream})`({
           policyStatements: [
             {
               Effect: "Allow",

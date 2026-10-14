@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { groupArnGlob, topicArnGlob, transactionalIdArnGlob } from "./BindingHttp.ts";
 import { connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
@@ -75,7 +75,7 @@ export const makeKafkaConnectHttpBinding = (options: {
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* HostAccess.bind`${options.tag}(${cluster})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
           env: {
             [`${prefix}_BROKERS`]: cluster.bootstrapBrokerStringSaslIam,
             [`${prefix}_ARN`]: cluster.clusterArn,

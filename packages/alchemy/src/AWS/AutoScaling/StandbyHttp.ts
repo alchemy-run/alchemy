@@ -1,7 +1,7 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import { Standby, type EnterStandbyRequest, type ExitStandbyRequest } from "./Standby.ts";
 
@@ -10,13 +10,13 @@ import { Standby, type EnterStandbyRequest, type ExitStandbyRequest } from "./St
 export const StandbyHttp = Layer.effect(
   Standby,
   Effect.gen(function* () {
-    const enter = yield* HostAccess.withCredentials(autoscaling.enterStandby);
-    const exit = yield* HostAccess.withCredentials(autoscaling.exitStandby);
+    const enter = yield* AWSBindings.withCredentials(autoscaling.enterStandby);
+    const exit = yield* AWSBindings.withCredentials(autoscaling.exitStandby);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AutoScaling.Standby(${group})`({
+        yield* AWSBindings.bind`AWS.AutoScaling.Standby(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

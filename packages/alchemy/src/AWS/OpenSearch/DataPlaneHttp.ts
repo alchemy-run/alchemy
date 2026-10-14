@@ -17,7 +17,7 @@ import * as Redacted from "effect/Redacted";
  * layers are public.
  */
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type {
   BulkResponse,
   CountResponse,
@@ -79,14 +79,14 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
   makeClient: (send: OpenSearchSend) => Client;
 }) =>
   Effect.gen(function* () {
-    const services = yield* HostAccess.withCredentials(
+    const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
     return Effect.fn(function* (domain: Domain) {
       const Endpoint = yield* domain.endpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.OpenSearch.${options.name}(${domain})`({
+        yield* AWSBindings.bind`AWS.OpenSearch.${options.name}(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",

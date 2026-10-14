@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { SigningProfile } from "./SigningProfile.ts";
 
@@ -44,13 +44,13 @@ export const makeSignerProfileHttpBinding = <I extends { profileName?: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: SigningProfile) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ProfileName = yield* profile.profileName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${profile})`({
+        yield* AWSBindings.bind`${options.tag}(${profile})`({
           policyStatements: [profilePolicyStatement(profile, options.actions)],
         });
       }
@@ -83,7 +83,7 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -94,7 +94,7 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements,
         });
       }

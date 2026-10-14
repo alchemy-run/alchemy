@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -40,12 +40,12 @@ export const makeEcrRepositoryHttpBinding = <I extends RepositoryScopedRequest, 
   iamActions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repository: Repository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ECR.${options.capability}(${repository})`({
+        yield* AWSBindings.bind`AWS.ECR.${options.capability}(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",

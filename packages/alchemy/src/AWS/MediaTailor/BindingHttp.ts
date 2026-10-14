@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PlaybackConfiguration } from "./PlaybackConfiguration.ts";
 
 /**
@@ -28,11 +28,11 @@ export const makeMediaTailorHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.MediaTailor.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -74,12 +74,12 @@ export const makeMediaTailorPlaybackHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (config: PlaybackConfiguration) {
       const name = yield* config.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.MediaTailor.${options.capability}(${config})`({
+        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}(${config})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
 
 /**
@@ -34,11 +34,11 @@ export const makeLicenseManagerHttpBinding = <I extends object, A, E, R>(options
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.LicenseManager.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.LicenseManager.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -78,13 +78,13 @@ export const makeLicenseConfigurationHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (configuration: LicenseConfiguration) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ConfigurationArn = yield* configuration.licenseConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.LicenseManager.${options.capability}(${configuration})`({
+        yield* AWSBindings.bind`AWS.LicenseManager.${options.capability}(${configuration})`({
           policyStatements: [
             {
               Effect: "Allow",

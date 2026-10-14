@@ -5,7 +5,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import path from "pathe";
-import * as HostAccess from "@/AWS/HostAccess.ts";
+import * as AWSBindings from "@/AWS/AWSBindings.ts";
 import * as Lambda from "@/AWS/Lambda";
 import * as S3 from "@/AWS/S3";
 import * as Signer from "@/AWS/Signer";
@@ -81,7 +81,7 @@ export default SignerTestFunction.make(
     // job ("S3 bucket … not accessible") — grant the documented signing-
     // caller set the object-level bindings above don't cover.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`SignerSourceDestinationBucketAccess`({
+      yield* AWSBindings.bind`SignerSourceDestinationBucketAccess`({
         policyStatements: [
           {
             Effect: "Allow",

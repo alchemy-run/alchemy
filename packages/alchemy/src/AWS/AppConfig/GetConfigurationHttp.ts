@@ -5,8 +5,8 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
@@ -47,8 +47,10 @@ interface SessionCache {
 export const GetConfigurationHttp = Layer.effect(
   GetConfiguration,
   Effect.gen(function* () {
-    const startSession = yield* HostAccess.withCredentials(appconfigdata.startConfigurationSession);
-    const getLatest = yield* HostAccess.withCredentials(appconfigdata.getLatestConfiguration);
+    const startSession = yield* AWSBindings.withCredentials(
+      appconfigdata.startConfigurationSession,
+    );
+    const getLatest = yield* AWSBindings.withCredentials(appconfigdata.getLatestConfiguration);
 
     return Effect.fn(function* (
       application: Application,
@@ -66,7 +68,7 @@ export const GetConfigurationHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        yield* HostAccess.bind`AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile})`(
+        yield* AWSBindings.bind`AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile})`(
           {
             policyStatements: [
               {

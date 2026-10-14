@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { SearchJob } from "./SearchJob.ts";
 
 /**
@@ -34,12 +34,12 @@ export const makeSearchJobScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (searchJob: SearchJob) {
       const SearchJobIdentifier = yield* searchJob.searchJobIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${searchJob})`({
+        yield* AWSBindings.bind`${options.tag}(${searchJob})`({
           policyStatements: [
             {
               Effect: "Allow",

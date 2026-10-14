@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Output } from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
 /**
@@ -53,7 +53,7 @@ export const makeOmicsResourceHttpBinding = <
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (res: Res) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
@@ -61,7 +61,7 @@ export const makeOmicsResourceHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
         // `Input<…>` contextual typing accepts the `Output<string>` ARN.
-        yield* HostAccess.bind`${options.tag}(${res})`({
+        yield* AWSBindings.bind`${options.tag}(${res})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -107,11 +107,11 @@ export const makeOmicsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

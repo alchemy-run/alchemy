@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Discoverer } from "./Discoverer.ts";
 import type { Registry } from "./Registry.ts";
 import type { Schema } from "./Schema.ts";
@@ -34,13 +34,13 @@ export const makeSchemasSchemaHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (schema: Schema) {
       const RegistryName = yield* schema.registryName;
       const SchemaName = yield* schema.schemaName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${schema})`({
+        yield* AWSBindings.bind`${options.tag}(${schema})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +83,12 @@ export const makeSchemasRegistryHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (registry: Registry) {
       const RegistryName = yield* registry.registryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${registry})`({
+        yield* AWSBindings.bind`${options.tag}(${registry})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -145,7 +145,7 @@ export const makeSchemasDiscovererHttpBinding = <
   ruleActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (discoverer: Discoverer) {
       const DiscovererId = yield* discoverer.discovererId;
@@ -160,7 +160,7 @@ export const makeSchemasDiscovererHttpBinding = <
             (arn) =>
               `${arn.replace(":schemas:", ":events:").split(":discoverer/")[0]}:rule/${busSegment}Schemas-*`,
           );
-        yield* HostAccess.bind`${options.tag}(${discoverer})`({
+        yield* AWSBindings.bind`${options.tag}(${discoverer})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -208,11 +208,11 @@ export const makeSchemasAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

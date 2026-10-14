@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/aws/backup";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { BackupVault } from "./BackupVault.ts";
 import { StartCopyJob, type StartCopyJobRequest } from "./StartCopyJob.ts";
@@ -10,13 +10,13 @@ import { StartCopyJob, type StartCopyJobRequest } from "./StartCopyJob.ts";
 export const StartCopyJobHttp = Layer.effect(
   StartCopyJob,
   Effect.gen(function* () {
-    const startCopyJob = yield* HostAccess.withCredentials(backup.startCopyJob);
+    const startCopyJob = yield* AWSBindings.withCredentials(backup.startCopyJob);
 
     return Effect.fn(function* <R extends Role>(sourceVault: BackupVault, copyRole: R) {
       const SourceBackupVaultName = yield* sourceVault.backupVaultName;
       const RoleArn = yield* copyRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Backup.StartCopyJob(${sourceVault}, ${copyRole})`({
+        yield* AWSBindings.bind`AWS.Backup.StartCopyJob(${sourceVault}, ${copyRole})`({
           policyStatements: [
             // StartCopyJob authorizes on the recovery point's underlying
             // resource ARN and CopyIntoBackupVault on the destination

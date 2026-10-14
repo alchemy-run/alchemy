@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { LogEventSink, type LogEventSinkProps } from "./LogEventSink.ts";
 import type { LogGroup } from "./LogGroup.ts";
 import { PutLogEvents } from "./PutLogEvents.ts";
@@ -50,7 +50,7 @@ export const LogEventSinkHttp = Layer.effect(
 
     return Effect.fn(function* (logGroup: LogGroup, props: LogEventSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Logs.LogEventSink(${logGroup})`({
+        yield* AWSBindings.bind`AWS.Logs.LogEventSink(${logGroup})`({
           policyStatements: [
             {
               // PutLogEvents authorizes against the log-stream resource

@@ -1,7 +1,7 @@
 import * as ci from "@distilled.cloud/aws/cognito-identity";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { cognitoMethods } from "./BindingHttp.ts";
 import type { IdentityPool } from "./IdentityPool.ts";
 import {
@@ -19,19 +19,19 @@ import {
 export const IdentityPoolAuthHttp = Layer.effect(
   IdentityPoolAuth,
   Effect.gen(function* () {
-    const getId = yield* HostAccess.withCredentials(ci.getId);
-    const getCredentialsForIdentity = yield* HostAccess.withCredentials(
+    const getId = yield* AWSBindings.withCredentials(ci.getId);
+    const getCredentialsForIdentity = yield* AWSBindings.withCredentials(
       ci.getCredentialsForIdentity,
     );
-    const getOpenIdToken = yield* HostAccess.withCredentials(ci.getOpenIdToken);
-    const unlinkIdentity = yield* HostAccess.withCredentials(ci.unlinkIdentity);
+    const getOpenIdToken = yield* AWSBindings.withCredentials(ci.getOpenIdToken);
+    const unlinkIdentity = yield* AWSBindings.withCredentials(ci.unlinkIdentity);
 
     return Effect.fn(function* <P extends IdentityPool>(pool: P) {
       const IdentityPoolId = yield* pool.identityPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // No IAM is required for the public identity flows; the binding is
         // recorded so the identity pool deploys before the function.
-        yield* HostAccess.bind`AWS.Cognito.IdentityPoolAuth(${pool})`({
+        yield* AWSBindings.bind`AWS.Cognito.IdentityPoolAuth(${pool})`({
           policyStatements: [],
         });
       }

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { HealthCheck } from "./HealthCheck.ts";
 import type { HostedZone } from "./HostedZone.ts";
 
@@ -43,13 +43,13 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
   wildcardIam?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const requestKey = options.requestKey ?? "HostedZoneId";
 
     return Effect.fn(function* (zone: HostedZone) {
       const zoneId = yield* zone.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${zone})`({
+        yield* AWSBindings.bind`${options.tag}(${zone})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -92,12 +92,12 @@ export const makeRoute53HealthCheckHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (healthCheck: HealthCheck) {
       const healthCheckId = yield* healthCheck.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${healthCheck})`({
+        yield* AWSBindings.bind`${options.tag}(${healthCheck})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -137,11 +137,11 @@ export const makeRoute53AccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

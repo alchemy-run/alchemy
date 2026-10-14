@@ -1,7 +1,7 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ListTagsForResource,
   type ListTagsForResourceRequest,
@@ -11,12 +11,12 @@ import {
 export const ListTagsForResourceHttp = Layer.effect(
   ListTagsForResource,
   Effect.gen(function* () {
-    const listTagsForResource = yield* HostAccess.withCredentials(Kinesis.listTagsForResource);
+    const listTagsForResource = yield* AWSBindings.withCredentials(Kinesis.listTagsForResource);
 
     return Effect.fn(function* (resource: TaggableResource) {
       const ResourceARN = yield* getResourceArn(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Kinesis.ListTagsForResource(${resource})`({
+        yield* AWSBindings.bind`AWS.Kinesis.ListTagsForResource(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",

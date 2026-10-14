@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Thing } from "./Thing.ts";
 
 /**
@@ -38,11 +38,11 @@ export const makeIotAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -73,12 +73,12 @@ export const makeIotThingHttpBinding = <I extends { thingName: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: Thing) {
       const thingName = yield* thing.thingName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${thing})`({
+        yield* AWSBindings.bind`${options.tag}(${thing})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -119,12 +119,12 @@ export const makeIotTopicHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (topicFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnvironment;
-        yield* HostAccess.bind`${options.tag}(${topicFilter ?? "*"})`({
+        yield* AWSBindings.bind`${options.tag}(${topicFilter ?? "*"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -158,12 +158,12 @@ export const makeIotClientHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (clientIdFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnvironment;
-        yield* HostAccess.bind`${options.tag}(${clientIdFilter ?? "*"})`({
+        yield* AWSBindings.bind`${options.tag}(${clientIdFilter ?? "*"})`({
           policyStatements: [
             {
               Effect: "Allow",

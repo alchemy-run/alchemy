@@ -1,7 +1,7 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { cognitoMethods } from "./BindingHttp.ts";
 import type { UserPool } from "./UserPool.ts";
 import {
@@ -22,55 +22,55 @@ type UserPoolIdField = Pick<cip.AdminGetUserRequest, "UserPoolId">;
 export const UserPoolAdminHttp = Layer.effect(
   UserPoolAdmin,
   Effect.gen(function* () {
-    const adminCreateUser = yield* HostAccess.withCredentials(cip.adminCreateUser);
-    const adminGetUser = yield* HostAccess.withCredentials(cip.adminGetUser);
-    const adminSetUserPassword = yield* HostAccess.withCredentials(cip.adminSetUserPassword);
-    const adminUpdateUserAttributes = yield* HostAccess.withCredentials(
+    const adminCreateUser = yield* AWSBindings.withCredentials(cip.adminCreateUser);
+    const adminGetUser = yield* AWSBindings.withCredentials(cip.adminGetUser);
+    const adminSetUserPassword = yield* AWSBindings.withCredentials(cip.adminSetUserPassword);
+    const adminUpdateUserAttributes = yield* AWSBindings.withCredentials(
       cip.adminUpdateUserAttributes,
     );
-    const adminDeleteUserAttributes = yield* HostAccess.withCredentials(
+    const adminDeleteUserAttributes = yield* AWSBindings.withCredentials(
       cip.adminDeleteUserAttributes,
     );
-    const adminDeleteUser = yield* HostAccess.withCredentials(cip.adminDeleteUser);
-    const adminConfirmSignUp = yield* HostAccess.withCredentials(cip.adminConfirmSignUp);
-    const adminDisableUser = yield* HostAccess.withCredentials(cip.adminDisableUser);
-    const adminEnableUser = yield* HostAccess.withCredentials(cip.adminEnableUser);
-    const adminResetUserPassword = yield* HostAccess.withCredentials(cip.adminResetUserPassword);
-    const adminInitiateAuth = yield* HostAccess.withCredentials(cip.adminInitiateAuth);
-    const adminRespondToAuthChallenge = yield* HostAccess.withCredentials(
+    const adminDeleteUser = yield* AWSBindings.withCredentials(cip.adminDeleteUser);
+    const adminConfirmSignUp = yield* AWSBindings.withCredentials(cip.adminConfirmSignUp);
+    const adminDisableUser = yield* AWSBindings.withCredentials(cip.adminDisableUser);
+    const adminEnableUser = yield* AWSBindings.withCredentials(cip.adminEnableUser);
+    const adminResetUserPassword = yield* AWSBindings.withCredentials(cip.adminResetUserPassword);
+    const adminInitiateAuth = yield* AWSBindings.withCredentials(cip.adminInitiateAuth);
+    const adminRespondToAuthChallenge = yield* AWSBindings.withCredentials(
       cip.adminRespondToAuthChallenge,
     );
-    const adminUserGlobalSignOut = yield* HostAccess.withCredentials(cip.adminUserGlobalSignOut);
-    const adminAddUserToGroup = yield* HostAccess.withCredentials(cip.adminAddUserToGroup);
-    const adminRemoveUserFromGroup = yield* HostAccess.withCredentials(
+    const adminUserGlobalSignOut = yield* AWSBindings.withCredentials(cip.adminUserGlobalSignOut);
+    const adminAddUserToGroup = yield* AWSBindings.withCredentials(cip.adminAddUserToGroup);
+    const adminRemoveUserFromGroup = yield* AWSBindings.withCredentials(
       cip.adminRemoveUserFromGroup,
     );
-    const adminListGroupsForUser = yield* HostAccess.withCredentials(cip.adminListGroupsForUser);
-    const adminSetUserMFAPreference = yield* HostAccess.withCredentials(
+    const adminListGroupsForUser = yield* AWSBindings.withCredentials(cip.adminListGroupsForUser);
+    const adminSetUserMFAPreference = yield* AWSBindings.withCredentials(
       cip.adminSetUserMFAPreference,
     );
-    const adminLinkProviderForUser = yield* HostAccess.withCredentials(
+    const adminLinkProviderForUser = yield* AWSBindings.withCredentials(
       cip.adminLinkProviderForUser,
     );
-    const adminDisableProviderForUser = yield* HostAccess.withCredentials(
+    const adminDisableProviderForUser = yield* AWSBindings.withCredentials(
       cip.adminDisableProviderForUser,
     );
-    const adminGetDevice = yield* HostAccess.withCredentials(cip.adminGetDevice);
-    const adminListDevices = yield* HostAccess.withCredentials(cip.adminListDevices);
-    const adminForgetDevice = yield* HostAccess.withCredentials(cip.adminForgetDevice);
-    const adminUpdateDeviceStatus = yield* HostAccess.withCredentials(cip.adminUpdateDeviceStatus);
-    const adminListUserAuthEvents = yield* HostAccess.withCredentials(cip.adminListUserAuthEvents);
-    const adminUpdateAuthEventFeedback = yield* HostAccess.withCredentials(
+    const adminGetDevice = yield* AWSBindings.withCredentials(cip.adminGetDevice);
+    const adminListDevices = yield* AWSBindings.withCredentials(cip.adminListDevices);
+    const adminForgetDevice = yield* AWSBindings.withCredentials(cip.adminForgetDevice);
+    const adminUpdateDeviceStatus = yield* AWSBindings.withCredentials(cip.adminUpdateDeviceStatus);
+    const adminListUserAuthEvents = yield* AWSBindings.withCredentials(cip.adminListUserAuthEvents);
+    const adminUpdateAuthEventFeedback = yield* AWSBindings.withCredentials(
       cip.adminUpdateAuthEventFeedback,
     );
-    const listUsers = yield* HostAccess.withCredentials(cip.listUsers);
-    const listUsersInGroup = yield* HostAccess.withCredentials(cip.listUsersInGroup);
-    const listGroups = yield* HostAccess.withCredentials(cip.listGroups);
+    const listUsers = yield* AWSBindings.withCredentials(cip.listUsers);
+    const listUsersInGroup = yield* AWSBindings.withCredentials(cip.listUsersInGroup);
+    const listGroups = yield* AWSBindings.withCredentials(cip.listGroups);
 
     return Effect.fn(function* <P extends UserPool>(pool: P) {
       const UserPoolId = yield* pool.userPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Cognito.UserPoolAdmin(${pool})`({
+        yield* AWSBindings.bind`AWS.Cognito.UserPoolAdmin(${pool})`({
           policyStatements: [
             {
               Effect: "Allow",

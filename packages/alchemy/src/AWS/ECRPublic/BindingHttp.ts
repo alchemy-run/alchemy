@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { Region } from "../Region.ts";
 import type { PublicRepository } from "./Repository.ts";
 
@@ -52,12 +52,12 @@ export const makePublicRepositoryHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinEcrPublic, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinEcrPublic, AWSBindings.withCredentials);
 
     return Effect.fn(function* (repository: PublicRepository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ECRPublic.${options.capability}(${repository})`({
+        yield* AWSBindings.bind`AWS.ECRPublic.${options.capability}(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -101,11 +101,11 @@ export const makePublicRegistryHttpBinding = <I extends object, A, E, R>(options
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinEcrPublic, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinEcrPublic, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ECRPublic.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.ECRPublic.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

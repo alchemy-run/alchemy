@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Secret } from "./Secret.ts";
 
 /**
@@ -26,12 +26,12 @@ export const makeSecretHttpBinding = <I extends { SecretId?: string }, A, E, R>(
   actions: readonly `secretsmanager:${string}`[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (secret: Secret) {
       const SecretId = yield* secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${secret})`({
+        yield* AWSBindings.bind`${options.tag}(${secret})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -65,11 +65,11 @@ export const makeSecretsManagerAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly `secretsmanager:${string}`[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

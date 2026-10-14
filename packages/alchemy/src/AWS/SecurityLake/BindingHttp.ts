@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataLake } from "./DataLake.ts";
 
 /**
@@ -27,11 +27,11 @@ export const makeSecurityLakeDataLakeHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (lake: DataLake) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${lake})`({
+        yield* AWSBindings.bind`${options.tag}(${lake})`({
           policyStatements: [
             {
               Effect: "Allow",

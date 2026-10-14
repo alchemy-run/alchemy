@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 
 /**
  * Options for {@link makeAppFlowHttpBinding}. Everything except these five
@@ -56,12 +56,12 @@ export const makeAppFlowHttpBinding = <
   options: AppFlowHttpBindingOptions<R, K, I, A, E, OpR>,
 ) =>
   Effect.gen(function* () {
-    const operation = yield* HostAccess.withCredentials(options.operation);
+    const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: R) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AppFlow.${options.action}(${resource})`({
+        yield* AWSBindings.bind`AWS.AppFlow.${options.action}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",

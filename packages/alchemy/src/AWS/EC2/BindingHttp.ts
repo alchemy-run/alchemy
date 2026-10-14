@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { type Instance } from "./Instance.ts";
 import type { SecurityGroup } from "./SecurityGroup.ts";
 import type { Volume } from "./Volume.ts";
@@ -40,12 +40,12 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "instance" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const instanceId = yield* instance.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${instance})`({
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +83,12 @@ export const makeSecurityGroupHttpBinding = <I extends object, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: SecurityGroup) {
       const groupId = yield* group.groupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -127,12 +127,12 @@ export const makeVolumeHttpBinding = <I extends object, A, E, R>(options: {
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (volume: Volume) {
       const volumeId = yield* volume.volumeId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${volume})`({
+        yield* AWSBindings.bind`${options.tag}(${volume})`({
           policyStatements: [
             {
               Effect: "Allow",

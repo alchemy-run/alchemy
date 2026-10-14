@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -46,7 +46,7 @@ export const makeIdentityStoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const IdentityStoreId = yield* instance.identityStoreId;
@@ -54,7 +54,7 @@ export const makeIdentityStoreHttpBinding = <
         const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
           accountId: string;
         }>;
-        yield* HostAccess.bind`${options.tag}(${instance})`({
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,12 +103,12 @@ export const makeIdentityCenterInstanceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const InstanceArn = yield* instance.instanceArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${instance})`({
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

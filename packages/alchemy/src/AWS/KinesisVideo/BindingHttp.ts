@@ -1,7 +1,7 @@
 import { Endpoint } from "@distilled.cloud/aws";
 import * as kv from "@distilled.cloud/aws/kinesis-video";
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { discoverDataEndpoint, discoverSignalingEndpoint } from "./internal.ts";
 import type { SignalingChannel } from "./SignalingChannel.ts";
 import type { Stream } from "./Stream.ts";
@@ -43,13 +43,13 @@ export const makeStreamMediaHttpBinding = <
   Effect.gen(function* () {
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const getDataEndpoint = yield* HostAccess.withCredentials(kv.getDataEndpoint);
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const getDataEndpoint = yield* AWSBindings.withCredentials(kv.getDataEndpoint);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stream: Stream) {
       const StreamArn = yield* stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${stream})`({
+        yield* AWSBindings.bind`${options.tag}(${stream})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -108,15 +108,15 @@ export const makeChannelSignalingHttpBinding = <
   Effect.gen(function* () {
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const getSignalingChannelEndpoint = yield* HostAccess.withCredentials(
+    const getSignalingChannelEndpoint = yield* AWSBindings.withCredentials(
       kv.getSignalingChannelEndpoint,
     );
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: SignalingChannel) {
       const ChannelArn = yield* channel.channelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${channel})`({
+        yield* AWSBindings.bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,7 +1,7 @@
 import * as sdb from "@distilled.cloud/aws/simpledb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { ListDomains } from "./ListDomains.ts";
 
 /**
@@ -13,11 +13,11 @@ import { ListDomains } from "./ListDomains.ts";
 export const ListDomainsHttp = Layer.effect(
   ListDomains,
   Effect.gen(function* () {
-    const listDomains = yield* HostAccess.withCredentials(sdb.listDomains);
+    const listDomains = yield* AWSBindings.withCredentials(sdb.listDomains);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.SimpleDB.ListDomains()`({
+        yield* AWSBindings.bind`AWS.SimpleDB.ListDomains()`({
           policyStatements: [
             {
               Effect: "Allow",

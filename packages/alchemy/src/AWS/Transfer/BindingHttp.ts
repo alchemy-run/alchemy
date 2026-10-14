@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Server } from "./Server.ts";
 import type { User } from "./User.ts";
 
@@ -34,13 +34,13 @@ export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A
   resource?: (server: Server) => string | Output.Output<string>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (server: Server) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ServerId = yield* server.serverId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${server})`({
+        yield* AWSBindings.bind`${options.tag}(${server})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -78,14 +78,14 @@ export const makeTransferUserHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (user: User) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ServerId = yield* user.serverId;
       const UserName = yield* user.userName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${user})`({
+        yield* AWSBindings.bind`${options.tag}(${user})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -123,11 +123,11 @@ export const makeTransferAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

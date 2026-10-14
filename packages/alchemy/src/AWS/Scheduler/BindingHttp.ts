@@ -23,8 +23,8 @@ import * as Effect from "effect/Effect";
  *   defaults to `{ Mode: "OFF" }`.
  */
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
@@ -90,7 +90,7 @@ export const makeScheduleGroupScopedHttpBinding = <
   resourceScope?: "group" | "all";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group?: ScheduleGroup) {
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
@@ -99,7 +99,7 @@ export const makeScheduleGroupScopedHttpBinding = <
           options.resourceScope === "all"
             ? yield* allSchedulesArnPattern
             : yield* scheduleArnPattern(group);
-        yield* HostAccess.bind`${options.tag}(${group ?? "default"})`({
+        yield* AWSBindings.bind`${options.tag}(${group ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -148,14 +148,14 @@ export const makeScheduleWriteHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Ro extends Role>(executionRole: Ro, group?: ScheduleGroup) {
       const RoleArn = yield* executionRole.roleArn;
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const pattern = yield* scheduleArnPattern(group);
-        yield* HostAccess.bind`${options.tag}(${executionRole}, ${group ?? "default"})`({
+        yield* AWSBindings.bind`${options.tag}(${executionRole}, ${group ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",

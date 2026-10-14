@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueSink, type QueueSinkEntry } from "./QueueSink.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
@@ -36,7 +36,7 @@ export const QueueSinkHttp = Layer.effect(
 
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.SQS.QueueSink(${queue})`({
+        yield* AWSBindings.bind`AWS.SQS.QueueSink(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",

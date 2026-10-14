@@ -1,7 +1,7 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import { DescribeAutoScalingGroup } from "./DescribeAutoScalingGroup.ts";
 
@@ -11,12 +11,12 @@ import { DescribeAutoScalingGroup } from "./DescribeAutoScalingGroup.ts";
 export const DescribeAutoScalingGroupHttp = Layer.effect(
   DescribeAutoScalingGroup,
   Effect.gen(function* () {
-    const describe = yield* HostAccess.withCredentials(autoscaling.describeAutoScalingGroups);
+    const describe = yield* AWSBindings.withCredentials(autoscaling.describeAutoScalingGroups);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AutoScaling.DescribeAutoScalingGroup(${group})`({
+        yield* AWSBindings.bind`AWS.AutoScaling.DescribeAutoScalingGroup(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

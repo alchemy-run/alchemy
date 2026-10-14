@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Namespace } from "./Namespace.ts";
 
 /**
@@ -30,11 +30,11 @@ export const makeServerlessAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -73,13 +73,13 @@ export const makeServerlessNamespaceHttpBinding = <
   extraResources?: (namespaceArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (namespace: Namespace) {
       const Identifier = yield* namespace.namespaceName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const resources = options.extraResources;
-        yield* HostAccess.bind`${options.tag}(${namespace})`({
+        yield* AWSBindings.bind`${options.tag}(${namespace})`({
           policyStatements: [
             {
               Effect: "Allow",

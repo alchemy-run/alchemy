@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Stage } from "./Stage.ts";
 
 /**
@@ -62,13 +62,13 @@ export const makeIvsRealtimeStageHttpBinding = <
   prepare?: (request: Req) => Omit<I, K>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stage: Stage) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const StageArn = yield* stage.stageArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${stage})`({
+        yield* AWSBindings.bind`${options.tag}(${stage})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -111,13 +111,13 @@ export const makeIvsRealtimeReplicationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (sourceStage: Stage, destinationStage: Stage) {
       const SourceStageArn = yield* sourceStage.stageArn;
       const DestinationStageArn = yield* destinationStage.stageArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${sourceStage}, ${destinationStage})`({
+        yield* AWSBindings.bind`${options.tag}(${sourceStage}, ${destinationStage})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -159,11 +159,11 @@ export const makeIvsRealtimeAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

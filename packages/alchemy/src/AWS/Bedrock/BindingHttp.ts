@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { AgentAlias } from "./AgentAlias.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
@@ -39,7 +39,7 @@ export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (model: string, ...additionalModels: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -47,7 +47,7 @@ export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, 
         // Sort so the binding identity (SID + ARN list) is deterministic
         // regardless of argument order.
         const sorted = [...new Set([model, ...additionalModels])].sort();
-        yield* HostAccess.bind`${options.tag}(${sorted.join(",")})`({
+        yield* AWSBindings.bind`${options.tag}(${sorted.join(",")})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,12 +90,12 @@ export const makeKnowledgeBaseScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K) {
       const KnowledgeBaseId = yield* knowledgeBase.knowledgeBaseId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${knowledgeBase})`({
+        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -138,14 +138,14 @@ export const makeDataSourceScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <D extends DataSource>(dataSource: D) {
       const KnowledgeBaseId = yield* dataSource.knowledgeBaseId;
       const DataSourceId = yield* dataSource.dataSourceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnv;
-        yield* HostAccess.bind`${options.tag}(${dataSource})`({
+        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -191,13 +191,13 @@ export const makeAgentAliasScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <AA extends AgentAlias>(alias: AA) {
       const AgentId = yield* alias.agentId;
       const AgentAliasId = yield* alias.agentAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${alias})`({
+        yield* AWSBindings.bind`${options.tag}(${alias})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -235,7 +235,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K, ...models: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -249,7 +249,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
                 `arn:aws:bedrock:${region}::foundation-model/*`,
                 `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
               ];
-        yield* HostAccess.bind`${options.tag}(${knowledgeBase})`({
+        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
           policyStatements: [
             {
               Effect: "Allow",

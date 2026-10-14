@@ -2,7 +2,7 @@ import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import { CreateLanguageModel, type CreateLanguageModelRequest } from "./CreateLanguageModel.ts";
 
@@ -12,12 +12,12 @@ import { CreateLanguageModel, type CreateLanguageModelRequest } from "./CreateLa
 export const CreateLanguageModelHttp = Layer.effect(
   CreateLanguageModel,
   Effect.gen(function* () {
-    const createLanguageModel = yield* HostAccess.withCredentials(transcribe.createLanguageModel);
+    const createLanguageModel = yield* AWSBindings.withCredentials(transcribe.createLanguageModel);
 
     return Effect.fn(function* <Rl extends Role>(dataAccessRole: Rl) {
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Transcribe.CreateLanguageModel(${dataAccessRole})`({
+        yield* AWSBindings.bind`AWS.Transcribe.CreateLanguageModel(${dataAccessRole})`({
           policyStatements: [
             {
               Effect: "Allow",

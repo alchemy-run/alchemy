@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -25,7 +25,7 @@ const bindPipelinePolicy = Effect.fn(function* (
   subScoped: boolean | undefined,
 ) {
   if (!globalThis.__ALCHEMY_RUNTIME__) {
-    yield* HostAccess.bind`${tag}(${pipeline})`({
+    yield* AWSBindings.bind`${tag}(${pipeline})`({
       policyStatements: [
         {
           Effect: "Allow",
@@ -55,7 +55,7 @@ export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Pipeline>(pipeline: P) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
@@ -95,7 +95,7 @@ export const makeCodePipelinePipelineNameHttpBinding = <
   subScoped?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Pipeline>(pipeline: P) {
       const PipelineName = yield* pipeline.pipelineName;
@@ -126,11 +126,11 @@ export const makeCodePipelineJobHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -2,7 +2,7 @@ import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ExecuteScheduledQuery,
   type ExecuteScheduledQueryRequest,
@@ -17,13 +17,13 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
   Effect.gen(function* () {
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const executeScheduledQuery = yield* HostAccess.withCredentials(TSQ.executeScheduledQuery);
-    const describeEndpoints = yield* HostAccess.withCredentials(TSQ.describeEndpoints);
+    const executeScheduledQuery = yield* AWSBindings.withCredentials(TSQ.executeScheduledQuery);
+    const describeEndpoints = yield* AWSBindings.withCredentials(TSQ.describeEndpoints);
     const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* (scheduledQuery: ScheduledQuery) {
       const ScheduledQueryArn = yield* scheduledQuery.scheduledQueryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery})`({
+        yield* AWSBindings.bind`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery})`({
           policyStatements: [
             {
               Effect: "Allow",

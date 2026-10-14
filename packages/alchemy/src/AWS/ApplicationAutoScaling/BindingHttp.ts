@@ -1,6 +1,6 @@
 import type * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ScalableTarget } from "./ScalableTarget.ts";
 import type { ScalingPolicy } from "./ScalingPolicy.ts";
 
@@ -40,14 +40,14 @@ export const makeTargetScopedHttpBinding = <I extends TargetTriple, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (target: ScalableTarget) {
       const ServiceNamespace = yield* target.serviceNamespace;
       const ResourceId = yield* target.resourceId;
       const ScalableDimension = yield* target.scalableDimension;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${target})`({
+        yield* AWSBindings.bind`${options.tag}(${target})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,7 +89,7 @@ export const makePolicyScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: ScalingPolicy) {
       const ServiceNamespace = yield* policy.serviceNamespace;
@@ -97,7 +97,7 @@ export const makePolicyScopedHttpBinding = <
       const ScalableDimension = yield* policy.scalableDimension;
       const PolicyName = yield* policy.policyName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${policy})`({
+        yield* AWSBindings.bind`${options.tag}(${policy})`({
           policyStatements: [
             {
               Effect: "Allow",

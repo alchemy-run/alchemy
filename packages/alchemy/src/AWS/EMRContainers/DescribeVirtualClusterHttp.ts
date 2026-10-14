@@ -1,7 +1,7 @@
 import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { DescribeVirtualCluster } from "./DescribeVirtualCluster.ts";
 import type { VirtualCluster } from "./VirtualCluster.ts";
 
@@ -14,13 +14,13 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 export const DescribeVirtualClusterHttp = Layer.effect(
   DescribeVirtualCluster,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(emrc.describeVirtualCluster);
+    const op = yield* AWSBindings.withCredentials(emrc.describeVirtualCluster);
 
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({
+        yield* AWSBindings.bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({
           policyStatements: [
             {
               Effect: "Allow",

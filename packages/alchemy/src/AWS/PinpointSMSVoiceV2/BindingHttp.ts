@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { OptOutList } from "./OptOutList.ts";
 import type { PhoneNumber } from "./PhoneNumber.ts";
 
@@ -41,13 +41,13 @@ export const makeSmsVoicePhoneNumberHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (phoneNumber: PhoneNumber) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const PhoneNumberArn = yield* phoneNumber.phoneNumberArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${phoneNumber})`({
+        yield* AWSBindings.bind`${options.tag}(${phoneNumber})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,13 +90,13 @@ export const makeSmsVoiceOptOutListHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (optOutList: OptOutList) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const OptOutListArn = yield* optOutList.optOutListArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${optOutList})`({
+        yield* AWSBindings.bind`${options.tag}(${optOutList})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -130,11 +130,11 @@ export const makeSmsVoiceAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

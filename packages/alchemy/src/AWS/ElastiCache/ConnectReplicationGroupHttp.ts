@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { unpackEnvValue } from "../../RuntimeContext.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ConnectReplicationGroup,
   replicationGroupConnectEnvPrefix,
@@ -33,7 +33,7 @@ export const ConnectReplicationGroupHttp = Layer.effect(
         port === undefined ? "" : String(port),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+        yield* AWSBindings.bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
           env: {
             [`${prefix}_HOST`]: endpointHost,
             [`${prefix}_PORT`]: Output.interpolate`${endpointPort}`,

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 
 /**
  * Shared HTTP scaffolding for the CloudWatch Observability Admin runtime
@@ -31,11 +31,11 @@ export const makeObservabilityAdminHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ObservabilityAdmin.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.ObservabilityAdmin.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Dataset } from "./Dataset.ts";
 import type { EventTracker } from "./EventTracker.ts";
@@ -42,12 +42,12 @@ export const makePersonalizeDatasetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataset: Dataset) {
       const datasetArn = yield* dataset.datasetArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dataset})`({
+        yield* AWSBindings.bind`${options.tag}(${dataset})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,12 +89,12 @@ export const makePersonalizeEventTrackerHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (tracker: EventTracker) {
       const trackingId = yield* tracker.trackingId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${tracker})`({
+        yield* AWSBindings.bind`${options.tag}(${tracker})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -141,7 +141,7 @@ export const makePersonalizeAccountHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -165,7 +165,7 @@ export const makePersonalizeAccountHttpBinding = <I, A, E, R>(options: {
             },
           });
         }
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements,
         });
       }

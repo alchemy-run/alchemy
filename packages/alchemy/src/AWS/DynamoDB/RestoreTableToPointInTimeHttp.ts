@@ -1,7 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableToPointInTime,
@@ -39,7 +39,7 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
         ],
       );
       // Restores stay in-region: both tables must share it.
-      const restoreTableToPointInTime = yield* HostAccess.withCredentials(
+      const restoreTableToPointInTime = yield* AWSBindings.withCredentials(
         DynamoDB.restoreTableToPointInTime,
         tablesRegion([from, to]),
       );

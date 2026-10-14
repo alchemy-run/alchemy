@@ -2,7 +2,7 @@ import type * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PublishBatch } from "./PublishBatch.ts";
 import type { Topic } from "./Topic.ts";
 import { TopicSink, type TopicSinkEntry } from "./TopicSink.ts";
@@ -35,7 +35,7 @@ export const TopicSinkHttp = Layer.effect(
 
     return Effect.fn(function* (topic: Topic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.SNS.TopicSink(${topic})`({
+        yield* AWSBindings.bind`AWS.SNS.TopicSink(${topic})`({
           policyStatements: [
             {
               Effect: "Allow",

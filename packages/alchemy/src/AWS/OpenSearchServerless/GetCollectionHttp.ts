@@ -2,7 +2,7 @@ import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Collection } from "./Collection.ts";
 import { GetCollection } from "./GetCollection.ts";
 
@@ -12,12 +12,12 @@ import { GetCollection } from "./GetCollection.ts";
 export const GetCollectionHttp = Layer.effect(
   GetCollection,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(aoss.batchGetCollection);
+    const op = yield* AWSBindings.withCredentials(aoss.batchGetCollection);
 
     return Effect.fn(function* (collection: Collection) {
       const CollectionId = yield* collection.collectionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.OpenSearchServerless.GetCollection(${collection})`({
+        yield* AWSBindings.bind`AWS.OpenSearchServerless.GetCollection(${collection})`({
           policyStatements: [
             {
               Effect: "Allow",

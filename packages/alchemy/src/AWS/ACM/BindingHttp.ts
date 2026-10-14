@@ -2,7 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -65,12 +65,12 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
   config: AcmHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* config.operation.pipe(withAcmRegion, HostAccess.withCredentials);
+    const op = yield* config.operation.pipe(withAcmRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (certificate: Certificate) {
       const CertificateArn = yield* certificate.certificateArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ACM.${config.capability}(${certificate})`({
+        yield* AWSBindings.bind`AWS.ACM.${config.capability}(${certificate})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -128,11 +128,11 @@ export const makeAcmAccountHttpBinding = <Req extends object, Out, Err>(
   config: AcmAccountHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* config.operation.pipe(withAcmRegion, HostAccess.withCredentials);
+    const op = yield* config.operation.pipe(withAcmRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ACM.${config.capability}()`({
+        yield* AWSBindings.bind`AWS.ACM.${config.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

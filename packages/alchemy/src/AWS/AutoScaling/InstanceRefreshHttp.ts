@@ -1,7 +1,7 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import {
   InstanceRefresh,
@@ -16,15 +16,15 @@ import {
 export const InstanceRefreshHttp = Layer.effect(
   InstanceRefresh,
   Effect.gen(function* () {
-    const start = yield* HostAccess.withCredentials(autoscaling.startInstanceRefresh);
-    const cancel = yield* HostAccess.withCredentials(autoscaling.cancelInstanceRefresh);
-    const rollback = yield* HostAccess.withCredentials(autoscaling.rollbackInstanceRefresh);
-    const describe = yield* HostAccess.withCredentials(autoscaling.describeInstanceRefreshes);
+    const start = yield* AWSBindings.withCredentials(autoscaling.startInstanceRefresh);
+    const cancel = yield* AWSBindings.withCredentials(autoscaling.cancelInstanceRefresh);
+    const rollback = yield* AWSBindings.withCredentials(autoscaling.rollbackInstanceRefresh);
+    const describe = yield* AWSBindings.withCredentials(autoscaling.describeInstanceRefreshes);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AutoScaling.InstanceRefresh(${group})`({
+        yield* AWSBindings.bind`AWS.AutoScaling.InstanceRefresh(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,7 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetItem, type BatchGetItemRequest, type BatchGetItemTables } from "./BatchGetItem.ts";
 import { grantTables, tablesRegion } from "./BindingHttp.ts";
 
@@ -38,7 +38,7 @@ export const BatchGetItemHttp = Layer.effect(
           },
         ],
       );
-      const batchGetItem = yield* HostAccess.withCredentials(
+      const batchGetItem = yield* AWSBindings.withCredentials(
         DynamoDB.batchGetItem,
         tablesRegion(sortedTables),
       );

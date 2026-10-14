@@ -2,7 +2,7 @@ import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { BrowserCustom } from "./BrowserCustom.ts";
 import { StartBrowserSession, type StartBrowserSessionRequest } from "./StartBrowserSession.ts";
 
@@ -11,12 +11,12 @@ import { StartBrowserSession, type StartBrowserSessionRequest } from "./StartBro
 export const StartBrowserSessionHttp = Layer.effect(
   StartBrowserSession,
   Effect.gen(function* () {
-    const startBrowserSession = yield* HostAccess.withCredentials(agentcore.startBrowserSession);
+    const startBrowserSession = yield* AWSBindings.withCredentials(agentcore.startBrowserSession);
 
     return Effect.fn(function* <R extends BrowserCustom>(browser: R) {
       const Identifier = yield* browser.browserId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.BedrockAgentCore.StartBrowserSession(${browser})`({
+        yield* AWSBindings.bind`AWS.BedrockAgentCore.StartBrowserSession(${browser})`({
           policyStatements: [
             {
               Effect: "Allow",

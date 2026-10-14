@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DBCluster } from "./DBCluster.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
@@ -28,11 +28,11 @@ export const makeRdsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -71,13 +71,13 @@ export const makeRdsClusterHttpBinding = <
   extraResources?: (clusterArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster) {
       const Identifier = yield* cluster.dbClusterIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const resources = options.extraResources;
-        yield* HostAccess.bind`${options.tag}(${cluster})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -123,13 +123,13 @@ export const makeRdsInstanceHttpBinding = <
   extraResources?: (instanceArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: DBInstance) {
       const Identifier = yield* instance.dbInstanceIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const resources = options.extraResources;
-        yield* HostAccess.bind`${options.tag}(${instance})`({
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

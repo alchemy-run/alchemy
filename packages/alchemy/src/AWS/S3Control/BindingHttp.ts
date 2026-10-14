@@ -21,7 +21,7 @@ import * as Effect from "effect/Effect";
  *   (cached per binding) and are granted on `*` — job ARNs are
  *   server-assigned at runtime and unknowable at deploy time.
  */
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { AccessPoint } from "./AccessPoint.ts";
 import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
@@ -56,13 +56,13 @@ export const makeS3ControlAccessPointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (accessPoint: AccessPoint) {
       const AccountId = yield* accessPoint.accountId;
       const Name = yield* accessPoint.accessPointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${accessPoint})`({
+        yield* AWSBindings.bind`${options.tag}(${accessPoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -105,13 +105,13 @@ export const makeS3ControlMrapHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(inMrapRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(inMrapRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (mrap: MultiRegionAccessPoint) {
       const AccountId = yield* mrap.accountId;
       const Mrap = yield* mrap.multiRegionAccessPointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${mrap})`({
+        yield* AWSBindings.bind`${options.tag}(${mrap})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -157,8 +157,8 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
-    const getCallerIdentity = yield* HostAccess.withCredentials(sts.getCallerIdentity);
+    const op = yield* AWSBindings.withCredentials(options.operation);
+    const getCallerIdentity = yield* AWSBindings.withCredentials(sts.getCallerIdentity);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -180,7 +180,7 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
             Resource: ["*"],
           });
         }
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements,
         });
       }

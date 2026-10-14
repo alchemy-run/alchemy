@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 /**
@@ -52,13 +52,13 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
   injectLogGroupName?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const inject = options.injectLogGroupName ?? true;
 
     return Effect.fn(function* <G extends LogGroup>(logGroup: G) {
       const LogGroupName = yield* logGroup.logGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${logGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${logGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

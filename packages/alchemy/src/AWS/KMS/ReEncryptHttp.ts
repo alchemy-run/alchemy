@@ -1,7 +1,7 @@
 import * as kms from "@distilled.cloud/aws/kms";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { keyLabel, keyPolicyStatement, type KeyLike } from "./KeyBinding.ts";
 import { ReEncrypt, type ReEncryptRequest } from "./ReEncrypt.ts";
 
@@ -13,7 +13,7 @@ import { ReEncrypt, type ReEncryptRequest } from "./ReEncrypt.ts";
 export const ReEncryptHttp = Layer.effect(
   ReEncrypt,
   Effect.gen(function* () {
-    const reEncrypt = yield* HostAccess.withCredentials(kms.reEncrypt);
+    const reEncrypt = yield* AWSBindings.withCredentials(kms.reEncrypt);
 
     return Effect.fn(function* (destination: KeyLike, source?: KeyLike) {
       const from = source ?? destination;
@@ -24,7 +24,7 @@ export const ReEncryptHttp = Layer.effect(
       const SourceKeyId =
         typeof from === "string" ? Effect.succeed<string>(from) : yield* from.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.KMS.ReEncrypt(${destination}, ${from})`({
+        yield* AWSBindings.bind`AWS.KMS.ReEncrypt(${destination}, ${from})`({
           policyStatements:
             source === undefined
               ? [keyPolicyStatement(["kms:ReEncryptFrom", "kms:ReEncryptTo"], destination)]

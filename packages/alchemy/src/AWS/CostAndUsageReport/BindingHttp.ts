@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Region } from "../Region.ts";
 import type { ReportDefinition } from "./ReportDefinition.ts";
@@ -40,7 +40,7 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinCur, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -51,7 +51,7 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* HostAccess.bind`AWS.CostAndUsageReport.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}()`({
           policyStatements,
         });
       }
@@ -88,12 +88,12 @@ export const makeReportDefinitionHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinCur, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* (report: ReportDefinition) {
       const ReportName = yield* report.reportName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CostAndUsageReport.${options.capability}(${report})`({
+        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}(${report})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -4,21 +4,21 @@ import type * as Region from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Bucket } from "./Bucket.ts";
 import { PresignPutObject, type PresignPutObjectRequest } from "./PresignPutObject.ts";
 
 export const PresignPutObjectHttp = Layer.effect(
   PresignPutObject,
   Effect.gen(function* () {
-    const services = yield* HostAccess.withCredentials(
+    const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
     return Effect.fn(function* (bucket: Bucket) {
       const BucketName = yield* bucket.bucketName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.S3.PresignPutObject(${bucket})`({
+        yield* AWSBindings.bind`AWS.S3.PresignPutObject(${bucket})`({
           policyStatements: [
             {
               Effect: "Allow",

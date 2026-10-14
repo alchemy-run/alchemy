@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 
 /**
@@ -25,7 +25,7 @@ export const bindRumAppMonitorPolicy = (options: {
 }) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`${options.tag}(${options.monitor})`({
+      yield* AWSBindings.bind`${options.tag}(${options.monitor})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -52,7 +52,7 @@ export const makeRumAppMonitorHttpBinding = <I extends { Name: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (monitor: AppMonitor) {
       const Name = yield* monitor.appMonitorName;

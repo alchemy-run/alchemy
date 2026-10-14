@@ -15,8 +15,8 @@ import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import type * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 
 /** Region/account available to an IAM grant factory. */
 export interface AppRunnerIamContext {
@@ -62,7 +62,7 @@ export const makeAppRunnerHttpBinding = <
   Layer.effect(
     service,
     Effect.gen(function* () {
-      const operation = yield* HostAccess.withCredentials(options.operation);
+      const operation = yield* AWSBindings.withCredentials(options.operation);
 
       return Effect.fn(function* (...args: Parameters<Shape>) {
         const { identifiers, iam } = options.spec(...args);
@@ -81,7 +81,7 @@ export const makeAppRunnerHttpBinding = <
             region: string;
           }>;
           const { actions, resources } = iam({ accountId, region });
-          yield* HostAccess.bind`${service.key}(${label})`({
+          yield* AWSBindings.bind`${service.key}(${label})`({
             policyStatements: [
               {
                 Effect: "Allow",

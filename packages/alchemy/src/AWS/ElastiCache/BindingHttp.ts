@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ServerlessCache } from "./ServerlessCache.ts";
 
 /**
@@ -40,11 +40,11 @@ export const makeElastiCacheAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -82,12 +82,12 @@ export const makeElastiCacheCacheHttpBinding = <
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cache: ServerlessCache) {
       const ServerlessCacheName = yield* cache.serverlessCacheName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${cache})`({
+        yield* AWSBindings.bind`${options.tag}(${cache})`({
           policyStatements: [
             {
               Effect: "Allow",

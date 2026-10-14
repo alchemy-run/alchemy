@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 
 /**
@@ -35,12 +35,12 @@ export const makeGroupHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "group" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

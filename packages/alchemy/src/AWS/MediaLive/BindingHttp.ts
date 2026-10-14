@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Channel } from "./Channel.ts";
 import type { Input } from "./Input.ts";
 
@@ -31,12 +31,12 @@ export const makeMediaLiveChannelHttpBinding = <I extends { ChannelId: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: Channel) {
       const ChannelId = yield* channel.channelId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${channel})`({
+        yield* AWSBindings.bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -70,12 +70,12 @@ export const makeMediaLiveInputHttpBinding = <I extends { InputId: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (input: Input) {
       const InputId = yield* input.inputId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${input})`({
+        yield* AWSBindings.bind`${options.tag}(${input})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -109,11 +109,11 @@ export const makeMediaLiveAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

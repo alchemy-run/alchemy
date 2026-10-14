@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Table } from "./Table.ts";
 import type { TableBucket } from "./TableBucket.ts";
 
@@ -34,12 +34,12 @@ export const makeS3TablesTableBucketHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (tableBucket: TableBucket) {
       const tableBucketARN = yield* tableBucket.tableBucketArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${tableBucket})`({
+        yield* AWSBindings.bind`${options.tag}(${tableBucket})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,14 +87,14 @@ export const makeS3TablesTableHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (table: Table) {
       const tableBucketARN = yield* table.tableBucketArn;
       const namespace = yield* table.namespace;
       const name = yield* table.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${table})`({
+        yield* AWSBindings.bind`${options.tag}(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

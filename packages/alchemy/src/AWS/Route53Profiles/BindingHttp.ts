@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Profile } from "./Profile.ts";
 
 /**
@@ -29,12 +29,12 @@ export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: Profile) {
       const ProfileId = yield* profile.profileId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${profile})`({
+        yield* AWSBindings.bind`${options.tag}(${profile})`({
           policyStatements: [
             {
               Effect: "Allow",

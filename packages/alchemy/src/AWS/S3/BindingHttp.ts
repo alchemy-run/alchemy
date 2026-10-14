@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Bucket } from "./Bucket.ts";
 
 /**
@@ -15,9 +15,9 @@ import type { Bucket } from "./Bucket.ts";
  *   requested actions on the bound bucket (object-level `${arn}/*` or the
  *   bucket ARN itself, per `iamResources`). On a native AWS host the
  *   statements go on the host's role; on an external host they go on the
- *   least-privilege role minted for it (see `HostAccess.bind`);
+ *   least-privilege role minted for it (see `AWSBindings.bind`);
  * - the runtime callable injects the resolved bucket name as `Bucket`; the
- *   operation is resolved with `HostAccess.withCredentials`, so an external
+ *   operation is resolved with `AWSBindings.withCredentials`, so an external
  *   host signs with its assumed role in the bucket's region.
  *
  * Genuinely-different bindings stay bespoke: `PresignGetObject` /
@@ -28,7 +28,7 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
   tag: string;
   /**
    * The distilled operation; `Bucket` is injected from the bound bucket.
-   * Resolved with the host's credentials (see `HostAccess.withCredentials`),
+   * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
    * signing in the bucket's region on an external host.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
@@ -56,9 +56,12 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
       const BucketName = yield* bucket.bucketName;
       const BucketRegion = yield* bucket.region;
       // resolved per bind because an external host signs in the bucket's own region
-      const op = yield* HostAccess.withCredentials(options.operation, Effect.succeed(BucketRegion));
+      const op = yield* AWSBindings.withCredentials(
+        options.operation,
+        Effect.succeed(BucketRegion),
+      );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${bucket})`({
+        yield* AWSBindings.bind`${options.tag}(${bucket})`({
           policyStatements: [
             {
               Effect: "Allow",

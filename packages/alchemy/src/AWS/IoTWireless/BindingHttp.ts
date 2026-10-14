@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 import type { WirelessGateway } from "./WirelessGateway.ts";
 
@@ -40,13 +40,13 @@ export const makeIotWirelessDeviceHttpBinding = <I, A, E, R, Req>(options: {
   resourceScope?: "device" | "any";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (device: WirelessDevice) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DeviceId = yield* device.wirelessDeviceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IoTWireless.${options.capability}(${device})`({
+        yield* AWSBindings.bind`AWS.IoTWireless.${options.capability}(${device})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -82,12 +82,12 @@ export const makeIotWirelessGatewayHttpBinding = <I, A, E, R, Req>(options: {
   prepare: (request: Req, wirelessGatewayId: string) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (gateway: WirelessGateway) {
       const GatewayId = yield* gateway.wirelessGatewayId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IoTWireless.${options.capability}(${gateway})`({
+        yield* AWSBindings.bind`AWS.IoTWireless.${options.capability}(${gateway})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -122,11 +122,11 @@ export const makeIotWirelessAccountHttpBinding = <I, A, E, R, Req>(options: {
   prepare: (request: Req) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IoTWireless.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.IoTWireless.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

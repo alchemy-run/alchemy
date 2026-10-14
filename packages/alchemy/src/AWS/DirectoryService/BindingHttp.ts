@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -28,11 +28,11 @@ export const makeDirectoryServiceAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -63,7 +63,7 @@ export const makeDirectoryHttpBinding = <I extends { DirectoryId?: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (directory: Directory) {
       const DirectoryId = yield* directory.directoryId;
@@ -72,7 +72,7 @@ export const makeDirectoryHttpBinding = <I extends { DirectoryId?: string }, A, 
           accountId: string;
           region: string;
         }>;
-        yield* HostAccess.bind`${options.tag}(${directory})`({
+        yield* AWSBindings.bind`${options.tag}(${directory})`({
           policyStatements: [
             {
               Effect: "Allow",

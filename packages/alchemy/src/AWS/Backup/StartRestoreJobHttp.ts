@@ -2,19 +2,19 @@ import * as backup from "@distilled.cloud/aws/backup";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import { StartRestoreJob, type StartRestoreJobRequest } from "./StartRestoreJob.ts";
 
 export const StartRestoreJobHttp = Layer.effect(
   StartRestoreJob,
   Effect.gen(function* () {
-    const startRestoreJob = yield* HostAccess.withCredentials(backup.startRestoreJob);
+    const startRestoreJob = yield* AWSBindings.withCredentials(backup.startRestoreJob);
 
     return Effect.fn(function* <R extends Role>(restoreRole: R) {
       const RoleArn = yield* restoreRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Backup.StartRestoreJob(${restoreRole})`({
+        yield* AWSBindings.bind`AWS.Backup.StartRestoreJob(${restoreRole})`({
           policyStatements: [
             // StartRestoreJob authorizes on the recovery point's
             // underlying resource ARN (a snapshot ARN unknowable at

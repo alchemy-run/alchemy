@@ -1,7 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   TransactGetItems,
@@ -42,7 +42,7 @@ export const TransactGetItemsHttp = Layer.effect(
           },
         ],
       );
-      const transactGetItems = yield* HostAccess.withCredentials(
+      const transactGetItems = yield* AWSBindings.withCredentials(
         DynamoDB.transactGetItems,
         tablesRegion(sortedTables),
       );

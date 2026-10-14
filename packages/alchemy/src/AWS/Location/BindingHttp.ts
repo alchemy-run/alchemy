@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { GeofenceCollection } from "./GeofenceCollection.ts";
 import type { Map as LocationMap } from "./Map.ts";
 import type { PlaceIndex } from "./PlaceIndex.ts";
@@ -38,12 +38,12 @@ export const makeLocationTrackerHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (tracker: Tracker) {
       const TrackerName = yield* tracker.trackerName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${tracker})`({
+        yield* AWSBindings.bind`${options.tag}(${tracker})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -84,12 +84,12 @@ export const makeLocationCollectionHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (collection: GeofenceCollection) {
       const CollectionName = yield* collection.collectionName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${collection})`({
+        yield* AWSBindings.bind`${options.tag}(${collection})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -129,12 +129,12 @@ export const makeLocationPlaceIndexHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (index: PlaceIndex) {
       const IndexName = yield* index.indexName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${index})`({
+        yield* AWSBindings.bind`${options.tag}(${index})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -175,12 +175,12 @@ export const makeLocationCalculatorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (calculator: RouteCalculator) {
       const CalculatorName = yield* calculator.calculatorName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${calculator})`({
+        yield* AWSBindings.bind`${options.tag}(${calculator})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -215,12 +215,12 @@ export const makeLocationMapHttpBinding = <I extends { MapName: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (map: LocationMap) {
       const MapName = yield* map.mapName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${map})`({
+        yield* AWSBindings.bind`${options.tag}(${map})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -256,11 +256,11 @@ export const makeLocationAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

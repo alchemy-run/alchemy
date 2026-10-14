@@ -2,7 +2,7 @@ import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { virtualClusterPolicyStatement } from "./BindingHttp.ts";
 import {
   GetManagedEndpointSessionCredentials,
@@ -13,7 +13,7 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 export const GetManagedEndpointSessionCredentialsHttp = Layer.effect(
   GetManagedEndpointSessionCredentials,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(emrc.getManagedEndpointSessionCredentials);
+    const op = yield* AWSBindings.withCredentials(emrc.getManagedEndpointSessionCredentials);
 
     // Bespoke (not the shared builder): the request addresses the cluster as
     // `virtualClusterIdentifier` (not `virtualClusterId`) and carries a
@@ -21,7 +21,7 @@ export const GetManagedEndpointSessionCredentialsHttp = Layer.effect(
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.EMRContainers.GetManagedEndpointSessionCredentials(${virtualCluster})`(
+        yield* AWSBindings.bind`AWS.EMRContainers.GetManagedEndpointSessionCredentials(${virtualCluster})`(
           {
             policyStatements: [
               virtualClusterPolicyStatement(virtualCluster, [

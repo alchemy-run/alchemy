@@ -2,10 +2,10 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as Region from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import type { SqlConnectionInfo } from "../Connection/internal.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
@@ -24,7 +24,7 @@ export const ConnectHttp = Layer.effect(
     // Captured at layer build so the runtime callable only requires
     // RuntimeContext — the presign resolves credentials lazily from the
     // service on every mint, so refreshed execution-role creds are honored.
-    const services = yield* HostAccess.withCredentials(
+    const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
@@ -34,7 +34,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* HostAccess.bind`AWS.DSQL.Connect(${cluster})`({
+        yield* AWSBindings.bind`AWS.DSQL.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpoint,
           },

@@ -2,7 +2,7 @@ import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Table } from "./Table.ts";
 import {
   TableStreams,
@@ -19,16 +19,16 @@ import {
 export const TableStreamsHttp = Layer.effect(
   TableStreams,
   Effect.gen(function* () {
-    const listStreams = yield* HostAccess.withCredentials(keyspacesstreams.listStreams);
-    const getStream = yield* HostAccess.withCredentials(keyspacesstreams.getStream);
-    const getShardIterator = yield* HostAccess.withCredentials(keyspacesstreams.getShardIterator);
-    const getRecords = yield* HostAccess.withCredentials(keyspacesstreams.getRecords);
+    const listStreams = yield* AWSBindings.withCredentials(keyspacesstreams.listStreams);
+    const getStream = yield* AWSBindings.withCredentials(keyspacesstreams.getStream);
+    const getShardIterator = yield* AWSBindings.withCredentials(keyspacesstreams.getShardIterator);
+    const getRecords = yield* AWSBindings.withCredentials(keyspacesstreams.getRecords);
 
     return Effect.fn(function* <T extends Table>(table: T) {
       const KeyspaceName = yield* table.keyspaceName;
       const TableName = yield* table.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Keyspaces.TableStreams(${table})`({
+        yield* AWSBindings.bind`AWS.Keyspaces.TableStreams(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

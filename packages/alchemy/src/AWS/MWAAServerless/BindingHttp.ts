@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Workflow } from "./Workflow.ts";
 
 /**
@@ -24,13 +24,13 @@ export const makeMwaaServerlessHttpBinding = <I extends { WorkflowArn: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workflow: Workflow) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const WorkflowArn = yield* workflow.workflowArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${workflow})`({
+        yield* AWSBindings.bind`${options.tag}(${workflow})`({
           policyStatements: [
             {
               Effect: "Allow",

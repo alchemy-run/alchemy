@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAccount.ts";
 
 /**
@@ -32,13 +32,13 @@ export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const AccountId = yield* account.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${account})`({
+        yield* AWSBindings.bind`${options.tag}(${account})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -71,11 +71,11 @@ export const makeWabaPhonePlaneHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${account})`({
+        yield* AWSBindings.bind`${options.tag}(${account})`({
           policyStatements: [
             {
               Effect: "Allow",

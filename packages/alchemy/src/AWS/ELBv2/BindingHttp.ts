@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LoadBalancer } from "./LoadBalancer.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 import type { TrustStore } from "./TrustStore.ts";
@@ -28,7 +28,7 @@ const bindHost = (
 ) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`${tag}(${resource})`({
+      yield* AWSBindings.bind`${tag}(${resource})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -67,7 +67,7 @@ export const makeTargetGroupHttpBinding = <
   resource?: "target-group" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (targetGroup: TargetGroup) {
       const TargetGroupArn = yield* targetGroup.targetGroupArn;
@@ -115,7 +115,7 @@ export const makeLoadBalancerHttpBinding = <
   resource?: "load-balancer" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (loadBalancer: LoadBalancer) {
       const LoadBalancerArn = yield* loadBalancer.loadBalancerArn;
@@ -151,7 +151,7 @@ export const makeTrustStoreHttpBinding = <I extends { TrustStoreArn?: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (trustStore: TrustStore) {
       const TrustStoreArn = yield* trustStore.trustStoreArn;

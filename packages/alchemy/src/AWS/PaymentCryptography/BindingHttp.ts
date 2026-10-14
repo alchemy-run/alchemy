@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Key } from "./Key.ts";
 
 /**
@@ -34,13 +34,13 @@ export const makePaymentCryptographyKeyHttpBinding = <
   actions: readonly `payment-cryptography:${string}`[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends Key>(key: K) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const KeyArn = yield* key.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${key})`({
+        yield* AWSBindings.bind`${options.tag}(${key})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,14 +86,14 @@ export const makePaymentCryptographyKeyPairHttpBinding = <
   keyFields: readonly [F1, F2];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <A1 extends Key, A2 extends Key>(first: A1, second: A2) {
       const FirstArn = yield* first.keyArn;
       const SecondArn = yield* second.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         for (const key of [first, second]) {
-          yield* HostAccess.bind`${options.tag}(${key})`({
+          yield* AWSBindings.bind`${options.tag}(${key})`({
             policyStatements: [
               {
                 Effect: "Allow",

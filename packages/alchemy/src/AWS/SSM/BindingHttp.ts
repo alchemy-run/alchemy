@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Parameter } from "./Parameter.ts";
 
@@ -49,7 +49,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
   resources?: (parameter: Parameter) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const requestKey = options.requestKey ?? "Name";
 
     return Effect.fn(function* <P extends Parameter>(parameter: P) {
@@ -77,7 +77,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
             ],
           });
         }
-        yield* HostAccess.bind`${options.tag}(${parameter})`({
+        yield* AWSBindings.bind`${options.tag}(${parameter})`({
           policyStatements: statements,
         });
       }

@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import * as HostAccess from "../HostAccess.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 import type { Workgroup } from "./Workgroup.ts";
 
@@ -25,7 +25,7 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined): string |
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getCredentials = yield* HostAccess.withCredentials(serverless.getCredentials);
+    const getCredentials = yield* AWSBindings.withCredentials(serverless.getCredentials);
 
     return Effect.fn(function* (workgroup: Workgroup, options: ConnectOptions = {}) {
       const WorkgroupName = yield* workgroup.workgroupName;
@@ -34,7 +34,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(workgroup.LogicalId);
-        yield* HostAccess.bind`AWS.RedshiftServerless.Connect(${workgroup})`({
+        yield* AWSBindings.bind`AWS.RedshiftServerless.Connect(${workgroup})`({
           policyStatements: [
             {
               Effect: "Allow",

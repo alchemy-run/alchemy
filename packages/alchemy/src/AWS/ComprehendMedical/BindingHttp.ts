@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
 /**
@@ -39,7 +39,7 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -63,7 +63,7 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
             },
           });
         }
-        yield* HostAccess.bind`AWS.ComprehendMedical.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.ComprehendMedical.${options.capability}()`({
           policyStatements,
         });
       }

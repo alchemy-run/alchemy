@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Domain } from "./Domain.ts";
 
 /**
@@ -23,7 +23,7 @@ import type { Domain } from "./Domain.ts";
 export const registerSimpleDbBinding = (operation: string, domain: Domain) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`AWS.SimpleDB.${operation}(${domain})`({
+      yield* AWSBindings.bind`AWS.SimpleDB.${operation}(${domain})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -46,7 +46,7 @@ export const makeSimpleDbBinding = <Req extends { DomainName: string }, A, E, R>
   readonly method: Effect.Effect<(input: Req) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const call = yield* HostAccess.withCredentials(options.method);
+    const call = yield* AWSBindings.withCredentials(options.method);
     return Effect.fn(function* (domain: Domain) {
       const domainName = yield* domain.domainName;
       yield* registerSimpleDbBinding(options.operation, domain);

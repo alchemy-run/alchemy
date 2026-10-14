@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 
 /**
@@ -31,12 +31,12 @@ export const makeCloudTrailEventDataStoreHttpBinding = <I, A, E, R>(options: {
   injectEventDataStores?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (store: EventDataStore) {
       const Arn = yield* store.eventDataStoreArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${store})`({
+        yield* AWSBindings.bind`${options.tag}(${store})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -74,11 +74,11 @@ export const makeCloudTrailAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

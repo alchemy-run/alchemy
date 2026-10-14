@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ResolverEndpoint } from "./ResolverEndpoint.ts";
 import type { ResolverRule } from "./ResolverRule.ts";
 
@@ -40,12 +40,12 @@ export const makeRoute53ResolverEndpointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: ResolverEndpoint) {
       const ResolverEndpointId = yield* endpoint.resolverEndpointId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${endpoint})`({
+        yield* AWSBindings.bind`${options.tag}(${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,12 +86,12 @@ export const makeRoute53ResolverRuleHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: ResolverRule) {
       const ResolverRuleId = yield* rule.resolverRuleId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${rule})`({
+        yield* AWSBindings.bind`${options.tag}(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -2,7 +2,7 @@ import * as location from "@distilled.cloud/aws/location";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import { StartJob, type StartJobRequest } from "./StartJob.ts";
 
@@ -14,12 +14,12 @@ import { StartJob, type StartJobRequest } from "./StartJob.ts";
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
-    const startJob = yield* HostAccess.withCredentials(location.startJob);
+    const startJob = yield* AWSBindings.withCredentials(location.startJob);
 
     return Effect.fn(function* (executionRole: Role) {
       const RoleArn = yield* executionRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Location.StartJob(${executionRole})`({
+        yield* AWSBindings.bind`AWS.Location.StartJob(${executionRole})`({
           policyStatements: [
             // Jobs are named at runtime, so their ARNs are unknowable at
             // deploy time.

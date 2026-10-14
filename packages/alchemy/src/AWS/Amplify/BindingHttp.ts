@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { App } from "./App.ts";
 
 /**
@@ -33,12 +33,12 @@ export const makeAmplifyHttpBinding = <I extends { appId: string }, A, E, R>(
   options: AmplifyHttpBindingOptions<I, A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const operation = yield* HostAccess.withCredentials(options.operation);
+    const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (app: App) {
       const AppId = yield* app.appId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Amplify.${options.name}(${app})`({
+        yield* AWSBindings.bind`AWS.Amplify.${options.name}(${app})`({
           policyStatements: [
             {
               Effect: "Allow",

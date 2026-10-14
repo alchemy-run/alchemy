@@ -1,7 +1,7 @@
 import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Detector } from "./Detector.ts";
 import { ListEventPredictions } from "./ListEventPredictions.ts";
 
@@ -14,13 +14,13 @@ import { ListEventPredictions } from "./ListEventPredictions.ts";
 export const ListEventPredictionsHttp = Layer.effect(
   ListEventPredictions,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(frauddetector.listEventPredictions);
+    const op = yield* AWSBindings.withCredentials(frauddetector.listEventPredictions);
 
     return Effect.fn(function* (detector: Detector) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.FraudDetector.ListEventPredictions(${detector})`({
+        yield* AWSBindings.bind`AWS.FraudDetector.ListEventPredictions(${detector})`({
           policyStatements: [
             {
               Effect: "Allow",

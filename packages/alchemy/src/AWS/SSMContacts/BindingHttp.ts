@@ -21,7 +21,7 @@ import * as Effect from "effect/Effect";
  *   the caller's request as-is and are granted on `*` — engagement and page
  *   ARNs are minted at runtime and cannot be scoped statically.
  */
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Contact } from "./Contact.ts";
 import type { ContactChannel } from "./ContactChannel.ts";
 import type { Rotation } from "./Rotation.ts";
@@ -41,12 +41,12 @@ export const makeContactHttpBinding = <I extends { ContactId: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (contact: Contact) {
       const ContactArn = yield* contact.contactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${contact})`({
+        yield* AWSBindings.bind`${options.tag}(${contact})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,12 +87,12 @@ export const makeContactChannelHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: ContactChannel) {
       const ChannelArn = yield* channel.contactChannelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${channel})`({
+        yield* AWSBindings.bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -128,12 +128,12 @@ export const makeRotationHttpBinding = <I extends { RotationId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rotation: Rotation) {
       const RotationArn = yield* rotation.rotationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${rotation})`({
+        yield* AWSBindings.bind`${options.tag}(${rotation})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -169,11 +169,11 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

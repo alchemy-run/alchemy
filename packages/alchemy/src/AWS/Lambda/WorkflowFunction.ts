@@ -27,7 +27,7 @@ import {
   payloadCodec,
 } from "../../WorkflowEncoding.ts";
 import { type Implemented, implemented } from "../../Workflows.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { DurableStep } from "./Durable.ts";
 import {
   DurableFunction,
@@ -212,7 +212,7 @@ export const DurableFunctionEngine = <
         for (const host of hosts) {
           const fn = yield* host;
           if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* HostAccess.bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
+            yield* AWSBindings.bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
               policyStatements: [
                 {
                   Effect: "Allow",

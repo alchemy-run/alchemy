@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Endpoint } from "./Endpoint.ts";
 import type { ReplicationInstance } from "./ReplicationInstance.ts";
 
@@ -42,12 +42,12 @@ export const makeDmsEndpointScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: Endpoint) {
       const EndpointArn = yield* endpoint.endpointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${endpoint})`({
+        yield* AWSBindings.bind`${options.tag}(${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -94,12 +94,12 @@ export const makeDmsInstanceScopedHttpBinding = <
   iam: "resource" | "wildcard";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: ReplicationInstance) {
       const ReplicationInstanceArn = yield* instance.replicationInstanceArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${instance})`({
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -144,13 +144,13 @@ export const makeDmsConnectionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: ReplicationInstance, endpoint: Endpoint) {
       const ReplicationInstanceArn = yield* instance.replicationInstanceArn;
       const EndpointArn = yield* endpoint.endpointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${instance}, ${endpoint})`({
+        yield* AWSBindings.bind`${options.tag}(${instance}, ${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -188,11 +188,11 @@ export const makeDmsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

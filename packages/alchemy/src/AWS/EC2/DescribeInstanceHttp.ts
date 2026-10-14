@@ -1,7 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { DescribeInstance } from "./DescribeInstance.ts";
 import { type Instance } from "./Instance.ts";
 
@@ -11,12 +11,12 @@ import { type Instance } from "./Instance.ts";
 export const DescribeInstanceHttp = Layer.effect(
   DescribeInstance,
   Effect.gen(function* () {
-    const describe = yield* HostAccess.withCredentials(ec2.describeInstances);
+    const describe = yield* AWSBindings.withCredentials(ec2.describeInstances);
 
     return Effect.fn(function* (instance: Instance) {
       const instanceId = yield* instance.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.EC2.DescribeInstance(${instance})`({
+        yield* AWSBindings.bind`AWS.EC2.DescribeInstance(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

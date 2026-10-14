@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableFromBackup,
@@ -39,7 +39,7 @@ export const RestoreTableFromBackupHttp = Layer.effect(
         ],
       );
       // Restores stay in-region: both tables must share it.
-      const restoreTableFromBackup = yield* HostAccess.withCredentials(
+      const restoreTableFromBackup = yield* AWSBindings.withCredentials(
         DynamoDB.restoreTableFromBackup,
         tablesRegion([from, to]),
       );

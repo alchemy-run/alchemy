@@ -1,7 +1,7 @@
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { StartJob } from "./StartJob.ts";
 
 /**
@@ -17,11 +17,11 @@ import { StartJob } from "./StartJob.ts";
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(dataexchange.startJob);
+    const op = yield* AWSBindings.withCredentials(dataexchange.startJob);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.DataExchange.StartJob()`({
+        yield* AWSBindings.bind`AWS.DataExchange.StartJob()`({
           policyStatements: [
             {
               Effect: "Allow",

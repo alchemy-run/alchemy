@@ -1,8 +1,8 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Archive } from "./Archive.ts";
 import { StartReplay, type StartReplayRequest } from "./StartReplay.ts";
 
@@ -17,7 +17,7 @@ import { StartReplay, type StartReplayRequest } from "./StartReplay.ts";
 export const StartReplayHttp = Layer.effect(
   StartReplay,
   Effect.gen(function* () {
-    const startReplay = yield* HostAccess.withCredentials(eventbridge.startReplay);
+    const startReplay = yield* AWSBindings.withCredentials(eventbridge.startReplay);
 
     return Effect.fn(function* (archive: Archive) {
       const ArchiveArn = yield* archive.archiveArn;
@@ -27,7 +27,7 @@ export const StartReplayHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        yield* HostAccess.bind`AWS.EventBridge.StartReplay(${archive})`({
+        yield* AWSBindings.bind`AWS.EventBridge.StartReplay(${archive})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   BatchExecuteStatement,
   type BatchExecuteStatementRequest,
@@ -34,7 +34,7 @@ export const BatchExecuteStatementHttp = Layer.effect(
           },
         ],
       );
-      const batchExecuteStatement = yield* HostAccess.withCredentials(
+      const batchExecuteStatement = yield* AWSBindings.withCredentials(
         DynamoDB.batchExecuteStatement,
         tablesRegion(sortedTables),
       );

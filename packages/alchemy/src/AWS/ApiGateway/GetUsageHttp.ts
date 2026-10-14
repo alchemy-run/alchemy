@@ -2,7 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { registerApiGatewayBinding } from "./BindingHttp.ts";
 import { GetUsage, type GetUsageRequest } from "./GetUsage.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
@@ -15,7 +15,7 @@ import type { UsagePlan } from "./UsagePlan.ts";
 export const GetUsageHttp = Layer.effect(
   GetUsage,
   Effect.gen(function* () {
-    const getUsage = yield* HostAccess.withCredentials(ag.getUsage);
+    const getUsage = yield* AWSBindings.withCredentials(ag.getUsage);
     return Effect.fn(function* <P extends UsagePlan>(usagePlan: P) {
       const UsagePlanId = yield* usagePlan.id;
       yield* registerApiGatewayBinding({

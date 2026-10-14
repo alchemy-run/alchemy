@@ -1,19 +1,19 @@
 import * as AVP from "@distilled.cloud/aws/verifiedpermissions";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetPolicies, type GetPoliciesRequest } from "./GetPolicies.ts";
 import type { PolicyStore } from "./PolicyStore.ts";
 
 export const GetPoliciesHttp = Layer.effect(
   GetPolicies,
   Effect.gen(function* () {
-    const batchGetPolicy = yield* HostAccess.withCredentials(AVP.batchGetPolicy);
+    const batchGetPolicy = yield* AWSBindings.withCredentials(AVP.batchGetPolicy);
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.VerifiedPermissions.GetPolicies(${store})`({
+        yield* AWSBindings.bind`AWS.VerifiedPermissions.GetPolicies(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

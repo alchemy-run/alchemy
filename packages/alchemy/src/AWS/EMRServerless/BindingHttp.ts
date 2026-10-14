@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Application } from "./Application.ts";
 
@@ -40,7 +40,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
@@ -60,7 +60,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
               },
             ]
           : [];
-        yield* HostAccess.bind`${options.tag}(${application})`({
+        yield* AWSBindings.bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

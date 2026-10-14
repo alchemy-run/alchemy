@@ -1,7 +1,7 @@
 import * as AVP from "@distilled.cloud/aws/verifiedpermissions";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   type BatchIsAuthorizedRequest,
   type BatchIsAuthorizedWithTokenRequest,
@@ -14,17 +14,17 @@ import type { PolicyStore } from "./PolicyStore.ts";
 export const IsAuthorizedHttp = Layer.effect(
   IsAuthorized,
   Effect.gen(function* () {
-    const isAuthorized = yield* HostAccess.withCredentials(AVP.isAuthorized);
-    const isAuthorizedWithToken = yield* HostAccess.withCredentials(AVP.isAuthorizedWithToken);
-    const batchIsAuthorized = yield* HostAccess.withCredentials(AVP.batchIsAuthorized);
-    const batchIsAuthorizedWithToken = yield* HostAccess.withCredentials(
+    const isAuthorized = yield* AWSBindings.withCredentials(AVP.isAuthorized);
+    const isAuthorizedWithToken = yield* AWSBindings.withCredentials(AVP.isAuthorizedWithToken);
+    const batchIsAuthorized = yield* AWSBindings.withCredentials(AVP.batchIsAuthorized);
+    const batchIsAuthorizedWithToken = yield* AWSBindings.withCredentials(
       AVP.batchIsAuthorizedWithToken,
     );
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.VerifiedPermissions.IsAuthorized(${store})`({
+        yield* AWSBindings.bind`AWS.VerifiedPermissions.IsAuthorized(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

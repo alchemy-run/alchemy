@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { EnabledBaseline } from "./EnabledBaseline.ts";
 import type { EnabledControl } from "./EnabledControl.ts";
 import type { LandingZone } from "./LandingZone.ts";
@@ -54,12 +54,12 @@ export const makeControlTowerHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ControlTower.${options.capability}(${resource})`({
+        yield* AWSBindings.bind`AWS.ControlTower.${options.capability}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -102,11 +102,11 @@ export const makeControlTowerAccountHttpBinding = <I extends object, A, E, R>(op
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ControlTower.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.ControlTower.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

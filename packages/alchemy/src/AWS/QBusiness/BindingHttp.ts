@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Application } from "./Application.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { Index } from "./SearchIndex.ts";
@@ -48,12 +48,12 @@ export const makeQBusinessApplicationHttpBinding = <
   subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
       const applicationId = yield* application.applicationId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${application})`({
+        yield* AWSBindings.bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -109,13 +109,13 @@ export const makeQBusinessIndexHttpBinding = <
   subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (index: Index) {
       const applicationId = yield* index.applicationId;
       const indexId = yield* index.indexId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${index})`({
+        yield* AWSBindings.bind`${options.tag}(${index})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -172,14 +172,14 @@ export const makeQBusinessDataSourceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSource: DataSource) {
       const applicationId = yield* dataSource.applicationId;
       const indexId = yield* dataSource.indexId;
       const dataSourceId = yield* dataSource.dataSourceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dataSource})`({
+        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -243,13 +243,13 @@ export const makeQBusinessWebExperienceHttpBinding = <
   prepare?: (request: Req | undefined) => Omit<I, "applicationId" | "webExperienceId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (webExperience: WebExperience) {
       const applicationId = yield* webExperience.applicationId;
       const webExperienceId = yield* webExperience.webExperienceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${webExperience})`({
+        yield* AWSBindings.bind`${options.tag}(${webExperience})`({
           policyStatements: [
             {
               Effect: "Allow",

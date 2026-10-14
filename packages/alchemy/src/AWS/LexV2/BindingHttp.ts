@@ -2,7 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
@@ -51,13 +51,13 @@ export const makeLexAliasHttpBinding = <Req extends object, Out, Err>(
   config: LexAliasHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(config.operation);
+    const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* (alias: BotAlias) {
       const BotId = yield* alias.botId;
       const BotAliasId = yield* alias.botAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.LexV2.${config.capability}(${alias})`({
+        yield* AWSBindings.bind`AWS.LexV2.${config.capability}(${alias})`({
           policyStatements: [
             {
               Effect: "Allow",

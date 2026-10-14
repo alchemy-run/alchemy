@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -35,12 +35,12 @@ export const makeVpcLatticeTargetGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (targetGroup: TargetGroup) {
       const targetGroupIdentifier = yield* targetGroup.targetGroupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${targetGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${targetGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

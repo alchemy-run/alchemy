@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { Region } from "../Region.ts";
 import type { EmailContact } from "./EmailContact.ts";
 
@@ -40,13 +40,13 @@ export const makeEmailContactHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinContactsRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinContactsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (contact: EmailContact) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ContactArn = yield* contact.emailContactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${contact})`({
+        yield* AWSBindings.bind`${options.tag}(${contact})`({
           policyStatements: [
             {
               Effect: "Allow",

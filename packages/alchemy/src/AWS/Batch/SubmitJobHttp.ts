@@ -1,7 +1,7 @@
 import * as batch from "@distilled.cloud/aws/batch";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { JobDefinition } from "./JobDefinition.ts";
 import type { JobQueue } from "./JobQueue.ts";
 import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
@@ -9,14 +9,14 @@ import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
 export const SubmitJobHttp = Layer.effect(
   SubmitJob,
   Effect.gen(function* () {
-    const submitJob = yield* HostAccess.withCredentials(batch.submitJob);
+    const submitJob = yield* AWSBindings.withCredentials(batch.submitJob);
 
     return Effect.fn(function* (queue: JobQueue, jobDefinition: JobDefinition) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobQueueArn = yield* queue.jobQueueArn;
       const JobDefinitionArn = yield* jobDefinition.jobDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Batch.SubmitJob(${queue}, ${jobDefinition})`({
+        yield* AWSBindings.bind`AWS.Batch.SubmitJob(${queue}, ${jobDefinition})`({
           policyStatements: [
             {
               Effect: "Allow",

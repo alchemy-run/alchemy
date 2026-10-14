@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/aws/backup";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { BackupVault } from "./BackupVault.ts";
 import { StartBackupJob, type StartBackupJobRequest } from "./StartBackupJob.ts";
@@ -10,13 +10,13 @@ import { StartBackupJob, type StartBackupJobRequest } from "./StartBackupJob.ts"
 export const StartBackupJobHttp = Layer.effect(
   StartBackupJob,
   Effect.gen(function* () {
-    const startBackupJob = yield* HostAccess.withCredentials(backup.startBackupJob);
+    const startBackupJob = yield* AWSBindings.withCredentials(backup.startBackupJob);
 
     return Effect.fn(function* <R extends Role>(vault: BackupVault, backupRole: R) {
       const BackupVaultName = yield* vault.backupVaultName;
       const RoleArn = yield* backupRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Backup.StartBackupJob(${vault}, ${backupRole})`({
+        yield* AWSBindings.bind`AWS.Backup.StartBackupJob(${vault}, ${backupRole})`({
           policyStatements: [
             {
               Effect: "Allow",

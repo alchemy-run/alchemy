@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -38,11 +38,11 @@ export const makeDocDBElasticAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -79,12 +79,12 @@ export const makeDocDBElasticClusterHttpBinding = <
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster) {
       const clusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${cluster})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",

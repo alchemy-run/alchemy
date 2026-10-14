@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Budget } from "./Budget.ts";
 import type { BudgetAction } from "./BudgetAction.ts";
 
@@ -37,13 +37,13 @@ export const makeBudgetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (budget: Budget) {
       const AccountId = yield* budget.accountId;
       const BudgetName = yield* budget.budgetName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${budget})`({
+        yield* AWSBindings.bind`${options.tag}(${budget})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -85,14 +85,14 @@ export const makeBudgetActionHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (action: BudgetAction) {
       const AccountId = yield* action.accountId;
       const BudgetName = yield* action.budgetName;
       const ActionId = yield* action.actionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${action})`({
+        yield* AWSBindings.bind`${options.tag}(${action})`({
           policyStatements: [
             {
               Effect: "Allow",

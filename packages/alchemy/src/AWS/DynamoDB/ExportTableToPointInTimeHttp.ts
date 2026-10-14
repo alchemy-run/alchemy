@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { regionFromArn } from "../Lambda/BindingHttp.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { grantTables } from "./BindingHttp.ts";
@@ -34,7 +34,7 @@ export const ExportTableToPointInTimeHttp = Layer.effect(
         ],
       );
       // The export runs in the table's region; the bucket may be elsewhere.
-      const exportTableToPointInTime = yield* HostAccess.withCredentials(
+      const exportTableToPointInTime = yield* AWSBindings.withCredentials(
         DynamoDB.exportTableToPointInTime,
         Effect.succeed(Effect.map(TableArn, regionFromArn)),
       );

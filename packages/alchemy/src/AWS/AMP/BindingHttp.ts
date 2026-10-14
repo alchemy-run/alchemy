@@ -18,7 +18,7 @@ import * as Redacted from "effect/Redacted";
  * `*Http` layers are public.
  */
 import { toWireSeconds } from "../../Util/Duration.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PrometheusApiError, type PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
@@ -85,14 +85,14 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
   makeClient: (send: AmpSend) => Client;
 }) =>
   Effect.gen(function* () {
-    const services = yield* HostAccess.withCredentials(
+    const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
     return Effect.fn(function* (workspace: Workspace) {
       const PrometheusEndpoint = yield* workspace.prometheusEndpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AMP.${options.name}(${workspace})`({
+        yield* AWSBindings.bind`AWS.AMP.${options.name}(${workspace})`({
           policyStatements: [
             {
               Effect: "Allow",

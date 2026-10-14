@@ -2,7 +2,7 @@ import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Domain } from "./Domain.ts";
 import {
   GetAuthorizationToken,
@@ -18,13 +18,13 @@ import {
 export const GetAuthorizationTokenHttp = Layer.effect(
   GetAuthorizationToken,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(codeartifact.getAuthorizationToken);
+    const op = yield* AWSBindings.withCredentials(codeartifact.getAuthorizationToken);
 
     return Effect.fn(function* (domain: Domain) {
       const DomainName = yield* domain.domainName;
       const Owner = yield* domain.owner;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CodeArtifact.GetAuthorizationToken(${domain})`({
+        yield* AWSBindings.bind`AWS.CodeArtifact.GetAuthorizationToken(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",

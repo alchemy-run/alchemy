@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Space } from "./Space.ts";
 
 /**
@@ -23,12 +23,12 @@ export const makeRePostSpaceHttpBinding = <I extends { spaceId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (space: Space) {
       const spaceId = yield* space.spaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${space})`({
+        yield* AWSBindings.bind`${options.tag}(${space})`({
           policyStatements: [
             {
               Effect: "Allow",

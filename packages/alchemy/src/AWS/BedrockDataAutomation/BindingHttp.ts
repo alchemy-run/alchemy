@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Blueprint } from "./Blueprint.ts";
 import type { DataAutomationLibrary } from "./DataAutomationLibrary.ts";
 import type { DataAutomationProject } from "./DataAutomationProject.ts";
@@ -42,13 +42,13 @@ export const makeBdaProjectHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (project: DataAutomationProject) {
       const projectArn = yield* project.projectArn;
       const projectStage = yield* project.projectStage;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${project})`({
+        yield* AWSBindings.bind`${options.tag}(${project})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -99,12 +99,12 @@ export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E
   additionalResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (library: DataAutomationLibrary) {
       const libraryArn = yield* library.libraryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${library})`({
+        yield* AWSBindings.bind`${options.tag}(${library})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -149,13 +149,13 @@ export const makeBdaBlueprintOptimizationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (blueprint: Blueprint) {
       const blueprintArn = yield* blueprint.blueprintArn;
       const blueprintStage = yield* blueprint.blueprintStage;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${blueprint})`({
+        yield* AWSBindings.bind`${options.tag}(${blueprint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -200,12 +200,12 @@ export const makeBdaBlueprintHttpBinding = <I extends { blueprintArn: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (blueprint: Blueprint) {
       const blueprintArn = yield* blueprint.blueprintArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${blueprint})`({
+        yield* AWSBindings.bind`${options.tag}(${blueprint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -241,11 +241,11 @@ export const makeBdaAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

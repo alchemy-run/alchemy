@@ -2,7 +2,7 @@ import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { CreateDeployment, type CreateDeploymentRequest } from "./CreateDeployment.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
@@ -17,14 +17,14 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 export const CreateDeploymentHttp = Layer.effect(
   CreateDeployment,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(codedeploy.createDeployment);
+    const op = yield* AWSBindings.withCredentials(codedeploy.createDeployment);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CodeDeploy.CreateDeployment(${group})`({
+        yield* AWSBindings.bind`AWS.CodeDeploy.CreateDeployment(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

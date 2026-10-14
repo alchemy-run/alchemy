@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AnomalyMonitor } from "./AnomalyMonitor.ts";
 import { pinCe } from "./common.ts";
 import type { CostCategory } from "./CostCategory.ts";
@@ -47,11 +47,11 @@ export const makeCostExplorerHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinCe, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CostExplorer.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -94,12 +94,12 @@ export const makeAnomalyMonitorHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinCe, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* (monitor: AnomalyMonitor) {
       const MonitorArn = yield* monitor.monitorArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CostExplorer.${options.capability}(${monitor})`({
+        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}(${monitor})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -149,12 +149,12 @@ export const makeCostCategoryHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinCe, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* (category: CostCategory) {
       const CostCategoryArn = yield* category.costCategoryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CostExplorer.${options.capability}(${category})`({
+        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}(${category})`({
           policyStatements: [
             {
               Effect: "Allow",

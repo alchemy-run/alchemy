@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { unpackEnvValue } from "../../RuntimeContext.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { CacheCluster } from "./CacheCluster.ts";
 import {
   ConnectCacheCluster,
@@ -16,7 +16,7 @@ export const ConnectCacheClusterHttp = Layer.effect(
     return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
       const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+        yield* AWSBindings.bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
           env: {
             [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
             [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>

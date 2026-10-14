@@ -1,8 +1,8 @@
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 import { bedrockModelArns } from "./ModelArns.ts";
 import { Rerank, type RerankRequest } from "./Rerank.ts";
 
@@ -13,7 +13,7 @@ import { Rerank, type RerankRequest } from "./Rerank.ts";
 export const RerankHttp = Layer.effect(
   Rerank,
   Effect.gen(function* () {
-    const rerank = yield* HostAccess.withCredentials(bedrock.rerank);
+    const rerank = yield* AWSBindings.withCredentials(bedrock.rerank);
 
     return Effect.fn(function* (model: string, ...additionalModels: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -24,7 +24,7 @@ export const RerankHttp = Layer.effect(
         // Sort so the binding identity (SID + ARN list) is deterministic
         // regardless of argument order.
         const sorted = [...new Set([model, ...additionalModels])].sort();
-        yield* HostAccess.bind`AWS.Bedrock.Rerank(${sorted.join(",")})`({
+        yield* AWSBindings.bind`AWS.Bedrock.Rerank(${sorted.join(",")})`({
           policyStatements: [
             {
               // bedrock:Rerank does not support resource-level scoping.

@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import * as HostAccess from "../HostAccess.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
@@ -25,8 +25,10 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined): string |
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getClusterCredentials = yield* HostAccess.withCredentials(redshift.getClusterCredentials);
-    const getClusterCredentialsWithIAM = yield* HostAccess.withCredentials(
+    const getClusterCredentials = yield* AWSBindings.withCredentials(
+      redshift.getClusterCredentials,
+    );
+    const getClusterCredentialsWithIAM = yield* AWSBindings.withCredentials(
       redshift.getClusterCredentialsWithIAM,
     );
 
@@ -51,7 +53,7 @@ export const ConnectHttp = Layer.effect(
         // a named database user needs BOTH policy statements, and binds that
         // share an id collapse into one (the last one wins).
         const strategy = options.dbUser !== undefined ? `, ${options.dbUser}` : "";
-        yield* HostAccess.bind`AWS.Redshift.Connect(${cluster}${strategy})`({
+        yield* AWSBindings.bind`AWS.Redshift.Connect(${cluster}${strategy})`({
           policyStatements:
             options.dbUser !== undefined
               ? [

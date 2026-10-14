@@ -1,7 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   BatchWriteItem,
   type BatchWriteItemRequest,
@@ -43,7 +43,7 @@ export const BatchWriteItemHttp = Layer.effect(
           },
         ],
       );
-      const batchWriteItem = yield* HostAccess.withCredentials(
+      const batchWriteItem = yield* AWSBindings.withCredentials(
         DynamoDB.batchWriteItem,
         tablesRegion(sortedTables),
       );

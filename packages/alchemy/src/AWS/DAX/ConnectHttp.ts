@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import { connectEnvPrefix } from "./Connect.ts";
 
@@ -64,7 +64,7 @@ export const makeDaxConnectHttpBinding = (options: {
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* HostAccess.bind`${options.tag}(${cluster})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.discoveryEndpointAddress,
             // Lambda environment variables are strings — stringify the port.

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ManagedThing } from "./ManagedThing.ts";
 
 /**
@@ -38,13 +38,13 @@ export const makeManagedThingHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: ManagedThing) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ManagedThingId = yield* thing.managedThingId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IoTManagedIntegrations.${options.capability}(${thing})`({
+        yield* AWSBindings.bind`AWS.IoTManagedIntegrations.${options.capability}(${thing})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -84,11 +84,11 @@ export const makeManagedIntegrationsHttpBinding = <I extends object, A, E, R>(op
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.IoTManagedIntegrations.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.IoTManagedIntegrations.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

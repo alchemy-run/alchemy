@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Farm } from "./Farm.ts";
 import type { Queue } from "./Queue.ts";
 
@@ -34,13 +34,13 @@ export const makeDeadlineQueueHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const FarmId = yield* queue.farmId;
       const QueueId = yield* queue.queueId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${queue})`({
+        yield* AWSBindings.bind`${options.tag}(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,13 +83,13 @@ export const makeDeadlineQueueSearchHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const FarmId = yield* queue.farmId;
       const QueueId = yield* queue.queueId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${queue})`({
+        yield* AWSBindings.bind`${options.tag}(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -126,12 +126,12 @@ export const makeDeadlineFarmHttpBinding = <I extends { farmId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (farm: Farm) {
       const FarmId = yield* farm.farmId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${farm})`({
+        yield* AWSBindings.bind`${options.tag}(${farm})`({
           policyStatements: [
             {
               Effect: "Allow",

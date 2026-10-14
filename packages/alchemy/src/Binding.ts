@@ -271,7 +271,7 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
  * Total: resolves to `undefined` when no host is ambient — a plan-time
  * {@link Service.execute} invoke, or a binding client provided directly in a
  * script/test outside any Function. Providers narrow it before calling
- * `host.bind` (e.g. Cloudflare's `isWorker`, or AWS's `HostAccess`, which
+ * `host.bind` (e.g. Cloudflare's `isWorker`, or AWS's `AWSBindings`, which
  * tells native hosts from external ones); both reject `undefined`.
  */
 export const Host: Effect.Effect<ResourceLike | undefined> = Effect.serviceOption(

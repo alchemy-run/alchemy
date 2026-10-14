@@ -2,7 +2,7 @@ import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   GetParameters,
   type GetParametersParameters,
@@ -12,7 +12,7 @@ import {
 export const GetParametersHttp = Layer.effect(
   GetParameters,
   Effect.gen(function* () {
-    const getParameters = yield* HostAccess.withCredentials(SSM.getParameters);
+    const getParameters = yield* AWSBindings.withCredentials(SSM.getParameters);
 
     return Effect.fn(function* (...parameters: GetParametersParameters) {
       // Resolve name accessors in caller order so the runtime request
@@ -25,7 +25,7 @@ export const GetParametersHttp = Layer.effect(
         // Sort by LogicalId so the binding identity (SID + ARN list) is
         // deterministic regardless of argument order.
         const sorted = [...parameters].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));
-        yield* HostAccess.bind`AWS.SSM.GetParameters(${sorted})`({
+        yield* AWSBindings.bind`AWS.SSM.GetParameters(${sorted})`({
           policyStatements: [
             {
               Effect: "Allow",

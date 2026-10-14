@@ -2,7 +2,7 @@ import { Endpoint } from "@distilled.cloud/aws";
 import * as mgmt from "@distilled.cloud/aws/apigatewaymanagementapi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ManageConnections,
   type DeleteConnectionRequest,
@@ -34,14 +34,14 @@ import type { ApiGatewayV2Stage } from "./Stage.ts";
 export const ManageConnectionsHttp = Layer.effect(
   ManageConnections,
   Effect.gen(function* () {
-    const postToConnection = yield* HostAccess.withCredentials(mgmt.postToConnection);
-    const getConnection = yield* HostAccess.withCredentials(mgmt.getConnection);
-    const deleteConnection = yield* HostAccess.withCredentials(mgmt.deleteConnection);
+    const postToConnection = yield* AWSBindings.withCredentials(mgmt.postToConnection);
+    const getConnection = yield* AWSBindings.withCredentials(mgmt.getConnection);
+    const deleteConnection = yield* AWSBindings.withCredentials(mgmt.deleteConnection);
 
     return Effect.fn(function* <S extends ApiGatewayV2Stage>(stage: S) {
       const CallbackUrl = yield* stage.callbackUrl;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ApiGatewayV2.ManageConnections(${stage})`({
+        yield* AWSBindings.bind`AWS.ApiGatewayV2.ManageConnections(${stage})`({
           policyStatements: [
             {
               Effect: "Allow",

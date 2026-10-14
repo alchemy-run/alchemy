@@ -2,7 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { registerApiGatewayBinding } from "./BindingHttp.ts";
 import { DeleteUsagePlanKey, type DeleteUsagePlanKeyRequest } from "./DeleteUsagePlanKey.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
@@ -15,7 +15,7 @@ import type { UsagePlan } from "./UsagePlan.ts";
 export const DeleteUsagePlanKeyHttp = Layer.effect(
   DeleteUsagePlanKey,
   Effect.gen(function* () {
-    const deleteUsagePlanKey = yield* HostAccess.withCredentials(ag.deleteUsagePlanKey);
+    const deleteUsagePlanKey = yield* AWSBindings.withCredentials(ag.deleteUsagePlanKey);
     return Effect.fn(function* <P extends UsagePlan>(usagePlan: P) {
       const UsagePlanId = yield* usagePlan.id;
       yield* registerApiGatewayBinding({

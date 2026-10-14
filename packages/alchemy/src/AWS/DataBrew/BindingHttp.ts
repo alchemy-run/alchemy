@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Job } from "./Job.ts";
 import type { Project } from "./Project.ts";
 import type { Recipe } from "./Recipe.ts";
@@ -30,13 +30,13 @@ export const makeDataBrewJobHttpBinding = <I extends { Name?: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <J extends Job>(job: J) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${job})`({
+        yield* AWSBindings.bind`${options.tag}(${job})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -66,12 +66,12 @@ export const makeDataBrewProjectHttpBinding = <I extends { Name?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${project})`({
+        yield* AWSBindings.bind`${options.tag}(${project})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,12 +103,12 @@ export const makeDataBrewRecipeHttpBinding = <I extends { Name?: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Rec extends Recipe>(recipe: Rec) {
       const RecipeName = yield* recipe.recipeName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${recipe})`({
+        yield* AWSBindings.bind`${options.tag}(${recipe})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,7 +1,7 @@
 import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Group } from "./Group.ts";
 import { StartTagSyncTask, type StartTagSyncTaskRequest } from "./StartTagSyncTask.ts";
@@ -12,13 +12,13 @@ import { StartTagSyncTask, type StartTagSyncTaskRequest } from "./StartTagSyncTa
 export const StartTagSyncTaskHttp = Layer.effect(
   StartTagSyncTask,
   Effect.gen(function* () {
-    const startTagSyncTask = yield* HostAccess.withCredentials(resourcegroups.startTagSyncTask);
+    const startTagSyncTask = yield* AWSBindings.withCredentials(resourcegroups.startTagSyncTask);
 
     return Effect.fn(function* <R extends Role>(group: Group, syncRole: R) {
       const GroupName = yield* group.groupName;
       const RoleArn = yield* syncRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ResourceGroups.StartTagSyncTask(${group}, ${syncRole})`({
+        yield* AWSBindings.bind`AWS.ResourceGroups.StartTagSyncTask(${group}, ${syncRole})`({
           policyStatements: [
             {
               Effect: "Allow",

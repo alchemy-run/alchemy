@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { withRoute53DomainsRegion } from "./internal.ts";
 
 /**
@@ -30,11 +30,11 @@ export const makeRoute53DomainsHttpBinding = <I extends object, A, E, R>(options
   Effect.gen(function* () {
     // Capture the client with the region pinned to us-east-1 — the Route 53
     // Domains API is not served from any other region.
-    const op = yield* options.operation.pipe(withRoute53DomainsRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(withRoute53DomainsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Route53Domains.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.Route53Domains.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

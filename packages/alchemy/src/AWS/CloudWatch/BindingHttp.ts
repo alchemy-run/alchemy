@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { Output } from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { TaggableResource } from "./binding-common.ts";
 import { sortByLogicalId } from "./common.ts";
 
@@ -47,11 +47,11 @@ export const makeCloudWatchAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -94,12 +94,12 @@ export const makeCloudWatchResourceHttpBinding = <
   resourceArn: (resource: Res) => Output<string, never>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${resource})`({
+        yield* AWSBindings.bind`${options.tag}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -146,13 +146,13 @@ export const makeCloudWatchResourceSetHttpBinding = <
   arn: (resource: Res) => Output<string, never>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (...resources: [Res, ...Res[]]) {
       const sorted = sortByLogicalId(resources) as [Res, ...Res[]];
       const names = yield* Effect.forEach(sorted, (resource) => options.name(resource).asEffect());
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${sorted})`({
+        yield* AWSBindings.bind`${options.tag}(${sorted})`({
           policyStatements: [
             {
               Effect: "Allow",

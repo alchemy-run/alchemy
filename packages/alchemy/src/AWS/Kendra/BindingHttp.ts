@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { Index } from "./SearchIndex.ts";
 
@@ -52,12 +52,12 @@ export const makeKendraIndexHttpBinding = <
   prepare?: (request: Req) => Omit<I, "IndexId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (index: Index) {
       const IndexId = yield* index.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${index})`({
+        yield* AWSBindings.bind`${options.tag}(${index})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -108,13 +108,13 @@ export const makeKendraDataSourceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSource: DataSource) {
       const IndexId = yield* dataSource.indexId;
       const Id = yield* dataSource.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dataSource})`({
+        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Application } from "./Application.ts";
 import type { AttributeGroup } from "./AttributeGroup.ts";
 
@@ -34,12 +34,12 @@ export const makeApplicationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
       const ApplicationId = yield* application.applicationId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${application})`({
+        yield* AWSBindings.bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -79,12 +79,12 @@ export const makeAttributeGroupScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (attributeGroup: AttributeGroup) {
       const AttributeGroupId = yield* attributeGroup.attributeGroupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${attributeGroup})`({
+        yield* AWSBindings.bind`${options.tag}(${attributeGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -118,11 +118,11 @@ export const makeAppRegistryAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

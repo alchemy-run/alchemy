@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Datastore } from "./Datastore.ts";
 
@@ -39,12 +39,12 @@ export const makeMedicalImagingDatastoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: Datastore) {
       const DatastoreId = yield* datastore.datastoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${datastore})`({
+        yield* AWSBindings.bind`${options.tag}(${datastore})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -96,13 +96,13 @@ export const makeMedicalImagingStartJobHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: Datastore, dataAccessRole: Role) {
       const DatastoreId = yield* datastore.datastoreId;
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${datastore}, ${dataAccessRole})`({
+        yield* AWSBindings.bind`${options.tag}(${datastore}, ${dataAccessRole})`({
           policyStatements: [
             {
               Effect: "Allow",

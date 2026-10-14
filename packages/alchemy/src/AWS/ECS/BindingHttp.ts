@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Service } from "./Service.ts";
 import { type Task } from "./Task.ts";
@@ -64,12 +64,12 @@ export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, 
   resources: readonly EcsClusterIamResource[] | "cluster-condition";
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster) {
       const ClusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${cluster})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
           policyStatements: [
             options.resources === "cluster-condition"
               ? {
@@ -135,13 +135,13 @@ export const makeEcsTaskLaunchHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster, task: Task) {
       const ClusterArn = yield* cluster.clusterArn;
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${cluster}, ${task})`({
+        yield* AWSBindings.bind`${options.tag}(${cluster}, ${task})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -208,13 +208,13 @@ export const makeEcsServiceHttpBinding = <I, A, E, R>(options: {
   inject?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (service: Service) {
       const ServiceArn = yield* service.serviceArn;
       const ClusterArn = yield* service.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${service})`({
+        yield* AWSBindings.bind`${options.tag}(${service})`({
           policyStatements: [
             {
               Effect: "Allow",

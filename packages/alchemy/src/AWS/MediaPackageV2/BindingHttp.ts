@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Channel } from "./Channel.ts";
 import type { ChannelGroup } from "./ChannelGroup.ts";
 import type { OriginEndpoint } from "./OriginEndpoint.ts";
@@ -41,12 +41,12 @@ export const makeMediaPackageV2ChannelGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends ChannelGroup>(group: G) {
       const ChannelGroupName = yield* group.channelGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,13 +90,13 @@ export const makeMediaPackageV2ChannelHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <C extends Channel>(channel: C) {
       const ChannelGroupName = yield* channel.channelGroupName;
       const ChannelName = yield* channel.channelName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${channel})`({
+        yield* AWSBindings.bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -149,14 +149,14 @@ export const makeMediaPackageV2OriginEndpointHttpBinding = <
   harvestJobScoped?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <O extends OriginEndpoint>(endpoint: O) {
       const ChannelGroupName = yield* endpoint.channelGroupName;
       const ChannelName = yield* endpoint.channelName;
       const OriginEndpointName = yield* endpoint.originEndpointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${endpoint})`({
+        yield* AWSBindings.bind`${options.tag}(${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -23,7 +23,7 @@ import * as Redacted from "effect/Redacted";
  *   endpoint, made with the host Function's own credentials.
  */
 import type * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -51,12 +51,12 @@ export const makeOsisPipelineHttpBinding = <
   identifier: (pipeline: Pipeline) => Output.Output<string, never>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (pipeline: Pipeline) {
       const Identifier = yield* options.identifier(pipeline);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${pipeline})`({
+        yield* AWSBindings.bind`${options.tag}(${pipeline})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,11 +90,11 @@ export const makeOsisAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -145,7 +145,7 @@ export interface IngestRequest {
  * pipeline's ingest endpoint with the host Function's own credentials.
  */
 export const makeOsisIngestBinding = Effect.gen(function* () {
-  const services = yield* HostAccess.withCredentials(
+  const services = yield* AWSBindings.withCredentials(
     Effect.context<Credentials.Credentials | Region.Region>(),
   );
 
@@ -153,7 +153,7 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
     const PipelineName = yield* pipeline.pipelineName;
     const IngestEndpointUrls = yield* pipeline.ingestEndpointUrls;
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* HostAccess.bind`AWS.OSIS.Ingest(${pipeline})`({
+      yield* AWSBindings.bind`AWS.OSIS.Ingest(${pipeline})`({
         policyStatements: [
           {
             Effect: "Allow",

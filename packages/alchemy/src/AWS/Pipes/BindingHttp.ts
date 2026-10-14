@@ -13,7 +13,7 @@ import * as Effect from "effect/Effect";
  * - Account-level operations (`pipes:ListPipes`) take the caller's request
  *   as-is and are granted on `*`.
  */
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Pipe } from "./Pipe.ts";
 
 /**
@@ -30,12 +30,12 @@ export const makePipesHttpBinding = <I extends { Name: string }, A, E, R>(option
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (pipe: Pipe) {
       const PipeName = yield* pipe.pipeName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${pipe})`({
+        yield* AWSBindings.bind`${options.tag}(${pipe})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -68,11 +68,11 @@ export const makePipesAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

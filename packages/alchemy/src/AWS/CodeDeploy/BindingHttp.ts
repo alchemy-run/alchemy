@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Application } from "./Application.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
@@ -43,14 +43,14 @@ export const makeCodeDeployGroupNameHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,11 +89,11 @@ export const makeCodeDeployGroupHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${group})`({
+        yield* AWSBindings.bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -129,12 +129,12 @@ export const makeCodeDeployApplicationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Application>(application: P) {
       const ApplicationName = yield* application.applicationName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${application})`({
+        yield* AWSBindings.bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

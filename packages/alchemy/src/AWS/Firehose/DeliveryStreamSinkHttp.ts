@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
 import { DeliveryStreamSink, type DeliveryStreamSinkRecord } from "./DeliveryStreamSink.ts";
 import { PutRecordBatch } from "./PutRecordBatch.ts";
@@ -22,7 +22,7 @@ export const DeliveryStreamSinkHttp = Layer.effect(
 
     return Effect.fn(function* (deliveryStream: DeliveryStream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Firehose.DeliveryStreamSink(${deliveryStream})`({
+        yield* AWSBindings.bind`AWS.Firehose.DeliveryStreamSink(${deliveryStream})`({
           policyStatements: [
             {
               Effect: "Allow",

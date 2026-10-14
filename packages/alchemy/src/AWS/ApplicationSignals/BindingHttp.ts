@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 
 /**
@@ -27,11 +27,11 @@ export const makeApplicationSignalsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}()`({
+        yield* AWSBindings.bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -62,12 +62,12 @@ export const makeSloIdHttpBinding = <I extends { Id: string }, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${slo})`({
+        yield* AWSBindings.bind`${options.tag}(${slo})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -108,12 +108,12 @@ export const makeSloBatchHttpBinding = <I extends { SloIds: string[] }, A, E, R>
   accountActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${slo})`({
+        yield* AWSBindings.bind`${options.tag}(${slo})`({
           policyStatements: [
             {
               Effect: "Allow",

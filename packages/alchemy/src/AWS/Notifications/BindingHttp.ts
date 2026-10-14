@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { pinNotificationsRegion } from "./internal.ts";
 import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 
@@ -41,11 +41,11 @@ export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options:
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinNotificationsRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Notifications.${options.capability}()`({
+        yield* AWSBindings.bind`AWS.Notifications.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,12 +87,12 @@ export const makeNotificationConfigurationHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation.pipe(pinNotificationsRegion, HostAccess.withCredentials);
+    const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (configuration: NotificationConfiguration) {
       const configurationArn = yield* configuration.notificationConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.Notifications.${options.capability}(${configuration})`({
+        yield* AWSBindings.bind`AWS.Notifications.${options.capability}(${configuration})`({
           policyStatements: [
             {
               Effect: "Allow",

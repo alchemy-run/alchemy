@@ -1,7 +1,7 @@
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { retryOptimisticLock, withWafScope } from "./internal.ts";
 import type { IPSet } from "./IPSet.ts";
 import { UpdateIPSet, type UpdateIPSetRequest } from "./UpdateIPSet.ts";
@@ -14,15 +14,15 @@ import { UpdateIPSet, type UpdateIPSetRequest } from "./UpdateIPSet.ts";
 export const UpdateIPSetHttp = Layer.effect(
   UpdateIPSet,
   Effect.gen(function* () {
-    const get = yield* HostAccess.withCredentials(wafv2.getIPSet);
-    const update = yield* HostAccess.withCredentials(wafv2.updateIPSet);
+    const get = yield* AWSBindings.withCredentials(wafv2.getIPSet);
+    const update = yield* AWSBindings.withCredentials(wafv2.updateIPSet);
 
     return Effect.fn(function* (ipSet: IPSet) {
       const Name = yield* ipSet.ipSetName;
       const Id = yield* ipSet.ipSetId;
       const Scope = yield* ipSet.scope;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.WAFv2.UpdateIPSet(${ipSet})`({
+        yield* AWSBindings.bind`AWS.WAFv2.UpdateIPSet(${ipSet})`({
           policyStatements: [
             {
               Effect: "Allow",

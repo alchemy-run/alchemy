@@ -1,7 +1,7 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetAuthorizationToken } from "./GetAuthorizationToken.ts";
 
 /**
@@ -13,11 +13,11 @@ import { GetAuthorizationToken } from "./GetAuthorizationToken.ts";
 export const GetAuthorizationTokenHttp = Layer.effect(
   GetAuthorizationToken,
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(ecr.getAuthorizationToken);
+    const op = yield* AWSBindings.withCredentials(ecr.getAuthorizationToken);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.ECR.GetAuthorizationToken()`({
+        yield* AWSBindings.bind`AWS.ECR.GetAuthorizationToken()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -2,7 +2,7 @@ import type * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { MetricSink, type MetricSinkDatum, type MetricSinkProps } from "./MetricSink.ts";
 import { PutMetricData } from "./PutMetricData.ts";
 
@@ -22,7 +22,7 @@ export const MetricSinkHttp = Layer.effect(
 
     return Effect.fn(function* (props: MetricSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.CloudWatch.MetricSink(${props.Namespace})`({
+        yield* AWSBindings.bind`AWS.CloudWatch.MetricSink(${props.Namespace})`({
           policyStatements: [
             {
               Effect: "Allow",

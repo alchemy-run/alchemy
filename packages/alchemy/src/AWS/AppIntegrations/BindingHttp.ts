@@ -6,8 +6,8 @@ import * as Effect from "effect/Effect";
  */
 import type { Input } from "../../Input.ts";
 import type { Output } from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as HostAccess from "../HostAccess.ts";
 
 /** Deploy-time environment handed to the `resources` IAM builder. */
 export interface AppIntegrationsIamEnv {
@@ -50,7 +50,7 @@ export const makeAppIntegrationsHttpBinding = <
   dependentActions?: string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
@@ -59,7 +59,7 @@ export const makeAppIntegrationsHttpBinding = <
           accountId: string;
           region: string;
         }>;
-        yield* HostAccess.bind`AWS.AppIntegrations.${options.name}(${resource})`({
+        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -105,11 +105,11 @@ export const makeAppIntegrationsAccountHttpBinding = <WireReq, Out, Err, OpR>(op
   iamActions: string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.AppIntegrations.${options.name}()`({
+        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}()`({
           policyStatements: [
             {
               Effect: "Allow",

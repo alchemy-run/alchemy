@@ -1,7 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetAmi } from "./GetAmi.ts";
 import type { FindImageOptions } from "./Image.ts";
 
@@ -11,11 +11,11 @@ import type { FindImageOptions } from "./Image.ts";
 export const GetAmiHttp = Layer.effect(
   GetAmi,
   Effect.gen(function* () {
-    const describeImages = yield* HostAccess.withCredentials(ec2.describeImages);
+    const describeImages = yield* AWSBindings.withCredentials(ec2.describeImages);
 
     return Effect.fn(function* (options: FindImageOptions) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`AWS.EC2.GetAmi`({
+        yield* AWSBindings.bind`AWS.EC2.GetAmi`({
           policyStatements: [
             {
               Effect: "Allow",

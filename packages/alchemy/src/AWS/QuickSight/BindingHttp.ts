@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Dashboard } from "./Dashboard.ts";
 import type { DataSet } from "./DataSet.ts";
 
@@ -41,13 +41,13 @@ export const makeQuickSightDashboardHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dashboard})`({
+        yield* AWSBindings.bind`${options.tag}(${dashboard})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -91,13 +91,13 @@ export const makeQuickSightDataSetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       const Arn = yield* dataSet.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dataSet})`({
+        yield* AWSBindings.bind`${options.tag}(${dataSet})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -147,13 +147,13 @@ export const makeQuickSightEmbedHttpBinding = <
   ) => Omit<I, "AwsAccountId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${dashboard})`({
+        yield* AWSBindings.bind`${options.tag}(${dashboard})`({
           policyStatements: [
             {
               Effect: "Allow",

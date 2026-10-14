@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -52,12 +52,12 @@ export const makeMWAAEnvironmentHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment) {
       const Name = yield* environment.environmentName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${environment})`({
+        yield* AWSBindings.bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -93,13 +93,13 @@ export const makeMWAAAirflowRoleHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* HostAccess.withCredentials(options.operation);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment, roleOptions?: AirflowRoleOptions) {
       const Name = yield* environment.environmentName;
       const airflowRole = roleOptions?.airflowRole ?? "Admin";
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* HostAccess.bind`${options.tag}(${environment}, ${airflowRole})`({
+        yield* AWSBindings.bind`${options.tag}(${environment}, ${airflowRole})`({
           policyStatements: [
             {
               Effect: "Allow",

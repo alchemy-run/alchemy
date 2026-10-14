@@ -1,7 +1,7 @@
 import * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HostAccess from "../HostAccess.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Key } from "./Key.ts";
 import { TranslateKeyMaterial, type TranslateKeyMaterialRequest } from "./TranslateKeyMaterial.ts";
 
@@ -18,14 +18,14 @@ import { TranslateKeyMaterial, type TranslateKeyMaterialRequest } from "./Transl
 export const TranslateKeyMaterialHttp = Layer.effect(
   TranslateKeyMaterial,
   Effect.gen(function* () {
-    const translateKeyMaterial = yield* HostAccess.withCredentials(
+    const translateKeyMaterial = yield* AWSBindings.withCredentials(
       paymentcryptographydata.translateKeyMaterial,
     );
 
     return Effect.fn(function* (...keys: readonly [Key, ...Key[]]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         for (const key of keys) {
-          yield* HostAccess.bind`AWS.PaymentCryptography.TranslateKeyMaterial(${key})`({
+          yield* AWSBindings.bind`AWS.PaymentCryptography.TranslateKeyMaterial(${key})`({
             policyStatements: [
               {
                 Effect: "Allow",
