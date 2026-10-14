@@ -1033,28 +1033,30 @@ const work = yield* WorkGateway;
 yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ repository, issue })] });
 ```
 
-## 17. Pull requests
+## 17. What's built (PR #2019)
 
 ```
 1. #2251 (merged)  ctx.props and ctx.exports in the Effect DX
 2. alchemy/Egress  egress kinds as values with effectful constructors (GitHub, Anthropic, Http);
                    Egress.Gateway declaration + serve(effect) (mint, fetch); yield* Gateway
-                   (GrantableEgress, narrow, for); Grant (WebCrypto); routes (host + path, conflicts);
-                   accepted kinds on AI.Sandbox
+                   (narrow, for); Grant (WebCrypto); routes (host + path, conflicts);
+                   accepted kinds on AI.Sandbox; gateways on a Worker or on AWS Lambda
 3. Cloudflare      AlchemyEgress relay entrypoint (mints grants lazily over the gateway's binding);
-                   stored egress + per-host intercept diff; bugs 1–3; drop the __alchemyEgress hop
+                   stored egress + per-host intercept diff; bugs 1–3; no hop through the Durable Object
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
                    replaces Sandbox.make; named sizes
-5. AWS microVM     the bootstrap proxy (run hook); AWS.Lambda.MicrovmSandbox; renewal on the DO alarm
+5. AWS microVM     the bootstrap proxy (run hook, a CA per MicroVM); AWS.Lambda.MicrovmSandbox;
+                   renewal on the Durable Object's alarm; enableInternet; networkConnector
 ```
 
-## 18. Open questions
+## 18. Decisions
 
-1. **Hosting a gateway is a Layer, provided like the sandbox's host.** That keeps `yield* WorkGateway` host-agnostic, but means the stack must provide it. Fine, or should a gateway default to a Worker of its own?
-2. **Path routing per egress:** GitHub can claim paths. GraphQL (`api.github.com/graphql`) can't be split by path, so two GitHub egresses with GraphQL on one sandbox conflict. Accept that, or route GraphQL by inspecting the query in the relay/proxy?
-3. **`for(subject)`:** a separate call from `narrow`, because narrowing restricts access and the subject chooses whose credential. Name it `for`, `as`, or `on`?
-4. **Certificates in the proxy:** it signs X.509 leaf certificates per host, which Node can't do natively. `@peculiar/x509` (a dependency), hand-rolled DER, or a proxy written in Go?
-5. **The control port** must be reachable by the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
-6. **Bypassing the proxy:** tools that ignore `HTTPS_PROXY` reach the internet directly. That can't leak credentials, but it skips the rules for non-egress hosts. Closing it needs a firewall that only allows the gateways.
-7. **A missed renewal:** if the Durable Object can't renew for a whole `ttl`, that gateway's routes stop working until it can. Fail closed like that, or let the proxy ask for a grant?
-8. **Isolate placement on Cloudflare:** concurrent intercepted requests mostly shared one isolate (~270 MB/s). Enough for agents; worth re-measuring with a real upstream before relying on it for bulk transfer.
+1. **Hosting a gateway is a Layer** (`WorkGateway.host(worker)`), provided like the sandbox's host. A stack that doesn't provide one doesn't type-check.
+2. **GraphQL:** `api.github.com/graphql` can't be split by path, so two GitHub egresses that both allow GraphQL on one sandbox fail `start` with `EgressRouteConflict`. Grant one of them with `graphql: false`.
+3. **`for(subject)`** is separate from `narrow`: narrowing restricts access; the subject chooses whose credential. It's on every egress; the gateway refuses `for()` on a single-credential egress and requires it on a per-subject one.
+4. **Certificates:** `@peculiar/x509` on WebCrypto, bundled into the image's bootstrap only. Each MicroVM mints its own CA in the `/run` hook (the image snapshot holds none).
+5. **The control port** sits behind AWS's MicroVM endpoint auth (a token the Durable Object mints per port) and a bearer secret generated at `start`; only the first `/run` call is accepted.
+6. **Bypassing the proxy:** with egress, `start` defaults to `enableInternet: false`, and the proxy refuses hosts without a route. A tool that ignores `HTTPS_PROXY` could still go direct: a MicroVM runs without `CAP_NET_ADMIN` (measured: Docker's default capability set), so it can't firewall itself. Closing that is network-level: `AWS.Lambda.MicrovmSandbox(..., { networkConnector })` with a VPC whose egress only reaches the gateways. On Cloudflare, `enableInternet: false` is enforced by the container runtime.
+7. **A missed renewal fails closed:** if the Durable Object can't renew a MicroVM's grants for a whole `ttl`, that gateway's routes stop working until it can. On Cloudflare the relay mints its own grants, so nothing renews.
+8. **Isolate placement on Cloudflare:** concurrent intercepted requests mostly share one isolate (~270 MB/s, section 14). Enough for agents.
+9. **WebSocket RPC clients ping with room to spare:** effect@4.0.4's client checks its ping timeout (one 5s interval) before its first ping, so a call quiet for 5s (a `start` cloning a repository) drops a healthy socket. `Cloudflare.RpcWebSocketClient` defaults `pingTimeout` to 15s.
