@@ -21,6 +21,10 @@ export interface Host {
   readonly timer: (key: string, at: number, fire: Effect.Effect<void>) => Effect.Effect<void>;
   /** Record a run that failed, so a story can report it. */
   readonly failed: (cause: unknown) => void;
+  /** Record a step a run finished, succeeded or failed, in the order it finished. */
+  readonly stepped: (workflow: string, executionId: string, step: string) => void;
+  /** Record a run that ended with a defect, so a story can report it. */
+  readonly died: (workflow: string, executionId: string, defect: unknown) => void;
 }
 
 type Execute = (
@@ -90,6 +94,13 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
         Effect.flatMap((result) => {
           if (result._tag === "Suspended") return Effect.void;
           execution.result = result;
+          if (Exit.isFailure(result.exit)) {
+            const reasons = result.exit.cause.reasons;
+            const defect = reasons.find((reason) => reason._tag === "Die");
+            if (defect?._tag === "Die" && !reasons.some((reason) => reason._tag === "Fail")) {
+              host.died(execution.workflow._tag, executionId, defect.defect);
+            }
+          }
           return execution.parent
             ? wake(keyOf(execution.parent.workflow._tag, execution.parent.executionId))
             : Effect.void;
@@ -173,7 +184,10 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
             ),
           ),
         );
-        if (result._tag === "Complete") activities.set(key, result.exit);
+        if (result._tag === "Complete") {
+          activities.set(key, result.exit);
+          host.stepped(instance.workflow._tag, instance.executionId, activity.name);
+        }
         return result;
       }),
 

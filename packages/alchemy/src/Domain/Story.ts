@@ -81,7 +81,13 @@ export type Step =
       readonly _tag: "Saga";
       readonly saga: Saga.Any;
       readonly key: unknown;
-      readonly expected: Saga.Status<unknown, unknown>;
+      readonly expected: Saga.Status<unknown, unknown> | { readonly _tag: "Died" };
+    }
+  | {
+      readonly _tag: "Steps";
+      readonly saga: Saga.Any;
+      readonly key: unknown;
+      readonly expected: ReadonlyArray<string>;
     }
   | {
       readonly _tag: "Provide";
@@ -205,19 +211,41 @@ const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
   value: Success["Type"],
 ): Step => ({ _tag: "Signal", saga, key, deferred, value });
 
-/** Check where a saga run is: running, completed with a result, rejected, or interrupted. */
-const saga = <S extends Saga.Any>(saga: S, key: SagaKeyOf<S>, expected: SagaStatusOf<S>): Step => ({
+/**
+ * Check where a saga run is: running, completed with a result, rejected,
+ * interrupted, or died. `{ _tag: "Died" }` matches any defect; with a
+ * `defect`, it must read the same.
+ */
+const saga = <S extends Saga.Any>(
+  saga: S,
+  key: SagaKeyOf<S>,
+  expected: SagaStatusOf<S> | { readonly _tag: "Died" },
+): Step => ({
   _tag: "Saga",
   saga,
   key,
   expected: expected as Saga.Status<unknown, unknown>,
 });
 
-/** A saga status, with any rejection or result in its JSON form for comparison. */
-const statusJson = (status: Saga.Status<unknown, unknown>) =>
+/**
+ * Check the steps a saga run has finished, in order: each `Activity` by its
+ * name, whether it succeeded or failed, compensations included.
+ */
+const sagaSteps = <S extends Saga.Any>(
+  saga: S,
+  key: SagaKeyOf<S>,
+  expected: ReadonlyArray<string>,
+): Step => ({ _tag: "Steps", saga, key, expected });
+
+/** A saga status, in a form to compare: rejections encoded, defects as text. */
+const statusJson = (status: Saga.Status<unknown, unknown> | { readonly _tag: "Died" }) =>
   status._tag === "Rejected"
     ? { _tag: "Rejected", rejection: encodeInstance(status.rejection as { readonly _tag: string }) }
-    : status;
+    : status._tag === "Died"
+      ? "defect" in status
+        ? { _tag: "Died", defect: String(status.defect) }
+        : { _tag: "Died" }
+      : status;
 
 /**
  * Provide a service to subsequent commands, as their middleware would (for
@@ -358,6 +386,7 @@ const make =
           | undefined;
         let unassertedRejection: { readonly step: number; readonly tag: string } | undefined;
         let provided = Context.empty() as Context.Context<unknown>;
+        const assertedDeaths = new Set<string>();
 
         const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
         const committed = (ref: Aggregate.Ref) =>
@@ -591,10 +620,31 @@ const make =
                 never,
                 Saga.Client<unknown, unknown, unknown, unknown>
               >;
-              const actual = yield* client.get(s.key).status;
-              if (!equal(statusJson(actual), statusJson(s.expected))) {
+              const run = client.get(s.key);
+              const actual = yield* run.status;
+              // `{ _tag: "Died" }` matches any defect.
+              const compared =
+                actual._tag === "Died" && !("defect" in s.expected)
+                  ? { _tag: "Died" as const }
+                  : actual;
+              if (!equal(statusJson(compared), statusJson(s.expected))) {
                 return yield* fail(
                   `${s.saga.sagaName}\n  expected ${show(statusJson(s.expected))}\n  actual   ${show(statusJson(actual))}`,
+                );
+              }
+              if (actual._tag === "Died")
+                assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
+              break;
+            }
+            case "Steps": {
+              const client = yield* s.saga as unknown as Context.Key<
+                never,
+                Saga.Client<unknown, unknown, unknown, unknown>
+              >;
+              const actual = platform.control.steps(s.saga.sagaName, client.get(s.key).executionId);
+              if (!equal(actual, s.expected)) {
+                return yield* fail(
+                  `${s.saga.sagaName}\n  expected ${show(s.expected)}\n  actual   ${show(actual)}`,
                 );
               }
               break;
@@ -613,6 +663,15 @@ const make =
           return yield* new StoryFailure({
             step: unassertedRejection.step,
             message: `the command was rejected with ${unassertedRejection.tag}, which no step asserts`,
+          });
+        }
+        const death = platform.control.deaths.find(
+          ({ saga, executionId }) => !assertedDeaths.has(`${saga}/${executionId}`),
+        );
+        if (death) {
+          return yield* new StoryFailure({
+            step: steps.length,
+            message: `saga ${death.saga} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
           });
         }
         if (calls.length > 0) {
@@ -636,7 +695,8 @@ const make =
  * Given / when / then specifications of a domain model, run against the real
  * model in memory: policies run for real, external system calls wait until you resolve
  * them, and a clock you control stamps commands and fires scheduled ones. A
- * story fails on any rejection or external system call it doesn't account for.
+ * story fails on any rejection, external system call or saga defect it
+ * doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -669,6 +729,14 @@ const make =
  * Story.clock("2026-01-02T09:00:00Z"),
  * ```
  *
+ * ### Sagas
+ * **Example:** Check a saga run and the steps it finished
+ * ```typescript
+ * Story.saga(ExecuteTransfer, transfer, { _tag: "Rejected", rejection: new DestinationClosed() }),
+ * Story.steps(ExecuteTransfer, transfer, ["debit", "credit", "refund", "record-failure"]),
+ * Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
+ * ```
+ *
  * @primitive
  */
 // The steps live on this object rather than as module exports: a module that
@@ -692,6 +760,7 @@ export const Story = {
   provide,
   signal,
   saga,
+  steps: sagaSteps,
   /** Marker for "the view key does not exist". */
   none,
 } as const;

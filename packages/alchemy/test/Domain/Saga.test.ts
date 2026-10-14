@@ -231,6 +231,69 @@ class Retries extends Domain.Model("Retries", {
   sagas: [DebitTwice],
 }) {}
 
+// A screening saga that asks an external system, and a saga whose step dies.
+class Sanctions extends Domain.ExternalSystem("Sanctions", {
+  check: { args: { wallet: Schema.String }, success: { clear: Schema.Boolean } },
+}) {}
+
+class Flagged extends Domain.Rejection("Flagged") {}
+
+class Screen extends Domain.Saga("Screen", {
+  key: Schema.String,
+  input: { wallet: Schema.String },
+  rejects: [Flagged],
+}) {}
+
+const ScreenLive = Screen.toLayer(
+  Effect.gen(function* () {
+    const sanctions = yield* Sanctions;
+    return Effect.fn(function* ({ wallet }) {
+      const { clear } = yield* Activity.make({
+        name: "check",
+        success: Schema.Struct({ clear: Schema.Boolean }),
+        execute: sanctions.check({ wallet }),
+      });
+      if (!clear) return yield* new Flagged();
+      yield* Activity.make({ name: "approve", execute: Effect.void });
+    });
+  }),
+);
+
+class Explode extends Domain.Saga("Explode", {
+  key: Schema.String,
+  input: {},
+}) {}
+
+const ExplodeLive = Explode.toLayer(
+  Effect.succeed(() => Activity.make({ name: "boom", execute: Effect.die(new Error("boom")) })),
+);
+
+class StartChecks extends Domain.Policy("StartChecks", {
+  from: Transfer,
+  on: [Requested],
+}) {}
+const StartChecksLive = StartChecks.toLayer(
+  Effect.gen(function* () {
+    const screens = yield* Screen;
+    const explosions = yield* Explode;
+    return Effect.fn(function* ({ source, event }) {
+      if (event.approval) yield* explosions.start(source, {});
+      else yield* screens.start(source, { wallet: event.from });
+    });
+  }),
+);
+
+class Checks extends Domain.Model("Checks", {
+  aggregates: [Wallet, Transfer],
+  policies: [StartChecks],
+  sagas: [Screen, Explode],
+}) {}
+
+const checks = Story.make(Checks, {
+  layer: Layer.mergeAll(StartChecksLive, ScreenLive, ExplodeLive),
+  externalSystems: [Sanctions],
+});
+
 describe("Domain.Saga", () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
@@ -255,6 +318,7 @@ describe("Domain.Saga", () => {
       ),
       Story.then(bob),
       Story.saga(MoveMoney, "t-1", { _tag: "Rejected", rejection: new DestinationClosed() }),
+      Story.steps(MoveMoney, "t-1", ["debit", "credit", "refund"]),
     ),
   );
 
@@ -268,6 +332,35 @@ describe("Domain.Saga", () => {
         _tag: "Rejected",
         rejection: new Insufficient({ balance: 10 }),
       }),
+    ),
+  );
+
+  it.effect("a step's external system call waits until the story resolves it", () =>
+    checks(
+      Story.when(transfer, request(40)),
+      Story.saga(Screen, "t-1", { _tag: "Running" }),
+      Story.steps(Screen, "t-1", []),
+      Story.expectCall(Sanctions.check, { wallet: "alice" }),
+      Story.resolve(Sanctions.check, { clear: false }),
+      Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new Flagged() }),
+      Story.steps(Screen, "t-1", ["check"]),
+    ),
+  );
+
+  it.effect("a saga that dies reads as Died", () =>
+    checks(
+      Story.when(transfer, request(40, true)),
+      Story.saga(Explode, "t-1", { _tag: "Died" }),
+      Story.steps(Explode, "t-1", ["boom"]),
+    ),
+  );
+
+  it.effect("a saga that dies fails the story unless a step asserts it", () =>
+    checks(Story.when(transfer, request(40, true))).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message).toMatch(/saga Explode run t-1 died with Error: boom/),
+      ),
     ),
   );
 

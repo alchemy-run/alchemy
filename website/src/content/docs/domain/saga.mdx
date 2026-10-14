@@ -229,8 +229,20 @@ const status = yield* run.status;
 
 A story runs the whole saga in memory: the request, every step, the compensations, and its status at the end.
 
+`Story.saga` checks where the run is, with the same status its run handle reads. `Story.steps` checks which steps finished, in order, failed ones and compensations included.
+
 ```typescript title="test/transfers.test.ts"
 Story.saga(ExecuteTransfer, transfer, { _tag: "Rejected", rejection: new DestinationClosed() }),
+Story.steps(ExecuteTransfer, transfer, ["debit", "credit", "refund", "record-failure"]),
 ```
+
+To test a saga on its own, complete what it waits for with `Story.signal`, and move its durable clocks with `Story.clock`:
+
+```typescript
+Story.saga(ExecuteTransfer, transfer, { _tag: "Running" }),
+Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
+```
+
+A step that calls an external system waits until the story resolves the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
 On Cloudflare, each run is a Durable Object named by its key, with its steps stored in its SQLite. `DomainCloudflare.DurableObjects` hosts sagas with the rest of the model, and `Domain.InMemory` runs them in memory.
