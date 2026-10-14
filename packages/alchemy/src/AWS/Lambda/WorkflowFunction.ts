@@ -1,8 +1,10 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Exit from "effect/Exit";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -13,19 +15,261 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
+import * as Binding from "../../Binding.ts";
+import type { InputProps } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import {
+  CurrentActivity,
   decodeExit,
   decodeResult,
   encodeExit,
   encodeResult,
+  makeCurrentActivity,
   payloadCodec,
 } from "../../WorkflowEncoding.ts";
+import { type Implemented, implemented } from "../../Workflows.ts";
 import { DurableStep } from "./Durable.ts";
-import type { DurableFunctionImpl } from "./DurableFunction.ts";
+import {
+  DurableFunction,
+  type DurableFunctionImpl,
+  type DurableFunctionInitServices,
+  type DurableFunctionProps,
+} from "./DurableFunction.ts";
+import { Function, isBindingHost } from "./Function.ts";
+
+type WorkflowNames<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
+
+type ImplementedEach<Name> = Name extends string ? Implemented<Name> : never;
+
+/** Workflows a host lists whose implementation is missing from the Layer it's given. */
+type Missing<ROut, Name> = Name extends string
+  ? Implemented<Name> extends ROut
+    ? never
+    : Name
+  : never;
+
+type ImplementsAll<ROut, Name> = [Missing<ROut, Name>] extends [never]
+  ? unknown
+  : { readonly "Missing workflow implementations": Missing<ROut, Name> };
+
+/**
+ * A Lambda durable function that runs workflows: the class a
+ * `WorkflowFunction` declares. `yield*` it for the Lambda function itself.
+ */
+export interface WorkflowFunctionClass<
+  Self,
+  W extends Workflow.Any = Workflow.Any,
+> extends Effect.Effect<Function, never, Function["Providers"]> {
+  readonly LogicalId: string;
+  /** The workflows this function runs. */
+  readonly workflows: ReadonlyArray<W>;
+  /**
+   * Deploy the function with the Layer that implements its workflows. The
+   * Layer must implement every workflow the function lists.
+   */
+  make<ROut, E, RIn, PropsReq = never>(
+    props:
+      | InputProps<DurableFunctionProps>
+      | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
+    workflows: Layer.Layer<ROut, E, RIn> & ImplementsAll<ROut, WorkflowNames<W>>,
+  ): Layer.Layer<
+    Self,
+    never,
+    | Function["Providers"]
+    | Exclude<PropsReq | RIn, DurableFunctionInitServices | WorkflowEngine.WorkflowEngine>
+  >;
+  new (_: never): {};
+}
+
+/**
+ * A Lambda durable function that runs Effect workflows. Each run is one
+ * durable execution of the function, named after the workflow and its
+ * execution id.
+ *
+ * Steps run as durable steps, so a finished step's result is replayed rather
+ * than run again. `DurableClock.sleep` is a durable wait: the invocation ends,
+ * and Lambda invokes the function again when it's due, with no compute billed
+ * in between. `DurableDeferred.await` waits for a callback, completed with a
+ * run's `signal`. A workflow's child workflows run in the same function.
+ *
+ * Other functions start and read its runs with
+ * {@link DurableFunctionEngine | AWS.Lambda.DurableFunctionEngine}.
+ *
+ * ### Declaring a workflow function
+ * **Example:** One function for the order workflows
+ * ```typescript
+ * // src/OrderWorkflows.ts
+ * import * as AWS from "alchemy/AWS";
+ * import * as Layer from "effect/Layer";
+ * import { PlaceOrder, PlaceOrderLive, RefundOrder, RefundOrderLive } from "./orders.ts";
+ *
+ * export class OrderWorkflows extends AWS.Lambda.WorkflowFunction<OrderWorkflows>()(
+ *   "OrderWorkflows",
+ *   { workflows: [PlaceOrder, RefundOrder] },
+ * ) {}
+ *
+ * export default OrderWorkflows.make(
+ *   { main: import.meta.url, executionTimeout: "7 days" },
+ *   Layer.mergeAll(PlaceOrderLive, RefundOrderLive),
+ * );
+ * ```
+ *
+ * The Layer must implement every workflow the function lists: leaving one out
+ * is a type error.
+ *
+ * @resource
+ */
+export const WorkflowFunction =
+  <Self>() =>
+  <const W extends ReadonlyArray<Workflow.Any>>(
+    id: string,
+    options: {
+      /** The workflows this function runs. */
+      readonly workflows: W;
+    },
+  ): WorkflowFunctionClass<Self, W[number]> => {
+    const durable = (DurableFunction as any)()(id);
+    const make = durable.make;
+    // The Lambda function, from anywhere: its own init, or another function's.
+    const self = (Function as any)()(id);
+    return Object.assign(
+      durable,
+      {
+        workflows: options.workflows,
+        make: (props: unknown, workflows: Layer.Layer<any, any, any>) =>
+          make(props, makeWorkflowRunner(workflows)),
+      },
+      Effectable.Prototype({
+        label: `AWS.Lambda.WorkflowFunction<${id}>`,
+        evaluate: () => self,
+      }),
+    );
+  };
+
+// ---------------------------------------------------------------- callers
+
+type HostedBy<Host> = Host extends WorkflowFunctionClass<any, infer W> ? WorkflowNames<W> : never;
+
+/**
+ * Run workflows hosted by {@link WorkflowFunction | AWS.Lambda.WorkflowFunction}s
+ * from another Lambda function: a `WorkflowEngine` that starts, reads,
+ * signals and interrupts each workflow's runs on the function that hosts it.
+ *
+ * Provide it to the calling function, and resolve each workflow's client with
+ * `Workflows.RunWorkflow` during init. It grants the caller the IAM it needs
+ * on each host. Running a workflow none of the hosts list is a type error.
+ *
+ * ### Running workflows from another function
+ * **Example:** An API that starts orders
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { OrderWorkflows } from "./OrderWorkflows.ts";
+ * import { PlaceOrder } from "./orders.ts";
+ *
+ * export class Api extends AWS.Lambda.Function<Api>()("Api") {}
+ *
+ * export default Api.make(
+ *   { main: import.meta.url, functionUrl: true },
+ *   Effect.gen(function* () {
+ *     const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const run = yield* placeOrder.start({ orderId: "o-1" });
+ *         return HttpServerResponse.text(run.executionId);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.Lambda.DurableFunctionEngine(OrderWorkflows))),
+ * );
+ * ```
+ *
+ * **Example:** Workflows across several functions
+ * ```typescript
+ * Effect.provide(AWS.Lambda.DurableFunctionEngine(OrderWorkflows, BillingWorkflows))
+ * ```
+ *
+ * @layer
+ * @provides WorkflowEngine
+ * @product Lambda
+ */
+export const DurableFunctionEngine = <
+  const Hosts extends ReadonlyArray<WorkflowFunctionClass<any, any>>,
+>(
+  ...hosts: Hosts
+): Layer.Layer<
+  WorkflowEngine.WorkflowEngine | ImplementedEach<HostedBy<Hosts[number]>>,
+  never,
+  LambdaServices | Function["Providers"]
+> =>
+  Layer.merge(
+    Layer.effect(
+      WorkflowEngine.WorkflowEngine,
+      Effect.gen(function* () {
+        const context = yield* Effect.context<LambdaServices>();
+        const caller = yield* Binding.Host;
+        const routes = new Map<string, Calls>();
+        for (const host of hosts) {
+          const fn = yield* host;
+          if (!globalThis.__ALCHEMY_RUNTIME__ && isBindingHost(caller)) {
+            yield* caller.bind`Allow(${caller}, AWS.Lambda.DurableFunctionEngine(${fn}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["lambda:InvokeFunction"],
+                  Resource: [fn.functionArn, Output.interpolate`${fn.functionArn}:*`],
+                },
+                // Durable execution ARNs aren't function ARNs, so reading and
+                // signalling runs is granted account-wide, as the host's own is.
+                {
+                  Effect: "Allow",
+                  Action: [
+                    "lambda:ListDurableExecutionsByFunction",
+                    "lambda:GetDurableExecution",
+                    "lambda:GetDurableExecutionHistory",
+                    "lambda:StopDurableExecution",
+                    "lambda:SendDurableExecutionCallbackSuccess",
+                    "lambda:SendDurableExecutionCallbackFailure",
+                  ],
+                  Resource: ["*"],
+                },
+              ],
+            });
+          }
+          const functionName = yield* fn.functionName;
+          const calls = makeCalls(
+            (effect) => effect.pipe(Effect.provide(context)),
+            functionName,
+            "$LATEST",
+          );
+          for (const workflow of host.workflows) routes.set(workflow._tag, calls);
+        }
+        return makeEngine({
+          route: (workflowName) => {
+            const calls = routes.get(workflowName);
+            return calls
+              ? Effect.succeed(calls)
+              : Effect.die(new Error(`No WorkflowFunction hosts workflow ${workflowName}`));
+          },
+          // Workflows run on their hosts; nothing registers here.
+          register: () => undefined,
+        });
+      }),
+    ),
+    implemented(
+      hosts.flatMap((host) => host.workflows.map((workflow) => workflow._tag)),
+    ) as Layer.Layer<ImplementedEach<HostedBy<Hosts[number]>>>,
+  ) as Layer.Layer<
+    WorkflowEngine.WorkflowEngine | ImplementedEach<HostedBy<Hosts[number]>>,
+    never,
+    LambdaServices | Function["Providers"]
+  >;
+
+// ---------------------------------------------------------------- hosting
 
 /** What a durable function running workflows is started with. */
-export interface WorkflowInvocation {
+interface WorkflowInvocation {
   /** The workflow's tag. */
   readonly workflow: string;
   readonly executionId: string;
@@ -33,43 +277,19 @@ export interface WorkflowInvocation {
   readonly payload: unknown;
 }
 
-/** The services a client engine calls Lambda with. */
+/** The services the engines call Lambda with. */
 type LambdaServices = Credentials | HttpClient.HttpClient;
 
 /**
- * Host Effect workflows in an AWS Lambda durable function. Pass the workflow
- * Layers (from `Workflow.toLayer`) as the function's implementation; each run
- * is one durable execution, named after the workflow and its execution id.
- *
- * Steps run as durable steps, so a finished step's result is replayed rather
- * than run again. `DurableClock.sleep` is a durable wait: the invocation ends,
- * and Lambda invokes the function again when it's due. `DurableDeferred.await`
- * waits for a callback, completed from outside with `DurableDeferred.done`.
- *
- * ### Hosting workflows
- * **Example:** A durable function that runs workflows
- * ```typescript
- * import * as AWS from "alchemy/AWS";
- * import * as Layer from "effect/Layer";
- * import { CheckoutLive, GreetLive } from "./workflows.ts";
- *
- * export default class Workflows extends AWS.Lambda.DurableFunction<Workflows>()(
- *   "Workflows",
- *   { main: import.meta.url, executionTimeout: "7 days" },
- *   AWS.Lambda.WorkflowHost(Layer.mergeAll(GreetLive, CheckoutLive)),
- * ) {}
- * ```
- *
- * @layer
- * @provides WorkflowEngine
- * @product Lambda
+ * The durable function body that runs the given workflows: each invocation is
+ * one run of one workflow. Child workflows start in the same function.
  */
-export const WorkflowHost = <ROut, E, RIn>(
+const makeWorkflowRunner = <ROut, E, RIn>(
   workflows: Layer.Layer<ROut, E, RIn>,
 ): Effect.Effect<
   DurableFunctionImpl<WorkflowInvocation, string>,
   E,
-  Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | LambdaServices
+  Exclude<RIn, WorkflowEngine.WorkflowEngine> | LambdaServices
 > =>
   Effect.gen(function* () {
     const context = yield* Effect.context<LambdaServices>();
@@ -77,15 +297,18 @@ export const WorkflowHost = <ROut, E, RIn>(
     // Child workflows start on the version this function is running.
     const version = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_VERSION ?? "$LATEST");
     const handlers = new Map<string, Registration>();
+    const calls = makeCalls(
+      (effect) => effect.pipe(Effect.provide(context)),
+      functionName
+        ? Effect.succeed(functionName)
+        : Effect.die(new Error("AWS_LAMBDA_FUNCTION_NAME is not set")),
+      version,
+    );
     const engine = makeEngine({
-      calls: makeCalls(
-        context,
-        () =>
-          functionName
-            ? Effect.succeed(functionName)
-            : Effect.die(new Error("AWS_LAMBDA_FUNCTION_NAME is not set")),
-        version,
-      ),
+      route: (workflowName) =>
+        handlers.has(workflowName)
+          ? Effect.succeed(calls)
+          : Effect.die(new Error(`Workflow ${workflowName} is not hosted by this function`)),
       register: (workflow, execute) => handlers.set(workflow._tag, { workflow, execute }),
     });
     // Workflows register for the life of the function instance.
@@ -131,41 +354,8 @@ export const WorkflowHost = <ROut, E, RIn>(
   }) as Effect.Effect<
     DurableFunctionImpl<WorkflowInvocation, string>,
     E,
-    Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | LambdaServices
+    Exclude<RIn, WorkflowEngine.WorkflowEngine> | LambdaServices
   >;
-
-/**
- * A `WorkflowEngine` that starts, reads, signals and interrupts workflows
- * hosted by a durable function, by name, through the Lambda API. Use it
- * wherever the ambient AWS credentials may call that function.
- *
- * @layer
- * @provides WorkflowEngine
- * @product Lambda
- */
-export const DurableWorkflowEngine = (options: {
-  /** The durable function hosting the workflows, by name or ARN. */
-  readonly functionName: string;
-  /**
-   * The version or alias runs start on. Durable executions replay against the
-   * version they started on, so production should name a version or alias.
-   * @default "$LATEST"
-   */
-  readonly qualifier?: string;
-}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, LambdaServices> =>
-  Layer.effect(
-    WorkflowEngine.WorkflowEngine,
-    Effect.map(Effect.context<LambdaServices>(), (context) =>
-      makeEngine({
-        calls: makeCalls(
-          context,
-          () => Effect.succeed(options.functionName),
-          options.qualifier ?? "$LATEST",
-        ),
-        register: () => undefined,
-      }),
-    ),
-  );
 
 // ---------------------------------------------------------------- the engine
 
@@ -192,19 +382,37 @@ class CurrentRun extends Context.Service<
     readonly clocks: Map<string, Duration.Duration>;
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
   }
->()("alchemy/AWS/Lambda/DurableWorkflowEngine/CurrentRun") {}
+>()("alchemy/AWS/Lambda/DurableWorkflows/CurrentRun") {}
 
 const currentRun = (operation: string) =>
   Effect.flatMap(Effect.serviceOption(CurrentRun), (run) =>
     Option.isSome(run)
       ? Effect.succeed(run.value)
-      : Effect.die(
-          new Error(`DurableWorkflowEngine: ${operation} only runs inside a workflow run`),
-        ),
+      : Effect.die(new Error(`WorkflowFunction: ${operation} only runs inside a workflow run`)),
   );
 
 /** A callback failed with this type interrupts the run waiting on it. */
 const INTERRUPT = "alchemy/WorkflowInterrupted";
+
+/** The SDK's callback error arrives wrapped, with the type in its cause chain. */
+const isInterrupt = (defect: unknown) => {
+  let node = defect;
+  for (let depth = 0; node !== null && typeof node === "object" && depth < 5; depth++) {
+    const error = node as {
+      readonly name?: unknown;
+      readonly message?: unknown;
+      readonly cause?: unknown;
+    };
+    if (
+      error.name === INTERRUPT ||
+      (typeof error.message === "string" && error.message.includes(INTERRUPT))
+    ) {
+      return true;
+    }
+    node = error.cause;
+  }
+  return false;
+};
 
 /** Lambda's calls for one host function. */
 interface Calls {
@@ -223,15 +431,15 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const makeCalls = (
-  context: Context.Context<LambdaServices>,
-  functionName: () => Effect.Effect<string>,
+  provide: <A, E>(effect: Effect.Effect<A, E, LambdaServices>) => Effect.Effect<A, E>,
+  functionName: Effect.Effect<string>,
   qualifier: string,
 ): Calls => {
   const run = <A, E>(effect: Effect.Effect<A, E, LambdaServices>) =>
-    effect.pipe(Effect.provide(context), Effect.orDie);
+    provide(effect).pipe(Effect.orDie);
   return {
     start: (executionName, invocation) =>
-      Effect.flatMap(functionName(), (FunctionName) =>
+      Effect.flatMap(functionName, (FunctionName) =>
         run(
           Lambda.invoke({
             FunctionName,
@@ -247,7 +455,7 @@ const makeCalls = (
         ),
       ),
     find: (executionName) =>
-      Effect.flatMap(functionName(), (FunctionName) =>
+      Effect.flatMap(functionName, (FunctionName) =>
         run(
           Lambda.listDurableExecutionsByFunction({
             FunctionName,
@@ -373,16 +581,18 @@ const readResult = (calls: Calls, workflow: Workflow.AnyWithProps, executionArn:
   });
 
 const makeEngine = (options: {
-  readonly calls: Calls;
+  /** The calls for the function that hosts a workflow. */
+  readonly route: (workflowName: string) => Effect.Effect<Calls>;
   readonly register: (workflow: Workflow.AnyWithProps, execute: Execute) => void;
 }): WorkflowEngine.WorkflowEngine["Service"] => {
-  const { calls } = options;
+  const { route } = options;
   return WorkflowEngine.makeUnsafe({
     register: (workflow, execute) =>
       Effect.sync(() => options.register(workflow as Workflow.AnyWithProps, execute)),
 
     execute: (workflow, opts) =>
       Effect.gen(function* () {
+        const calls = yield* route(workflow._tag);
         const executionName = executionNameOf(workflow._tag, opts.executionId);
         const payload = yield* Schema.encodeEffect(payloadCodec(workflow as Workflow.AnyWithProps))(
           opts.payload,
@@ -422,6 +632,7 @@ const makeEngine = (options: {
 
     poll: (workflow, executionId) =>
       Effect.gen(function* () {
+        const calls = yield* route(workflow._tag);
         const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
         if (!arn) return Option.none();
         const result = yield* readResult(calls, workflow as Workflow.AnyWithProps, arn);
@@ -432,6 +643,7 @@ const makeEngine = (options: {
     // compensations run; a run busy in a step can only be stopped.
     interrupt: (workflow, executionId) =>
       Effect.gen(function* () {
+        const calls = yield* route(workflow._tag);
         const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
         if (!arn) return;
         const pending = pendingCallbacks(yield* calls.history(arn));
@@ -443,6 +655,7 @@ const makeEngine = (options: {
 
     interruptUnsafe: (workflow, executionId) =>
       Effect.gen(function* () {
+        const calls = yield* route(workflow._tag);
         const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
         if (arn) yield* calls.stop(arn);
       }),
@@ -471,7 +684,17 @@ const makeEngine = (options: {
             // The run's services, with the step's own instance.
             Effect.provide(
               Layer.succeedContext(
-                Context.add(run.context, WorkflowEngine.WorkflowInstance, activityInstance),
+                run.context.pipe(
+                  Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                  Context.add(
+                    CurrentActivity,
+                    makeCurrentActivity(
+                      instance.workflow._tag,
+                      instance.executionId,
+                      activity.name,
+                    ),
+                  ),
+                ),
               ),
             ),
           ) as Effect.Effect<string>,
@@ -492,8 +715,7 @@ const makeEngine = (options: {
           .waitForCallback<string>({ name: deferred.name, submitter: () => Effect.void })
           .pipe(
             Effect.catchDefect((defect) =>
-              String(defect).includes(INTERRUPT) ||
-              JSON.stringify(defect ?? null).includes(INTERRUPT)
+              isInterrupt(defect)
                 ? Effect.sync(() => {
                     run.instance.interrupted = true;
                     run.instance.suspended = false;
@@ -508,6 +730,7 @@ const makeEngine = (options: {
 
     deferredDone: (opts) =>
       Effect.gen(function* () {
+        const calls = yield* route(opts.workflowName);
         const executionName = executionNameOf(opts.workflowName, opts.executionId);
         const callbackId = yield* findCallback(calls, executionName, opts.deferredName);
         yield* calls.succeed(callbackId, yield* encodeExit(opts.exit));
