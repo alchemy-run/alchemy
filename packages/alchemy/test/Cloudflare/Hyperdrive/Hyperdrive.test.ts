@@ -228,10 +228,11 @@ test.provider(
             }),
           );
 
-          // Both binding flavors resolve the looked-up configuration at runtime.
+          // Both binding flavors are bound to the looked-up configuration —
+          // the runtime binding reports the configuration id as its database.
           for (const url of [deployed.effectWorker.url!, deployed.asyncWorker.url!]) {
             const meta = yield* getMeta(url);
-            expect(meta.database).toEqual(origin.database);
+            expect(meta.database).toEqual(created.id);
             expect(meta.hasConnectionString).toBe(true);
           }
 
