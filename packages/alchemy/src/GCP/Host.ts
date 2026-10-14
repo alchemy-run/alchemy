@@ -6,9 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Binding from "../Binding.ts";
-import type { Input } from "../Input.ts";
-import { Resource, type ResourceBinding, type ResourceLike } from "../Resource.ts";
+import type { ResourceBinding } from "../Resource.ts";
 import {
   hasIamMembership,
   projectRolesOf,
@@ -85,33 +83,6 @@ export type AppliedIamGrant = {
   /** IAM Condition the role is bound under, if any. */
   condition?: IamCondition;
 };
-
-const GCP_HOST_TYPES = new Set([
-  "GCP.Run.Service",
-  "GCP.Run.Job",
-  "GCP.Run.WorkerPool",
-  "GCP.CloudFunctions.Function",
-  // Kubernetes workloads accept `{ env, iam }` through the augmented
-  // `WorkloadBindingContract`; the GKE cluster adapter grants `iam` to the
-  // workload's Workload Identity principal.
-  "Kubernetes.Deployment",
-  "Kubernetes.Job",
-]);
-
-/**
- * True for any Alchemy host that accepts {@link GcpHostBinding}: the Cloud
- * Run and Cloud Functions hosts, and `Kubernetes.Deployment` /
- * `Kubernetes.Job` (granted through the GKE cluster adapter). HTTP
- * `Binding.Service` implementations guard `host.bind` with this before
- * granting IAM / injecting env.
- */
-export const isGcpHost = (
-  value: ResourceLike | undefined,
-): value is Resource<string, object, object, GcpHostBinding> =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  GCP_HOST_TYPES.has((value as { Type: string }).Type);
 
 /** Merge the env and IAM grants of every binding attached to a host. */
 export const collectHostBindings = (
@@ -227,6 +198,8 @@ export const ensureHostServiceAccount = (options: {
   project: string;
   hostType: string;
   resourceName: string;
+  /** Let Cloud Run / Functions run as the account. @default true */
+  actAs?: boolean;
 }) => {
   const accountId = hostServiceAccountId(options.hostType, options.resourceName);
   const email = hostServiceAccountEmail(options.project, accountId);
@@ -256,7 +229,9 @@ export const ensureHostServiceAccount = (options: {
           Effect.catchTag("Conflict", () => Effect.succeed(false)),
         );
     }
-    yield* grantActAs(options.project, email);
+    if (options.actAs !== false) {
+      yield* grantActAs(options.project, email);
+    }
     return { email, created };
   });
 };
@@ -489,25 +464,3 @@ export const deleteHostServiceAccount = Effect.fn(function* (options: {
 export class HostServiceAccountStillExists extends Data.TaggedError(
   "GCP.HostServiceAccountStillExists",
 )<{ email: string }> {}
-
-/**
- * Bind IAM (+ optional env) onto the ambient GCP host at deploy time.
- * No-op inside the deployed runtime (`__ALCHEMY_RUNTIME__`).
- */
-export const bindGcpHost = (options: {
-  tag: string;
-  resource: { readonly LogicalId: string };
-  iam: Input<GcpIamGrant>[];
-  env?: Record<string, any>;
-  cloudSqlInstances?: Input<string>[];
-}) =>
-  Effect.gen(function* () {
-    if (globalThis.__ALCHEMY_RUNTIME__) return;
-    const host = yield* Binding.Host;
-    if (!isGcpHost(host)) return;
-    yield* host.bind`Allow(${host}, ${options.tag}(${options.resource}))`({
-      iam: options.iam,
-      env: options.env,
-      ...(options.cloudSqlInstances ? { cloudSqlInstances: options.cloudSqlInstances } : {}),
-    });
-  });

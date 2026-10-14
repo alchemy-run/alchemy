@@ -1,7 +1,7 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import type { TransferJob } from "./TransferJob.ts";
 
@@ -25,13 +25,11 @@ export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>
   projectInBody?: boolean;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (job: TransferJob) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: job,
-        iam: [grantFor(options.iam, job.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
+      }
       const name = yield* job.name;
       const project = yield* job.project;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (

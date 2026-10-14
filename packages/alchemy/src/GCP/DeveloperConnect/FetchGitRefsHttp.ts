@@ -1,6 +1,7 @@
 import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
 import { makeGitRepositoryLinkHttpBinding } from "./BindingHttp.ts";
 import { FetchGitRefs } from "./FetchGitRefs.ts";
 
@@ -20,8 +21,9 @@ export const FetchGitRefsHttp = Layer.effect(
     tag: "GCP.DeveloperConnect.FetchGitRefs",
     iam: { role: "roles/developerconnect.user" },
     operation: Effect.gen(function* () {
-      const call =
-        yield* developerconnect.fetchGitRefsProjectsLocationsConnectionsGitRepositoryLinks;
+      const call = yield* GCPBindings.withCredentials(
+        developerconnect.fetchGitRefsProjectsLocationsConnectionsGitRepositoryLinks,
+      );
       return (
         input: developerconnect.FetchGitRefsProjectsLocationsConnectionsGitRepositoryLinksRequest,
       ) => call(input);

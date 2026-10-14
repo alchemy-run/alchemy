@@ -1518,6 +1518,7 @@ import {
   DatasetsHl7V2StoresMessage,
   DatasetsHl7V2StoresMessageProvider,
 } from "./Healthcare/DatasetsHl7V2StoresMessage.ts";
+import { ExternalHostAccount, ExternalHostAccountProvider } from "./IAM/ExternalHostAccount.ts";
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
@@ -3573,6 +3574,7 @@ const makeProviders = () =>
           EnvironmentsApisRevisionsDebugsession,
           IamPolicy,
           HostServiceAccount,
+          ExternalHostAccount,
           IamMember,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -4702,6 +4704,7 @@ const makeProviders = () =>
                 EnvironmentsApisRevisionsDebugsessionProvider(),
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
+                ExternalHostAccountProvider(),
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
                 ProjectServiceProvider(),

@@ -1,7 +1,7 @@
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
 
@@ -19,15 +19,17 @@ import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
 export const SubmitJobHttp = Layer.effect(
   SubmitJob,
   Effect.gen(function* () {
-    const submitProjectsRegionsJobs = yield* dataproc.submitProjectsRegionsJobs;
+    const submitProjectsRegionsJobs = yield* GCPBindings.withCredentials(
+      dataproc.submitProjectsRegionsJobs,
+    );
     return Effect.fn(function* <T extends Cluster>(cluster: T) {
-      yield* bindGcpHost({
-        tag: "GCP.Dataproc.SubmitJob",
-        resource: cluster,
-        // dataproc.jobs.create is checked on the project (jobs are not
-        // children of the cluster); no narrower predefined role contains it.
-        iam: [{ role: "roles/dataproc.editor" }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.Dataproc.SubmitJob(${cluster})`({
+          // dataproc.jobs.create is checked on the project (jobs are not
+          // children of the cluster); no narrower predefined role contains it.
+          iam: [{ role: "roles/dataproc.editor" }],
+        });
+      }
       const projectId = yield* cluster.project;
       const region = yield* cluster.region;
       const clusterName = yield* cluster.clusterName;

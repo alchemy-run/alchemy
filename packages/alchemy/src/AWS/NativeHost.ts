@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import type * as rolldown from "rolldown";
+import { NATIVE_HOST_ENV, nativeHostBundle as coreNativeHostBundle } from "../NativeHost.ts";
 import { isResourceOfType, type ResourceLike } from "../Resource.ts";
 import type { Function } from "./Lambda/Function.ts";
 
@@ -30,12 +31,7 @@ const NATIVE_HOST_TYPES = new Set([
 /** The Kubernetes workloads, native only on an EKS cluster. */
 const KUBERNETES_WORKLOAD_TYPES = new Set(["Kubernetes.Deployment", "Kubernetes.Job"]);
 
-/**
- * The env var marking a host's runtime as native to a cloud, e.g. `"AWS"` in
- * an EKS pod. The runtime counterpart of `__ALCHEMY_NATIVE_HOST__`, for hosts
- * whose cloud depends on where they're deployed rather than their type.
- */
-export const NATIVE_HOST_ENV = "ALCHEMY_NATIVE_HOST";
+export { NATIVE_HOST_ENV } from "../NativeHost.ts";
 
 /**
  * Whether a binding's host is a native AWS host: an AWS platform whose code
@@ -74,13 +70,5 @@ const runsOnEks = (host: ResourceLike): boolean =>
  * native AWS host, so AWS bindings drop their external-host code paths
  * (see `AWSBindings.withCredentials`).
  */
-export const nativeHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
-  ...input,
-  transform: {
-    ...input.transform,
-    define: {
-      ...input.transform?.define,
-      "globalThis.__ALCHEMY_NATIVE_HOST__": JSON.stringify("AWS"),
-    },
-  },
-});
+export const nativeHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions =>
+  coreNativeHostBundle("AWS", input);

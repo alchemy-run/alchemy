@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { ParametersVersion } from "./ParametersVersion.ts";
 
@@ -14,13 +14,13 @@ export const makeParameterVersionHttpBinding = <I, A, E, Req = void>(options: {
   toInput: (versionName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (version: ParametersVersion) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: version,
-        iam: [grantFor(options.iam, version.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${version})`({
+          iam: [grantFor(options.iam, version.name)],
+        });
+      }
       const name = yield* version.name;
       return Effect.fn(`${options.tag}(${version.LogicalId})`)(function* (request?: Req) {
         return yield* run(options.toInput(yield* name, request));

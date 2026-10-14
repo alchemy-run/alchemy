@@ -1,7 +1,7 @@
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
 import { CreateTask, type CreateTaskRequest } from "./CreateTask.ts";
 import type { Queue } from "./Queue.ts";
@@ -15,13 +15,17 @@ import type { Queue } from "./Queue.ts";
 export const CreateTaskHttp = Layer.effect(
   CreateTask,
   Effect.gen(function* () {
-    const createTask = yield* cloudtasks.createProjectsLocationsQueuesTasks;
+    const createTask = yield* GCPBindings.withCredentials(
+      cloudtasks.createProjectsLocationsQueuesTasks,
+    );
     return Effect.fn(function* (queue: Queue) {
-      yield* bindGcpHost({
-        tag: "GCP.CloudTasks.CreateTask",
-        resource: queue,
-        iam: [grantFor({ role: "roles/cloudtasks.enqueuer", on: "cloudtasks.queue" }, queue.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.CloudTasks.CreateTask(${queue})`({
+          iam: [
+            grantFor({ role: "roles/cloudtasks.enqueuer", on: "cloudtasks.queue" }, queue.name),
+          ],
+        });
+      }
       const name = yield* queue.name;
       return Effect.fn(`GCP.CloudTasks.CreateTask(${queue.LogicalId})`)(function* (
         request: CreateTaskRequest,

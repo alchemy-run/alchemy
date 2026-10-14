@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Instance } from "./Instance.ts";
 
@@ -18,18 +18,18 @@ export const makeInstanceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (instance: Instance) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: instance,
-        iam: [
-          grantFor(
-            options.iam,
-            Output.interpolate`projects/${instance.project}/zones/${instance.zone}/instances/${instance.instanceName}`,
-          ),
-        ],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${instance})`({
+          iam: [
+            grantFor(
+              options.iam,
+              Output.interpolate`projects/${instance.project}/zones/${instance.zone}/instances/${instance.instanceName}`,
+            ),
+          ],
+        });
+      }
       const instanceName = yield* instance.instanceName;
       const zone = yield* instance.zone;
       const project = yield* instance.project;

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Table } from "./Table.ts";
 
@@ -17,13 +17,13 @@ export const makeTableHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (table: Table) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: table,
-        iam: [grantFor(options.iam, table.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${table})`({
+          iam: [grantFor(options.iam, table.name)],
+        });
+      }
       const project = yield* table.project;
       const datasetId = yield* table.datasetId;
       const tableId = yield* table.tableId;

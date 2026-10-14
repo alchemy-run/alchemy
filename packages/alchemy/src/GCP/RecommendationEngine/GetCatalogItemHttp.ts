@@ -3,7 +3,7 @@ import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
 import { GetCatalogItem, type GetCatalogItemRequest } from "./GetCatalogItem.ts";
 
@@ -20,13 +20,15 @@ export const GetCatalogItemHttp: Layer.Layer<
 > = Layer.effect(
   GetCatalogItem,
   Effect.gen(function* () {
-    const run = yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems;
+    const run = yield* GCPBindings.withCredentials(
+      recommendationengine.getProjectsLocationsCatalogsCatalogItems,
+    );
     return Effect.fn(function* (item: CatalogsCatalogItem) {
-      yield* bindGcpHost({
-        tag: "GCP.RecommendationEngine.GetCatalogItem",
-        resource: item,
-        iam: [{ role: "roles/automlrecommendations.viewer" }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.RecommendationEngine.GetCatalogItem(${item})`({
+          iam: [{ role: "roles/automlrecommendations.viewer" }],
+        });
+      }
       const name = yield* item.name;
       return Effect.fn(`GCP.RecommendationEngine.GetCatalogItem(${item.LogicalId})`)(function* (
         _request?: GetCatalogItemRequest,

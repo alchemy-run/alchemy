@@ -7,6 +7,7 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { zipFiles } from "../../Util/zip.ts";
+import { nativeHostBundle } from "../NativeHost.ts";
 
 /**
  * Bundles an Effect-native `GCP.CloudFunctions.Function` `main` into a
@@ -69,7 +70,8 @@ export const makeFunctionSource = Effect.gen(function* () {
     const cwd = yield* findCwdForBundle(realMain);
     const bootstrap = makeFunctionBootstrap(options.handler ?? "default");
     const output = yield* Bundle.build(
-      {
+      // Cloud Functions are native GCP hosts.
+      nativeHostBundle({
         ...options.build?.input,
         input: realMain,
         cwd,
@@ -82,7 +84,7 @@ export const makeFunctionSource = Effect.gen(function* () {
           options.build?.input?.plugins,
           options.isExternal ? undefined : virtualEntryPlugin(bootstrap),
         ],
-      },
+      }),
       {
         ...options.build?.output,
         format: "esm",

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { CatalogsServingConfig } from "./CatalogsServingConfig.ts";
 
@@ -13,13 +13,13 @@ export const makeServingConfigHttpBinding = <I extends { placement: string }, A,
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (servingConfig: CatalogsServingConfig) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: servingConfig,
-        iam: [grantFor(options.iam, servingConfig.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${servingConfig})`({
+          iam: [grantFor(options.iam, servingConfig.name)],
+        });
+      }
       const name = yield* servingConfig.name;
       return Effect.fn(`${options.tag}(${servingConfig.LogicalId})`)(function* (
         request: Omit<I, "placement">,

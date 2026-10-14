@@ -6,7 +6,7 @@ import type { HttpMethod } from "effect/http/HttpMethod";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
 import {
   InvokeService,
@@ -116,11 +116,12 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient;
       return Effect.fn(function* <T extends Service>(service: T) {
-        yield* bindGcpHost({
-          tag: "GCP.Run.InvokeService",
-          resource: service,
-          iam: [grantFor({ role: "roles/run.invoker", on: "run.service" }, service.name)],
-        });
+        yield* GCPBindings.requireNativeHost("GCP.Run.InvokeService");
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* GCPBindings.bind`GCP.Run.InvokeService(${service})`({
+            iam: [grantFor({ role: "roles/run.invoker", on: "run.service" }, service.name)],
+          });
+        }
         const uri = yield* service.uri;
         const idToken = yield* makeIdTokenCache(http);
 

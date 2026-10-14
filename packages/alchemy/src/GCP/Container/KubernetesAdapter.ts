@@ -50,6 +50,7 @@ import {
   type WorkloadIdentityReconcileOptions,
 } from "../../Kubernetes/ClusterAdapter.ts";
 import type { Connection } from "../../Kubernetes/Connection.ts";
+import { NATIVE_HOST_ENV } from "../../NativeHost.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
@@ -589,6 +590,9 @@ export const GkeKubernetesAdapter = () =>
             env: {
               GOOGLE_PROJECT_ID: project,
               GOOGLE_CLOUD_PROJECT: project,
+              // Marks the pod as a native GCP host for GCP bindings at
+              // runtime, whether or not alchemy bundled its image.
+              [NATIVE_HOST_ENV]: "GCP",
             },
             serviceAccountAnnotations: gcpServiceAccount
               ? { [GSA_ANNOTATION]: gcpServiceAccount }
