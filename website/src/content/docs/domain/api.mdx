@@ -11,7 +11,9 @@ An Api has no handlers of its own. Aggregates already decide commands and views 
 
 ## What an Api can expose
 
-An Api takes four kinds of entry. A command is something a client may ask for. A view, a stream or an aggregate is something a client may read. Every entry brings its own guard, so listing it on an Api never opens more than the entry itself allows.
+An Api can expose four kinds of entry. Commands are what a client sends to change something. Views, streams and aggregates are what a client reads.
+
+Exposing an entry doesn't bypass its security. Each entry declares its own middleware and checks, and they run on every call that comes through the Api.
 
 <DAG
   nodes={[
