@@ -8,6 +8,7 @@ import path from "pathe";
 import type { Sandbox as AISandbox } from "../../AI/Sandbox.ts";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
+import type { GatewayHost } from "../../Egress/Gateway.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
 import type * as Output from "../../Output.ts";
@@ -116,7 +117,10 @@ export type WorkerServices =
  * yields: a Container's program (`Container.make`) or a sandbox's host
  * (`Cloudflare.Containers.Sandbox`).
  */
-export type HostedImplementation = Container.Application<any> | AISandbox.Host<any>;
+export type HostedImplementation =
+  | Container.Application<any>
+  | AISandbox.Host<any>
+  | GatewayHost<any>;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
 

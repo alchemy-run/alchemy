@@ -5,18 +5,23 @@
  * placeholders.
  */
 import type * as cf from "@cloudflare/workers-types";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Redacted from "effect/Redacted";
 import type { ImageLayer } from "../../Docker/ImageLayer.ts";
-import * as Output from "../../Output.ts";
+import type { EgressHandler } from "../../Egress/Handler.ts";
 import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
+
+export {
+  type EgressHandler,
+  type EgressSecret,
+  egressSecret,
+  refuse,
+} from "../../Egress/Handler.ts";
 
 /** The `ctx.props` key that marks a Worker `fetch` as an intercepted container request. */
 export const EGRESS_PROPS_KEY = "alchemyEgress";
@@ -43,19 +48,6 @@ export interface EgressContainerConfig {
   /** Tools the container needs for this egress (e.g. the `gh` CLI). */
   readonly image?: ReadonlyArray<ImageLayer>;
 }
-
-/**
- * What an egress does with one request: return the request to forward
- * (rewritten, e.g. with credentials added), or a response to answer with
- * instead (e.g. a refusal).
- */
-export type EgressHandler<R = never> = (
-  request: HttpClientRequest.HttpClientRequest,
-) => Effect.Effect<
-  HttpClientRequest.HttpClientRequest | HttpServerResponse.HttpServerResponse,
-  never,
-  R
->;
 
 const EgressTypeId = "~alchemy/Egress" as const;
 
@@ -114,10 +106,6 @@ export const makeEgressHandle =
       );
       return response;
     }).pipe(Effect.provide(FetchHttpClient.layer));
-
-/** Answer an intercepted request with a refusal the program can read. */
-export const refuse = (reason: string, status = 403) =>
-  HttpServerResponse.text(`alchemy egress: ${reason}\n`, { status });
 
 /**
  * Build an {@link Egress} value. Presets use this with their own handler and
@@ -226,45 +214,6 @@ if [ -s ${EGRESS_CA} ]; then
   export SSL_CERT_FILE=${EXEC_CA_BUNDLE} GIT_SSL_CAINFO=${EXEC_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EXEC_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EXEC_CA_BUNDLE} CURL_CA_BUNDLE=${EXEC_CA_BUNDLE}
 fi
 exec "$@"`;
-
-/** A secret an egress adds to requests: a value, a `Config`, or an `Output` (e.g. `GitHub.ProfileToken`). */
-export type EgressSecret =
-  | Redacted.Redacted<string>
-  | Config.Config<Redacted.Redacted<string>>
-  | Output.Output<Redacted.Redacted<string>, any>;
-
-/**
- * Resolve an {@link EgressSecret} in the Durable Object's construction phase
- * to an effect that reads it at runtime. `Config`s and `Output`s are bound
- * into the hosting Worker (as secrets), never into the container.
- */
-export const egressSecret = (
-  secret: EgressSecret,
-  name: string,
-): Effect.Effect<Effect.Effect<Redacted.Redacted<string>>> =>
-  Effect.gen(function* () {
-    if (Output.isOutput(secret)) {
-      // Resolved by the stack while planning (where the Output's services,
-      // e.g. GitHub credentials, are provided); read from the Worker's env at
-      // runtime.
-      const bound = Output.named(secret, name).asEffect() as unknown as Effect.Effect<
-        Effect.Effect<Redacted.Redacted<string>>
-      >;
-      return yield* bound;
-    }
-    if (Config.isConfig(secret)) {
-      // A missing secret is a misconfigured deployment, not a runtime error.
-      const config = secret;
-      const value = yield* Effect.gen(function* () {
-        return yield* config;
-      }).pipe(
-        Effect.mapError((cause) => new Error(`egress secret ${name}: ${cause.message}`)),
-        Effect.orDie,
-      );
-      return Effect.succeed(value);
-    }
-    return Effect.succeed(secret);
-  });
 
 //#region registry (runtime, inside the Durable Object)
 
