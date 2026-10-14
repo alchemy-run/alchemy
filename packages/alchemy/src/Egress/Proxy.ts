@@ -13,6 +13,8 @@ import * as tls from "node:tls";
  *   unmatched path on a routed host is sent straight to the real host.
  * - `CONNECT` for any other host: a plain TCP tunnel, never decrypted.
  * - Absolute-form `http://` requests: forwarded directly.
+ * - With `internet` off, hosts without a route are refused (`403`), both
+ *   tunnels and plain HTTP: only the egress gateways are reachable.
  *
  * Bodies stream both ways (a large git push never sits in memory).
  *
@@ -81,6 +83,12 @@ export interface EgressProxyOptions {
    * refused (`503`) until {@link EgressProxy.useCa} installs one.
    */
   readonly ca?: LocalCa;
+  /**
+   * Whether hosts without a route are reachable (tunnelled untouched).
+   * `start({ enableInternet })` sets it; {@link EgressProxy.useInternet} changes it.
+   * @default true
+   */
+  readonly internet?: boolean;
 }
 
 export interface EgressProxy {
@@ -94,6 +102,8 @@ export interface EgressProxy {
    * (connections already decrypted run to completion).
    */
   readonly useCa: (ca: LocalCa) => Effect.Effect<void>;
+  /** Allow (or refuse) hosts without a route from the next connection on. */
+  readonly useInternet: (enabled: boolean) => Effect.Effect<void>;
 }
 
 /** A request's head: what the proxy reads and rewrites. */
@@ -328,6 +338,7 @@ export const serveEgressProxy = (
       generation: 0,
       ca: options.ca,
     });
+    const internet = yield* Ref.make(options.internet ?? true);
     const bind = options.host ?? "127.0.0.1";
     // Every connection handler runs in this set: closing the scope interrupts
     // them, and their finalizers destroy their sockets.
@@ -426,6 +437,7 @@ export const serveEgressProxy = (
         // No CA yet: nothing is decrypted, and a routed host never goes out
         // without its gateway.
         if (routed && !ca) return yield* respond(client, "503 Service Unavailable");
+        if (!routed && !(yield* Ref.get(internet))) return yield* respond(client, "403 Forbidden");
         const upstream = yield* (
           routed
             ? // Decrypt: the path decides the route, so it must be visible.
@@ -449,6 +461,7 @@ export const serveEgressProxy = (
       Effect.gen(function* () {
         const url = URL.canParse(head.target) ? new URL(head.target) : undefined;
         if (!url || url.protocol !== "http:") return yield* respond(client, "400 Bad Request");
+        if (!(yield* Ref.get(internet))) return yield* respond(client, "403 Forbidden");
         const upstream = yield* connect(
           url.hostname.replace(/^\[|\]$/g, ""),
           Number(url.port) || 80,
@@ -483,7 +496,8 @@ export const serveEgressProxy = (
       Ref.update(current, ({ generation }) => ({ generation: generation + 1, ca })).pipe(
         Effect.andThen(ScopedCache.invalidateAll(terminators)),
       );
-    return { port, url: `http://${display}:${port}`, useCa } satisfies EgressProxy;
+    const useInternet = (enabled: boolean) => Ref.set(internet, enabled);
+    return { port, url: `http://${display}:${port}`, useCa, useInternet } satisfies EgressProxy;
   });
 
 export interface EgressControlOptions {

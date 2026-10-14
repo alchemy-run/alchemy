@@ -24,6 +24,7 @@ import {
   MICROVM_SANDBOX_PORT,
   microvmSandboxImageId,
 } from "./MicrovmSandboxHost.ts";
+import type { NetworkConnector } from "./NetworkConnector.ts";
 
 export { MICROVM_SANDBOX_HOST } from "./MicrovmSandboxHost.ts";
 
@@ -77,6 +78,16 @@ export interface MicrovmSandboxProps<Size extends string = string> {
   readonly cpuConfigurations?: microvms.CpuConfiguration[];
   /** Logging for the images' builds and their MicroVMs. */
   readonly logging?: microvms.Logging;
+  /**
+   * The egress network connector every MicroVM runs with: an
+   * `AWS.Lambda.NetworkConnector` declaration (deployed with the sandbox) or a
+   * connector ARN. A VPC egress connector puts the MicroVM's traffic under the
+   * VPC's security groups and firewall: with one that only allows the egress
+   * gateways, tools that ignore `HTTPS_PROXY` can't bypass them. A MicroVM
+   * can't firewall itself (it runs without `CAP_NET_ADMIN`).
+   * @default AWS's managed public-internet connector
+   */
+  readonly networkConnector?: string | Effect.Effect<NetworkConnector, never, any>;
 }
 
 /** The program a MicroVM sandbox runs: an HTTP server (`fetch`), e.g. a harness server. */
@@ -186,6 +197,29 @@ const memoryInMiB = (memory: MicrovmSandboxMemory) => Math.round(Number.parseFlo
  * lifecycle hook's payload. `exec` is not supported: run commands from the
  * program.
  *
+ * ### Closing the internet <!-- api-prose -->
+ * With egress, `start` defaults to `enableInternet: false`: the in-sandbox
+ * proxy refuses every host without a route. A tool that ignores
+ * `HTTPS_PROXY` would still reach the internet directly; to stop that, run
+ * the MicroVMs on a VPC egress connector whose network only allows the
+ * gateways.
+ *
+ * **Example:** MicroVMs on a VPC egress connector
+ * ```typescript
+ * export default AWS.Lambda.MicrovmSandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     sizes: { small: "2 GB", large: "8 GB" },
+ *     networkConnector: AWS.Lambda.NetworkConnector("SandboxEgress", {
+ *       subnetIds: [privateSubnetId],
+ *       securityGroupIds: [gatewaysOnlySecurityGroupId],
+ *     }),
+ *   },
+ *   program,
+ * );
+ * ```
+ *
  * @binding
  * @product Lambda
  * @category Lambda
@@ -196,7 +230,7 @@ export const MicrovmSandbox = <const D extends AISandbox.Decl.Any, InitReq = nev
   program: MicrovmSandboxProgram<InitReq>,
 ): Layer.Layer<AISandbox.Host<SelfOf<D>>, never, Providers> => {
   const id = sandbox.LogicalId;
-  const { sizes, image, dockerfile, buildRole, env, port, ...imageProps } = props;
+  const { sizes, image, dockerfile, buildRole, env, port, networkConnector, ...imageProps } = props;
   const names = (Object.keys(sizes) as Array<keyof typeof sizes & string>).sort();
   // The accepted kinds' tools (`git`, `gh`) go into every size's image.
   const tools: ImageLayer[] = sandbox.egress.flatMap((kind) => [...(kind.tools ?? [])]);
@@ -239,12 +273,26 @@ export const MicrovmSandbox = <const D extends AISandbox.Decl.Any, InitReq = nev
   const built = (globalThis.__ALCHEMY_RUNTIME__ ? names.slice(0, 1) : names).map((size) =>
     tagFor(size).make(propsFor(size), program),
   );
-  const host = Layer.succeed(sandboxHost(id), {
-    descriptor: { host: MICROVM_SANDBOX_HOST, sizes },
-    image: tagFor(names[0]!),
-    // The tools are already in every image (from the declaration's kinds).
-    install: () => Effect.void,
-  } satisfies SandboxHostService);
+  const host = Layer.effect(
+    sandboxHost(id),
+    Effect.gen(function* () {
+      // A declared connector deploys with the sandbox; its ARN rides the descriptor.
+      const connector =
+        networkConnector === undefined || typeof networkConnector === "string"
+          ? networkConnector
+          : (yield* networkConnector).networkConnectorArn;
+      return {
+        descriptor: {
+          host: MICROVM_SANDBOX_HOST,
+          sizes,
+          ...(connector !== undefined ? { networkConnector: connector } : {}),
+        },
+        image: tagFor(names[0]!),
+        // The tools are already in every image (from the declaration's kinds).
+        install: () => Effect.void,
+      } satisfies SandboxHostService;
+    }),
+  );
   return Layer.mergeAll(host, ...built) as unknown as Layer.Layer<
     AISandbox.Host<SelfOf<D>>,
     never,

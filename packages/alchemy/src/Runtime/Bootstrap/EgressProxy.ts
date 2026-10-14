@@ -57,6 +57,8 @@ export const RunPayload = Schema.Struct({
   routes: Schema.optional(Routes),
   /** Environment for programs started from now on (placeholders, `start({ env })`). */
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** `start({ enableInternet })`: whether hosts without a route are reachable. */
+  internet: Schema.optional(Schema.Boolean),
 });
 export type RunPayload = typeof RunPayload.Type;
 
@@ -185,6 +187,7 @@ export const serveSandboxEgress = (
               const ca = yield* mintCa;
               yield* writeCa(options, ca).pipe(Effect.provideService(FileSystem.FileSystem, fs));
               yield* proxy.useCa(ca);
+              if (config.internet !== undefined) yield* proxy.useInternet(config.internet);
               if (config.routes) yield* SubscriptionRef.set(routes, config.routes);
               // Read by each program at its own start (git, gh, a harness CLI).
               if (config.env) yield* Effect.sync(() => Object.assign(process.env, config.env));
@@ -198,7 +201,13 @@ export const serveSandboxEgress = (
     const routes = yield* SubscriptionRef.make(options.routes);
     const ca = yield* mintCa;
     yield* writeCa(options, ca);
-    const proxy = yield* serveEgressProxy({ port: options.proxyPort, routes, ca });
+    const proxy = yield* serveEgressProxy({
+      port: options.proxyPort,
+      routes,
+      ca,
+      // ALCHEMY_EGRESS_INTERNET=0: only the egress gateways are reachable.
+      internet: yield* Effect.sync(() => process.env.ALCHEMY_EGRESS_INTERNET !== "0"),
+    });
     if (!options.secret) {
       yield* Effect.logWarning(
         "ALCHEMY_EGRESS_CONTROL_SECRET is not set: the egress route table cannot be updated",

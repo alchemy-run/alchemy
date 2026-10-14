@@ -94,6 +94,7 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
     echo "token=$GH_TOKEN"
     echo "mem=$(grep MemTotal /proc/meminfo | tr -s ' ' | cut -d' ' -f2)"
     echo "gh=$(command -v gh)"
+    echo "internet=$(curl -s -o /dev/null -w '%{http_connect}' https://example.com)"
     true
     `,
   ).pipe(Effect.map(fields));
@@ -116,6 +117,8 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
       expect(result.gitA).toBe("1");
       // Anything else goes straight out, with the placeholder: GitHub refuses it.
       expect(result).toMatchObject({ statusother: "401", viaother: "0" });
+      // With egress and no `enableInternet`, hosts without a route are refused.
+      expect(result.internet).toBe("403");
       smallMemory = Number(result.mem);
     }),
     options,

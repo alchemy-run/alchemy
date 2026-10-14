@@ -189,6 +189,8 @@ export interface SandboxClient<Size extends string = string, Kind = any> {
 export interface SandboxHostDescriptor {
   readonly host: string;
   readonly sizes: Record<string, unknown>;
+  /** A MicroVM host's egress network connector ARN (an Output until deploy). */
+  readonly networkConnector?: string | Output.Output<string>;
 }
 
 /**
@@ -261,7 +263,18 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
         // The accepted kinds' tools go into the host's image.
         if (kinds.length > 0) yield* host.value.install(kinds);
         // The owning Worker carries the host's descriptor to run time.
-        if (ctx) yield* ctx.set(descriptorKey(id), Output.literal(descriptor));
+        if (ctx) {
+          const bound: SandboxHostDescriptor = descriptor;
+          const { networkConnector } = bound;
+          yield* ctx.set(
+            descriptorKey(id),
+            Output.isOutput(networkConnector)
+              ? networkConnector.pipe(
+                  Output.map((arn): SandboxHostDescriptor => ({ ...bound, networkConnector: arn })),
+                )
+              : Output.literal(bound),
+          );
+        }
       }
     } else if (ctx) {
       descriptor = yield* ctx.get<SandboxHostDescriptor>(descriptorKey(id));

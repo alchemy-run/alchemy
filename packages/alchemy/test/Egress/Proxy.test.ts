@@ -107,13 +107,13 @@ const fakeGateway = (mode: "answer" | "forward" | "drain") =>
   });
 
 /** A proxy over `initial`, with a fresh CA and a trust bundle for curl/git. */
-const startProxy = (initial: ReadonlyArray<Route>) =>
+const startProxy = (initial: ReadonlyArray<Route>, options: { internet?: boolean } = {}) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const ca = yield* makeLocalCa;
     const routes = yield* SubscriptionRef.make(initial);
-    const proxy = yield* serveEgressProxy({ port: 0, routes, ca });
+    const proxy = yield* serveEgressProxy({ port: 0, routes, ca, ...options });
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-egress-" });
     const bundle = path.join(dir, "bundle.pem");
     yield* writeTrustBundle(bundle, [ca.pem]);
@@ -313,6 +313,27 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
           expect(result.stdout).toContain("Example Domain");
           expect(result.stdout).toMatch(/\[200\]$/);
           expect(gateway.seen).toEqual([]);
+        }),
+      { timeout: 60_000 },
+    );
+
+    it.effect(
+      "with internet off, an unrouted host is refused; routed hosts still reach their gateway",
+      () =>
+        Effect.gen(function* () {
+          const gateway = yield* fakeGateway("answer");
+          const { proxy, bundle } = yield* startProxy(
+            [{ host: "api.github.com", gateway: { id: "work", url: gateway.url }, grant: "g1" }],
+            { internet: false },
+          );
+          const refused = yield* curl(proxy.url, "https://example.com/");
+          expect(refused.stderr).toMatch(/403/);
+          const routed = yield* curl(proxy.url, "https://api.github.com/zen", { cacert: bundle });
+          expect(routed.stdout).toMatch(/\[200\]$/);
+          expect(gateway.seen).toHaveLength(1);
+          yield* proxy.useInternet(true);
+          const tunnelled = yield* curl(proxy.url, "https://example.com/");
+          expect(tunnelled.stdout).toMatch(/\[200\]$/);
         }),
       { timeout: 60_000 },
     );

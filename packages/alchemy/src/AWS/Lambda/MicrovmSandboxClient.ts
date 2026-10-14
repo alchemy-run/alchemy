@@ -83,8 +83,11 @@ interface RunningMicrovm {
 
 const DEFAULT_TTL = Duration.minutes(5);
 
-/** `runHookPayload` is at most 16 KB: a larger first table is pushed once the MicroVM runs. */
-const MAX_RUN_PAYLOAD = 16 * 1024;
+/**
+ * `RunMicrovm` rejects a `runHookPayload` over 4,096 characters: a larger
+ * first table is pushed once the MicroVM runs.
+ */
+const MAX_RUN_PAYLOAD = 4096;
 
 /** Renew at 40% of the TTL: one renewal can fail and the next still lands before expiry. */
 const renewIn = (ttl: number) => Math.max(1_000, Math.floor(ttl * 0.4));
@@ -157,13 +160,17 @@ export const connectMicrovmSandbox = (id: string, descriptor: SandboxHostDescrip
       ),
     );
     const state = yield* DurableObjectState;
-    return makeMicrovmSandboxClient(id, state.raw, ops);
+    // Resolved to the ARN at deploy (see `AI.Sandbox`'s descriptor binding).
+    const networkConnector =
+      typeof descriptor.networkConnector === "string" ? descriptor.networkConnector : undefined;
+    return makeMicrovmSandboxClient(id, state.raw, ops, networkConnector);
   });
 
 const makeMicrovmSandboxClient = (
   id: string,
   state: cf.DurableObjectState,
   ops: Record<string, SizeOps>,
+  networkConnector: string | undefined,
 ): SandboxClient => {
   const key = storageKey(id);
   const load = Effect.tryPromise({
@@ -388,9 +395,11 @@ const makeMicrovmSandboxClient = (
         `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", ""),
       );
       const env = { ...placeholdersFor(next.egress), ...options.env };
-      const full: RunPayload = { secret, routes, env };
+      // As on Cloudflare: with egress, only the gateways unless asked otherwise.
+      const internet = options.enableInternet ?? next.egress.length === 0;
+      const full: RunPayload = { secret, routes, env, internet };
       const inline = JSON.stringify(full).length <= MAX_RUN_PAYLOAD;
-      const payload = JSON.stringify(inline ? full : { secret, env });
+      const payload = JSON.stringify(inline ? full : { secret, env, internet });
       const imageArn = yield* size.imageArn;
       // arn:<partition>:lambda:<region>:<account>:microvm-image:<name>
       const regionPrefix = imageArn.split(":").slice(0, 4).join(":");
@@ -398,7 +407,8 @@ const makeMicrovmSandboxClient = (
         .run({
           runHookPayload: payload,
           egressNetworkConnectors: [
-            `${regionPrefix}:aws:network-connector:aws-network-connector:INTERNET_EGRESS`,
+            networkConnector ??
+              `${regionPrefix}:aws:network-connector:aws-network-connector:INTERNET_EGRESS`,
           ],
           idlePolicy: {
             autoResumeEnabled: true,

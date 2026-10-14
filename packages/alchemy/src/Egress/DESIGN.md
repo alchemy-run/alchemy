@@ -588,7 +588,7 @@ MicrovmImage(`${id}-${size}`, {
 A MicroVM resumes from a snapshot taken at build time: the bootstrap and the
 proxy are already running, and `RunMicrovm` takes no env. So everything
 per-run arrives in the `/run` lifecycle hook's payload (`runHookPayload`,
-16 KB), answered on the proxy's control port:
+4,096 characters), answered on the proxy's control port:
 
 ```ts
 // at start, for the egresses granted
