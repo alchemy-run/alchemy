@@ -42,7 +42,8 @@ export const KINDS: Record<Kind, KindStyle> = {
     name: "Command",
     hue: "#4f9fd8",
     shape: "arrow",
-    icon: ["M4 12h15", "M13 6l6 6-6 6"],
+    // Sent to the model, like a paper plane.
+    icon: ["M21 3L10 14", "M21 3l-6.5 18-4.5-7-7-4.5z"],
   },
   aggregate: {
     name: "Aggregate",
