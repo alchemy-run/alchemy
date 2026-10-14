@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
@@ -25,6 +26,7 @@ import {
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
+import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
@@ -62,12 +64,14 @@ export interface Members<
   P extends ReadonlyArray<Policy.Any>,
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
+  G extends ReadonlyArray<Saga.Any> = readonly [],
 > {
   readonly aggregates: A;
   readonly views?: V;
   readonly policies?: P;
   readonly projections?: J;
   readonly streams?: S;
+  readonly sagas?: G;
 }
 
 /**
@@ -134,11 +138,20 @@ type ProvidedBy<
   V extends ReadonlyArray<View.Any>,
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
+  G extends ReadonlyArray<Saga.Any>,
 > =
   | Identifier<A[number]>
   | Identifier<V[number]>
   | Identifier<S[number]>
+  | Saga.Identifier<G[number]>
   | Projection.ProgressIdentifier<J[number]>;
+
+/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
+type HandledBy<
+  P extends ReadonlyArray<Policy.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  G extends ReadonlyArray<Saga.Any>,
+> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
 
 export const make = <
   const Name extends string,
@@ -147,10 +160,11 @@ export const make = <
   const P extends ReadonlyArray<Policy.Any> = readonly [],
   const J extends ReadonlyArray<Projection.Any> = readonly [],
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
+  const G extends ReadonlyArray<Saga.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S>,
-): ModelClass<Name, ProvidedBy<A, V, J, S>, Identifier<P[number]> | Identifier<J[number]>> => {
+  members: Members<A, V, P, J, S, G>,
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -162,17 +176,18 @@ export const make = <
     static readonly kind = "Model" as const;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
-    static layer<E, R>(handlers: Layer.Layer<Identifier<P[number]> | Identifier<J[number]>, E, R>) {
-      return Layer.effectContext(build(definitions, handlers));
+    static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>) {
+      return Layer.effectContext(build(definitions, handlers, members.sagas ?? []));
     }
-  } as unknown as ModelClass<
-    Name,
-    ProvidedBy<A, V, J, S>,
-    Identifier<P[number]> | Identifier<J[number]>
-  >;
+  } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
 };
 
-const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A, E, R>) =>
+const build = <A, E, R>(
+  definitions: Kernel.Definitions,
+  policies: Layer.Layer<A, E, R>,
+  sagas: ReadonlyArray<Saga.Any>,
+) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
     const kernel = Kernel.make(definitions);
@@ -255,7 +270,20 @@ const build = <A, E, R>(definitions: Kernel.Definitions, policies: Layer.Layer<A
       );
     }
 
-    // Policies and projections are built with the clients available, then hosted.
+    // Sagas run on the platform's workflow engine.
+    if (sagas.length > 0) {
+      const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
+      if (Option.isNone(engine)) {
+        return yield* Effect.die(
+          new Kernel.DefinitionError(
+            `${sagas.map((saga) => saga.sagaName).join(", ")} need a platform that runs workflows`,
+          ),
+        );
+      }
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+    }
+
+    // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
     for (const projection of definitions.projections) {
       const implementation = Context.getUnsafe(

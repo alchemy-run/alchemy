@@ -3,7 +3,9 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
+import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
   type Delivery,
@@ -55,12 +57,13 @@ export interface Control {
  */
 export const make = (
   options: Options = {},
-): { readonly layer: Layer.Layer<Platform>; readonly control: Control } => {
+): {
+  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine>;
+  readonly control: Control;
+} => {
   const now = options.now ?? (() => Date.now());
-  const pending: Array<{
-    readonly delivery: Delivery;
-    readonly deliver: (d: Delivery) => Effect.Effect<void>;
-  }> = [];
+  // Deliveries and saga runs, in the order they were queued.
+  const pending: Array<Effect.Effect<void>> = [];
   let draining = false;
   let running = 0;
   let suspended = 0;
@@ -82,21 +85,50 @@ export const make = (
       return Effect.void;
     }
     draining = true;
-    return next.deliver(next.delivery).pipe(Effect.flatMap(loop));
+    return next.pipe(Effect.flatMap(loop));
   });
 
   const drain: Effect.Effect<void> = fireDue.pipe(Effect.andThen(deliverAll));
 
-  const enqueue = (
-    deliveries: ReadonlyArray<Delivery>,
-    deliver: (d: Delivery) => Effect.Effect<void>,
-  ) =>
+  const enqueueWork = (work: ReadonlyArray<Effect.Effect<void>>) =>
     Effect.suspend(() => {
-      for (const delivery of deliveries) pending.push({ delivery, deliver });
+      pending.push(...work);
       if (options.manual || draining || pending.length === 0) return Effect.void;
       draining = true;
       return Effect.forkDetach(drain).pipe(Effect.asVoid);
     });
+
+  const enqueue = (
+    deliveries: ReadonlyArray<Delivery>,
+    deliver: (d: Delivery) => Effect.Effect<void>,
+  ) => enqueueWork(deliveries.map((delivery) => deliver(delivery)));
+
+  /** Fire `fire` at `at`: from `drain` as a story's clock moves, otherwise in real time. */
+  const timer = (key: string, at: number, fire: Effect.Effect<void>) =>
+    Effect.suspend(() => {
+      timers.set(key, { at, fire });
+      if (options.manual) return Effect.void;
+      return Effect.forkDetach(
+        Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
+      ).pipe(Effect.asVoid);
+    });
+
+  const workflows = InMemoryWorkflows.make({
+    now,
+    // A run is forked like a policy run, so one waiting on an external system
+    // doesn't hold up the queue.
+    enqueue: (run) =>
+      enqueueWork([
+        Effect.suspend(() => {
+          running++;
+          return Effect.forkDetach(run.pipe(Effect.ensuring(Effect.sync(() => running--)))).pipe(
+            Effect.asVoid,
+          );
+        }),
+      ]),
+    timer,
+    failed: (cause) => void failures.push(cause),
+  });
 
   const control: Control = {
     drain,
@@ -185,15 +217,11 @@ export const make = (
           schedule: (id, command, meta, due) =>
             Effect.suspend(() => {
               const at = "at" in due ? due.at : now() + due.afterMillis;
-              timers.set(`${kit.name}/${id}/${meta.commandId}`, {
+              return timer(
+                `${kit.name}/${id}/${meta.commandId}`,
                 at,
-                fire: send(id, command, meta).pipe(Effect.asVoid),
-              });
-              // Stories fire timers from `drain` as their clock moves; otherwise wait in real time.
-              if (options.manual) return Effect.void;
-              return Effect.forkDetach(
-                Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
-              ).pipe(Effect.asVoid);
+                send(id, command, meta).pipe(Effect.asVoid),
+              );
             }),
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
@@ -537,7 +565,13 @@ export const make = (
       }),
   });
 
-  return { layer: Layer.succeed(Platform, platform), control };
+  return {
+    layer: Layer.mergeAll(
+      Layer.succeed(Platform, platform),
+      Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
+    ),
+    control,
+  };
 };
 
 /**
@@ -557,8 +591,11 @@ export const make = (
  *
  * @layer
  * @provides Domain.Platform
+ * @provides WorkflowEngine
  */
-export const InMemory: Layer.Layer<Platform> = Layer.suspend(() => make().layer);
+export const InMemory: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine> = Layer.suspend(
+  () => make().layer,
+);
 
 /** Is a stream write's origin after the last one applied? @internal */
 export const isAfter = (

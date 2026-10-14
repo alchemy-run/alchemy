@@ -8,9 +8,11 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import type { WorkflowEngine } from "effect/workflow";
 import { makeCallback } from "../Callback.ts";
 import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+import { DurableWorkflowEngine } from "../Cloudflare/Workers/DurableWorkflowEngine.ts";
 import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -789,48 +791,8 @@ const pollAfter = <A>(
     });
   });
 
-/**
- * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
- * and policy becomes a Durable Object class on the host Worker, declared
- * while the model's Layer is built, so there are no bindings to write. One
- * instance per aggregate id, per view key, and per policy and source.
- *
- * Commands to one instance run one at a time, and their events, state and
- * outbox commit together. Deliveries to views and policies are at least once
- * and in order per source, and survive restarts. Live reads over
- * `Domain.protocolWebSocket` are WebSockets to the object that owns the key,
- * pushed on every commit; the object hibernates in between.
- *
- * ### Hosting on Cloudflare
- * **Example:** A Worker serving an Api
- * ```typescript
- * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
- * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankPolicies } from "./Bank.ts";
- * import { CustomerApi } from "./CustomerApi.ts";
- * import { SessionLive } from "./Session.ts";
- *
- * const BankLive = SessionLive.pipe(
- *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.DurableObjects),
- * );
- *
- * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
- *   "BankWorker",
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     const api = yield* CustomerApi;
- *     return { fetch: api.fetch };
- *   }).pipe(Effect.provide(BankLive)),
- * ) {}
- * ```
- *
- * @layer
- * @provides Domain.Platform
- */
-export const DurableObjects: Layer.Layer<Platform, never, Worker> = Layer.effect(
+/** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
+const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect(
   Platform,
   Effect.gen(function* () {
     // Factories run while the Domain's Layer is built, inside the Worker's
@@ -972,3 +934,48 @@ export const DurableObjects: Layer.Layer<Platform, never, Worker> = Layer.effect
     });
   }),
 );
+
+/**
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
+ * and policy becomes a Durable Object class on the host Worker, declared
+ * while the model's Layer is built, so there are no bindings to write. One
+ * instance per aggregate id, per view key, and per policy and source.
+ *
+ * Commands to one instance run one at a time, and their events, state and
+ * outbox commit together. Deliveries to views and policies are at least once
+ * and in order per source, and survive restarts. Live reads over
+ * `Domain.protocolWebSocket` are WebSockets to the object that owns the key,
+ * pushed on every commit; the object hibernates in between.
+ *
+ * ### Hosting on Cloudflare
+ * **Example:** A Worker serving an Api
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ * import { CustomerApi } from "./CustomerApi.ts";
+ * import { SessionLive } from "./Session.ts";
+ *
+ * const BankLive = SessionLive.pipe(
+ *   Layer.provideMerge(Bank.layer(BankPolicies)),
+ *   Layer.provide(DomainCloudflare.DurableObjects),
+ * );
+ *
+ * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+ *   "BankWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const api = yield* CustomerApi;
+ *     return { fetch: api.fetch };
+ *   }).pipe(Effect.provide(BankLive)),
+ * ) {}
+ * ```
+ *
+ * @layer
+ * @provides Domain.Platform
+ * @provides WorkflowEngine
+ */
+export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
+  Layer.merge(DurableObjectPlatform, DurableWorkflowEngine);

@@ -6,10 +6,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { DurableDeferred } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
+import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
@@ -68,6 +70,19 @@ export type Step =
   | { readonly _tag: "ExpectCall"; readonly op: ExternalSystem.Op; readonly args: unknown }
   | { readonly _tag: "Resolve"; readonly op: ExternalSystem.Op; readonly value: unknown }
   | { readonly _tag: "Clock"; readonly at: string | number }
+  | {
+      readonly _tag: "Signal";
+      readonly saga: Saga.Any;
+      readonly key: unknown;
+      readonly deferred: DurableDeferred.Any;
+      readonly value: unknown;
+    }
+  | {
+      readonly _tag: "Saga";
+      readonly saga: Saga.Any;
+      readonly key: unknown;
+      readonly expected: Saga.Status<unknown, unknown>;
+    }
   | {
       readonly _tag: "Provide";
       readonly service: Context.Key<unknown, unknown>;
@@ -175,6 +190,34 @@ const resolve = <Success>(op: ExternalSystem.Op<any, Success>, value: Success): 
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number): Step => ({ _tag: "Clock", at });
+
+type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
+type SagaKeyOf<S> =
+  SagaClientOf<S> extends Saga.Client<infer K, any, any, any> ? K | { readonly id: K } : never;
+type SagaStatusOf<S> =
+  SagaClientOf<S> extends Saga.Client<any, any, infer A, infer E> ? Saga.Status<A, E> : never;
+
+/** Complete a `DurableDeferred` a saga run waits on, then let it run. */
+const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
+  saga: S,
+  key: SagaKeyOf<S>,
+  deferred: DurableDeferred.DurableDeferred<Success, any>,
+  value: Success["Type"],
+): Step => ({ _tag: "Signal", saga, key, deferred, value });
+
+/** Check where a saga run is: running, completed with a result, rejected, or interrupted. */
+const saga = <S extends Saga.Any>(saga: S, key: SagaKeyOf<S>, expected: SagaStatusOf<S>): Step => ({
+  _tag: "Saga",
+  saga,
+  key,
+  expected: expected as Saga.Status<unknown, unknown>,
+});
+
+/** A saga status, with any rejection or result in its JSON form for comparison. */
+const statusJson = (status: Saga.Status<unknown, unknown>) =>
+  status._tag === "Rejected"
+    ? { _tag: "Rejected", rejection: encodeInstance(status.rejection as { readonly _tag: string }) }
+    : status;
 
 /**
  * Provide a service to subsequent commands, as their middleware would (for
@@ -534,6 +577,28 @@ const make =
               call.expected = true;
               break;
             }
+            case "Signal": {
+              const client = yield* s.saga as unknown as Context.Key<
+                never,
+                Saga.Client<unknown, unknown, unknown, unknown>
+              >;
+              yield* client.signal(s.key, s.deferred as never, s.value);
+              yield* settle(step);
+              break;
+            }
+            case "Saga": {
+              const client = yield* s.saga as unknown as Context.Key<
+                never,
+                Saga.Client<unknown, unknown, unknown, unknown>
+              >;
+              const actual = yield* client.status(s.key);
+              if (!equal(statusJson(actual), statusJson(s.expected))) {
+                return yield* fail(
+                  `${s.saga.sagaName}\n  expected ${show(statusJson(s.expected))}\n  actual   ${show(statusJson(actual))}`,
+                );
+              }
+              break;
+            }
             case "Resolve": {
               const index = calls.findIndex((c) => c.system === s.op.system && c.op === s.op.op);
               if (index === -1) return yield* fail(`no pending call to ${s.op.system}.${s.op.op}`);
@@ -625,6 +690,8 @@ export const Story = {
   resolve,
   clock,
   provide,
+  signal,
+  saga,
   /** Marker for "the view key does not exist". */
   none,
 } as const;

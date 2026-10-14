@@ -27,6 +27,7 @@ import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
+import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
 import * as ViewModule from "./View.ts";
 
@@ -114,6 +115,17 @@ export declare namespace Policy {
 }
 /** A standing business rule: on an event, decide what to do next. See {@link PolicyModule.make}. */
 export const Policy = PolicyModule.make;
+
+export declare namespace Saga {
+  /** Any Saga class. */
+  export type Any = SagaModule.Any;
+  /** Where a saga run is. */
+  export type Status<A, E> = SagaModule.Status<A, E>;
+  /** A saga's client. */
+  export type Client<Key, Input, A, E> = SagaModule.Client<Key, Input, A, E>;
+}
+/** A process that spans aggregates and takes time, run as an Effect workflow. See {@link SagaModule.make}. */
+export const Saga = SagaModule.make;
 
 export declare namespace Projection {
   /** Any Projection class. */
