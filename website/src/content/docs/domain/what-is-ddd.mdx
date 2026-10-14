@@ -283,7 +283,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
-When a process takes several steps across aggregates and can fail partway, like a transfer that debits one account and then credits another, a chain of policies drives it step by step, and undoes earlier steps if a later one fails. That pattern is called a **saga**. See [Policy](/domain/policy) and [Sagas and compensation](/domain/sagas).
+When a process takes several steps across aggregates and can fail partway, like a transfer that debits one account and then credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
 
 ## Testing: given, when, then
 

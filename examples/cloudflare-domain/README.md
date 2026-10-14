@@ -1212,7 +1212,7 @@ export const UsernameReservationLive = UsernameReservation.toLayer(
 );
 ```
 
-Transfers debit before they credit, for the same reason: money can be in flight, but never created. When the credit can't happen, `TransferExecution` refunds the debit.
+Transfers debit before they credit, for the same reason: money can be in flight, but never created. The `ExecuteTransfer` saga runs the steps, and when the credit can't happen, its compensation refunds the debit.
 
 ### Deadlines are scheduled commands
 
@@ -1268,7 +1268,7 @@ src/
                 UsernameReservation (reserve-first policy), CustomerDashboard (view of a
                 view), MainAccountProvisioning (policy)
   Transfer/     Transfer (process manager state), RequestTransfer, ApproveTransfer,
-                ExpireTransfer, CompleteTransfer, FailTransfer, TransferExecution (policy),
+                ExpireTransfer, CompleteTransfer, FailTransfer, TransferExecution (policy), ExecuteTransfer (saga),
                 TransferApprovalDeadline (schedules the expiry), TransferStatus (multi-source
                 view), AccountTransfers (one event routed to two accounts)
   Fraud/        FraudCheck (external system), SiftFraudCheck (adapter), DailyOutflow (stateful view emitting

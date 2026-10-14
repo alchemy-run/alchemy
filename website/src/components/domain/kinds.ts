@@ -12,6 +12,7 @@ export type Kind =
   | "projection"
   | "stream"
   | "policy"
+  | "saga"
   | "rejection"
   | "external"
   | "api"
@@ -100,6 +101,13 @@ export const KINDS: Record<Kind, KindStyle> = {
       "M5 7l-3 7a3 3 0 0 0 6 0z",
       "M19 7l-3 7a3 3 0 0 0 6 0z",
     ],
+  },
+  saga: {
+    name: "Saga",
+    hue: "#86c5da",
+    shape: "box",
+    // Steps joined into one process.
+    icon: ["M3 3h7v7H3z", "M14 14h7v7h-7z", "M6.5 10v4a3 3 0 0 0 3 3H14"],
   },
   rejection: {
     name: "Rejection",

@@ -144,7 +144,7 @@ Each instance processes one command at a time. When two withdrawals for the same
 
 Everything a command produces, its events, the new state, the reply and the deliveries to views and policies, commits together or not at all. This is what makes an instance a consistency boundary: its rules hold at every moment, for every observer.
 
-Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/sagas) drives the steps in order.
+Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/saga) drives the steps in order.
 
 That shapes how big an aggregate should be. Draw it around the rules that must hold together, and no wider. A customer and their accounts are separate aggregates: no rule needs a customer's name and an account's balance to change in the same step, and keeping them apart means one busy account never slows down the others.
 

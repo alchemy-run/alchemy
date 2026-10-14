@@ -20,6 +20,7 @@ import { Ledger } from "./Ledger/Ledger.ts";
 import { LedgerLive } from "./Ledger/LedgerLive.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.ts";
+import { ExecuteTransfer, ExecuteTransferLive } from "./Transfer/ExecuteTransfer.ts";
 import { Transfer } from "./Transfer/Transfer.ts";
 import {
   TransferApprovalDeadline,
@@ -28,7 +29,7 @@ import {
 import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.ts";
 
-/** The bank: every aggregate, view, policy, projection and stream, hosted together. */
+/** The bank: every aggregate, view, policy, projection, stream and saga, hosted together. */
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
   views: [
@@ -50,6 +51,7 @@ export class Bank extends Domain.Model("Bank", {
   ],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
+  sagas: [ExecuteTransfer],
 }) {}
 
 /**
@@ -60,6 +62,7 @@ export const BankHandlers = Layer.mergeAll(
   UsernameReservationLive,
   MainAccountProvisioningLive,
   TransferExecutionLive,
+  ExecuteTransferLive,
   TransferApprovalDeadlineLive,
   FraudReviewLive,
   SettlementRefundLive,

@@ -259,6 +259,7 @@ export default defineConfig({
     // Get started was folded into the overview and the tutorial.
     "/domain/getting-started": "/domain/tutorial/part-1",
     "/domain/stories": "/domain/testing-models",
+    "/domain/sagas": "/domain/saga",
     "/domain/external-systems": "/domain/external-system",
   },
   prefetch: true,
@@ -1503,6 +1504,7 @@ export default defineConfig({
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },
                 { label: "Policy", link: "/domain/policy" },
+                { label: "Saga", link: "/domain/saga" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Story", link: "/domain/story" },
@@ -1534,7 +1536,6 @@ export default defineConfig({
               label: "Consistency patterns",
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
-                { label: "Sagas and compensation", link: "/domain/sagas" },
                 { label: "Deadlines", link: "/domain/deadlines" },
               ],
             },

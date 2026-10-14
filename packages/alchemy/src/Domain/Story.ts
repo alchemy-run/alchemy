@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { DurableDeferred } from "effect/workflow";
+import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
@@ -317,7 +317,7 @@ const make =
   ): Effect.Effect<
     void,
     StoryFailure | LE,
-    Exclude<LR, Provided | ExternalSystem.Identifier<Systems>>
+    Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
   > =>
     Effect.gen(function* () {
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
@@ -629,7 +629,7 @@ const make =
     }) as Effect.Effect<
       void,
       StoryFailure | LE,
-      Exclude<LR, Provided | ExternalSystem.Identifier<Systems>>
+      Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
     >;
 
 /**

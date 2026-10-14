@@ -206,7 +206,7 @@ The freeze is then recorded as done by `FraudReview`, so the account's history s
 
 ## Chain policies into a process
 
-One policy covers one reaction. A process with several steps, like a transfer that debits one account, credits another, and refunds the first if the second fails, is a chain of policies, each reacting to the previous step's events. That's a [saga](/domain/sagas).
+One policy covers one reaction. A process with several steps, like a transfer that debits one account, credits another, and refunds the first if the second fails, is a [saga](/domain/saga), and a policy decides when to start one.
 
 <DAG
   nodes={[
