@@ -1,5 +1,6 @@
+import * as Schema from "effect/Schema";
 import type * as rolldown from "rolldown";
-import type { ResourceLike } from "../Resource.ts";
+import { isResourceOfType, type ResourceLike } from "../Resource.ts";
 import type { Function } from "./Lambda/Function.ts";
 
 /**
@@ -49,6 +50,11 @@ export const isNativeHost = (host: ResourceLike | undefined): host is NativeHost
   (NATIVE_HOST_TYPES.has(host.Type) ||
     (KUBERNETES_WORKLOAD_TYPES.has(host.Type) && runsOnEks(host)));
 
+const EksAuth = Schema.Struct({ auth: Schema.Struct({ kind: Schema.Literal("aws-eks") }) });
+
+/** A `Kubernetes.ClusterLike` authenticating as `aws-eks`: a connection or a value wrapping one. */
+const isEksConnection = Schema.is(Schema.Union([EksAuth, Schema.Struct({ connection: EksAuth })]));
+
 /**
  * Whether a Kubernetes workload runs on an EKS cluster.
  *
@@ -57,30 +63,16 @@ export const isNativeHost = (host: ResourceLike | undefined): host is NativeHost
  * At runtime the pod doesn't know its cluster, so the EKS adapter sets
  * {@link NATIVE_HOST_ENV} to `"AWS"` in the pod's env.
  */
-const runsOnEks = (host: ResourceLike): boolean => {
-  if (globalThis.__ALCHEMY_RUNTIME__) {
-    return globalThis.process?.env?.[NATIVE_HOST_ENV] === "AWS";
-  }
-  const cluster: unknown = (host as { Props?: { cluster?: unknown } }).Props?.cluster;
-  // A `Cluster.ref(...)` is a callable Output proxy, so accept functions too.
-  if ((typeof cluster !== "object" && typeof cluster !== "function") || cluster === null) {
-    return false;
-  }
-  if ("Type" in cluster && typeof cluster.Type === "string") {
-    return cluster.Type.startsWith("AWS.EKS.");
-  }
-  const connection: unknown = "connection" in cluster ? cluster.connection : cluster;
-  const auth: unknown =
-    typeof connection === "object" && connection !== null && "auth" in connection
-      ? connection.auth
-      : undefined;
-  return typeof auth === "object" && auth !== null && "kind" in auth && auth.kind === "aws-eks";
-};
+const runsOnEks = (host: ResourceLike): boolean =>
+  globalThis.__ALCHEMY_RUNTIME__
+    ? globalThis.process?.env?.[NATIVE_HOST_ENV] === "AWS"
+    : isResourceOfType(host.Props?.cluster, "AWS.EKS.Cluster") ||
+      isEksConnection(host.Props?.cluster);
 
 /**
  * Fold `__ALCHEMY_NATIVE_HOST__` to `"AWS"` into a bundle that runs on a
  * native AWS host, so AWS bindings drop their external-host code paths
- * (see `HostAccess.withCredentials`).
+ * (see `AWSBindings.withCredentials`).
  */
 export const nativeHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
   ...input,
