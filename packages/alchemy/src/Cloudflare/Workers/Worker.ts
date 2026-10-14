@@ -2392,6 +2392,53 @@ export const isSelf = (value: unknown): value is Self =>
  * };
  * ```
  *
+ * ### Self Entrypoints & ctx.props
+ * `WorkerExecutionContext.props` reads the `ctx.props` the caller attached
+ * to its service binding or stub — an empty object for an external request.
+ * `getEntrypoint(name, { props })` mints a stub to one of this Worker's own
+ * entrypoints (`"default"` unless named) that delivers those props; a Durable
+ * Object mints the same stub from `DurableObjectState.getEntrypoint`. The
+ * stub is a `Cloudflare.Fetcher`, so it plugs into APIs that route traffic to
+ * a Worker entrypoint, and its `raw` is the native `Fetcher`.
+ *
+ * **Example:** Read ctx.props in a handler
+ * ```typescript
+ * // Construction
+ * const exec = yield* Cloudflare.WorkerExecutionContext;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const { tenant } = yield* exec.props;
+ *     return HttpServerResponse.text(`tenant: ${String(tenant ?? "none")}`);
+ *   }),
+ * };
+ * ```
+ *
+ * **Example:** Route a container's egress into this Worker with props
+ * ```typescript
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *     const sandbox = yield* Sandbox;
+ *
+ *     return Effect.gen(function* () {
+ *       return {
+ *         run: (tenant: string) =>
+ *           Effect.gen(function* () {
+ *             yield* sandbox.start();
+ *             // the Worker's fetch handler sees ctx.props = { tenant }
+ *             const egress = yield* state.getEntrypoint("default", {
+ *               props: { tenant },
+ *             });
+ *             yield* sandbox.interceptOutboundHttps("api.example.com", egress);
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
  * ### R2 Bucket
  * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
