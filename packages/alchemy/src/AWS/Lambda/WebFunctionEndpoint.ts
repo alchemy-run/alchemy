@@ -16,17 +16,26 @@ import {
 export const WebFunctionEndpointTypeId = "AWS.Lambda.WebFunctionEndpoint" as const;
 export type WebFunctionEndpointTypeId = typeof WebFunctionEndpointTypeId;
 
+/** The parts of a Web Function an endpoint routes to. */
+export interface WebFunctionRef {
+  functionName: string;
+  revisionId: string;
+}
+
+/**
+ * A resource or its declaration (e.g. a `WebFunction` class), which is
+ * yielded for you.
+ */
+type Ref<T> = T | Effect.Effect<T, never, Providers>;
+
 export interface WebFunctionEndpointProps {
   /**
-   * The Web Function this endpoint serves — pass the `AWS.Lambda.WebFunction`
-   * resource. The endpoint routes all traffic to the function's latest
-   * revision and follows it on every deploy. Changing the function
-   * recreates the endpoint, which gets a new URL.
+   * The Web Function this endpoint serves: the `AWS.Lambda.WebFunction`
+   * resource, or its class declaration. The endpoint routes all traffic to
+   * the function's latest revision and follows it on every deploy. Changing
+   * the function recreates the endpoint, which gets a new URL.
    */
-  function: {
-    functionName: string;
-    revisionId: string;
-  };
+  function: Ref<WebFunctionRef>;
   /**
    * Name of the endpoint. Your server receives it in the
    * `lambda-web-endpoint-name` request header. Letters, digits, `-` and
@@ -115,6 +124,16 @@ export interface WebFunctionEndpoint extends Resource<
  * webhooks.url; // https://<id>.<shard>.lambda-web.<region>.on.aws
  * ```
  *
+ * **Example:** With a class-form Web Function
+ * ```typescript
+ * import Api from "./src/api.ts";
+ *
+ * const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+ *   function: Api,
+ *   authType: "ApplicationManaged",
+ * });
+ * ```
+ *
  * ### Routing by endpoint
  * **Example:** Serve only webhook routes on the public endpoint
  * ```typescript
@@ -133,7 +152,30 @@ export interface WebFunctionEndpoint extends Resource<
  *
  * @resource
  */
-export const WebFunctionEndpoint = Resource<WebFunctionEndpoint>(WebFunctionEndpointTypeId);
+const WebFunctionEndpointResource = Resource<WebFunctionEndpoint>(WebFunctionEndpointTypeId);
+
+/** Yield a `function` declaration so the endpoint references the resource. */
+const resolveEndpointProps = (
+  props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
+): Effect.Effect<WebFunctionEndpointProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const fn = Effect.isEffect(resolved.function) ? yield* resolved.function : resolved.function;
+    return { ...resolved, function: fn };
+  });
+
+export const WebFunctionEndpoint: typeof WebFunctionEndpointResource = Object.assign(
+  (
+    id: string,
+    props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
+  ) => WebFunctionEndpointResource(id, resolveEndpointProps(props)),
+  WebFunctionEndpointResource,
+);
+
+/** A declared `function` resolves to the resource before the provider runs. */
+const functionOf = (props: WebFunctionEndpointProps): WebFunctionRef =>
+  props.function as WebFunctionRef;
 
 export const WebFunctionEndpointProvider = () =>
   Provider.effect(
@@ -167,7 +209,7 @@ export const WebFunctionEndpointProvider = () =>
           // A different function, name, type, or Region set is a different
           // endpoint (and URL). The name is shared with the old endpoint on
           // the same function, so the old one must go first.
-          const sameFunction = news.function.functionName === output.functionName;
+          const sameFunction = functionOf(news).functionName === output.functionName;
           const sameName = nameOf(id, news) === output.endpointName;
           if (!sameFunction || !sameName) {
             return { action: "replace" };
@@ -178,7 +220,8 @@ export const WebFunctionEndpointProvider = () =>
           if (deepEqual(olds, news)) return { action: "noop" };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const functionName = output?.functionName ?? olds?.function.functionName;
+          const functionName =
+            output?.functionName ?? (olds ? functionOf(olds).functionName : undefined);
           if (functionName === undefined) return undefined;
           const endpointName = output?.endpointName ?? nameOf(id, olds);
           const endpoint = yield* getEndpoint(functionName, endpointName);
@@ -187,7 +230,7 @@ export const WebFunctionEndpointProvider = () =>
           return endpoint === undefined ? undefined : toAttributes(functionName, endpoint);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const functionName = news.function.functionName;
+          const functionName = functionOf(news).functionName;
           const endpointName = output?.endpointName ?? nameOf(id, news);
           const endpoint = yield* syncEndpoint({
             functionName,
@@ -199,7 +242,7 @@ export const WebFunctionEndpointProvider = () =>
               rateLimit: news.rateLimit,
               description: news.description,
             },
-            revisionId: news.function.revisionId,
+            revisionId: functionOf(news).revisionId,
             session,
           });
           yield* session.note(`https://${endpoint.domainName}`);

@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
+import EffectWebFunctionLive, { EffectWebFunction } from "./fixtures/web/effect-web.ts";
 
 const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
 
@@ -129,4 +130,33 @@ test.provider(
       expect(gone).toBe(true);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags, timeout: 360_000 },
+);
+
+test.provider(
+  "takes a class-form WebFunction directly",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { api, webhooks } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+            // the class declaration itself, not a yielded instance
+            function: EffectWebFunction,
+            authType: "ApplicationManaged",
+          });
+          const api = yield* EffectWebFunction;
+          return { api, webhooks };
+        }).pipe(Effect.provide(EffectWebFunctionLive)),
+      );
+      expect(webhooks.functionName).toBe(api.functionName);
+      expect(webhooks.revisionId).toBe(api.revisionId);
+      expect(yield* getTextUntil(webhooks.url)).toBe("hello from effect");
+
+      yield* stack.destroy();
+      expect(
+        yield* listEndpointNames(api.functionName).pipe(Effect.orElseSucceed(() => [])),
+      ).toEqual([]);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags, timeout: 240_000 },
 );
