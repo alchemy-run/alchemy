@@ -85,18 +85,19 @@ export default RDSDrizzleIamFunction.make(
 
         // Socket round-trip: IAM token auth + TLS + in-VPC connectivity.
         if (request.method === "GET" && pathname === "/drizzle-health") {
-          const rows = (yield* db.execute(sql`select 1 as one`)) as unknown as {
-            one: number;
-          }[];
+          // `"objects"` mode resolves to the row array; the default `"raw"`
+          // mode resolves to pg's whole QueryResult (`{ rows, rowCount, ... }`).
+          const rows = yield* db.execute<{ one: number }>(sql`select 1 as one`, "objects");
           return yield* HttpServerResponse.json({ rows });
         }
 
         // Cross-path consistency: rows written via the Data API fixture are
         // visible over the wire-protocol connection.
         if (request.method === "GET" && pathname === "/drizzle-todos") {
-          const rows = (yield* db.execute(
+          const rows = yield* db.execute<{ count: number }>(
             sql`select count(*)::int as count from todos`,
-          )) as unknown as { count: number }[];
+            "objects",
+          );
           return yield* HttpServerResponse.json({ rows });
         }
 

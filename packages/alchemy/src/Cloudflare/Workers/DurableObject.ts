@@ -61,6 +61,8 @@ export interface DurableObjectLike<Shape = any> {
   scriptName?: Input<string>;
   /** @internal phantom */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
+  /** @internal Durable Object-managed Containers attached to the class. */
+  containers?: ReadonlyArray<Container.Decl.Any>;
   /** @internal phantom */
   Shape?: Shape;
 }
@@ -264,6 +266,30 @@ export interface DurableObjectProps {
   // namespaceId?: string | undefined;
 }
 
+/**
+ * Props of an async Worker's Durable Object binding,
+ * `Cloudflare.DurableObject(className, props)` in `env`.
+ */
+export interface DurableObjectBindingProps extends DurableObjectProps {
+  /**
+   * Durable Object-managed Containers (`schedulingPolicy: "durable_object"`)
+   * this class starts. Each adds its image to the class's container
+   * application under the Container's id, read at runtime from
+   * `ctx.container.images`. A Container may be listed by several classes.
+   *
+   * Only for a plain (async) Durable Object class the Worker hosts.
+   * Effect-native Durable Objects `yield*` their Containers instead; listing
+   * Containers for one fails with `DurableObjectContainersOnEffectNativeClass`.
+   *
+   * ```typescript
+   * env: {
+   *   AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+   * }
+   * ```
+   */
+  containers?: ReadonlyArray<Container.Decl.Any> | undefined;
+}
+
 export interface DurableObjectClass extends Effect.Effect<DurableObject, never, DurableObject> {
   <Self, Shape>(): {
     <Name extends string>(
@@ -310,7 +336,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
       new (_: never): Shape;
     };
   };
-  <Shape>(name: string, props?: DurableObjectProps): DurableObjectLike<Shape>;
+  <Shape>(name: string, props?: DurableObjectBindingProps): DurableObjectLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
     impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq>,
@@ -576,6 +602,31 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *   get: () => Effect.succeed(count),
  *   reset: () => Effect.sync(() => { count = 0; }),
  * };
+ * ```
+ *
+ * ### Redeploying a Busy Durable Object
+ * A redeploy reaches your Workers right away, but Cloudflare moves each
+ * Durable Object onto the new code separately. An object idle for about
+ * 10 seconds starts on the new code at its next call. An object that keeps
+ * receiving traffic (requests, an open WebSocket, or a recurring alarm)
+ * keeps running its previous code for up to about 5 minutes after the
+ * deploy, until Cloudflare restarts it; open WebSockets disconnect (code
+ * 1006) when that happens. Until then a new Worker calling a method that
+ * only the new code defines fails with `RpcCallError` ("The RPC receiver
+ * does not implement the method"). Keep RPC changes backward compatible
+ * across a deploy: add a method, ship the callers in a later deploy, and
+ * remove old methods last.
+ *
+ * **Example:** Tolerate an object that has not picked up a new method yet
+ * ```typescript
+ * const result = yield* counter.incrementBy(5).pipe(
+ *   // Older code is still serving this object: use the old method.
+ *   Effect.catchCause((cause) =>
+ *     Cause.squash(cause) instanceof Cloudflare.RpcCallError
+ *       ? counter.increment()
+ *       : Effect.failCause(cause),
+ *   ),
+ * );
  * ```
  *
  * ### Returning Streams from RPC
@@ -1051,6 +1102,55 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * });
  * ```
  *
+ * ### Native Containers in an Async Worker
+ * A plain Durable Object class can start Durable Object-managed Containers
+ * (`schedulingPolicy: "durable_object"`). List them in its binding's
+ * `containers`: each adds its image to the class's container application,
+ * keyed by the Container's id in `ctx.container.images`. A Container may be
+ * shared by several classes.
+ *
+ * **Example:** Two classes, one shared image
+ * ```typescript
+ * const Node = Cloudflare.Container("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * });
+ * const Python = Cloudflare.Container("Python", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "python:3.13-slim",
+ * });
+ * const Rust = Cloudflare.Container("Rust", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "rust:1.90-slim",
+ * });
+ *
+ * export const Worker = Cloudflare.Worker("App", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+ *     REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [Node, Rust] }),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Starting a Container's image from the class
+ * ```typescript
+ * // src/worker.ts
+ * export class Agent extends DurableObject {
+ *   async run(cmd: string[]) {
+ *     const container = this.ctx.container!;
+ *     if (!container.running) {
+ *       container.start({
+ *         image: container.images.Node,
+ *         entrypoint: ["sleep", "infinity"],
+ *         enableInternet: false,
+ *       });
+ *     }
+ *     return (await container.exec(cmd)).output();
+ *   }
+ * }
+ * ```
+ *
  * ### Moving a Class Between Workers
  * A Durable Object class can move from one Worker to another with its
  * data intact. The move is always **declared** — a class that disappears
@@ -1332,6 +1432,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
         transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
+        containers: (args[1] as DurableObjectBindingProps)?.containers,
       };
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO

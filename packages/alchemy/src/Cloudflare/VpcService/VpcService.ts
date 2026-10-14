@@ -96,6 +96,10 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
+ *
+ * `VpcService` creates HTTP services. For a TCP service — e.g. a private
+ * database that Hyperdrive connects to — use
+ * `Cloudflare.Connectivity.DirectoryService` with `type: "tcp"`.
  * ### Creating a VPC Service
  * **Example:** Hostname through a tunnel
  * ```typescript

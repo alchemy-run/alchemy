@@ -845,6 +845,14 @@ export const CertificateAuthorityProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const caPool = olds?.caPool ?? output?.caPool;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (output?.name === undefined && (typeof caPool !== "string" || caPool.length === 0)) {
+        return undefined;
+      }
       const certificateAuthorityId = yield* toId(
         id,
         olds?.certificateAuthorityId,
@@ -852,7 +860,7 @@ export const CertificateAuthorityProvider = () =>
       );
       const { parent } = resolveParent(
         env.project,
-        olds?.caPool ?? output?.caPool ?? "",
+        typeof caPool === "string" ? caPool : "",
         olds?.location ?? output?.location ?? env.region,
       );
       const name = output?.name ?? resourceName(parent, certificateAuthorityId);

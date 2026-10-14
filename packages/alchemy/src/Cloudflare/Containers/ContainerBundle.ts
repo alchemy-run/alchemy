@@ -203,13 +203,13 @@ export const withImageLayers = <P extends AnyContainerApplicationProps>(
 
 /**
  * Under Durable Object scheduling a bundled `main` program has no
- * application environment, so it is published as one more named image,
- * `main`: the program, its bindings' image layers, and their plain env
- * baked in as `ENV`. Secrets are refused — they would be baked into an
- * image layer; pass them with `start({ env })` or keep them out with egress.
- * Other props pass through unchanged.
+ * application environment: its image is the Container's one image, so the
+ * program's bindings' image layers and plain env are baked into it (env as
+ * `ENV`). Secrets are refused — they would be baked into an image layer;
+ * pass them with `start({ env })` or keep them out with egress. Other props
+ * pass through unchanged.
  */
-export const withMainImage = <P extends AnyContainerApplicationProps>(
+export const withProgramImage = <P extends AnyContainerApplicationProps>(
   props: P,
   bindings: ReadonlyArray<{
     readonly data?: {
@@ -219,7 +219,7 @@ export const withMainImage = <P extends AnyContainerApplicationProps>(
     };
   }>,
   env: Record<string, string | Redacted.Redacted<string>>,
-): Effect.Effect<P, ContainerConfigurationError> =>
+): Effect.Effect<P & { imageLayers?: ImageLayer[] }, ContainerConfigurationError> =>
   Effect.gen(function* () {
     if (props.schedulingPolicy !== "durable_object" || props.main === undefined) return props;
     const secrets = Object.entries(env)
@@ -244,21 +244,8 @@ export const withMainImage = <P extends AnyContainerApplicationProps>(
           ]
         : [];
     const layered = withImageLayers(props, bindings);
-    const main = {
-      main: props.main,
-      image: props.image,
-      dockerfile: props.dockerfile,
-      runtime: props.runtime,
-      handler: props.handler,
-      external: props.external,
-      autoInstallExternals: props.autoInstallExternals,
-      build: props.build,
-      imageLayers: dedupeImageLayers([...envLayer, ...(layered.imageLayers ?? [])]),
-    } as AnyContainerApplicationProps;
-    return {
-      ...props,
-      images: { ...props.images, main },
-    };
+    const imageLayers = dedupeImageLayers([...envLayer, ...(layered.imageLayers ?? [])]);
+    return imageLayers.length > 0 ? { ...props, imageLayers } : props;
   });
 
 const baseEnvPreamble = (

@@ -699,7 +699,9 @@ export const Harness = (
         }
         generation = Number((yield* getMeta("generation")) ?? "0") + 1;
         yield* setMeta("generation", String(generation));
-        const image = startOptions?.image ?? (yield* sandbox.images).main;
+        const image =
+          startOptions?.image ??
+          (yield* sandbox.image.pipe(Effect.orElseSucceed((): string | undefined => undefined)));
         currentImage = image;
         const { image: _image, ...rest } = startOptions ?? {};
         const startFrom = (snapshotId: string) =>

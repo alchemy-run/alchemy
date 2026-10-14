@@ -15,7 +15,7 @@ export class ProgramBoxObject extends Cloudflare.DurableObject<ProgramBoxObject>
           Effect.flatMap((response) => response.text),
         );
       return {
-        // No image given: start() runs the bundled program (the `main` image).
+        // No image given: start() runs the Container's own image, the bundled program.
         writeAndRead: (text: string) =>
           box
             .start({ enableInternet: false })

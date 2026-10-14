@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
+import { declareDurableObjectApplication } from "@/Cloudflare/Containers/DurableObjectApplication.ts";
 import type { NativeAsyncObject } from "./async-worker.ts";
 
 /** Public half of a key generated once for these tests; the private key was discarded. */
@@ -11,20 +12,38 @@ export type ApplicationSettings = Pick<
   "ssh" | "authorizedKeys" | "observability"
 >;
 
-/** A Durable Object-managed application whose application-wide settings vary per deploy. */
-export const settingsStack = (settings: ApplicationSettings = {}) =>
+/**
+ * Two Containers backing one Durable Object class. Application-wide settings
+ * may be declared on either one; `tools` declares its own to probe conflicts.
+ */
+export const settingsStack = (
+  settings: ApplicationSettings = {},
+  tools: ApplicationSettings = {},
+) =>
   Effect.gen(function* () {
-    const sandbox = Cloudflare.Container<NativeAsyncObject>("SANDBOX", {
-      className: "NativeAsyncObject",
+    const shell = Cloudflare.Container("SettingsShell", {
       schedulingPolicy: "durable_object",
-      images: { shell: { image: "alpine:3.21" } },
+      image: "alpine:3.21",
       ...settings,
+    });
+    const toolbox = Cloudflare.Container("SettingsTools", {
+      schedulingPolicy: "durable_object",
+      image: "alpine:3.20",
+      ...tools,
     });
     const worker = yield* Cloudflare.Worker("SettingsWorker", {
       main: `${import.meta.dirname}/async-worker.ts`,
-      env: { SANDBOX: sandbox, IMAGE_REVISION: "settings" },
+      env: {
+        SANDBOX: Cloudflare.DurableObject<NativeAsyncObject>("NativeAsyncObject", {
+          containers: [shell, toolbox],
+        }),
+        IMAGE_REVISION: "settings",
+      },
     });
-    return { worker, application: yield* sandbox.Application };
+    return {
+      worker,
+      application: yield* declareDurableObjectApplication(worker, "NativeAsyncObject"),
+    };
   });
 
 /** A container application declared under one logical id with either scheduling policy. */
@@ -35,6 +54,6 @@ export const policyStack = (policy: "default" | "durable_object") =>
     }
     return yield* Cloudflare.Container("PolicySwitch", {
       schedulingPolicy: "durable_object",
-      images: { shell: { image: "alpine:3.21" } },
+      image: "alpine:3.21",
     }).Application;
   });

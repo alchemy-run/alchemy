@@ -13,7 +13,7 @@ const { test, beforeAll, afterAll } = Test.make({
   providers: AWS.providers(),
 });
 shareProvisionedNetwork({ beforeAll, afterAll });
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, verify, and destroy a provisioned Redis OSS replication group",
   (stack) =>
     Effect.gen(function* () {

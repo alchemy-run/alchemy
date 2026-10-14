@@ -14,7 +14,13 @@ import type {
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
-import { workerContainerBinding } from "./ContainerConfiguration.ts";
+import {
+  containerApplicationSettings,
+  durableObjectContainerBinding,
+  isDurableObjectContainerResource,
+  workerContainerBinding,
+} from "./ContainerConfiguration.ts";
+import { declareDurableObjectApplication } from "./DurableObjectApplication.ts";
 
 const toHttpUrl = (url: string) =>
   url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
@@ -50,16 +56,34 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
     | Effect.Effect<ContainerApplication<Shape>, never, Req>,
 ) {
   const namespace = yield* DurableObject;
+  const worker = yield* Worker;
 
   const container = Effect.isEffect(containerEff) ? yield* containerEff : containerEff;
+
+  if (isDurableObjectContainerResource(container)) {
+    // The class has one container application. Every Container bound to it
+    // declares the same resource (deduped by id), attaches it to the
+    // namespace, and adds its application-wide settings; the Worker merges
+    // each Container's image into the class's `containers` entry.
+    const application = yield* declareDurableObjectApplication(worker, namespace.name);
+    yield* application.bind`${container.LogicalId}`({
+      durableObjects: { namespaceId: namespace.namespaceId },
+      container: {
+        id: container.LogicalId,
+        settings: containerApplicationSettings(container),
+      },
+    });
+    yield* worker.bind`${namespace.name}:${container.LogicalId}`({
+      containers: [durableObjectContainerBinding(namespace.name, application, container)],
+    });
+    return;
+  }
 
   yield* container.bind`${namespace}`({
     durableObjects: {
       namespaceId: namespace.namespaceId,
     },
   });
-
-  const worker = yield* Worker;
 
   yield* worker.bind`${container.LogicalId}`({
     containers: [workerContainerBinding(namespace.name, container)],

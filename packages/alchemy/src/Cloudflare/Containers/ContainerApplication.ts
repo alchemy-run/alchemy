@@ -385,75 +385,11 @@ export interface ContainerSshConfiguration {
   port?: number;
 }
 
-/** An image published for a Durable Object to select when starting a container. */
-export type ContainerImageProps = {
-  /** Image publication and build-cache configuration. */
-  publish?: ContainerApplicationPropsBase["publish"];
-} & (
-  | {
-      /** Registry image to copy into Cloudflare's managed registry. */
-      image: string;
-      context?: never;
-      dockerfile?: never;
-    }
-  | {
-      image?: never;
-      /** Docker build context. Defaults to the current directory. */
-      context?: string;
-      /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
-      dockerfile?: string | InlineDockerfile;
-    }
-);
-
 /**
- * A container whose image and compute size are chosen by its Durable Object
- * at runtime. The policy is immutable: migrating an existing application
- * requires a new application and Durable Object namespace.
+ * Application-wide settings of a Durable Object class's container application.
+ * Every Container bound to the class may declare them; declarations must agree.
  */
-export interface DurableObjectContainerProps extends PlatformProps {
-  /** Application name. Alchemy generates a name when omitted. */
-  name?: string;
-  /** Exported Durable Object class, when bound on an async Worker's env. */
-  className?: string;
-  /** Select images and instance sizes in `ctx.container.start()`. */
-  schedulingPolicy: "durable_object";
-  /**
-   * Images exposed by name through `ctx.container.images`. Alchemy builds or
-   * copies each image into Cloudflare's registry and prepares its immutable
-   * digest before uploading the Worker. Omit to use the managed
-   * `cloudflare/debian-trixie` image or restore a filesystem snapshot.
-   * Supports up to 100 images, with names between 1 and 128 characters.
-   */
-  images?: Record<string, ContainerImageProps>;
-  /**
-   * Entrypoint of a bundled Effect program (`Container.make`), published as
-   * the named image `main` — the image `start()` uses when none is given.
-   * Its bindings' image layers and plain env are baked into that image;
-   * pass secrets with `start({ env })` or keep them out with egress.
-   */
-  main?: string;
-  /** Environment image for {@link main}'s generated Dockerfile. Exclusive with {@link dockerfile}. */
-  image?: string;
-  /** Inline environment Dockerfile for {@link main}. Exclusive with {@link image}. */
-  dockerfile?: InlineDockerfile;
-  /** Runtime for {@link main}. @default "bun" */
-  runtime?: "bun" | "node";
-  /** Exported handler in {@link main}. @default "default" */
-  handler?: string;
-  /** Packages {@link main}'s bundle leaves external. */
-  external?: string[];
-  /** Install {@link external} packages into the image. */
-  autoInstallExternals?: boolean;
-  /** Bundler configuration for {@link main}. */
-  build?: Bundle.BundleConfig;
-  /**
-   * Maximum wait for Cloudflare to prepare each published image, including API calls.
-   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
-   * Cancellation stops waiting; another deployment reuses the published registry image.
-   * Use an immutable source digest or change the image reference to refresh a named image.
-   * @default "30 minutes"
-   */
-  imagePreparationTimeout?: Duration.Input;
+export interface DurableObjectApplicationSettings {
   /**
    * SSH access to every instance of the application. Removing a previously
    * declared value disables SSH.
@@ -465,14 +401,83 @@ export interface DurableObjectContainerProps extends PlatformProps {
   observability?: Containers.ContainerApplicationObservability;
 }
 
+/**
+ * One image a Durable Object starts with `ctx.container.start()`.
+ *
+ * Cloudflare allows one container application per Durable Object class. Every
+ * `durable_object` Container bound to the class adds its image to that
+ * application, under the Container's id. Bind several Containers to start
+ * different images from the same class, one at a time. One Container may be
+ * bound to several classes.
+ *
+ * An Effect-native Durable Object binds a Container with `yield*`. An async
+ * Worker attaches it to a class with
+ * `Cloudflare.DurableObject(className, { containers })`.
+ *
+ * The policy is immutable: migrating an existing fleet application requires a
+ * new application and Durable Object namespace.
+ */
+export interface DurableObjectContainerProps
+  extends DurableObjectApplicationSettings, PlatformProps {
+  /** Select images and instance sizes in `ctx.container.start()`. */
+  schedulingPolicy: "durable_object";
+  /**
+   * Registry image to copy into Cloudflare's managed registry, e.g.
+   * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
+   * Omit every image source to contribute no image: `start()` then uses the
+   * managed `cloudflare/debian-trixie` image unless given another.
+   */
+  image?: string;
+  /**
+   * Docker build context. Setting `context` or `dockerfile` builds the image;
+   * `context` defaults to the current directory.
+   */
+  context?: string;
+  /**
+   * Dockerfile path or inline content. Defaults to the context's Dockerfile.
+   * With {@link main}, an inline environment Dockerfile for the program's
+   * generated Dockerfile (exclusive with {@link image}).
+   */
+  dockerfile?: string | InlineDockerfile;
+  /**
+   * Entrypoint of a bundled Effect program (`Container.make`). The program is
+   * this Container's image: Alchemy bundles it into a generated Dockerfile
+   * whose environment comes from {@link image} or an inline
+   * {@link dockerfile} (default: the runtime's base image). Its bindings'
+   * image layers and plain env are baked into the image; pass secrets with
+   * `start({ env })` or keep them out with egress.
+   */
+  main?: string;
+  /** Runtime for {@link main}. @default "bun" */
+  runtime?: "bun" | "node";
+  /** Exported handler in {@link main}. @default "default" */
+  handler?: string;
+  /** Packages {@link main}'s bundle leaves external. */
+  external?: string[];
+  /** Install {@link external} packages into the image. */
+  autoInstallExternals?: boolean;
+  /** Bundler configuration for {@link main}. */
+  build?: Bundle.BundleConfig;
+  /** Image publication and build-cache configuration. */
+  publish?: ContainerApplicationPropsBase["publish"];
+  /**
+   * Maximum wait for Cloudflare to prepare the published image, including API calls.
+   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
+   * Cancellation stops waiting; another deployment reuses the published registry image.
+   * Use an immutable source digest or change the image reference to refresh the image.
+   * @default "30 minutes"
+   */
+  imagePreparationTimeout?: Duration.Input;
+}
+
 /** A bundled Effect program (`Container.make`) scheduled by its Durable Object. */
 export type ProgramDurableObjectContainerProps = DurableObjectContainerProps & { main: string };
 
 /**
  * Fleet-scheduled applications select a deployment image through `main`
  * (bundled Effect program), `context`/`dockerfile`, or a pre-built `image`.
- * Durable Object-managed applications select images at runtime and can
- * publish named image sources through `images`.
+ * A Durable Object-managed Container publishes one image that its Durable
+ * Object selects at runtime.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
@@ -493,7 +498,6 @@ export interface AnyContainerApplicationProps extends Omit<
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
   ssh?: ContainerSshConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
-  images?: Record<string, ContainerImageProps>;
   imagePreparationTimeout?: Duration.Input;
   main?: string;
   /**
@@ -831,11 +835,15 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   {
     /**
      * Cloudflare-assigned unique identifier of the container application.
+     * Empty for a Durable Object-managed Container: the application belongs
+     * to the Durable Object class that binds it.
      */
     applicationId: string;
     /**
      * The resolved application name (either the provided `name` or the
      * deterministic physical name derived from the stack, stage, and logical ID).
+     * For a Durable Object-managed Container, the name of its default image
+     * repository.
      */
     applicationName: string;
     /**
@@ -870,12 +878,14 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     configuration: Partial<ContainerApplication.Configuration> &
       Containers.DurableObjectContainerConfiguration;
-    /** Application-wide logging for Durable Object-managed containers. */
+    /** Application-wide logging declared by a Durable Object-managed Container. */
     observability?: Containers.ContainerApplicationObservability;
-    /** Prepared, digest-pinned images keyed by their runtime names. */
-    images?: Record<string, string>;
-    /** Local image sources keyed by their runtime names. */
-    devImages?: Record<string, DevContainerImage>;
+    /**
+     * The prepared, digest-pinned image of a Durable Object-managed Container,
+     * or its local image key in `alchemy dev`. Unset when the Container
+     * declares no image source.
+     */
+    image?: string;
     /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.
@@ -902,7 +912,6 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       image: string;
       digest?: string;
       configuration?: string;
-      images?: Record<string, string>;
     };
     dev: DevContainerImage | undefined;
   },

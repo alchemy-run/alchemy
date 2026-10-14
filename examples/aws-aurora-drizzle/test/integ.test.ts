@@ -11,7 +11,7 @@ import * as Redacted from "effect/Redacted";
 import Stack from "../alchemy.run.ts";
 
 // Aurora provisioning/deletion is opt-in, as in the RDSData integration suite.
-describe.skipIf(!process.env.AWS_TEST_SLOW)("Drizzle + Aurora PostgreSQL", () => {
+describe.skipIf(!!process.env.FAST)("Drizzle + Aurora PostgreSQL", () => {
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     providers: AWS.providers(),
     state: Alchemy.localState(),

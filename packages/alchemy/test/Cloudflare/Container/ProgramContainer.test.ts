@@ -10,7 +10,7 @@ const HOOK_TIMEOUT = 600_000;
 
 /**
  * A bundled program (`Container.make`) under `schedulingPolicy:
- * "durable_object"`: published as the named image `main`, started by
+ * "durable_object"`: the program is the Container's one image, started by
  * `start()` without an image, and snapshotted and restored by its
  * Durable Object.
  */

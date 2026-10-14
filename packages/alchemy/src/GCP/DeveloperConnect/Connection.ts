@@ -374,6 +374,18 @@ export type Connection = Resource<
  * connection. `disabled`, labels, annotations, credentials, and
  * `gitProxyConfig` update in place.
  *
+ * Developer Connect stores OAuth tokens in Secret Manager as its service
+ * agent, so the project must grant that agent Secret Manager Admin once
+ * (the console does this for you; the API does not). Without it, create
+ * fails with `Permission 'secretmanager.secrets.create' denied`:
+ *
+ * ```sh
+ * gcloud beta services identity create --service=developerconnect.googleapis.com --project=PROJECT_ID
+ * gcloud projects add-iam-policy-binding PROJECT_ID \
+ *   --member=serviceAccount:service-PROJECT_NUMBER@gcp-sa-devconnect.iam.gserviceaccount.com \
+ *   --role=roles/secretmanager.admin
+ * ```
+ *
  * ### Creating a Connection
  * **Example:** Generated GitHub connection
  * ```typescript

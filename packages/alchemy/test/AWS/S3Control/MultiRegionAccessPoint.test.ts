@@ -41,7 +41,7 @@ test.provider(
 
 // Multi-Region Access Point provisioning is asynchronous and can consume the
 // entire 240s suite ceiling, so the full lifecycle remains explicitly gated.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and delete multi-region access point (slow, gated)",
   (stack) =>
     Effect.gen(function* () {

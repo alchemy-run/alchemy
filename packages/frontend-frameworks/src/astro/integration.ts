@@ -165,7 +165,9 @@ const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT = sessionDrivers.cloudflareKVBindi
 
 type SessionConfigLike =
   | {
-      driver?: string | { entrypoint: string | { toString(): string } } | undefined;
+      // Astro types `entrypoint` as optional `any` (it comes from a
+      // `z.instanceof(URL)` schema), though its config validation requires it.
+      driver?: string | { entrypoint?: unknown } | undefined;
       cookie?: unknown;
       ttl?: unknown;
     }
@@ -179,8 +181,10 @@ export const usesCloudflareKVSessionDriver = (session: SessionConfigLike): boole
   if (typeof driver === "string") {
     return driver === "cloudflareKVBinding" || driver === "cloudflare-kv-binding";
   }
-  const entrypoint =
-    typeof driver.entrypoint === "string" ? driver.entrypoint : driver.entrypoint.toString();
+  if (driver.entrypoint == null) {
+    return false;
+  }
+  const entrypoint = String(driver.entrypoint);
   return (
     entrypoint === CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT ||
     entrypoint.endsWith("cloudflare-kv-binding")

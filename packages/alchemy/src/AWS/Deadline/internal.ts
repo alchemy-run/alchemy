@@ -306,13 +306,15 @@ export const retryWhileFarmSettling = <A, E extends { readonly _tag: string }, R
 
 /**
  * A freshly-created IAM role may not have propagated when Deadline validates
- * it — createFleet/createMonitor surface this as AccessDeniedException.
- * Bounded retry through the propagation window (~60s).
+ * it — createMonitor surfaces this as AccessDeniedException, createFleet /
+ * updateFleet as the typed `DeadlineRoleNotAssumable` ("Could not
+ * sts:AssumeRole ... check its trust policy"). Bounded retry through the
+ * propagation window (~60s).
  */
 export const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) => e._tag === "AccessDeniedException",
+    while: (e) => e._tag === "AccessDeniedException" || e._tag === "DeadlineRoleNotAssumable",
     schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });

@@ -51,6 +51,7 @@ import {
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
@@ -532,8 +533,10 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
         Effect.orElseSucceed(() => ""),
       );
 
-// Railway builds can outlast a 50-second poll window. Allow up to 90 seconds
-// while bounding both the retry count and time spent in API requests.
+// Railway builds routinely take 60–90s and exceed 90s when its build queue is
+// busy (observed 2026-10: a small bundled service stuck BUILDING past 90s), so
+// a 90s cap failed healthy deploys. Allow up to 150 seconds while bounding
+// both the retry count and time spent in API requests.
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
     const instance = yield* getInstance(environmentId, serviceId);
@@ -550,11 +553,11 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 15,
+      schedule: Schedule.spaced("10 seconds"),
     }),
     Effect.timeoutOrElse({
-      duration: "90 seconds",
+      duration: "150 seconds",
       orElse: () => Effect.fail(new ServiceDeployPending({ serviceId, status: "pending" })),
     }),
   );
@@ -635,13 +638,13 @@ const waitForDeploymentById = (input: {
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 15,
+      schedule: Schedule.spaced("10 seconds"),
     }),
     // Surface the budget as a pending deploy so the final check below still
     // reports a ready instance, or a failed deploy with its logs.
     Effect.timeoutOrElse({
-      duration: "90 seconds",
+      duration: "150 seconds",
       orElse: () =>
         Effect.fail(new ServiceDeployPending({ serviceId: input.serviceId, status: "pending" })),
     }),
@@ -774,7 +777,39 @@ const serviceInstanceDeploy = Query.fn((environmentId: string, serviceId: string
   Railway.serviceInstanceDeployV2({ environmentId, serviceId }),
 );
 
-const serviceDelete = Query.fn((id: string) => Railway.serviceDelete({ id }));
+// Railway keeps one service per project with an instance per environment.
+// Scoping by `environmentId` removes only that instance; Railway drops the
+// service once no instances remain. Omitting it deletes every environment.
+const environmentPatchCommit = Query.fn(
+  (input: { environmentId: string; commitMessage: string; patch: unknown }) =>
+    Railway.environmentPatchCommit(input),
+);
+
+// Railway does not fan an existing service out to other environments, so a
+// Service attaching to one in a new environment adds its instance through
+// the environment config, as Railway's own IaC does.
+const ensureInstance = (input: {
+  environmentId: string;
+  serviceId: string;
+  source: { image: string } | { repo: string };
+}) =>
+  Effect.gen(function* () {
+    const existing = yield* getInstance(input.environmentId, input.serviceId);
+    if (existing !== undefined) return existing;
+    yield* withEnvironmentConfigLock(
+      input.environmentId,
+      environmentPatchCommit({
+        environmentId: input.environmentId,
+        commitMessage: "Add service instance",
+        patch: { services: { [input.serviceId]: { source: input.source } } },
+      }),
+    );
+    return yield* waitForInstance(input.environmentId, input.serviceId);
+  });
+
+const serviceDelete = Query.fn((id: string, environmentId: string | undefined) =>
+  Railway.serviceDelete({ id, environmentId }),
+);
 
 const toAttrs = (input: {
   service: CloudService;
@@ -1081,14 +1116,17 @@ export const ServiceProvider = () =>
             current = yield* findByName(projectId, name);
           }
 
+          const initialSource =
+            sourceRepo !== undefined
+              ? { repo: sourceRepo }
+              : { image: sourceImage ?? "hashicorp/http-echo" };
+          const existed = current !== undefined;
           if (current === undefined) {
             const created = yield* serviceCreate({
               projectId,
               environmentId,
               name,
-              ...(sourceRepo !== undefined
-                ? { source: { repo: sourceRepo } }
-                : { source: { image: sourceImage ?? "hashicorp/http-echo" } }),
+              source: initialSource,
               ...(sourceRepo !== undefined && props.branch !== undefined
                 ? { branch: props.branch }
                 : {}),
@@ -1106,10 +1144,16 @@ export const ServiceProvider = () =>
 
           // The service instance must exist in this environment before a
           // domain can be generated (`railway domain` / Terraform both
-          // operate on a live service instance). Extra non-fork
-          // environments lag — `serviceCreate` fans out to every
-          // non-fork env and `serviceInstance` 404s until it lands.
-          let instance = yield* waitForInstance(environmentId, current.id);
+          // operate on a live service instance). A fresh `serviceCreate`
+          // instance lands asynchronously; an existing service may have
+          // no instance in this environment yet.
+          let instance = existed
+            ? yield* ensureInstance({
+                environmentId,
+                serviceId: current.id,
+                source: initialSource,
+              })
+            : yield* waitForInstance(environmentId, current.id);
 
           const publicDomain = props.publicDomain !== false;
           let domain: ServiceDomainRecord | undefined;
@@ -1345,13 +1389,20 @@ export const ServiceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const serviceId = output.serviceId;
           if (serviceId.length === 0) return;
-          yield* serviceDelete(serviceId).pipe(
+          const environmentId = output.environmentId.length > 0 ? output.environmentId : undefined;
+          yield* serviceDelete(serviceId, environmentId).pipe(
             Effect.catchTag("RailwayNotFound", () => Effect.void),
           );
+          // Other environments may still hold instances of this service, so
+          // wait on this environment's instance rather than the service.
           yield* waitUntilDeleted(
             "Service",
             serviceId,
-            getById(serviceId).pipe(Effect.map((service) => service === undefined)),
+            environmentId !== undefined
+              ? getInstance(environmentId, serviceId).pipe(
+                  Effect.map((instance) => instance === undefined),
+                )
+              : getById(serviceId).pipe(Effect.map((service) => service === undefined)),
           );
         }),
       });

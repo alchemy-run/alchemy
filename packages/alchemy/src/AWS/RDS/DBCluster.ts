@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
+import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface DBClusterProps {
@@ -867,6 +868,11 @@ export const DBClusterProvider = () =>
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));
+          // RDS creates `/aws/rds/cluster/<id>/<logType>` for every
+          // `enableCloudwatchLogsExports` type and never deletes them.
+          yield* reapLogGroupsByPrefix(
+            `/aws/rds/cluster/${output.dbClusterIdentifier.toLowerCase()}/`,
+          );
         }),
       };
     }),
