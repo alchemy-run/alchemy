@@ -365,7 +365,8 @@ export interface ViewKey<Name extends string> {
  * import { Account } from "./Account.ts";
  *
  * export class StatementLine extends Domain.Event("StatementLine", {
- *   data: { kind: Schema.Literals(["deposit", "withdrawal"]), amount: Schema.Int },
+ *   kind: Schema.Literals(["deposit", "withdrawal"]),
+ *   amount: Schema.Int,
  * }) {}
  *
  * export class Statement extends Domain.View("Statement", {

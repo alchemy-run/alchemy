@@ -5,7 +5,8 @@ import { Username } from "./Username.ts";
 
 /** The registration failed; the customer may register again. */
 export class RegistrationRejected extends Domain.Event("RegistrationRejected", {
-  data: { username: Username, reason: Schema.String },
+  username: Username,
+  reason: Schema.String,
 }) {}
 
 /** The username could not be claimed. Reports an outcome, so it never rejects. */

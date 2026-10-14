@@ -197,7 +197,8 @@ import * as Schema from "effect/Schema";
 import { TransferId } from "./TransferId.ts";
 
 export class TransferFailed extends Domain.Event("TransferFailed", {
-  data: { transferId: TransferId, reason: Schema.String },
+  transferId: TransferId,
+  reason: Schema.String,
 }) {}
 
 /** Reports an outcome, so it never rejects. */

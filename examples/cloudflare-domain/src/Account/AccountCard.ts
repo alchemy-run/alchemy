@@ -10,12 +10,10 @@ import { NotOwner } from "./NotOwner.ts";
 
 /** What an account's card shows, as of one change. */
 export class CardChanged extends Domain.Event("CardChanged", {
-  data: {
-    customerId: CustomerId,
-    owner: Schema.String,
-    balance: Cents,
-    frozen: Schema.Boolean,
-  },
+  customerId: CustomerId,
+  owner: Schema.String,
+  balance: Cents,
+  frozen: Schema.Boolean,
 }) {}
 
 /**

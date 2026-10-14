@@ -9,7 +9,9 @@ import { NotOpen } from "./NotOpen.ts";
 import { NotOwner } from "./NotOwner.ts";
 
 export class TransferDebited extends Domain.Event("TransferDebited", {
-  data: { transferId: TransferId, amount: Cents, balanceAfter: Cents },
+  transferId: TransferId,
+  amount: Cents,
+  balanceAfter: Cents,
 }) {}
 
 /**

@@ -129,7 +129,8 @@ export interface StreamKey<Name extends string> {
  * import { Account } from "./Account.ts";
  *
  * export class CardChanged extends Domain.Event("CardChanged", {
- *   data: { owner: Schema.String, balance: Schema.Int },
+ *   owner: Schema.String,
+ *   balance: Schema.Int,
  * }) {}
  *
  * export class AccountCard extends Domain.Stream("AccountCard", {

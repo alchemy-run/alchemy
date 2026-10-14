@@ -9,7 +9,8 @@ export const REVIEW_THRESHOLD = 50_000;
 
 /** An account's money out today crossed {@link REVIEW_THRESHOLD}. */
 export class DailyOutflowExceeded extends Domain.Event("DailyOutflowExceeded", {
-  data: { day: Schema.String, total: Cents },
+  day: Schema.String,
+  total: Cents,
 }) {}
 
 const add = (

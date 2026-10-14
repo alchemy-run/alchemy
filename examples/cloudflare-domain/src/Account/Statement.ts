@@ -10,18 +10,16 @@ import { NotOwner } from "./NotOwner.ts";
 
 /** One movement of money on an account. */
 export class StatementLine extends Domain.Event("StatementLine", {
-  data: {
-    kind: Schema.Literals([
-      "deposit",
-      "withdrawal",
-      "transfer-in",
-      "transfer-out",
-      "refund",
-      "settlement",
-    ]),
-    amount: Cents,
-    balance: Cents,
-  },
+  kind: Schema.Literals([
+    "deposit",
+    "withdrawal",
+    "transfer-in",
+    "transfer-out",
+    "refund",
+    "settlement",
+  ]),
+  amount: Cents,
+  balance: Cents,
 }) {}
 
 const line =

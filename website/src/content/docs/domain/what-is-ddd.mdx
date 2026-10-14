@@ -75,7 +75,8 @@ Facts can't be refused or undone. If a deposit was a mistake, the bank doesn't e
 
 ```typescript title="src/WithdrawMoney.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 ```
 

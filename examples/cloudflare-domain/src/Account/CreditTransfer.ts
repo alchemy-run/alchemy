@@ -5,7 +5,9 @@ import { AccountId } from "./AccountId.ts";
 import { NotOpen } from "./NotOpen.ts";
 
 export class TransferCredited extends Domain.Event("TransferCredited", {
-  data: { transferId: TransferId, amount: Cents, balanceAfter: Cents },
+  transferId: TransferId,
+  amount: Cents,
+  balanceAfter: Cents,
 }) {}
 
 /** Pay a transfer's amount into the destination account. */

@@ -4,7 +4,8 @@ import { CustomerId } from "./CustomerId.ts";
 import { Username } from "./Username.ts";
 
 export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
-  data: { name: Schema.String, username: Username },
+  name: Schema.String,
+  username: Username,
 }) {}
 
 /** The username was claimed. Reports an outcome, so it never rejects. */

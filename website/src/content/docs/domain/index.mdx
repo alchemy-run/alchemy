@@ -31,7 +31,8 @@ A command declares what it asks for and every way it can end:
 
 ```typescript title="src/DepositMoney.ts"
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 
 export class DepositMoney extends Domain.Command("DepositMoney", {

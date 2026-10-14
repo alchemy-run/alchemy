@@ -7,7 +7,8 @@
  * import * as Domain from "alchemy/Domain";
  *
  * export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
- *   data: { amount: Cents, balanceAfter: Cents },
+ *   amount: Cents,
+ *   balanceAfter: Cents,
  * }) {}
  * ```
  *

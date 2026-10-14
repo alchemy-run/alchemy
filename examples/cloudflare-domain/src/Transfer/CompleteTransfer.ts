@@ -2,7 +2,7 @@ import * as Domain from "alchemy/Domain";
 import { TransferId } from "./TransferId.ts";
 
 export class TransferCompleted extends Domain.Event("TransferCompleted", {
-  data: { transferId: TransferId },
+  transferId: TransferId,
 }) {}
 
 /** Reports an outcome, so it never rejects. */

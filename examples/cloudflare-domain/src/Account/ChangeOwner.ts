@@ -9,7 +9,9 @@ import { NotOpen } from "./NotOpen.ts";
 export class NotPermitted extends Domain.Rejection("NotPermitted") {}
 
 export class OwnerChanged extends Domain.Event("OwnerChanged", {
-  data: { previous: CustomerId, customerId: CustomerId, by: Actor },
+  previous: CustomerId,
+  customerId: CustomerId,
+  by: Actor,
 }) {}
 
 /** Reassign an account to another customer. */

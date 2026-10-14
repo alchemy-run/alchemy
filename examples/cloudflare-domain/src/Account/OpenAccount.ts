@@ -6,7 +6,8 @@ import { AccountId } from "./AccountId.ts";
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 
 export class AccountOpened extends Domain.Event("AccountOpened", {
-  data: { customerId: CustomerId, owner: Schema.String },
+  customerId: CustomerId,
+  owner: Schema.String,
 }) {}
 
 /** Open an account for a customer. Sent by `MainAccountProvisioning`. */

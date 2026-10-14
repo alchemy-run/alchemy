@@ -16,7 +16,8 @@ import { Story } from "@/Domain/Story.ts";
 // ---------------------------------------------------------------- a wallet domain
 
 class Deposited extends Domain.Event("Deposited", {
-  data: { amount: Schema.Number, balance: Schema.Number },
+  amount: Schema.Number,
+  balance: Schema.Number,
 }) {}
 class Deposit extends Domain.Command("Deposit", {
   target: Schema.String,
@@ -37,7 +38,9 @@ class Wallet extends Domain.Aggregate("Wallet", {
 }) {}
 
 class Sent extends Domain.Event("Sent", {
-  data: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+  from: Schema.String,
+  to: Schema.String,
+  amount: Schema.Number,
 }) {}
 class Send extends Domain.Command("Send", {
   target: Schema.String,
@@ -138,7 +141,8 @@ const ViewerSessionLive = Layer.succeed(ViewerSession, (effect, { headers }) =>
 );
 
 class BalanceChanged extends Domain.Event("BalanceChanged", {
-  data: { owner: Schema.String, balance: Schema.Number },
+  owner: Schema.String,
+  balance: Schema.Number,
 }) {}
 
 class WalletCard extends Domain.Stream("WalletCard", {
@@ -173,7 +177,7 @@ const WalletCardsLive = WalletCards.toLayer(
 
 // ---------------------------------------------------------------- a keyed policy over two sources
 
-class Flagged extends Domain.Event("Flagged", { data: { reason: Schema.String } }) {}
+class Flagged extends Domain.Event("Flagged", { reason: Schema.String }) {}
 class Flag extends Domain.Command("Flag", {
   target: Schema.String,
   input: { reason: Schema.String },

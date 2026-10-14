@@ -29,11 +29,13 @@ A command, the events it records and the rejections it returns are one unit: you
 
 ```typescript title="src/WithdrawMoney.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 
 export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  data: { balance: Schema.Int, requested: Schema.Int },
+  balance: Schema.Int,
+  requested: Schema.Int,
 }) {}
 ```
 
@@ -80,7 +82,8 @@ A refusal is a `Domain.Rejection`, a typed error that can carry data about why.
 
 ```typescript title="src/WithdrawMoney.ts"
 export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  data: { balance: Schema.Int, requested: Schema.Int },
+  balance: Schema.Int,
+  requested: Schema.Int,
 }) {}
 ```
 

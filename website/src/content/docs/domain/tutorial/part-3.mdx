@@ -27,7 +27,7 @@ import * as Schema from "effect/Schema";
 import { CustomerId } from "./CustomerId.ts";
 
 export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
-  data: { name: Schema.String },
+  name: Schema.String,
 }) {}
 
 export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}

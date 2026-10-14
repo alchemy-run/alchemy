@@ -12,7 +12,8 @@ export class NotTheCustomer extends Domain.Rejection("NotTheCustomer") {}
 
 /** Registration waits for `UsernameReservation` to claim the username. */
 export class RegistrationRequested extends Domain.Event("RegistrationRequested", {
-  data: { name: Schema.String, username: Username },
+  name: Schema.String,
+  username: Username,
 }) {}
 
 /**

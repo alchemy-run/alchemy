@@ -35,7 +35,8 @@ export interface Any extends Schema.Top {
  * import * as Schema from "effect/Schema";
  *
  * export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
- *   data: { amount: Schema.Int, balanceAfter: Schema.Int },
+ *   amount: Schema.Int,
+ *   balanceAfter: Schema.Int,
  * }) {}
  * ```
  *
@@ -50,9 +51,8 @@ export interface Any extends Schema.Top {
  */
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,
-  options?: { readonly data?: F },
+  fields: F = {} as F,
 ): EventClass<Tag, F> => {
-  const fields = (options?.data ?? {}) as F;
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base: new (...args: any[]) => object = Schema.TaggedClass<Instance<Tag, F>>(tag)(
     tag,

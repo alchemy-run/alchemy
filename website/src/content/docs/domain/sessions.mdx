@@ -174,9 +174,7 @@ import { Session } from "../Session.ts";
 import { AccountId } from "./AccountId.ts";
 import { NotOwner } from "./NotOwner.ts";
 
-export class NicknameSet extends Domain.Event("NicknameSet", {
-  data: { nickname: Schema.String },
-}) {}
+export class NicknameSet extends Domain.Event("NicknameSet", { nickname: Schema.String }) {}
 
 export class SetNickname extends Domain.Command("SetNickname", {
   target: AccountId,

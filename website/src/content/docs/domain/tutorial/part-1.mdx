@@ -34,9 +34,7 @@ A branded id keeps an account id from being mixed up with any other string. The 
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 
-export class AccountOpened extends Domain.Event("AccountOpened", {
-  data: { owner: Schema.String },
-}) {}
+export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema.String }) {}
 ```
 
 An event is a fact, named in the past tense. Everything the account knows will come from its events.
@@ -47,8 +45,8 @@ Each command gets a file named after it, holding the command, the events it reco
 
 ```diff lang="typescript"
 // src/OpenAccount.ts
-  data: { owner: Schema.String },
-}) {}
+
+export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema.String }) {}
 +
 +export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 ```
@@ -63,11 +61,7 @@ import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 +import { AccountId } from "./AccountId.ts";
 
-export class AccountOpened extends Domain.Event("AccountOpened", {
-```
-
-```diff lang="typescript"
-// src/OpenAccount.ts
+export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema.String }) {}
 
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 +
@@ -172,7 +166,8 @@ import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 ```
 
@@ -199,7 +194,11 @@ import * as Schema from "effect/Schema";
 +import { NotOpen } from "./NotOpen.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+```
+
+```diff lang="typescript"
+// src/DepositMoney.ts
+  balanceAfter: Schema.Int,
 }) {}
 +
 +export class DepositMoney extends Domain.Command("DepositMoney", {
@@ -305,11 +304,13 @@ import { AccountId } from "./AccountId.ts";
 import { NotOpen } from "./NotOpen.ts";
 
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 
 export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  data: { balance: Schema.Int, requested: Schema.Int },
+  balance: Schema.Int,
+  requested: Schema.Int,
 }) {}
 
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {

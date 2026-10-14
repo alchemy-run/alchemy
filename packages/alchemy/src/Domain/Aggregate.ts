@@ -331,11 +331,13 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
  *
  * export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
- *   data: { amount: Schema.Int, balanceAfter: Schema.Int },
+ *   amount: Schema.Int,
+ *   balanceAfter: Schema.Int,
  * }) {}
  *
  * export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
- *   data: { balance: Schema.Int, requested: Schema.Int },
+ *   balance: Schema.Int,
+ *   requested: Schema.Int,
  * }) {}
  *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {

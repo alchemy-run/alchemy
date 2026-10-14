@@ -7,7 +7,8 @@ import { NotOpen } from "./NotOpen.ts";
 import { NotOwner } from "./NotOwner.ts";
 
 export class AccountFrozen extends Domain.Event("AccountFrozen", {
-  data: { reason: Schema.String, by: Actor },
+  reason: Schema.String,
+  by: Actor,
 }) {}
 
 /** Stop money leaving an account. Freezing a frozen account records nothing. */

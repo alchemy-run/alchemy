@@ -15,12 +15,10 @@ A stream names its key and the events its entries may be. The bank keeps a card 
 
 ```typescript title="src/Account/AccountCard.ts"
 export class CardChanged extends Domain.Event("CardChanged", {
-  data: {
-    customerId: CustomerId,
-    owner: Schema.String,
-    balance: Cents,
-    frozen: Schema.Boolean,
-  },
+  customerId: CustomerId,
+  owner: Schema.String,
+  balance: Cents,
+  frozen: Schema.Boolean,
 }) {}
 ```
 

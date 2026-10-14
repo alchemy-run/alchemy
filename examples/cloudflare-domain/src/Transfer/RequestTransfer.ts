@@ -15,15 +15,13 @@ export class AlreadyRequested extends Domain.Rejection("AlreadyRequested") {}
 export class SameAccount extends Domain.Rejection("SameAccount") {}
 
 export class TransferRequested extends Domain.Event("TransferRequested", {
-  data: {
-    transferId: TransferId,
-    from: AccountId,
-    to: AccountId,
-    amount: Cents,
-    requestedBy: Actor,
-    /** At or above {@link APPROVAL_THRESHOLD}: execution waits for `ApproveTransfer`. */
-    needsApproval: Schema.Boolean,
-  },
+  transferId: TransferId,
+  from: AccountId,
+  to: AccountId,
+  amount: Cents,
+  requestedBy: Actor,
+  /** At or above {@link APPROVAL_THRESHOLD}: execution waits for `ApproveTransfer`. */
+  needsApproval: Schema.Boolean,
 }) {}
 
 /**

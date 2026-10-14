@@ -13,11 +13,9 @@ import { TransferId } from "./TransferId.ts";
 
 /** Money moved in or out of an account by a transfer. */
 export class TransferMoved extends Domain.Event("TransferMoved", {
-  data: {
-    transferId: TransferId,
-    amount: Cents,
-    direction: Schema.Literals(["in", "out"]),
-  },
+  transferId: TransferId,
+  amount: Cents,
+  direction: Schema.Literals(["in", "out"]),
 }) {}
 
 const moved = (direction: "in" | "out") => (e: TransferRequested) =>

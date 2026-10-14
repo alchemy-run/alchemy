@@ -12,11 +12,12 @@ import { NotOwner } from "./NotOwner.ts";
 export const DAILY_LIMIT = 100_000;
 
 export class DailyLimitExceeded extends Domain.Rejection("DailyLimitExceeded", {
-  data: { remaining: Cents },
+  remaining: Cents,
 }) {}
 
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Cents, balanceAfter: Cents },
+  amount: Cents,
+  balanceAfter: Cents,
 }) {}
 
 /** Take money out of an account, within the balance and the daily limit. */

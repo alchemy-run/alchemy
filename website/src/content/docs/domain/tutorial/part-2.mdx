@@ -80,11 +80,9 @@ import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 
 export class StatementLine extends Domain.Event("StatementLine", {
-  data: {
-    kind: Schema.Literals(["deposit", "withdrawal"]),
-    amount: Schema.Int,
-    balance: Schema.Int,
-  },
+  kind: Schema.Literals(["deposit", "withdrawal"]),
+  amount: Schema.Int,
+  balance: Schema.Int,
 }) {}
 ```
 
@@ -103,7 +101,7 @@ export class StatementLine extends Domain.Event("StatementLine", {
 
 ```diff lang="typescript"
 // src/Statement.ts
-  },
+  balance: Schema.Int,
 }) {}
 +
 +export class Statement extends Domain.View("Statement", {

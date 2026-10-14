@@ -13,10 +13,11 @@ import { Story } from "@/Domain/Story.ts";
 
 // A tiny counter domain exercising every concept the story runner supports.
 class Incremented extends Domain.Event("Incremented", {
-  data: { by: Schema.Number, total: Schema.Number },
+  by: Schema.Number,
+  total: Schema.Number,
 }) {}
 class Capped extends Domain.Event("Capped") {}
-class TooBig extends Domain.Rejection("TooBig", { data: { max: Schema.Number } }) {}
+class TooBig extends Domain.Rejection("TooBig", { max: Schema.Number }) {}
 // Who is operating a counter: provided by middleware, read by `decide`.
 class Operator extends Domain.RequestContext<Operator>()("Test/Operator", Schema.String) {}
 class Unauthenticated extends Domain.Rejection("Unauthenticated") {}
@@ -31,7 +32,7 @@ const OperatorSessionLive = Layer.succeed(OperatorSession, (effect, { headers })
   }),
 );
 
-class WasReset extends Domain.Event("WasReset", { data: { by: Schema.String } }) {}
+class WasReset extends Domain.Event("WasReset", { by: Schema.String }) {}
 class NotAnOperator extends Domain.Rejection("NotAnOperator") {}
 class ResetCounter extends Domain.Command("ResetCounter", {
   target: Schema.String,
@@ -107,7 +108,7 @@ class Totals extends Domain.View("Totals", {
   validate: () => notGuest(),
 }) {}
 
-class Logged extends Domain.Event("Logged", { data: { by: Schema.Number } }) {}
+class Logged extends Domain.Event("Logged", { by: Schema.Number }) {}
 
 // A view without state that maps events.
 class History extends Domain.View("History", {
@@ -120,7 +121,9 @@ class History extends Domain.View("History", {
 // Moves between counters exercise named routes, view-to-view state and a
 // policy listening to a view.
 class Moved extends Domain.Event("Moved", {
-  data: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+  from: Schema.String,
+  to: Schema.String,
+  amount: Schema.Number,
 }) {}
 class MakeMove extends Domain.Command("MakeMove", {
   target: Schema.String,
@@ -137,7 +140,8 @@ class Move extends Domain.Aggregate("Move", {
 }) {}
 
 class Flowed extends Domain.Event("Flowed", {
-  data: { direction: Schema.Literals(["in", "out"]), amount: Schema.Number },
+  direction: Schema.Literals(["in", "out"]),
+  amount: Schema.Number,
 }) {}
 
 class Flows extends Domain.View("Flows", {

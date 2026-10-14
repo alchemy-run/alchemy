@@ -15,11 +15,12 @@ An event has a name and, usually, some data.
 
 ```typescript title="src/WithdrawMoney.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  data: { amount: Schema.Int, balanceAfter: Schema.Int },
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
 }) {}
 ```
 
-Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data leaves `data` out: `Domain.Event("AccountClosed")`.
+Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data has no fields: `Domain.Event("AccountClosed")`.
 
 ## Only decide creates events
 
@@ -41,7 +42,8 @@ The same goes for who did something and why. When a support agent freezes an acc
 
 ```typescript title="src/Account/FreezeAccount.ts"
 export class AccountFrozen extends Domain.Event("AccountFrozen", {
-  data: { reason: Schema.String, by: Actor },
+  reason: Schema.String,
+  by: Actor,
 }) {}
 ```
 

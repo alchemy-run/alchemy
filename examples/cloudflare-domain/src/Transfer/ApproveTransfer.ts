@@ -11,14 +11,12 @@ export class NotAwaitingApproval extends Domain.Rejection("NotAwaitingApproval")
 
 /** Carries the transfer so `TransferExecution` can carry it out. */
 export class TransferApproved extends Domain.Event("TransferApproved", {
-  data: {
-    transferId: TransferId,
-    from: AccountId,
-    to: AccountId,
-    amount: Cents,
-    requestedBy: Actor,
-    approvedBy: Actor,
-  },
+  transferId: TransferId,
+  from: AccountId,
+  to: AccountId,
+  amount: Cents,
+  requestedBy: Actor,
+  approvedBy: Actor,
 }) {}
 
 /** A support agent approves a large transfer before its approval window closes. */

@@ -30,7 +30,8 @@ export interface Any extends Schema.Top {
  * export class NotOpen extends Domain.Rejection("NotOpen") {}
  *
  * export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
- *   data: { balance: Schema.Int, requested: Schema.Int },
+ *   balance: Schema.Int,
+ *   requested: Schema.Int,
  * }) {}
  * ```
  *
@@ -38,9 +39,8 @@ export interface Any extends Schema.Top {
  */
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,
-  options?: { readonly data?: F },
+  fields: F = {} as F,
 ): RejectionClass<Tag, F> => {
-  const fields = (options?.data ?? {}) as F;
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base: new (...args: any[]) => object = Schema.TaggedError<Instance<Tag, F>>(tag)(
     tag,

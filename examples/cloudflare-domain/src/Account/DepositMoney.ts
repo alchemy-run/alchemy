@@ -6,7 +6,8 @@ import { NotOpen } from "./NotOpen.ts";
 import { NotOwner } from "./NotOwner.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-  data: { amount: Cents, balanceAfter: Cents },
+  amount: Cents,
+  balanceAfter: Cents,
 }) {}
 
 /** Pay money into an account. */

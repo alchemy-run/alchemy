@@ -6,9 +6,7 @@ import { NotOpen } from "./NotOpen.ts";
 import { NotOwner } from "./NotOwner.ts";
 
 /** Only an empty account can be closed. */
-export class BalanceNotZero extends Domain.Rejection("BalanceNotZero", {
-  data: { balance: Cents },
-}) {}
+export class BalanceNotZero extends Domain.Rejection("BalanceNotZero", { balance: Cents }) {}
 
 export class AccountClosed extends Domain.Event("AccountClosed") {}
 
