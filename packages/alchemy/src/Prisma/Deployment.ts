@@ -43,7 +43,7 @@ import {
   unresolvedAppIdOf,
 } from "./Refs.ts";
 
-export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 256 * 1024 * 1024;
+export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 768 * 1024 * 1024;
 
 export interface DeploymentProps {
   /**

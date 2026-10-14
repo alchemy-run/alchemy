@@ -19,10 +19,10 @@ import {
 
 export const COMPUTE_MANIFEST_VERSION = "1";
 
-const MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
+const MAX_UNCOMPRESSED_BYTES = 768 * 1024 * 1024;
 const MAX_FILE_BYTES = 128 * 1024 * 1024;
 const MAX_ENTRIES = 50_000;
-const MAX_COMPRESSED_BYTES = 256 * 1024 * 1024;
+const MAX_COMPRESSED_BYTES = 768 * 1024 * 1024;
 
 export interface ComputeArchiveOptions {
   /**
@@ -51,9 +51,9 @@ export interface ComputeArchiveOptions {
   requiredFiles?: readonly string[];
   /**
    * Maximum uncompressed bytes accepted across all archived files. Values
-   * above the provider's 256 MiB hard ceiling are rejected.
+   * above the provider's 768 MiB hard ceiling are rejected.
    *
-   * @default 268435456 (256 MiB)
+   * @default 805306368 (768 MiB)
    */
   maxUncompressedBytes?: number;
   /**
