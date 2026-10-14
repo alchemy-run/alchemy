@@ -136,7 +136,7 @@ Being on an Api doesn't mean anyone may use an entry for anything. Each entry st
 
 ## Serve it
 
-An Api is served from a Worker. `httpEffect` turns the Api into an HTTP handler, and the Worker returns it as its `fetch`. This is the tutorial's bank:
+An Api is served from a Worker. The Api class is an Effect: `yield* BankApi` gives you its `fetch`, and the Worker returns it as its own. This is the tutorial's bank:
 
 ```typescript title="src/BankWorker.ts"
 const BankLive = SessionLive.pipe(
@@ -148,8 +148,8 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const api = yield* BankApi.httpEffect;
-    return { fetch: api };
+    const api = yield* BankApi;
+    return { fetch: api.fetch };
   }).pipe(Effect.provide(BankLive)),
 ) {}
 ```
@@ -161,8 +161,8 @@ Commands, `get`, `peek` and `list` are plain requests. Live reads, `watch` and `
 A Worker can serve several Apis by routing on the path. The example bank serves customers on `/api` and support agents on `/support`:
 
 ```typescript title="src/BankWorker.ts"
-if (path.startsWith("/api")) return yield* customerApi;
-if (path.startsWith("/support")) return yield* supportApi;
+if (path.startsWith("/api")) return yield* customerApi.fetch;
+if (path.startsWith("/support")) return yield* supportApi.fetch;
 ```
 
 See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted.

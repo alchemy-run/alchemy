@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Exit from "effect/Exit";
 import type * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
@@ -205,10 +206,21 @@ export interface ClientKey<Name extends string> {
   readonly "~alchemy/Domain/Api/Client": Name;
 }
 
+/** What `yield* MyApi` gives a Worker: the Api served over HTTP. */
+export interface ApiServer {
+  /** Use as the Worker's `fetch`. Commands and reads over HTTP; live reads over WebSockets. */
+  readonly fetch: HttpEffect;
+}
+
 /**
- * The class type returned by {@link make}.
+ * The class type returned by {@link make}. The class is itself an Effect:
+ * `yield* MyApi` serves it, requiring the hosted Domain and the Layers of every
+ * middleware its entries declare.
  */
-export interface ApiClass<Name extends string, Entries extends ReadonlyArray<Entry>> {
+export interface ApiClass<
+  Name extends string,
+  Entries extends ReadonlyArray<Entry>,
+> extends Effect.Effect<ApiServer, never, Model.Internals | MiddlewareServices<Entries>> {
   new (_: never): {};
   readonly kind: "Api";
   readonly apiName: Name;
@@ -226,16 +238,6 @@ export interface ApiClass<Name extends string, Entries extends ReadonlyArray<Ent
       ? M
       : "Middleware that provides services is declared on each command, view or aggregate",
   ): ApiClass<Name, Entries>;
-  /**
-   * Serve the Api over HTTP (Effect RPC, NDJSON), returning an `HttpEffect`
-   * to use as a Worker's `fetch`. Requires the Domain and the Layers of every
-   * middleware the entries declare.
-   */
-  readonly httpEffect: Effect.Effect<
-    HttpEffect,
-    never,
-    Model.Internals | MiddlewareServices<Entries>
-  >;
   /** A typed client. Provide a protocol: {@link protocolWebSocket} or {@link protocolHttp}. */
   readonly client: Effect.Effect<
     ApiClient<Entries[number]>,
@@ -659,49 +661,56 @@ const build = (
     Effect.map((flat) => nest(entries, flat as unknown as Flat)),
   );
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
-  return Object.assign(class {}, {
-    kind: "Api" as const,
-    apiName: name,
-    entries,
-    group,
-    middleware: (middleware: RpcMiddleware.AnyService) =>
-      build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
-    httpEffect: Effect.gen(function* () {
-      const handlers = yield* handlersOf(entries);
-      // The middleware services (declared in `httpEffect`'s requirements), for every request.
-      const middleware = yield* captureContext();
-      const layer = Layer.mergeAll(
-        group.toLayer(handlers as never),
-        RpcSerialization.layerNdjson,
-        Layer.succeedContext(middleware),
-      );
-      // One server per request: Workers forbid sharing I/O objects across requests.
-      const rpc = RpcServer.toHttpEffect(group).pipe(Effect.flatten, Effect.provide(layer));
-      const live = liveReads(entries, yield* Model.Internals, middleware);
-      return Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        return request.headers.upgrade?.toLowerCase() === "websocket" ? yield* live : yield* rpc;
-      }) as unknown as HttpEffect;
-    }),
-    client,
-    Client,
-    layerClient: Layer.effect(Client, client),
-    testClient: Effect.gen(function* () {
-      const handlers = yield* handlersOf(entries);
-      const flat = yield* RpcTest.makeClient(group).pipe(
-        Effect.provide(group.toLayer(handlers as never)),
-      );
-      return nest(entries, flat as unknown as Flat);
-    }),
+  // Serve the Api over HTTP (Effect RPC, NDJSON), with live reads over WebSockets.
+  const serve = Effect.gen(function* () {
+    const handlers = yield* handlersOf(entries);
+    // The middleware services (declared in the Api's requirements), for every request.
+    const middleware = yield* captureContext();
+    const layer = Layer.mergeAll(
+      group.toLayer(handlers as never),
+      RpcSerialization.layerNdjson,
+      Layer.succeedContext(middleware),
+    );
+    // One server per request: Workers forbid sharing I/O objects across requests.
+    const rpc = RpcServer.toHttpEffect(group).pipe(Effect.flatten, Effect.provide(layer));
+    const live = liveReads(entries, yield* Model.Internals, middleware);
+    const fetch = Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      return request.headers.upgrade?.toLowerCase() === "websocket" ? yield* live : yield* rpc;
+    }) as unknown as HttpEffect;
+    return { fetch };
   });
+  return Object.assign(
+    class {},
+    // The class is an Effect: `yield* MyApi` serves it.
+    Effectable.Prototype({ label: `alchemy/Domain/Api<${name}>`, evaluate: () => serve }),
+    {
+      kind: "Api" as const,
+      apiName: name,
+      entries,
+      group,
+      middleware: (middleware: RpcMiddleware.AnyService) =>
+        build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
+      client,
+      Client,
+      layerClient: Layer.effect(Client, client),
+      testClient: Effect.gen(function* () {
+        const handlers = yield* handlersOf(entries);
+        const flat = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(group.toLayer(handlers as never)),
+        );
+        return nest(entries, flat as unknown as Flat);
+      }),
+    },
+  );
 };
 
 /**
  * The public surface of a domain for one kind of client: the commands it may
  * send, and the views and aggregates (with a `read` contract) it may read.
- * Nothing in an Api needs a handler. Serve it from a Worker with
- * `httpEffect`, and call it with a typed client over `Domain.protocolWebSocket`
- * or `Domain.protocolHttp`.
+ * Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
+ * gives a Worker its `fetch`. Call it with a typed client over
+ * `Domain.protocolWebSocket` or `Domain.protocolHttp`.
  *
  * ### Declaring an Api
  * **Example:** What customers may reach
@@ -739,7 +748,8 @@ const build = (
  *   "BankWorker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     return { fetch: yield* CustomerApi.httpEffect };
+ *     const api = yield* CustomerApi;
+ *     return { fetch: api.fetch };
  *   }).pipe(Effect.provide(BankLive)),
  * ) {}
  * ```

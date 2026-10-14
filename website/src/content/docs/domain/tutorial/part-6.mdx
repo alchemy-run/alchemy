@@ -169,13 +169,13 @@ const BankLive = SessionLive.pipe(
 ```diff lang="typescript"
 // src/BankWorker.ts
   Effect.gen(function* () {
-    const api = yield* BankApi.httpEffect;
--    return { fetch: api };
+    const api = yield* BankApi;
+-    return { fetch: api.fetch };
 +    return {
 +      fetch: Effect.gen(function* () {
 +        const request = yield* HttpServerRequest;
 +        const path = new URL(request.url, "http://localhost").pathname;
-+        return path === "/api/session" ? yield* sessionRoute : yield* api;
++        return path === "/api/session" ? yield* sessionRoute : yield* api.fetch;
 +      }),
 +    };
   }).pipe(Effect.provide(BankLive)),

@@ -43,8 +43,8 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const customerApi = yield* CustomerApi.httpEffect;
-    const supportApi = yield* SupportApi.httpEffect;
+    const customerApi = yield* CustomerApi;
+    const supportApi = yield* SupportApi;
     const ledger = yield* LedgerStore;
     const summaries = yield* AccountSummary;
     const ledgerRoute = (accountId: string) =>
@@ -70,8 +70,8 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
         if (path === "/api/session") return yield* sessionRoute;
         const ledgerPath = LEDGER.exec(path);
         if (ledgerPath) return yield* ledgerRoute(decodeURIComponent(ledgerPath[1]!));
-        if (path.startsWith("/api")) return yield* customerApi;
-        if (path.startsWith("/support")) return yield* supportApi;
+        if (path.startsWith("/api")) return yield* customerApi.fetch;
+        if (path.startsWith("/support")) return yield* supportApi.fetch;
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };

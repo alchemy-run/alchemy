@@ -17,7 +17,7 @@ import { SessionLive, sessionClient } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
 import { register } from "./flows.ts";
 
-// The Worker's HTTP surface (`CustomerApi.httpEffect`) on a real HTTP server, over the in-memory platform.
+// The Worker's HTTP surface (`yield* CustomerApi`, its `fetch`) on a real HTTP server, over the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(
@@ -26,9 +26,10 @@ const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
 );
 
 // A test server on a random port, plus an HttpClient pointed at it.
-const Served = Layer.unwrap(
-  Effect.map(CustomerApi.httpEffect, (http) => HttpServer.serve()(http)),
-).pipe(Layer.provideMerge(NodeHttpServer.layerTest), Layer.provide(World));
+const Served = Layer.unwrap(Effect.map(CustomerApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provide(World),
+);
 
 // The test server serves the Api at its root; its HttpClient already targets the server.
 const Client = Layer.mergeAll(Domain.protocolHttp(""), sessionClient("customer:c-1"));

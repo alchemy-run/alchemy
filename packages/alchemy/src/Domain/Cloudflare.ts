@@ -821,7 +821,8 @@ const pollAfter = <A>(
  *   "BankWorker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     return { fetch: yield* CustomerApi.httpEffect };
+ *     const api = yield* CustomerApi;
+ *     return { fetch: api.fetch };
  *   }).pipe(Effect.provide(BankLive)),
  * ) {}
  * ```

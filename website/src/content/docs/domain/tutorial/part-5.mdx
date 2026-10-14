@@ -28,13 +28,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const api = yield* BankApi.httpEffect;
-    return { fetch: api };
+    const api = yield* BankApi;
+    return { fetch: api.fetch };
   }).pipe(Effect.provide(BankLive)),
 ) {}
 ```
 
-`DomainCloudflare.DurableObjects` hosts the model: every aggregate, view and policy becomes a Durable Object class on this Worker, with no bindings to write. `SessionLive` is the middleware the Api's entries declare, and `httpEffect` serves the Api.
+`DomainCloudflare.DurableObjects` hosts the model: every aggregate, view and policy becomes a Durable Object class on this Worker, with no bindings to write. `SessionLive` is the middleware the Api's entries declare. `yield* BankApi` serves the Api, and its `fetch` becomes the Worker's.
 
 ## Declare the stack
 
