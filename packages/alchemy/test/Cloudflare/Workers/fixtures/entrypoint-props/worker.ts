@@ -18,7 +18,7 @@ const fetchProps = (entrypoint: Cloudflare.Fetcher) =>
 
 /**
  * Durable Object that mints a stub to its host Worker's default entrypoint
- * with props via `DurableObjectState.getEntrypoint`.
+ * with props via `DurableObjectState.exports`.
  */
 export class PropsMinter extends Cloudflare.DurableObject<PropsMinter>()(
   "PropsMinter",
@@ -27,8 +27,8 @@ export class PropsMinter extends Cloudflare.DurableObject<PropsMinter>()(
     return Effect.gen(function* () {
       return {
         mint: Effect.fn(function* () {
-          const entrypoint = yield* state
-            .getEntrypoint("default", { props: TENANT_PROPS })
+          const entrypoint = yield* state.exports
+            .default({ props: TENANT_PROPS })
             .pipe(Effect.orDie);
           return yield* fetchProps(entrypoint);
         }),
@@ -63,8 +63,8 @@ export default class EntrypointPropsWorker extends Cloudflare.Worker<EntrypointP
           return HttpServerResponse.text(`props=${JSON.stringify(yield* exec.props)}`);
         }
         if (url.pathname === "/mint") {
-          const entrypoint = yield* exec
-            .getEntrypoint("default", { props: TENANT_PROPS })
+          const entrypoint = yield* exec.exports
+            .default({ props: TENANT_PROPS })
             .pipe(Effect.orDie);
           return HttpServerResponse.text(`via-worker:${yield* fetchProps(entrypoint)}`);
         }
@@ -72,7 +72,7 @@ export default class EntrypointPropsWorker extends Cloudflare.Worker<EntrypointP
           return HttpServerResponse.text(`via-do:${yield* minters.getByName("default").mint()}`);
         }
         if (url.pathname === "/missing") {
-          return yield* exec.getEntrypoint("Missing").pipe(
+          return yield* exec.exports.Missing().pipe(
             Effect.map(() => HttpServerResponse.text("minted")),
             Effect.catchTag("EntrypointUnavailableError", (error) =>
               Effect.succeed(HttpServerResponse.text(`${error._tag}:${error.entrypoint}`)),

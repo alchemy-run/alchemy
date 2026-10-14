@@ -33,7 +33,7 @@ export interface WorkerExecutionContextCache {
 }
 
 /**
- * Raised by `getEntrypoint` when this Worker has no loopback for the named
+ * Raised by `ctx.exports.Name(...)` when this Worker has no loopback for the named
  * entrypoint: the name is not an entrypoint exported by the Worker's main
  * module, or `ctx.exports` is unavailable (the `disable_ctx_exports`
  * compatibility flag).
@@ -45,9 +45,9 @@ export class EntrypointUnavailableError extends Data.TaggedError("EntrypointUnav
 
 /**
  * Options for minting a loopback stub to one of this Worker's own
- * entrypoints. See {@link WorkerExecutionContext} `getEntrypoint`.
+ * entrypoints. See {@link WorkerExecutionContext} `exports`.
  */
-export interface GetEntrypointOptions {
+export interface EntrypointOptions {
   /**
    * Properties the target entrypoint reads from `ctx.props` — via
    * `WorkerExecutionContext.props` in an Effect Worker. Must be
@@ -65,7 +65,7 @@ export interface GetEntrypointOptions {
 export const getLoopbackEntrypoint = (
   exports: cf.ExecutionContext["exports"] | undefined,
   name = "default",
-  options?: GetEntrypointOptions,
+  options?: EntrypointOptions,
 ): Effect.Effect<Fetcher, EntrypointUnavailableError> =>
   Effect.suspend(() => {
     const loopback = (exports as Record<string, unknown> | undefined)?.[name];
@@ -88,6 +88,33 @@ export const getLoopbackEntrypoint = (
         }),
       ),
     );
+  });
+
+/**
+ * This Worker's own entrypoints, by export name (`default` for the Worker's
+ * own Effect handlers): the Effect view of workerd's `ctx.exports`. Calling
+ * one mints a stub that delivers `props` as the target's `ctx.props`.
+ */
+export type EntrypointExports = {
+  readonly [name: string]: (
+    options?: EntrypointOptions,
+  ) => Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>;
+};
+
+/**
+ * Build {@link EntrypointExports} over a lookup of workerd's `exports`
+ * (resolved when an entry is called, not when it is read).
+ * @internal
+ */
+export const makeEntrypointExports = (
+  call: (
+    name: string,
+    options?: EntrypointOptions,
+  ) => Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
+): EntrypointExports =>
+  new Proxy({} as EntrypointExports, {
+    get: (_, name) =>
+      typeof name === "string" ? (options?: EntrypointOptions) => call(name, options) : undefined,
   });
 
 export class WorkerExecutionContext extends Context.Service<
@@ -121,22 +148,19 @@ export class WorkerExecutionContext extends Context.Service<
      * The properties this invocation was called with (`ctx.props`): the
      * `props` of the service binding or loopback stub the caller went
      * through, e.g. `Cloudflare.WorkerEntrypoint(worker, { props })` or
-     * {@link getEntrypoint}. An empty object for an external request.
+     * {@link exports}. An empty object for an external request.
      */
     readonly props: Effect.Effect<Record<string, unknown>, never, RuntimeContext>;
     /**
-     * Mint a stub to one of this Worker's own entrypoints that delivers
-     * `props` as the target's `ctx.props` (workerd's
-     * `ctx.exports[name]({ props })`). `name` defaults to `"default"`, the
-     * Worker's own Effect handlers. The {@link Fetcher} can be passed to
-     * APIs that route traffic to a Worker entrypoint, such as a container's
-     * `interceptOutboundHttps` or a dynamic Worker's `globalOutbound`; its
-     * `raw` is the native `Fetcher`.
+     * This Worker's own entrypoints (workerd's `ctx.exports`):
+     * `yield* ctx.exports.default({ props })` mints a stub to the Worker's
+     * own Effect handlers that delivers `props` as the target's `ctx.props`;
+     * `ctx.exports.Name(...)` targets a named `WorkerEntrypoint`. The
+     * {@link Fetcher} can be passed to APIs that route traffic to a Worker
+     * entrypoint, such as a container's `interceptOutboundHttps` or a
+     * dynamic Worker's `globalOutbound`; its `raw` is the native `Fetcher`.
      */
-    getEntrypoint(
-      name?: string,
-      options?: GetEntrypointOptions,
-    ): Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>;
+    readonly exports: EntrypointExports;
     /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
@@ -151,7 +175,9 @@ export const fromExecutionContext = (
   raw: ctx,
   access: Effect.sync(() => resolveAccessContext(ctx, env)),
   props: Effect.sync(() => (ctx.props as Record<string, unknown> | undefined) ?? {}),
-  getEntrypoint: (name, options) => getLoopbackEntrypoint(ctx.exports, name, options),
+  exports: makeEntrypointExports((name, options) =>
+    getLoopbackEntrypoint(ctx.exports, name, options),
+  ),
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
@@ -215,11 +241,13 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
   },
-  getEntrypoint: (name, options) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
-    liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.getEntrypoint(name, options)),
-    ) as Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
+  exports: makeEntrypointExports(
+    (name, options) =>
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
+      liveExecutionContext.pipe(
+        Effect.flatMap((live) => live.exports[name](options)),
+      ) as Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
+  ),
   get props() {
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
     return liveExecutionContext.pipe(Effect.flatMap((live) => live.props)) as Effect.Effect<
