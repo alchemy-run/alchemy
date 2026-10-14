@@ -3,6 +3,7 @@ import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
+import * as RDSData from "@distilled.cloud/aws/rds-data";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -21,6 +22,7 @@ import {
   EventSourceWeb,
   EventSourceWebLive,
 } from "./fixtures/web/not-http.ts";
+import RdsWebFunctionLive, { RdsWebFunction, RdsWebInfra } from "./fixtures/web/rds-web.ts";
 
 const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
 const asyncListenMain = fileURLToPath(new URL("./fixtures/web/async-listen.ts", import.meta.url));
@@ -432,4 +434,103 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(connectorGone).toBe(true);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags: [...tags, "provider:aws:ec2"], timeout: 900_000 },
+);
+
+// Slow: the endpoint replicates the revision to every Region.
+test.provider.skipIf(!!process.env.FAST)(
+  "regions serves from several Regions behind one global domain",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (regions: string[] | undefined) =>
+        stack.deploy(
+          AWS.Lambda.WebFunction("Global", {
+            main: asyncFetchMain,
+            authType: "ApplicationManaged",
+            env: { GREETING: "global" },
+            ...(regions ? { regions } : {}),
+          }),
+        );
+
+      const global = yield* deploy(["us-east-1"]);
+      expect(global.domainName).toContain(".lambda-web.global.on.aws");
+      const endpoint = yield* getEndpoint(global.functionName);
+      expect(endpoint.endpointType).toBe("MultiRegion");
+      expect([...endpoint.regions].sort()).toEqual(["us-east-1", "us-west-2"]);
+      expect(yield* getTextUntil(global.url, (body) => body === "greeting=global")).toBe(
+        "greeting=global",
+      );
+
+      // Regions are immutable on an endpoint: changing them recreates it
+      // with a new domain; the function and its revision stay.
+      const home = yield* deploy(undefined);
+      expect(home.functionName).toBe(global.functionName);
+      expect(home.url).not.toBe(global.url);
+      expect((yield* getEndpoint(home.functionName)).endpointType).toBe("HomeRegion");
+      expect(yield* getText(home.url)).toBe("greeting=global");
+
+      yield* stack.destroy();
+      yield* expectFunctionDeleted(global.functionName, global.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags, timeout: 900_000 },
+);
+
+// Slow: an Aurora cluster takes ~10 minutes to create and to delete.
+test.provider.skipIf(!!process.env.FAST)(
+  "RDS.Connect requests VPC access through the binding channel",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { api, cluster, secret } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { cluster, secret } = yield* RdsWebInfra;
+          const api = yield* RdsWebFunction;
+          return { api, cluster, secret };
+        }).pipe(Effect.provide(RdsWebFunctionLive)),
+      );
+
+      // The binding's subnets and security group became the function's
+      // egress connector, though the function sets no `vpc` prop.
+      const revision = yield* LambdaWeb.getWebFunctionRevision({
+        functionName: api.functionName,
+        revisionId: api.revisionId,
+      });
+      const connectorArn = revision.serviceConfig.egressNetworkConnectorArn!;
+      expect(connectorArn).toMatch(/:network-connector:.+:\d+$/);
+      const connector = yield* lambdacore.getNetworkConnector({
+        Identifier: connectorArn.split(":").at(-2)!,
+      });
+      expect(connector.Configuration?.VpcEgressConfiguration?.SubnetIds).toHaveLength(2);
+
+      // Bootstrap the IAM-auth database user through the Data API.
+      for (const sqlText of [
+        "DO $$ BEGIN CREATE USER app_iam WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "GRANT rds_iam TO app_iam",
+      ]) {
+        yield* RDSData.executeStatement({
+          resourceArn: cluster.dbClusterArn,
+          secretArn: secret.secretArn,
+          database: "app",
+          sql: sqlText,
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "DatabaseResumingException",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
+          }),
+        );
+      }
+
+      // A real query: IAM token, TLS, and a socket into the private subnets.
+      const health = yield* send(HttpClientRequest.get(`${api.url}/drizzle-health`)).pipe(
+        Effect.flatMap((response) => response.json),
+      );
+      expect(health).toEqual({ rows: [{ one: 1 }] });
+
+      yield* stack.destroy();
+      yield* expectFunctionDeleted(api.functionName, api.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: [...tags, "provider:aws:rds", "provider:aws:ec2"], timeout: 2_700_000 },
 );
