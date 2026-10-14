@@ -39,7 +39,7 @@ import {
   type RouteSpec,
   type ScopeOf,
 } from "./Kind.ts";
-import { type Route, routesFor, type EgressRouteConflict } from "./Route.ts";
+import { type EgressRouteConflict, gatewayBindingName, type Route, routesFor } from "./Route.ts";
 
 //#region types
 
@@ -101,6 +101,8 @@ export interface GatewayClient<G = unknown> {
   readonly "~alchemy/Gateway"?: G;
   /** The gateway's id: `"WorkGateway"`. */
   readonly id: string;
+  /** The egress kinds it serves, by name (from its declaration). */
+  readonly kinds: GatewayDeclaration;
   /** Where the sandbox's traffic goes (the HTTPS transport). */
   readonly url: Effect.Effect<string, never, RuntimeContext>;
   /** Ask the gateway to sign a grant. */
@@ -114,6 +116,8 @@ export interface GatewayClient<G = unknown> {
 export interface GrantableEgress<G, E> {
   /** A value from this gateway can only be granted by it. */
   readonly gateway: GatewayClient<G>;
+  /** Its kind: a sandbox only takes egresses of the kinds it accepts. */
+  readonly kind: E;
   readonly ref: EgressRef;
   /** Restrict access (the scope type comes from the kind). */
   narrow(scope: ScopeOf<E>): GrantableEgress<G, E>;
@@ -183,14 +187,32 @@ const clients = new Map<string, GatewayClient>();
 /** The client for gateway `id`, if this isolate yielded it. */
 export const gatewayClient = (id: string): GatewayClient | undefined => clients.get(id);
 
-const bindingName = (id: string) => `ALCHEMY_EGRESS_${sanitizeKey(id)}`;
-
-const grantable = <G, E>(client: GatewayClient<G>, ref: EgressRef): GrantableEgress<G, E> => ({
+const grantable = <G, E>(
+  client: GatewayClient<G>,
+  kind: E,
+  ref: EgressRef,
+): GrantableEgress<G, E> => ({
   gateway: client,
+  kind,
   ref,
-  narrow: (scope) => grantable(client, { ...ref, scope }),
-  for: (subject) => grantable(client, { ...ref, subject }),
+  narrow: (scope) => grantable(client, kind, { ...ref, scope }),
+  for: (subject) => grantable(client, kind, { ...ref, subject }),
 });
+
+/** The kind of a granted egress, if its gateway was yielded in this isolate. */
+export const kindOf = (ref: EgressRef): EgressKind<string, never> | undefined => {
+  const kinds = clients.get(ref.gateway)?.kinds;
+  return kinds && Object.prototype.hasOwnProperty.call(kinds, ref.egress)
+    ? kinds[ref.egress]
+    : undefined;
+};
+
+/** The placeholder env a sandbox's programs need for `refs` (`GH_TOKEN=alchemy-egress`). */
+export const placeholdersFor = (refs: ReadonlyArray<EgressRef>): Record<string, string> =>
+  Object.assign({}, ...refs.map((ref) => kindOf(ref)?.env ?? {}));
+
+/** Everything granting egresses to a sandbox can fail with. */
+export type EgressError = EgressNotServed | EgressGatewayError | EgressRouteConflict;
 
 //#endregion
 
@@ -379,9 +401,13 @@ interface GatewayHostShape {
   readonly path: string;
 }
 
-const makeClient = (id: string, hostTag: Context.Key<any, GatewayHostShape>) =>
+const makeClient = (
+  id: string,
+  hostTag: Context.Key<any, GatewayHostShape>,
+  kinds: GatewayDeclaration,
+) =>
   Effect.gen(function* () {
-    const name = bindingName(id);
+    const name = gatewayBindingName(id);
     const urlKey = `${name}_URL`;
     const ctx = yield* RuntimeContext;
     let url: Effect.Effect<string>;
@@ -414,6 +440,7 @@ const makeClient = (id: string, hostTag: Context.Key<any, GatewayHostShape>) =>
     );
     const client: GatewayClient = {
       id,
+      kinds,
       url,
       mint: (refs, ttl) =>
         Effect.gen(function* () {
@@ -552,11 +579,11 @@ export const Gateway =
       Effectable.Prototype({
         label: `Egress.Gateway<${id}>`,
         evaluate: () =>
-          Effect.map(makeClient(id, hostTag), (client) =>
+          Effect.map(makeClient(id, hostTag, egresses), (client) =>
             Object.fromEntries(
               Object.keys(egresses).map((name) => [
                 name,
-                grantable(client, { gateway: id, egress: name }),
+                grantable(client, egresses[name], { gateway: id, egress: name }),
               ]),
             ),
           ),

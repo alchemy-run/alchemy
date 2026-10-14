@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Cloudflare from "@/Cloudflare";
-import * as GitHub from "@/GitHub/index.ts";
 import { EgressBox } from "./box.ts";
+import { GitHubEgressGateway } from "./gateway.ts";
 import { EGRESS_REPO } from "./repo.ts";
 
 export interface Shell {
@@ -11,23 +11,12 @@ export interface Shell {
   readonly stderr: string;
 }
 
-/** Runs scripts in its container, whose GitHub access is this object's egress. */
+/** Runs scripts in its container, whose GitHub access goes through the gateway. */
 export class EgressObject extends Cloudflare.DurableObject<EgressObject>()(
   "GitHubEgressObject",
   Effect.gen(function* () {
     const box = yield* EgressBox;
-    const github = yield* GitHub.Egress(EgressBox, {
-      token: GitHub.ProfileToken,
-      repositories: [
-        {
-          repository: EGRESS_REPO,
-          contents: "write",
-          pullRequests: "write",
-          issues: "write",
-          push: { branches: ["agent/**"] },
-        },
-      ],
-    });
+    const gateway = yield* GitHubEgressGateway;
     return Effect.gen(function* () {
       const { fetch } = yield* box.getTcpPort(3000);
       const sh = (script: string) =>
@@ -40,11 +29,14 @@ export class EgressObject extends Cloudflare.DurableObject<EgressObject>()(
       return {
         /** With the declared access. */
         run: (script: string) =>
-          box.start({ size: "small", egress: [github] }).pipe(Effect.andThen(sh(script))),
+          box.start({ size: "small", egress: [gateway.repo] }).pipe(Effect.andThen(sh(script))),
         /** Narrowed to one issue. */
         runOnIssue: (issue: number, script: string) =>
           box
-            .start({ size: "small", egress: [github.narrow({ repository: EGRESS_REPO, issue })] })
+            .start({
+              size: "small",
+              egress: [gateway.repo.narrow({ repository: EGRESS_REPO, issue })],
+            })
             .pipe(Effect.andThen(sh(script))),
       };
     });

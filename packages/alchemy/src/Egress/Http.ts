@@ -53,7 +53,7 @@ export interface HttpOptions {
     | ((input: CredentialInput) => Effect.Effect<HttpCredential, unknown, RuntimeContext>);
 }
 
-/** The `Egress.Http` kind, as named in a gateway declaration. */
+/** The `Egress.Http` kind, as named in a gateway or sandbox declaration. */
 export interface HttpKind extends EgressKind<"Http", HttpScope> {
   (options: HttpOptions): Effect.Effect<ConfiguredEgress<"Http">>;
 }
@@ -205,3 +205,6 @@ const makeHttp = (options: HttpOptions): Effect.Effect<ConfiguredEgress<"Http">>
 export const Http: HttpKind = Object.assign(makeHttp, {
   [EgressKindTypeId]: "Http" as const,
 });
+
+/** The `Egress.Http` kind, as a type (`AI.Sandbox<…, { egress: Egress.Http }>`). */
+export type Http = HttpKind;

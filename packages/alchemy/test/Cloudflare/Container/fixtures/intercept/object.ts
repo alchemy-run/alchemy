@@ -3,14 +3,14 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
+import { EchoGateway, EGRESS_HOST } from "./gateway.ts";
+
+export { EGRESS_HOST } from "./gateway.ts";
 
 /** `ctx.exports` entrypoints; workers-types does not type them on DurableObjectState. */
 interface InterceptExports {
   default(options: { props: Record<string, unknown> }): import("@cloudflare/workers-types").Fetcher;
 }
-
-/** Only this object's egress answers this host. */
-export const EGRESS_HOST = "egress.internal";
 
 /** Only the owning object's `interceptOutboundHttp` answers this host. */
 export const INTERCEPT_HOST = "intercept.internal";
@@ -32,14 +32,8 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
   Effect.gen(function* () {
     const container = yield* InterceptContainer;
     const state = yield* Cloudflare.DurableObjectState;
-    // Answers the container's requests to EGRESS_HOST, showing what arrived.
-    const echo = yield* Cloudflare.Egress(InterceptContainer, EGRESS_HOST, (request) =>
-      Effect.succeed(
-        HttpServerResponse.text(
-          `egress ${request.method} ${new URL(request.url).pathname} auth=${request.headers.authorization ?? "-"}`,
-        ),
-      ),
-    );
+    // Answers the container's requests to EGRESS_HOST (through its gateway), showing what arrived.
+    const { echo } = yield* EchoGateway;
     const env = yield* Cloudflare.WorkerEnvironment;
 
     return Effect.gen(function* () {
@@ -82,7 +76,7 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
         });
 
       return {
-        // An egress answers its host over HTTP and HTTPS; other hosts are unreachable.
+        // An egress answers its host over HTTPS (HTTP isn't routed); other hosts are unreachable.
         probeEgress: () =>
           container.start({ egress: [echo] }).pipe(
             Effect.andThen(
@@ -94,8 +88,8 @@ export class InterceptContainerObject extends Cloudflare.DurableObject<Intercept
             ),
             Effect.flatMap((result) =>
               // Removing it refuses its host on the running container.
-              container.removeEgress(echo).pipe(
-                Effect.andThen(probe(`http://${EGRESS_HOST}/again`)),
+              container.setEgress({ egress: [] }).pipe(
+                Effect.andThen(probeTls(`https://${EGRESS_HOST}/again`)),
                 Effect.map((removed) => JSON.stringify({ ...result, removed })),
               ),
             ),

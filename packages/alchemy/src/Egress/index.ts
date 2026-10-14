@@ -1,5 +1,6 @@
 export {
   type ConfiguredEgresses,
+  type EgressError,
   EgressGatewayError,
   Gateway,
   type GatewayClass,
@@ -34,7 +35,9 @@ export {
 } from "./Http.ts";
 export {
   type ConfiguredEgress,
+  ConfiguredEgressTypeId,
   type EgressKind,
+  EgressKindTypeId,
   EgressNotServed,
   type EgressRef,
   type EgressRequest,

@@ -49,6 +49,41 @@ export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
   };
 };
 
+/**
+ * Alchemy's own callbacks (e.g. container egress renewal), queued by a
+ * Durable Object's outer Effect and registered when the instance's callbacks
+ * open — before the user's inner Effect runs. Keyed so several handles in
+ * one object queue one.
+ */
+const pendingInitializers = new WeakMap<
+  cf.DurableObjectState,
+  Map<string, Effect.Effect<void, never, RuntimeContext | DurableObjectState>>
+>();
+
+/** @internal Run `initialize` when this instance's alarm callbacks open (once per key). */
+export const onAlarmCallbacksReady = (
+  state: cf.DurableObjectState,
+  key: string,
+  initialize: Effect.Effect<void, never, RuntimeContext | DurableObjectState>,
+) => {
+  let pending = pendingInitializers.get(state);
+  if (!pending) {
+    pending = new Map();
+    pendingInitializers.set(state, pending);
+  }
+  if (!pending.has(key)) pending.set(key, initialize);
+};
+
+/** @internal Called by the bridge right after {@link initializeAlarmCallbacks}. */
+export const runAlarmCallbackInitializers = (state: cf.DurableObjectState) =>
+  Effect.suspend(() => {
+    const pending = pendingInitializers.get(state);
+    pendingInitializers.delete(state);
+    return pending
+      ? Effect.forEach(pending.values(), (init) => init, { discard: true })
+      : Effect.void;
+  });
+
 /** @internal */
 export const makeDurableObjectCallbackFactory = (raw: cf.DurableObjectState): CallbackFactory => {
   const state = fromDurableObjectState(raw);

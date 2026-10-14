@@ -1,199 +1,332 @@
 /**
- * Container egress: the Durable Object that owns a container intercepts the
- * container's outbound HTTP(S), decides each request, adds credentials, and
- * forwards it. Credentials stay in the Worker; the container only ever sees
- * placeholders.
+ * Container egress, in the Durable Object that owns a Cloudflare container
+ * (Egress/DESIGN.md §8, §10, §12). The object stores what it granted
+ * (`{ ttl, egress }`), asks each gateway for a short-lived grant, and
+ * intercepts each routed host into its Worker's `AlchemyEgress` relay
+ * (EgressRelay.ts) with that host's routes in the props. A renewal callback
+ * on the object's alarm re-mints the grants at 40% of their lifetime, and
+ * re-applies what's stored after the object restarts while its container
+ * runs.
  */
 import type * as cf from "@cloudflare/workers-types";
+import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import type { ImageLayer } from "../../Docker/ImageLayer.ts";
-import type { EgressHandler } from "../../Egress/Handler.ts";
-import { EGRESS_CA, EGRESS_CA_BUNDLE } from "../../Runtime/Bootstrap/EgressCa.ts";
+import { type Callback, makeCallback } from "../../Callback.ts";
+import { canonicalJson } from "../../Egress/Canonical.ts";
+import {
+  type EgressError,
+  type GrantableEgress,
+  grant,
+  placeholdersFor,
+} from "../../Egress/Gateway.ts";
+import type { EgressRef } from "../../Egress/Kind.ts";
+import type { Route } from "../../Egress/Route.ts";
+import { EGRESS_CA, EGRESS_CA_BUNDLE, EGRESS_CA_SWITCH } from "../../Runtime/Bootstrap/EgressCa.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { ContainerApplication } from "./ContainerApplication.ts";
+import { onAlarmCallbacksReady } from "../Workers/AlarmCallback.ts";
+import { ContainerError } from "./Container.ts";
+import {
+  controlsOf,
+  durableObjectClassOf,
+  RELAY_ENTRYPOINT,
+  type RelayProps,
+} from "./EgressRelay.ts";
 
 export {
-  type EgressHandler,
-  type EgressSecret,
-  egressSecret,
-  refuse,
-} from "../../Egress/Handler.ts";
+  CONTROL_METHOD,
+  dispatchControl,
+  type EgressControl,
+  registerControl,
+  registerDurableObjectClass,
+} from "./EgressRelay.ts";
 
-/** The `ctx.props` key that marks a Worker `fetch` as an intercepted container request. */
-export const EGRESS_PROPS_KEY = "alchemyEgress";
+/** An egress a container can be granted: a value from `yield* SomeGateway`. */
+export type ContainerEgress = GrantableEgress<any, any>;
 
-/** The Durable Object RPC method an intercepted request is delivered to. */
-export const EGRESS_METHOD = "__alchemyEgress";
-
-/** The key whose requests are refused: a host taken out of the live set. */
-export const EGRESS_DENIED = "~denied";
-
-/** What the Worker entrypoint receives in `ctx.props` for an intercepted request. */
-export interface EgressRoute {
-  /** The Durable Object class that owns the container (its `ctx.exports` name). */
-  readonly className: string;
-  /** The Durable Object's id (`id.toString()`). */
-  readonly id: string;
-  /** The egress that handles the request, or {@link EGRESS_DENIED}. */
-  readonly key: string;
+/** What the owning Durable Object stores (DESIGN.md §12). */
+export interface StoredEgress {
+  /** Each grant's lifetime, in milliseconds. */
+  readonly ttl: number;
+  /** The granted egresses; each names its gateway. */
+  readonly egress: ReadonlyArray<EgressRef>;
+  /** The hosts intercepted when the routes were last applied (refused when they leave). */
+  readonly hosts: ReadonlyArray<string>;
 }
 
-/** Env the container gets from the egress (placeholders, the CA trust switch). */
-export interface EgressContainerConfig {
-  readonly env?: Record<string, string>;
-  /** Tools the container needs for this egress (e.g. the `gh` CLI). */
-  readonly image?: ReadonlyArray<ImageLayer>;
-}
+/** Each grant's lifetime unless `ttl` says otherwise. */
+export const DEFAULT_TTL = Duration.minutes(5);
 
-const EgressTypeId = "~alchemy/Egress" as const;
+const STORAGE_KEY = "alchemy:egress";
+const RENEWAL_CALLBACK = "alchemy/egress";
+const RENEWAL_ID = "renew";
+
+/** Renew at 40% of the TTL: one renewal can fail and the next still lands before expiry. */
+const renewIn = (ttl: number) => Math.max(1_000, Math.floor(ttl * 0.4));
+
+const containerError = (message: string) => (cause: unknown) =>
+  new ContainerError({
+    message: `${message}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    cause,
+  });
+
+//#region storage
+
+export const loadEgress = (state: cf.DurableObjectState) =>
+  Effect.tryPromise({
+    try: () => state.storage.get<StoredEgress>(STORAGE_KEY),
+    catch: containerError("reading the stored egress failed"),
+  });
+
+const saveEgress = (state: cf.DurableObjectState, stored: StoredEgress) =>
+  Effect.tryPromise({
+    try: () => state.storage.put(STORAGE_KEY, stored),
+    catch: containerError("storing the egress failed"),
+  });
+
+//#endregion
+
+//#region applied (this instance's memory)
 
 /**
- * Outbound access for a container: the hosts it intercepts and what happens
- * to their requests. Create one with {@link Egress} (or a preset such as
- * `GitHub.Egress`) in a Durable Object, then pass it to the container's
- * `start({ egress })` / `setEgress`.
+ * What this instance of the Durable Object last applied to its running
+ * container: a repeated `start` with the same egress skips re-minting until
+ * the renewal is due. Memory only — a restarted object has nothing here, so
+ * its first `start` (or the renewal it schedules on construction) applies
+ * what's stored.
  */
-export interface Egress {
-  readonly [EgressTypeId]: typeof EgressTypeId;
-  /** Unique within its Durable Object; narrowed egresses derive their own. */
+interface Applied {
   readonly key: string;
-  /** Hosts intercepted on ports 80 and 443 (`*` for every host). */
-  readonly hosts: ReadonlyArray<string>;
-  /** Handles one intercepted request, inside the Durable Object. */
-  readonly handle: (request: Request) => Effect.Effect<Response, never, RuntimeContext>;
+  readonly renewAt: number;
 }
+const applied = new WeakMap<object, Applied>();
 
-export const isEgress = (value: unknown): value is Egress =>
-  typeof value === "object" && value !== null && EgressTypeId in value;
+/** @internal Forget what was applied (the container stopped). */
+export const forgetApplied = (state: object) => applied.delete(state);
 
-/** Turn an {@link EgressHandler} into the request handler an {@link Egress} runs. */
-export const makeEgressHandle =
-  <R>(handler: EgressHandler<R>) =>
-  (request: Request): Effect.Effect<Response, never, RuntimeContext | R> =>
+const markApplied = (state: object, next: Omit<StoredEgress, "hosts">) =>
+  Effect.map(Clock.currentTimeMillis, (now) => {
+    applied.set(state, {
+      key: canonicalJson({ ttl: next.ttl, egress: next.egress }),
+      renewAt: now + renewIn(next.ttl),
+    });
+  });
+
+//#endregion
+
+//#region routes
+
+/** The egress `start`/`setEgress` asks for, merged over what's stored (omitted fields are kept). */
+export const nextEgress = (
+  stored: StoredEgress | undefined,
+  options: { readonly egress?: ReadonlyArray<ContainerEgress>; readonly ttl?: Duration.Input },
+): StoredEgress => ({
+  ttl:
+    options.ttl !== undefined
+      ? Duration.toMillis(options.ttl)
+      : (stored?.ttl ?? Duration.toMillis(DEFAULT_TTL)),
+  egress: options.egress !== undefined ? options.egress.map((e) => e.ref) : (stored?.egress ?? []),
+  hosts: stored?.hosts ?? [],
+});
+
+/** One grant per gateway, then one route table for all of them. Conflicts fail here. */
+export const routesOf = (
+  next: StoredEgress,
+): Effect.Effect<ReadonlyArray<Route>, EgressError, RuntimeContext> =>
+  next.egress.length === 0
+    ? Effect.succeed([])
+    : Effect.map(grant(next.egress, { ttl: Duration.millis(next.ttl) }), (g) => g.routes);
+
+/** The env a container started with `egress` needs: placeholders, and the CA trust switch. */
+export const containerEnv = (egress: ReadonlyArray<EgressRef>): Record<string, string> =>
+  egress.length === 0 ? {} : { ...placeholdersFor(egress), [EGRESS_CA_SWITCH]: "1" };
+
+const relayFor = (state: cf.DurableObjectState, props: RelayProps) => {
+  const exports = (state as unknown as { exports?: Record<string, unknown> }).exports;
+  const relay = exports?.[RELAY_ENTRYPOINT] as
+    | ((options: { props: RelayProps }) => cf.Fetcher)
+    | undefined;
+  if (!relay) {
+    throw new Error(
+      `Container egress needs ctx.exports.${RELAY_ENTRYPOINT} (compatibility date 2025-11-01 or later, and an Effect Worker entry).`,
+    );
+  }
+  return relay({ props });
+};
+
+/**
+ * Point every routed host at the relay with its routes, every control host
+ * at this object, and refuse hosts that had routes and lost them. Calling
+ * `interceptOutbound*` again replaces the props, on open connections too.
+ * Returns the hosts that now have routes.
+ */
+export const applyRoutes = (
+  state: cf.DurableObjectState,
+  container: cf.Container,
+  routes: ReadonlyArray<Route>,
+  previousHosts: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<string>, ContainerError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const byHost = new Map<string, Array<Route>>();
+      for (const route of routes) {
+        const host = route.host.toLowerCase();
+        byHost.set(host, [...(byHost.get(host) ?? []), route]);
+      }
+      // Routes are HTTPS (the gateway re-checks the target); a control
+      // host answers HTTP and HTTPS.
+      const intercept = async (host: string, props: RelayProps, http = false) => {
+        const relay = relayFor(state, props);
+        if (http) await container.interceptOutboundHttp(host, relay);
+        await container.interceptOutboundHttps(host, relay);
+      };
+      for (const [host, forHost] of byHost) await intercept(host, { routes: forHost });
+      const controls = controlsOf(state);
+      if (controls.length > 0) {
+        const className = durableObjectClassOf(state);
+        if (className === undefined) {
+          throw new Error(
+            "Container controls are only available inside an Alchemy Durable Object.",
+          );
+        }
+        for (const control of controls) {
+          if (byHost.has(control.host.toLowerCase())) continue;
+          await intercept(
+            control.host,
+            { control: { className, id: state.id.toString(), key: control.key } },
+            true,
+          );
+        }
+      }
+      for (const host of previousHosts) {
+        if (!byHost.has(host)) await intercept(host, { routes: [] });
+      }
+      return [...byHost.keys()];
+    },
+    catch: containerError("applying the container's egress failed"),
+  });
+
+//#endregion
+
+//#region renewal
+
+const renewals = new WeakMap<object, Callback<Record<string, never>>>();
+
+/**
+ * Schedule the next renewal of this object's grants; with no egress left,
+ * cancel the one `previous` scheduled. Renewal shares the object's alarm
+ * with `Alchemy.makeCallback` (an object that calls `storage.setAlarm`
+ * directly must use callbacks instead); an object that never grants egress
+ * never touches its alarm.
+ */
+const scheduleRenewal = (
+  state: cf.DurableObjectState,
+  previous: StoredEgress | undefined,
+  next: StoredEgress,
+) =>
+  Effect.gen(function* () {
+    const renewal = renewals.get(state);
+    if (!renewal) return;
+    if (next.egress.length === 0 && !previous?.egress.length) return;
+    yield* (
+      next.egress.length === 0
+        ? renewal.cancel(RENEWAL_ID)
+        : renewal.schedule(RENEWAL_ID, { after: Duration.millis(renewIn(next.ttl)), payload: {} })
+    ).pipe(
+      Effect.catchTag("CallbackError", (error) =>
+        Effect.logWarning("scheduling the egress renewal failed", error),
+      ),
+    );
+  });
+
+/** @internal Cancel the renewal (the container stops; the stored egress stays). */
+export const cancelRenewal = (state: cf.DurableObjectState, stored: StoredEgress | undefined) =>
+  Effect.gen(function* () {
+    const renewal = renewals.get(state);
+    if (renewal && stored?.egress.length) yield* renewal.cancel(RENEWAL_ID).pipe(Effect.ignore);
+  });
+
+/**
+ * Mint `next`'s grants, store it, apply its routes to the running container
+ * and schedule the renewal. Fails (storing nothing) on a route conflict or a
+ * refused egress.
+ */
+export const applyEgress = (
+  state: cf.DurableObjectState,
+  container: cf.Container,
+  next: StoredEgress,
+): Effect.Effect<void, EgressError | ContainerError, RuntimeContext> =>
+  Effect.gen(function* () {
+    const previous = yield* loadEgress(state);
+    const routes = yield* routesOf(next);
+    yield* saveEgress(state, next);
+    const hosts = yield* applyRoutes(state, container, routes, next.hosts);
+    const stored = { ...next, hosts };
+    yield* saveEgress(state, stored);
+    yield* markApplied(state, stored);
+    yield* scheduleRenewal(state, previous, stored);
+  });
+
+/** Check `next` (mint its grants, find route conflicts) and store it, without applying it. */
+export const storeEgress = (
+  state: cf.DurableObjectState,
+  next: StoredEgress,
+): Effect.Effect<void, EgressError | ContainerError, RuntimeContext> =>
+  Effect.andThen(routesOf(next), saveEgress(state, next));
+
+/** Whether `next` is what this instance already applied, and its grants aren't due for renewal. */
+export const isApplied = (state: object, next: StoredEgress) =>
+  Effect.map(Clock.currentTimeMillis, (now) => {
+    const current = applied.get(state);
+    return (
+      current !== undefined &&
+      now < current.renewAt &&
+      current.key === canonicalJson({ ttl: next.ttl, egress: next.egress })
+    );
+  });
+
+/** The renewal: re-mint and re-apply what's stored, while the container runs. */
+const renew = (state: cf.DurableObjectState) =>
+  Effect.gen(function* () {
+    const stored = yield* loadEgress(state);
+    const container = state.container;
+    if (!stored || !container?.running) {
+      applied.delete(state);
+      return;
+    }
+    yield* applyEgress(state, container, stored);
+  });
+
+/**
+ * @internal Install the renewal callback on a Durable Object that owns a
+ * container, when its instance initializes. A container still running from
+ * before this instance (the object was evicted or redeployed) gets what's
+ * stored re-applied at once.
+ */
+export const installRenewal = (state: cf.DurableObjectState) =>
+  onAlarmCallbacksReady(
+    state,
+    RENEWAL_CALLBACK,
     Effect.gen(function* () {
-      const body =
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : new Uint8Array(yield* Effect.promise(() => request.arrayBuffer()));
-      let outgoing = HttpClientRequest.make(request.method as "GET")(request.url).pipe(
-        HttpClientRequest.setHeaders(Object.fromEntries(request.headers.entries())),
-      );
-      if (body !== undefined && body.byteLength > 0) {
-        outgoing = HttpClientRequest.bodyUint8Array(
-          outgoing,
-          body,
-          request.headers.get("content-type") ?? undefined,
-        );
+      const renewal = yield* makeCallback(RENEWAL_CALLBACK, () => renew(state), {
+        retry: { delay: "5 seconds" },
+      });
+      renewals.set(state, renewal as Callback<Record<string, never>>);
+      if (!state.container?.running) return;
+      const stored = yield* loadEgress(state).pipe(Effect.orElseSucceed(() => undefined));
+      if (stored && (stored.egress.length > 0 || stored.hosts.length > 0)) {
+        yield* renewal
+          .schedule(RENEWAL_ID, { after: Duration.zero, payload: {} })
+          .pipe(
+            Effect.catchTag("CallbackError", (e) =>
+              Effect.logWarning("re-applying egress failed", e),
+            ),
+          );
       }
-      const decided = yield* handler(outgoing);
-      if (HttpServerResponse.isHttpServerResponse(decided)) {
-        return HttpServerResponse.toWeb(decided);
-      }
-      const client = yield* HttpClient.HttpClient;
-      const response = yield* client.execute(decided).pipe(
-        Effect.map((r) => HttpServerResponse.toWeb(HttpServerResponse.fromClientResponse(r))),
-        Effect.catch((error) =>
-          Effect.succeed(
-            new Response(`alchemy egress: upstream request failed: ${error.message}`, {
-              status: 502,
-            }),
-          ),
-        ),
-      );
-      return response;
-    }).pipe(Effect.provide(FetchHttpClient.layer));
+    }),
+  );
 
-/**
- * Build an {@link Egress} value. Presets use this with their own handler and
- * hosts; {@link Egress} is the general form.
- */
-export const makeEgress = (options: {
-  readonly key: string;
-  readonly hosts: ReadonlyArray<string>;
-  readonly handle: (request: Request) => Effect.Effect<Response, never, RuntimeContext>;
-}): Egress => ({ [EgressTypeId]: EgressTypeId, ...options });
-
-/**
- * Configure the container side of an egress from the Durable Object: the
- * placeholder env its programs need, and the switch that makes the container
- * trust the interception CA. Deploy-time only.
- */
-export const bindEgressIntoContainer = (
-  container: unknown,
-  key: string,
-  config: EgressContainerConfig,
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    if (globalThis.__ALCHEMY_RUNTIME__) return;
-    const application = (yield* (container as { Application: Effect.Effect<ContainerApplication> })
-      .Application) as ContainerApplication;
-    yield* application.bind`Egress(${key})`({
-      env: { ...config.env, ALCHEMY_EGRESS_CA: "1" },
-      ...(config.image?.length ? { image: [...config.image] } : {}),
-    });
-  });
-
-/**
- * An egress for a container: requests to `hosts` (a host, a list, or `*`)
- * from the container are handed to `handler` in this Durable Object, which
- * returns the request to forward (e.g. with credentials added) or a response
- * to answer with. Declare egresses at the top of the Durable Object that owns
- * the container; select them with `start({ egress })`.
- *
- * ### Adding credentials to an API
- * **Example:** A bearer token the container never sees
- * ```typescript
- * export class Box extends Cloudflare.DurableObject<Box>()(
- *   "Box",
- *   Effect.gen(function* () {
- *     const sandbox = yield* Sandbox;
- *     const key = yield* Config.Redacted("STRIPE_KEY");
- *     const stripe = yield* Cloudflare.Egress(Sandbox, "api.stripe.com", (request) =>
- *       Effect.succeed(HttpClientRequest.bearerToken(request, key)),
- *     );
- *     return Effect.gen(function* () {
- *       return {
- *         run: (cmd: string[]) =>
- *           sandbox.start({ egress: [stripe] }).pipe(
- *             Effect.andThen(sandbox.exec(cmd)),
- *             Effect.flatMap((child) => child.output()),
- *             Effect.scoped,
- *           ),
- *       };
- *     });
- *   }),
- * ) {}
- * ```
- *
- * @binding
- * @product Containers
- * @category Containers
- */
-export const Egress = <R = never>(
-  container: unknown,
-  hosts: string | ReadonlyArray<string>,
-  handler: EgressHandler<R>,
-  options: {
-    readonly key?: string;
-    readonly env?: Record<string, string>;
-    readonly image?: ReadonlyArray<ImageLayer>;
-  } = {},
-): Effect.Effect<Egress, never, R> =>
-  Effect.gen(function* () {
-    const list = typeof hosts === "string" ? [hosts] : hosts;
-    const key = options.key ?? list.join(",");
-    yield* bindEgressIntoContainer(container, key, { env: options.env, image: options.image });
-    const context = yield* Effect.context<R>();
-    return makeEgress({
-      key,
-      hosts: list,
-      handle: (request) => makeEgressHandle(handler)(request).pipe(Effect.provideContext(context)),
-    });
-  });
+//#endregion
 
 /** The bundle `exec`'d commands trust: system roots plus the interception CA. */
 const EXEC_CA_BUNDLE = `${EGRESS_CA_BUNDLE}.exec`;
@@ -214,57 +347,3 @@ if [ -s ${EGRESS_CA} ]; then
   export SSL_CERT_FILE=${EXEC_CA_BUNDLE} GIT_SSL_CAINFO=${EXEC_CA_BUNDLE} NODE_EXTRA_CA_CERTS=${EXEC_CA_BUNDLE} REQUESTS_CA_BUNDLE=${EXEC_CA_BUNDLE} CURL_CA_BUNDLE=${EXEC_CA_BUNDLE}
 fi
 exec "$@"`;
-
-//#region registry (runtime, inside the Durable Object)
-
-/** The class name of each Durable Object instance, set by its bridge. */
-const classNames = new WeakMap<object, string>();
-/** The egresses applied to each Durable Object's container, by key. */
-const registries = new WeakMap<object, Map<string, Egress>>();
-
-/** @internal Called by the Durable Object bridge for every instance. */
-export const registerDurableObjectClass = (state: object, className: string) => {
-  classNames.set(state, className);
-};
-
-/** @internal Make `egress` answerable for this Durable Object's container. */
-export const registerEgress = (state: object, egress: Egress) => {
-  let registry = registries.get(state);
-  if (!registry) {
-    registry = new Map();
-    registries.set(state, registry);
-  }
-  registry.set(egress.key, egress);
-};
-
-/** @internal The route for `key` on this Durable Object, as `ctx.props`. */
-export const egressRoute = (state: cf.DurableObjectState, key: string): EgressRoute => {
-  const className = classNames.get(state);
-  if (className === undefined) {
-    throw new Error("Container egress is only available inside an Alchemy Durable Object.");
-  }
-  return { className, id: state.id.toString(), key };
-};
-
-/** @internal Handle a request the Worker entrypoint forwarded to this Durable Object. */
-export const dispatchEgress = (
-  state: object,
-  key: string,
-  request: Request,
-): Effect.Effect<Response, never, RuntimeContext> => {
-  if (key === EGRESS_DENIED) {
-    return Effect.succeed(
-      new Response("alchemy egress: this host is not allowed\n", { status: 403 }),
-    );
-  }
-  const egress = registries.get(state)?.get(key);
-  return egress
-    ? egress.handle(request)
-    : Effect.succeed(
-        new Response(`alchemy egress: ${key} is not active for this container\n`, {
-          status: 403,
-        }),
-      );
-};
-
-//#endregion

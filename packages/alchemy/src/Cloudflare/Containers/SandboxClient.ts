@@ -14,6 +14,7 @@ import {
   type SandboxProcess,
   type SandboxStartOptions,
 } from "../../AI/Sandbox.ts";
+import type { EgressError } from "../../Egress/Gateway.ts";
 import { toHttpClient } from "../Fetcher.ts";
 import type { ContainerStartupOptions } from "./Container.ts";
 import {
@@ -77,6 +78,16 @@ export const containerOf = (
 const sandboxError = (cause: { readonly message: string }) =>
   new SandboxError({ message: cause.message, cause });
 
+/** Egress errors stay typed; the container's own become `SandboxError`. */
+const fromContainerError = <E extends { readonly _tag: string; readonly message: string }>(
+  error: E,
+): Extract<E, EgressError> | SandboxError =>
+  error._tag === "EgressNotServed" ||
+  error._tag === "EgressGatewayError" ||
+  error._tag === "EgressRouteConflict"
+    ? (error as unknown as Extract<E, EgressError>)
+    : sandboxError(error);
+
 const fromProcess = (process: ContainerProcess): SandboxProcess => ({
   pid: process.pid,
   isPty: process.isPty,
@@ -107,6 +118,7 @@ export const fromContainerClient = (
     return {
       ...(instance !== undefined ? { instance } : {}),
       ...(options.egress !== undefined ? { egress: options.egress } : {}),
+      ...(options.ttl !== undefined ? { ttl: options.ttl } : {}),
       ...(options.enableInternet !== undefined ? { enableInternet: options.enableInternet } : {}),
       ...(options.env !== undefined ? { env: options.env } : {}),
     } as ContainerStartOptions;
@@ -117,10 +129,8 @@ export const fromContainerClient = (
     start: (options) =>
       sizes[options.size] === undefined
         ? Effect.fail(new SandboxError({ message: `Unknown sandbox size '${options.size}'.` }))
-        : container.start(startOptions(options)).pipe(Effect.mapError(sandboxError)),
-    setEgress: ({ egress }) => container.setEgress(egress).pipe(Effect.mapError(sandboxError)),
-    addEgress: (egress) => container.addEgress(egress).pipe(Effect.mapError(sandboxError)),
-    removeEgress: (egress) => container.removeEgress(egress).pipe(Effect.mapError(sandboxError)),
+        : container.start(startOptions(options)).pipe(Effect.mapError(fromContainerError)),
+    setEgress: (options) => container.setEgress(options).pipe(Effect.mapError(fromContainerError)),
     exec: (cmd, options) =>
       container
         .exec([...cmd], options as ContainerExecOptions | undefined)

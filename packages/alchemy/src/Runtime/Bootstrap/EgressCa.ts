@@ -1,6 +1,6 @@
 /**
  * Trust the per-instance CA a Cloudflare container's HTTPS interception
- * presents (see Cloudflare/Containers/Egress.ts). Programs started from the
+ * presents (see Cloudflare/Containers/EgressRelay.ts). Programs started from the
  * container (git, gh, a harness CLI) verify TLS against a bundle of the
  * system roots plus that CA; the bundle is rebuilt when the CA appears or
  * changes, which can be after this process starts.

@@ -1,8 +1,7 @@
 /**
  * GitHub egress: `gh` and `git` in a sandbox work with a placeholder token,
- * while an egress gateway (or the Durable Object that owns a Cloudflare
- * container) checks each request against the declared repositories,
- * permissions and scope, adds the real token, and forwards it.
+ * while an egress gateway checks each request against the declared
+ * repositories, permissions and scope, adds the real token, and forwards it.
  */
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -10,17 +9,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
-import {
-  type Egress as ContainerEgress,
-  Egress as makeContainerEgress,
-  makeEgressHandle,
-} from "../Cloudflare/Containers/Egress.ts";
 import { ghCliLayer, gitCliLayer } from "../Docker/CliLayers.ts";
+import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import {
   bodyBytes,
   bufferBody,
   type CredentialInput,
-  egressSecret,
   type EgressHandler,
   type EgressSecret,
   peekBody,
@@ -67,17 +61,6 @@ export interface RepositoryAccess {
   readonly push?: { readonly branches: ReadonlyArray<string> };
 }
 
-export interface EgressOptions {
-  /**
-   * The token added to requests: a PAT, `GitHub.ProfileToken` (the stack's
-   * GitHub auth profile), or a `Config`. Bound into the Worker; the container
-   * only sees a placeholder.
-   */
-  readonly token: EgressSecret;
-  /** The repositories the container may reach, and how. */
-  readonly repositories: ReadonlyArray<RepositoryAccess>;
-}
-
 /**
  * Narrow a GitHub egress to one repository, and optionally to one pull
  * request or issue in it.
@@ -95,16 +78,6 @@ export interface Scope {
    * @default true
    */
   readonly graphql?: boolean;
-}
-
-/** A GitHub egress, which can be narrowed to one pull request or issue. */
-export interface Egress extends ContainerEgress {
-  /**
-   * The same access, narrowed: writes only to `pullRequest` (and its head
-   * branch) or `issue` (and branches `agent/issue-<n>/**`). It can only
-   * shrink what was declared.
-   */
-  readonly narrow: (scope: Scope) => ContainerEgress;
 }
 
 /** A GitHub token: a secret bound into the host, or looked up per subject. */
@@ -737,41 +710,6 @@ const makeRules = (
 /** What the sandbox's programs need: placeholders, and no prompts. */
 const SANDBOX_ENV = { GH_TOKEN: PLACEHOLDER, GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" };
 
-const containerEgress = (container: unknown, options: EgressOptions) =>
-  Effect.gen(function* () {
-    const token = yield* egressSecret(options.token, "ALCHEMY_GITHUB_EGRESS_TOKEN");
-    const rules = makeRules(token, yield* resolvePolicy(options.repositories));
-
-    const egress = yield* makeContainerEgress(
-      container,
-      [...API_HOSTS, GIT_HOST],
-      rules.handlerFor(undefined),
-      { key: "github", env: SANDBOX_ENV, image: [gitCliLayer, ghCliLayer] },
-    );
-
-    return {
-      ...egress,
-      narrow: (scope: Scope): ContainerEgress => {
-        const target =
-          scope.pullRequest !== undefined
-            ? `#pr${scope.pullRequest}`
-            : scope.issue !== undefined
-              ? `#issue${scope.issue}`
-              : "";
-        return {
-          ...egress,
-          key: `github:${scope.repository.toLowerCase()}${target}`,
-          handle: (request) =>
-            Effect.flatMap(rules.branchFor(scope), (branch) =>
-              makeEgressHandle(
-                rules.handlerFor({ ...scope, ...(branch !== undefined ? { branch } : {}) }),
-              )(request),
-            ),
-        };
-      },
-    } satisfies Egress;
-  });
-
 const invalidScope = (message: string) => Effect.fail(new EgressNotServed({ message }));
 
 const checkScope = (scope: unknown): Effect.Effect<Scope | undefined, EgressNotServed> => {
@@ -864,27 +802,24 @@ const gatewayEgress = (options: GatewayEgressOptions) =>
     } satisfies ConfiguredEgress<"GitHub">;
   });
 
-/** The `GitHub.Egress` kind and its constructors. */
-export interface EgressKindConstructor extends EgressKind<"GitHub", Scope> {
-  /**
-   * Configure a GitHub egress in a gateway's constructor
-   * (`Egress.Gateway.serve`).
-   */
+/** The `GitHub.Egress` kind, as named in a gateway or sandbox declaration. */
+export interface Egress extends EgressKind<"GitHub", Scope> {
+  /** Configure a GitHub egress in a gateway's constructor (`Egress.Gateway.serve`). */
   (options: GatewayEgressOptions): Effect.Effect<ConfiguredEgress<"GitHub">>;
-  /** GitHub access for a container, handled in its owning Durable Object. */
-  (container: unknown, options: EgressOptions): Effect.Effect<Egress>;
+  readonly env: Readonly<Record<string, string>>;
+  readonly tools: ReadonlyArray<ImageLayer>;
 }
 
 /**
  * GitHub access without the token ever entering the sandbox: `gh` and `git`
  * (over HTTPS) work with a placeholder, while each request is checked
  * against `repositories` (deny by default) and the grant's scope, gets the
- * real token, and is forwarded.
+ * real token in an egress gateway, and is forwarded.
  *
  * Name it in a gateway declaration (`{ repo: GitHub.Egress }`) and configure
- * it in the gateway's constructor; or, for a Cloudflare container, declare it
- * at the top of the Durable Object that owns the container with the
- * container as the first argument.
+ * it in the gateway's constructor. A sandbox that accepts it
+ * (`AI.Sandbox<…, { egress: GitHub.Egress }>`) gets `git` and `gh`
+ * installed at deploy, and `GH_TOKEN=alchemy-egress` when it is granted.
  *
  * ### Serving GitHub from a gateway
  * **Example:** Read-only access to one repository, with your GitHub login
@@ -916,35 +851,21 @@ export interface EgressKindConstructor extends EgressKind<"GitHub", Scope> {
  * }),
  * ```
  *
- * ### Giving a container `gh` and `git`
- * **Example:** Pushes only to agent branches, from a Durable Object
+ * ### Granting it to a sandbox
+ * **Example:** Pushes only to one issue's branches, from a Durable Object
  * ```typescript
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const github = yield* GitHub.Egress(Sandbox, {
- *       token: GitHub.ProfileToken,
- *       repositories: [
- *         {
- *           repository: "alchemy-run/alchemy",
- *           contents: "write",
- *           pullRequests: "write",
- *           issues: "read",
- *           push: { branches: ["agent/**"] },
- *         },
- *       ],
- *     });
- *     const harness = yield* Cloudflare.Containers.Harness(Sandbox);
+ *     const sandbox = yield* Sandbox;
+ *     const gateway = yield* RepoGateway;
  *     return Effect.gen(function* () {
  *       return {
- *         // Writes only to pull request #n and its branch.
- *         open: (pullRequest: number) =>
- *           harness
- *             .start({
- *               size: "large",
- *               egress: [github.narrow({ repository: "alchemy-run/alchemy", pullRequest })],
- *             })
- *             .pipe(Effect.flatMap((claude) => claude.start({}))),
+ *         work: (issue: number) =>
+ *           sandbox.start({
+ *             size: "large",
+ *             egress: [gateway.repo.narrow({ repository: "alchemy-run/alchemy", issue })],
+ *           }),
  *       };
  *     });
  *   }),
@@ -955,10 +876,8 @@ export interface EgressKindConstructor extends EgressKind<"GitHub", Scope> {
  * @product Egress
  * @category GitHub
  */
-export const Egress: EgressKindConstructor = Object.assign(
-  (...args: [GatewayEgressOptions] | [unknown, EgressOptions]) =>
-    args.length >= 2
-      ? containerEgress(args[0], (args as [unknown, EgressOptions])[1])
-      : gatewayEgress(args[0] as GatewayEgressOptions),
-  { [EgressKindTypeId]: "GitHub" as const },
-) as EgressKindConstructor;
+export const Egress: Egress = Object.assign(gatewayEgress, {
+  [EgressKindTypeId]: "GitHub" as const,
+  env: SANDBOX_ENV,
+  tools: [gitCliLayer, ghCliLayer],
+});

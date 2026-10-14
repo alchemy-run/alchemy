@@ -33,6 +33,7 @@ import {
   isSandbox,
   type Sandbox as AISandbox,
   type SandboxClient,
+  type SandboxKinds,
   type SandboxSize,
   type SandboxStartOptions,
 } from "../../AI/Sandbox.ts";
@@ -57,7 +58,7 @@ import type {
   ContainerExecOptions,
   ContainerStartOptions,
 } from "./ContainerClient.ts";
-import { makeEgress } from "./Egress.ts";
+import { registerControl } from "./EgressRelay.ts";
 import { cloudflareSandboxOf } from "./SandboxClient.ts";
 
 /** The host the container calls when it is told to shut down. */
@@ -264,13 +265,11 @@ const RECENT_SNAPSHOT_MS = 5_000;
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const model = yield* Anthropic.Egress(Sandbox, {
- *       apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
- *     });
+ *     const gateway = yield* ModelGateway; // { model: Anthropic.Egress }
  *     const harness = yield* Cloudflare.Containers.Harness(Sandbox);
  *
  *     return Effect.gen(function* () {
- *       const live = harness.start({ egress: [model] });
+ *       const live = harness.start({ size: "large", egress: [gateway.model] });
  *       return {
  *         open: () =>
  *           live.pipe(
@@ -299,7 +298,11 @@ export const Harness: {
   <D extends AISandbox.Decl.Any>(
     sandbox: D,
     options?: HarnessOptions,
-  ): Effect.Effect<Harness<SandboxStartOptions<SandboxSize<D>>>, never, DurableObjectState>;
+  ): Effect.Effect<
+    Harness<SandboxStartOptions<SandboxSize<D>, SandboxKinds<D>>>,
+    never,
+    DurableObjectState
+  >;
   (
     container: Container.Decl.Any,
     options?: HarnessOptions,
@@ -689,10 +692,13 @@ export const Harness: {
       return Exit.isSuccess(taken);
     });
 
-    /** The container calls this when it is told to shut down. */
-    const control = makeEgress({
+    /**
+     * The container calls this when it is told to shut down: answered by
+     * this object, intercepted alongside the container's egress.
+     */
+    registerControl(state.raw, {
       key: "alchemy:harness-control",
-      hosts: [HARNESS_CONTROL_HOST],
+      host: HARNESS_CONTROL_HOST,
       handle: (request) =>
         Effect.gen(function* () {
           if (new URL(request.url).pathname !== "/shutdown") {
@@ -723,10 +729,9 @@ export const Harness: {
 
     const startContainer = (startOptions: ContainerStartOptions | undefined) =>
       Effect.gen(function* () {
-        const egress = [...(startOptions?.egress ?? []), control];
         if (yield* sandbox.running.pipe(Effect.orElseSucceed(() => false))) {
           // Running: only the egress may have changed.
-          yield* sandbox.start({ ...startOptions, egress });
+          yield* sandbox.start({ ...startOptions });
           if (generation === 0) {
             // A new activation of this object found the container running.
             generation = Number((yield* getMeta("generation")) ?? "1");
@@ -745,7 +750,6 @@ export const Harness: {
           Effect.exit(
             sandbox.start({
               ...rest,
-              egress,
               containerSnapshot: { id: snapshotId },
             } as ContainerStartOptions),
           );
@@ -766,7 +770,7 @@ export const Harness: {
         // turn has lost that turn's unsaved work (checkpoints are taken
         // between turns). Detect it per session (recorded events past the
         // last checkpoint) and tell the agent, so it can redo the work.
-        yield* sandbox.start({ ...startOptions, egress });
+        yield* sandbox.start({ ...startOptions });
         yield* restoreCheckpoint(0);
       }).pipe(
         Effect.mapError((cause) =>

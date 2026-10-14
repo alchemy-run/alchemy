@@ -12,8 +12,9 @@ const HOOK_TIMEOUT = 600_000;
 
 /**
  * `gh` and `git` in a container that holds only a placeholder token: its
- * Durable Object's `GitHub.Egress` checks each request against the declared
- * repository access and adds the real token.
+ * requests go through the `AlchemyEgress` relay to an egress gateway, whose
+ * `GitHub.Egress` checks each one against the declared repository access and
+ * adds the real token.
  */
 describe.each([
   { dev: true, mode: "local" },

@@ -3,7 +3,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { Dockerfile } from "@/Docker/index.ts";
 import { HarnessBox } from "./box.ts";
 
-/** Claude Code in /workspace/repo. It holds no API key: the Durable Object's egress adds it. */
+/** Claude Code in /workspace/repo. It holds no API key: the gateway adds it. */
 export default Cloudflare.Containers.Sandbox(
   HarnessBox,
   {

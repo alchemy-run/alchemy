@@ -19,12 +19,6 @@ import { Self } from "../../Self.ts";
 import { StackContext } from "../../StackContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
-import {
-  EGRESS_DENIED,
-  EGRESS_METHOD,
-  EGRESS_PROPS_KEY,
-  type EgressRoute,
-} from "../Containers/Egress.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
 import {
@@ -58,31 +52,6 @@ export interface WorkerBuild<Export = any> {
   readonly shape: () => Record<string, any>;
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
-
-/**
- * Forward an intercepted container request to the Durable Object that owns
- * the container, found through `ctx.exports` by class name.
- */
-const routeEgress = (ctx: any, route: EgressRoute, request: Request): Promise<Response> => {
-  if (route.key === EGRESS_DENIED) {
-    return Promise.resolve(
-      new Response("alchemy egress: this host is not allowed\n", { status: 403 }),
-    );
-  }
-  const namespace = ctx.exports?.[route.className] as cf.DurableObjectNamespace | undefined;
-  if (!namespace) {
-    return Promise.resolve(
-      new Response(`alchemy egress: no Durable Object class ${route.className}\n`, {
-        status: 500,
-      }),
-    );
-  }
-  const stub = namespace.get(namespace.idFromString(route.id)) as unknown as Record<
-    string,
-    (key: string, request: Request) => Promise<Response>
-  >;
-  return stub[EGRESS_METHOD]!(route.key, request);
-};
 
 /**
  * Makes the WorkerEntrypoint class and bridges to Effect fetch and RPC calls.
@@ -164,10 +133,6 @@ export const makeWorkerBridge = (
 
       for (const methodName of ExportedHandlerMethods) {
         (this as any)[methodName] = async (input: any) => {
-          // A container's request, intercepted by its Durable Object's egress
-          // (see Containers/Egress.ts): hand it to that object.
-          const egress = methodName === "fetch" ? this.ctx?.props?.[EGRESS_PROPS_KEY] : undefined;
-          if (egress) return routeEgress(this.ctx, egress as EgressRoute, input);
           return processEvent(
             (built) =>
               built.export[methodName](input, this.env, this.ctx) as [

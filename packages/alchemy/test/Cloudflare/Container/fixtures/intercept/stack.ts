@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
+import EchoGatewayWorker from "./gateway-worker.ts";
+import { EchoGateway } from "./gateway.ts";
 import InterceptContainerWorker from "./worker.ts";
 
 /**
@@ -15,6 +17,7 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const worker = yield* InterceptContainerWorker;
+    yield* EchoGatewayWorker;
     return { url: worker.url.as<string>() };
-  }),
+  }).pipe(Effect.provide(EchoGateway.host(EchoGatewayWorker))),
 );

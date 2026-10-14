@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -10,24 +11,25 @@ import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import type * as Sink from "effect/Sink";
 import type * as Stream from "effect/Stream";
-import type { Egress } from "../Cloudflare/Containers/Egress.ts";
+import type { EgressError, GrantableEgress } from "../Egress/Gateway.ts";
+import type { EgressKind } from "../Egress/Kind.ts";
 import type { Named } from "../Named.ts";
 import * as Output from "../Output.ts";
 import { CurrentRuntimeContext, sanitizeKey, type RuntimeContext } from "../RuntimeContext.ts";
 
 /**
- * What a sandbox declaration fixes: the sizes `start()` takes, and (filled by
- * the egress-core PR) the egress kinds it accepts.
+ * What a sandbox declaration fixes: the sizes `start()` takes, and the
+ * egress kinds it accepts.
  */
 export interface SandboxSpec {
   /** The names `start({ size })` accepts. Every host maps each one. */
   readonly size: string;
   /**
-   * The egress kinds the sandbox accepts (e.g. `GitHub.Egress | Anthropic.Egress`).
-   * Reserved: kinds become values in the egress-core PR, which fills this
-   * slot. Until then `start({ egress })` takes today's egress values.
+   * The egress kinds the sandbox accepts (e.g. `GitHub.Egress | Anthropic.Egress`):
+   * `start({ egress })` only takes egresses of these kinds, and each host
+   * installs their tools (`git`, `gh`) at deploy. Omitted: none.
    */
-  readonly egress?: unknown;
+  readonly egress?: EgressKind<string, never>;
 }
 
 /** The size names of a sandbox declaration (or its spec). */
@@ -38,11 +40,21 @@ export type SandboxSize<S> =
       ? S["size"]
       : never;
 
+/** The egress kinds a sandbox declaration (or its spec) accepts. */
+export type SandboxKinds<S> =
+  S extends Sandbox.Decl<any, infer Spec, any>
+    ? SpecKinds<Spec>
+    : S extends SandboxSpec
+      ? SpecKinds<S>
+      : never;
+
+type SpecKinds<Spec> = Spec extends { readonly egress: infer K } ? K : never;
+
 /**
- * An egress value a sandbox's `start` / `setEgress` accepts: today's egress
- * values (`Cloudflare.Containers.Egress`, `GitHub.Egress`, `Anthropic.Egress`).
+ * An egress a sandbox's `start` / `setEgress` accepts: a value from
+ * `yield* SomeGateway`, of one of the kinds the sandbox accepts.
  */
-export type SandboxEgress = Egress;
+export type SandboxEgress<Kind = any> = GrantableEgress<any, Kind>;
 
 /** A sandbox operation failed on its host. */
 export class SandboxError extends Data.TaggedError("SandboxError")<{
@@ -50,17 +62,27 @@ export class SandboxError extends Data.TaggedError("SandboxError")<{
   readonly cause?: unknown;
 }> {}
 
+/** What the sandbox may reach: egresses from its gateways, and their grants' lifetime. */
+export interface SandboxEgressOptions<Kind = any> {
+  /**
+   * Egresses from `yield* SomeGateway`, of the kinds the sandbox accepts:
+   * their hosts and paths go to their gateways (which add the credentials),
+   * with one short-lived grant per gateway, renewed before it expires.
+   * Replaces what's stored; omitted, what's stored is kept.
+   */
+  readonly egress?: ReadonlyArray<SandboxEgress<Kind>>;
+  /** Each grant's lifetime. @default "5 minutes" (or what's stored) */
+  readonly ttl?: Duration.Input;
+}
+
 /** `start()` options: a declared size, plus what the sandbox may reach. */
-export interface SandboxStartOptions<Size extends string = string> {
+export interface SandboxStartOptions<
+  Size extends string = string,
+  Kind = any,
+> extends SandboxEgressOptions<Kind> {
   /** One of the declaration's sizes. Applies only when this call starts the sandbox. */
   readonly size: Size;
-  /**
-   * The sandbox's outbound access: these egresses' hosts are routed through
-   * them and every other host is unreachable (`enableInternet` defaults to
-   * `false` when `egress` is given).
-   */
-  readonly egress?: ReadonlyArray<SandboxEgress>;
-  /** Whether hosts outside `egress` are reachable. */
+  /** Whether hosts outside `egress` are reachable. @default false with egress */
   readonly enableInternet?: boolean;
   /** Environment for the sandbox's program. */
   readonly env?: Record<string, string>;
@@ -122,19 +144,25 @@ export interface SandboxPort {
  * on every host. Yielding never starts the sandbox: call {@link start} at
  * the top of each operation (a no-op while it runs).
  */
-export interface SandboxClient<Size extends string = string> {
+export interface SandboxClient<Size extends string = string, Kind = any> {
   /** Whether the sandbox is running. */
   readonly running: Effect.Effect<boolean, SandboxError, RuntimeContext>;
-  /** Start the sandbox at a declared size unless it is already running. */
-  start(options: SandboxStartOptions<Size>): Effect.Effect<void, SandboxError, RuntimeContext>;
-  /** Replace the running sandbox's egress. Applies at once. */
-  setEgress(options: {
-    readonly egress: ReadonlyArray<SandboxEgress>;
-  }): Effect.Effect<void, SandboxError, RuntimeContext>;
-  /** Add one egress to the live set. */
-  addEgress(egress: SandboxEgress): Effect.Effect<void, SandboxError, RuntimeContext>;
-  /** Remove one egress from the live set; its hosts become unreachable. */
-  removeEgress(egress: SandboxEgress): Effect.Effect<void, SandboxError, RuntimeContext>;
+  /**
+   * Start the sandbox at a declared size unless it is already running, and
+   * apply its egress: `egress` and `ttl` replace what's stored (omitted,
+   * what's stored is re-applied). Two egresses that claim the same requests
+   * fail with `EgressRouteConflict` before anything is stored.
+   */
+  start(
+    options: SandboxStartOptions<Size, Kind>,
+  ): Effect.Effect<void, SandboxError | EgressError, RuntimeContext>;
+  /**
+   * Replace the sandbox's egress (omitted fields are kept): stored, and
+   * applied at once to a running sandbox, open connections included.
+   */
+  setEgress(
+    options: SandboxEgressOptions<Kind>,
+  ): Effect.Effect<void, SandboxError | EgressError, RuntimeContext>;
   /**
    * Run an argument vector (no shell) in the running sandbox. Closing the
    * scope kills the process.
@@ -150,7 +178,7 @@ export interface SandboxClient<Size extends string = string> {
    * `AI.connectHarness` to a harness server on port 3000.
    */
   httpClient(port: number): Effect.Effect<HttpClient.HttpClient, never, RuntimeContext>;
-  /** Stop the sandbox now. */
+  /** Stop the sandbox now. Its routes are cleared first; the stored egress stays for the next `start`. */
   stop(): Effect.Effect<void, SandboxError, RuntimeContext>;
 }
 
@@ -169,8 +197,12 @@ export interface SandboxHostDescriptor {
  */
 export interface SandboxHostService {
   readonly descriptor: SandboxHostDescriptor;
-  /** The host's image resource: egresses and harnesses bind env and image layers into it. */
+  /** The host's image resource: harnesses bind env and image layers into it. */
   readonly image: Effect.Effect<unknown, never, any>;
+  /** Deploy time: install the tools the accepted egress kinds need (`git`, `gh`). */
+  readonly install: (
+    kinds: ReadonlyArray<EgressKind<string, never>>,
+  ) => Effect.Effect<void, never, any>;
 }
 
 /**
@@ -191,6 +223,15 @@ export class SandboxRuntime extends Context.Service<
 export const sandboxHost = (id: string) =>
   Context.Service<Sandbox.Host<unknown>, SandboxHostService>(`alchemy/AI/Sandbox<${id}>`);
 
+/**
+ * The declaration's second argument: the accepted egress kinds as values
+ * (they carry the tools each host installs). Required, and only allowed,
+ * when the spec declares `egress`.
+ */
+export type SandboxDeclarationArgs<Kinds> = [Kinds] extends [never]
+  ? []
+  : [options: { readonly egress: ReadonlyArray<Kinds> }];
+
 /** @internal Marks a sandbox declaration. */
 export const SandboxTypeId = "~alchemy/AI/Sandbox" as const;
 
@@ -201,7 +242,7 @@ export const isSandbox = (value: unknown): value is Sandbox.Decl.Any =>
 
 const descriptorKey = (id: string) => sanitizeKey(`ALCHEMY_SANDBOX_${id}`);
 
-const connect = (id: string) =>
+const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
   Effect.gen(function* () {
     const runtime = yield* Effect.serviceOption(SandboxRuntime);
     if (Option.isNone(runtime)) {
@@ -216,9 +257,11 @@ const connect = (id: string) =>
     let descriptor: SandboxHostDescriptor | undefined;
     if (Option.isSome(host)) {
       descriptor = host.value.descriptor;
-      // The owning Worker carries the host's descriptor to run time.
-      if (!globalThis.__ALCHEMY_RUNTIME__ && ctx) {
-        yield* ctx.set(descriptorKey(id), Output.literal(descriptor));
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // The accepted kinds' tools go into the host's image.
+        if (kinds.length > 0) yield* host.value.install(kinds);
+        // The owning Worker carries the host's descriptor to run time.
+        if (ctx) yield* ctx.set(descriptorKey(id), Output.literal(descriptor));
       }
     } else if (ctx) {
       descriptor = yield* ctx.get<SandboxHostDescriptor>(descriptorKey(id));
@@ -252,6 +295,25 @@ const connect = (id: string) =>
  * export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()(
  *   "Sandbox",
  * ) {}
+ * ```
+ *
+ * ### Accepting egress kinds
+ * A sandbox holds no credentials: its requests to egress hosts go to an
+ * egress gateway (`Egress.Gateway`), which adds them. The declaration names
+ * the egress kinds it accepts, in its type and as values: each host installs
+ * their tools at deploy (`git` and `gh` for `GitHub.Egress`), and `start`
+ * only takes egresses of these kinds.
+ *
+ * **Example:** A sandbox for GitHub and the model
+ * ```typescript
+ * import * as AI from "alchemy/AI";
+ * import * as Anthropic from "alchemy/Anthropic";
+ * import * as GitHub from "alchemy/GitHub";
+ *
+ * export class Sandbox extends AI.Sandbox<
+ *   Sandbox,
+ *   { size: "small" | "large"; egress: GitHub.Egress | Anthropic.Egress }
+ * >()("Sandbox", { egress: [GitHub.Egress, Anthropic.Egress] }) {}
  * ```
  *
  * ### Hosting it
@@ -303,6 +365,35 @@ const connect = (id: string) =>
  * ) {}
  * ```
  *
+ * **Example:** Granting egresses from two gateways
+ * ```typescript
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
+ *     const work = yield* WorkGateway; // { model, repo }
+ *     const personal = yield* PersonalGateway; // { repo }
+ *     return Effect.gen(function* () {
+ *       return {
+ *         work: (issue: number) =>
+ *           sandbox.start({
+ *             size: "large",
+ *             egress: [
+ *               work.model,
+ *               work.repo.narrow({ repository: "alchemy-run/alchemy", issue }),
+ *               personal.repo.narrow({ repository: "sam/dotfiles", graphql: false }),
+ *             ],
+ *             ttl: "5 minutes",
+ *           }),
+ *         // Applies at once, on open connections too.
+ *         modelOnly: () => sandbox.setEgress({ egress: [work.model] }),
+ *         settle: () => sandbox.stop(),
+ *       };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
  * **Example:** Connecting to the harness server it runs
  * ```typescript
  * const claude = yield* sandbox
@@ -339,18 +430,23 @@ const connect = (id: string) =>
  */
 export const Sandbox =
   <Self, Spec extends SandboxSpec>() =>
-  <const Id extends string>(id: Id): Sandbox.Decl<Self, Spec, Id> => {
+  <const Id extends string>(
+    id: Id,
+    ...options: SandboxDeclarationArgs<SpecKinds<Spec>>
+  ): Sandbox.Decl<Self, Spec, Id> => {
     const host = sandboxHost(id);
+    const kinds = (options[0]?.egress ?? []) as ReadonlyArray<EgressKind<string, never>>;
     return Object.assign(
       class {},
       Effectable.Prototype({
         label: `AI.Sandbox<${id}>`,
-        evaluate: () => connect(id),
+        evaluate: () => connect(id, kinds),
       }),
       {
         [SandboxTypeId]: SandboxTypeId,
         "~alchemy/Id": id,
         LogicalId: id,
+        egress: kinds,
         // Deploy time: the host's image, for egresses and harnesses to bind into.
         Application: Effect.flatMap(Effect.serviceOption(host), (provided) =>
           Option.isSome(provided)
@@ -372,10 +468,14 @@ export declare namespace Sandbox {
     Spec extends SandboxSpec = SandboxSpec,
     Id extends string = string,
   >
-    extends Effect.Effect<SandboxClient<Spec["size"]>, never, Host<Self>>, Named<Id> {
-    new (_: never): SandboxClient<Spec["size"]>;
+    extends
+      Effect.Effect<SandboxClient<Spec["size"], SpecKinds<Spec>>, never, Host<Self>>,
+      Named<Id> {
+    new (_: never): SandboxClient<Spec["size"], SpecKinds<Spec>>;
     readonly [SandboxTypeId]: typeof SandboxTypeId;
     readonly LogicalId: Id;
+    /** The egress kinds it accepts, as values: their tools are installed at deploy. */
+    readonly egress: ReadonlyArray<EgressKind<string, never>>;
     /** @internal phantom: the declaration's spec. */
     readonly "~alchemy/SandboxSpec"?: Spec;
     /** @internal Deploy time: the host's image resource. */

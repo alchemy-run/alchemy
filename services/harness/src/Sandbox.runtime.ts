@@ -7,8 +7,8 @@ import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 /**
  * The program a session's container runs: Claude Code, working in a checkout
  * of Alchemy. The image only holds the toolchain; the checkout is prepared
- * at runtime (see Agent.ts). It holds no credentials — the Durable Object
- * that owns the container adds them to its requests.
+ * at runtime (see Agent.ts). It holds no credentials — the egress gateway
+ * (gateway.worker.ts) adds them to its requests.
  */
 export default Cloudflare.Containers.Sandbox(
   Sandbox,

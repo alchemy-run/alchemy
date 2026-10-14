@@ -85,7 +85,7 @@ describe(
     );
 
     test(
-      "an egress answers its host over HTTP and HTTPS, and only while it is live",
+      "an egress answers its host over HTTPS, and only while it is live",
       Effect.gen(function* () {
         const { url } = yield* stack;
         const client = yield* HttpClient.HttpClient;
@@ -102,7 +102,8 @@ describe(
         const https = JSON.parse(result.https!) as { body?: string };
         const other = JSON.parse(result.other!) as { status?: number; error?: string };
         const removed = JSON.parse(result.removed!) as { status?: number; body?: string };
-        expect(http.body).toBe("egress GET /hello auth=-");
+        // Routes are HTTPS: plain HTTP to the host isn't intercepted (and there's no internet).
+        expect(http.body).not.toBe("egress GET /hello auth=-");
         expect(https.body).toBe("egress GET /hello auth=-");
         // Not an egress host: no internet, no interception.
         expect(other.status === undefined || other.status >= 400).toBe(true);

@@ -1,11 +1,9 @@
 import { type Session, SessionError } from "alchemy/AI";
-import * as Anthropic from "alchemy/Anthropic";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { AgentGateway } from "./gateway.ts";
 import { makeMachine, SIZE } from "./machine.ts";
 import { AgentRpcs } from "./rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
@@ -16,9 +14,9 @@ import { makeTerminals } from "./terminals.ts";
  * One Durable Object per issue, serving this app's `AgentRpcs`. Every call
  * names its session, so one issue can run several.
  *
- * The session's container holds no credentials: the model API key and your
- * GitHub login are added to its requests by this Durable Object's egress,
- * which also decides what it may reach. Its history and its work (the
+ * The session's container holds no credentials: its requests to the model
+ * API and GitHub go to the egress gateway (gateway.worker.ts), which checks
+ * them and adds the model API key and your GitHub login. Its history and its work (the
  * checkout, checkpointed after every turn) live in this Durable Object, so
  * the session picks up where it left off on any container.
  */
@@ -26,25 +24,8 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
   "Agent",
   { schema: AgentRpcs },
   Effect.gen(function* () {
-    const model = yield* Anthropic.Egress(Sandbox, {
-      apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
-    });
-    const github = yield* GitHub.Egress(Sandbox, {
-      // Your `gh` login (the stack's GitHub auth profile), never in the container.
-      token: GitHub.ProfileToken,
-      repositories: [
-        {
-          repository: "alchemy-run/alchemy",
-          contents: "write",
-          pullRequests: "write",
-          issues: "write",
-          // The agent pushes its own branches, never main.
-          push: { branches: ["agent/**"] },
-        },
-        // Its generated SDKs: a submodule, read only.
-        { repository: "alchemy-run/distilled", contents: "read" },
-      ],
-    });
+    // Grants for the model and GitHub, minted (and renewed) by the gateway.
+    const { model, repo } = yield* AgentGateway;
     const harness = yield* Cloudflare.Containers.Harness(Sandbox, { workspace: WORKSPACE });
     const sandbox = yield* Sandbox;
 
@@ -98,7 +79,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
     return Effect.sync(() => {
       const startHarness = harness
         .start({
-          egress: [model, github],
+          egress: [model, repo],
           // Package registries and docs; GitHub and the model go through egress.
           enableInternet: true,
           size: SIZE,

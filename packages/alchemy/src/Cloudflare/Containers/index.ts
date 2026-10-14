@@ -32,7 +32,6 @@ export {
   type DurableObjectApplicationProps,
 } from "./DurableObjectApplication.ts";
 export * from "./LocalContainerProvider.ts";
-export { Egress, type EgressHandler, isEgress } from "./Egress.ts";
 export { Harness, type HarnessOptions } from "./Harness.ts";
 export { Sandbox, type SandboxProps } from "./Sandbox.ts";
 export { containerOf, type ContainerInstanceType } from "./SandboxClient.ts";

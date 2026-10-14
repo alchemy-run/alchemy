@@ -78,6 +78,13 @@ const pathOf = (path: string) => {
 
 const sameHost = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
+/**
+ * The Worker binding a gateway is reached through (a service binding to its
+ * Worker); `<name>_URL` holds its public URL.
+ */
+export const gatewayBindingName = (id: string) =>
+  `ALCHEMY_EGRESS_${id.replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
+
 /** Whether any route covers `host` (so its traffic must be decrypted to route by path). */
 export const hasRoute = (routes: ReadonlyArray<{ readonly host: string }>, host: string) =>
   routes.some((route) => sameHost(route.host, host));

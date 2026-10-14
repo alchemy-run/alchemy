@@ -4,13 +4,15 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";
+import { AgentGateway } from "./src/gateway.ts";
+import AgentGatewayWorker from "./src/gateway.worker.ts";
 import SandboxLive from "./src/Sandbox.runtime.ts";
 import CodingAgents from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "Harness",
   {
-    // GitHub: the egress resolves your GitHub auth profile's token.
+    // GitHub: the gateway resolves your GitHub auth profile's token.
     providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Alchemy.localState(),
   },
@@ -23,5 +25,8 @@ export default Alchemy.Stack(
       env: { VITE_API_URL: api.url.as<string>() },
     });
     return { api: api.url.as<string>(), web: web.url.as<string>() };
-  }).pipe(Effect.provide(SandboxLive)),
+  }).pipe(
+    // The sandbox's host, and the Worker that serves its egress gateway.
+    Effect.provide(Layer.mergeAll(SandboxLive, AgentGateway.host(AgentGatewayWorker))),
+  ),
 );

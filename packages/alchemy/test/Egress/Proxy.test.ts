@@ -116,6 +116,42 @@ const startProxy = (initial: ReadonlyArray<Route>) =>
     return { proxy, routes, bundle, dir };
   });
 
+/**
+ * The proxy in a process of its own (fixtures/proxy/server.ts), with `rss`
+ * sampling that process alone. Killed when the scope closes.
+ */
+const spawnProxy = (initial: ReadonlyArray<Route>, bundle: string) =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const [bun, script] = yield* Effect.sync(() => [
+      process.execPath,
+      path.join(import.meta.dirname, "fixtures", "proxy", "server.ts"),
+    ]);
+    const child = yield* spawner.spawn(
+      ChildProcess.make(bun, [script, JSON.stringify(initial), bundle], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "inherit",
+        extendEnv: true,
+      }),
+    );
+    const line = yield* child.stdout.pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.runHead,
+      Effect.timeout("30 seconds"),
+    );
+    if (line._tag === "None")
+      return yield* Effect.die(new Error("the proxy exited before listening"));
+    const { url } = JSON.parse(line.value) as { url: string };
+    /** The proxy process's resident memory, in bytes. */
+    const rss = run("ps", ["-o", "rss=", "-p", String(child.pid)]).pipe(
+      Effect.map((result) => Number(result.stdout.trim()) * 1024),
+    );
+    return { url, rss };
+  });
+
 const run = (command: string, args: ReadonlyArray<string>, env: Record<string, string> = {}) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -334,11 +370,16 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
       () =>
         Effect.gen(function* () {
           const gateway = yield* fakeGateway("drain");
-          const { proxy, bundle, dir } = yield* startProxy([
-            { host: "uploads.example", gateway: { id: "work", url: gateway.url }, grant: "g4" },
-          ]);
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
+          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-egress-" });
+          const bundle = path.join(dir, "bundle.pem");
+          // The proxy runs in its own process: the test process's memory moves
+          // with whatever else the runner does (bundling, deploying).
+          const proxy = yield* spawnProxy(
+            [{ host: "uploads.example", gateway: { id: "work", url: gateway.url }, grant: "g4" }],
+            bundle,
+          );
           // Under Bun.serve's default 128 MiB request limit (the fake gateway's, not the proxy's).
           const size = 120 * 1024 * 1024;
           const file = path.join(dir, "upload.bin");
@@ -346,10 +387,10 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
           yield* fs.writeFile(file, new Uint8Array(0));
           yield* fs.truncate(file, size);
 
-          const rss = Effect.sync(() => process.memoryUsage().rss);
-          const baseline = yield* rss;
+          const baseline = yield* proxy.rss;
+          expect(baseline).toBeGreaterThan(0);
           let peak = baseline;
-          const sampler = yield* rss.pipe(
+          const sampler = yield* proxy.rss.pipe(
             Effect.tap((value) => Effect.sync(() => (peak = Math.max(peak, value)))),
             Effect.repeat(Schedule.spaced("50 millis")),
             Effect.forkChild,
@@ -374,7 +415,7 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
           expect(result.stderr).toBe("");
           expect(result.stdout).toBe(`drained:${size} [200]`);
           expect(gateway.seen.map((s) => s.method)).toEqual(["PUT"]);
-          // Buffered, the body alone would add 120 MiB.
+          // Buffered, the body alone would add 120 MiB to the proxy's process.
           expect(peak - baseline).toBeLessThan(64 * 1024 * 1024);
         }),
       { timeout: 90_000 },

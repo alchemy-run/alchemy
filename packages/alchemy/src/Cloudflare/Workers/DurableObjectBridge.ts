@@ -10,11 +10,16 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
-import { dispatchEgress, EGRESS_METHOD, registerDurableObjectClass } from "../Containers/Egress.ts";
+import {
+  CONTROL_METHOD,
+  dispatchControl,
+  registerDurableObjectClass,
+} from "../Containers/EgressRelay.ts";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
   makeDurableObjectCallbackFactory,
+  runAlarmCallbackInitializers,
 } from "./AlarmCallback.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
@@ -60,7 +65,7 @@ export const makeDurableObjectBridge =
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
-        // Container egress routes intercepted requests back by class name.
+        // Container controls route intercepted requests back by class name.
         registerDurableObjectClass(state, className);
 
         this.#instance = state.blockConcurrencyWhile(() =>
@@ -87,7 +92,9 @@ export const makeDurableObjectBridge =
                       RuntimeContext,
                       instanceRuntimeContext,
                     ).pipe(Layer.provideMerge(doContext));
-                    return instance.pipe(
+                    // Alchemy's own callbacks (container egress renewal)
+                    // register before the user's.
+                    return Effect.andThen(runAlarmCallbackInitializers(this.#state), instance).pipe(
                       Effect.provide(instanceContext),
                       Effect.ensuring(Effect.sync(seal)),
                     );
@@ -189,10 +196,10 @@ export const makeDurableObjectBridge =
           );
       }
 
-      /** A container request intercepted by this object's egress (see Containers/Egress.ts). */
-      async [EGRESS_METHOD](key: string, request: Request): Promise<Response> {
+      /** A container request to a host this object answers itself (see Containers/EgressRelay.ts). */
+      async [CONTROL_METHOD](key: string, request: Request): Promise<Response> {
         return this.#execute(
-          () => dispatchEgress(this.#state, key, request),
+          () => dispatchControl(this.#state, key, request),
           async (exit) =>
             exit._tag === "Success"
               ? exit.value

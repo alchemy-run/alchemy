@@ -1,5 +1,5 @@
 import type * as Config from "effect/Config";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
   sandboxHost,
@@ -7,10 +7,12 @@ import {
   type SandboxHostService,
   type SandboxSize,
 } from "../../AI/Sandbox.ts";
+import type { EgressKind } from "../../Egress/Kind.ts";
 import type { InputProps } from "../../Input.ts";
+import { EGRESS_CA_SWITCH } from "../../Runtime/Bootstrap/EgressCa.ts";
 import type { Providers } from "../Providers.ts";
 import type { WorkerShape } from "../Workers/Worker.ts";
-import type { DurableObjectContainerProps } from "./ContainerApplication.ts";
+import type { ContainerApplication, DurableObjectContainerProps } from "./ContainerApplication.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { CLOUDFLARE_CONTAINER_HOST, type ContainerInstanceType } from "./SandboxClient.ts";
 
@@ -116,6 +118,17 @@ export const Sandbox = <const D extends AISandbox.Decl.Any, InitReq = never, Wor
   const host = Layer.succeed(sandboxHost(id), {
     descriptor: { host: CLOUDFLARE_CONTAINER_HOST, sizes },
     image: tag,
+    // The accepted kinds' tools, and the switch that makes the program
+    // trust the interception CA (placeholders are set at start).
+    install: (kinds: ReadonlyArray<EgressKind<string, never>>) =>
+      Effect.gen(function* () {
+        const application = (yield* tag) as unknown as ContainerApplication;
+        const tools = kinds.flatMap((kind) => kind.tools ?? []);
+        yield* application.bind`AcceptedEgress`({
+          env: { [EGRESS_CA_SWITCH]: "1" },
+          ...(tools.length > 0 ? { image: tools } : {}),
+        });
+      }),
   } satisfies SandboxHostService);
   return Layer.merge(application, host) as unknown as Layer.Layer<
     AISandbox.Host<SelfOf<D>>,

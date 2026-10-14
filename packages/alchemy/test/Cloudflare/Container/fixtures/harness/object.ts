@@ -1,18 +1,15 @@
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as Anthropic from "@/Anthropic/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import { HarnessBox } from "./box.ts";
+import { HarnessGateway } from "./gateway.ts";
 
 /** Runs turns in a session; stops or crashes the container between them. */
 export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
   "HarnessObject",
   Effect.gen(function* () {
-    const model = yield* Anthropic.Egress(HarnessBox, {
-      apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
-    });
+    const { model } = yield* HarnessGateway;
     const harness = yield* Cloudflare.Containers.Harness(HarnessBox, {
       workspace: "/workspace/repo",
     });

@@ -1,13 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
-import { Egress as ContainerEgress } from "../Cloudflare/Containers/Egress.ts";
-import {
-  type CredentialInput,
-  egressSecret,
-  type EgressHandler,
-  type EgressSecret,
-} from "../Egress/Handler.ts";
+import { type CredentialInput, type EgressHandler, type EgressSecret } from "../Egress/Handler.ts";
 import {
   checkSubject,
   type ConfiguredEgress,
@@ -19,11 +13,6 @@ import {
   resolveCredential,
 } from "../Egress/Kind.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-
-export interface EgressOptions {
-  /** The Anthropic API key, added to each request. Never enters the container. */
-  readonly apiKey: EgressSecret;
-}
 
 /** Configures an Anthropic egress in a gateway's constructor. */
 export interface GatewayEgressOptions {
@@ -61,15 +50,6 @@ const withKey =
       ),
     );
 
-const containerEgress = (container: unknown, options: EgressOptions) =>
-  Effect.gen(function* () {
-    const apiKey = yield* egressSecret(options.apiKey, "ALCHEMY_ANTHROPIC_EGRESS_KEY");
-    return yield* ContainerEgress(container, HOST, withKey(apiKey), {
-      key: "anthropic",
-      env: SANDBOX_ENV,
-    });
-  });
-
 const gatewayEgress = (options: GatewayEgressOptions) =>
   Effect.gen(function* () {
     const credential = yield* resolveCredential(
@@ -95,20 +75,18 @@ const gatewayEgress = (options: GatewayEgressOptions) =>
     } satisfies ConfiguredEgress<"Anthropic">;
   });
 
-/** The `Anthropic.Egress` kind and its constructors. */
-export interface EgressKindConstructor extends EgressKind<"Anthropic"> {
+/** The `Anthropic.Egress` kind, as named in a gateway or sandbox declaration. */
+export interface Egress extends EgressKind<"Anthropic"> {
   /** Configure an Anthropic egress in a gateway's constructor (`Egress.Gateway.serve`). */
   (options: GatewayEgressOptions): Effect.Effect<ConfiguredEgress<"Anthropic">>;
-  /** Anthropic API access for a container, handled in its owning Durable Object. */
-  (container: unknown, options: EgressOptions): Effect.Effect<ContainerEgress>;
+  readonly env: Readonly<Record<string, string>>;
 }
 
 /**
  * Anthropic API access without the key ever entering the sandbox: requests
- * to `api.anthropic.com` get the real `x-api-key` in the egress gateway (or
- * the Durable Object that owns a Cloudflare container). The sandbox's
- * programs see a placeholder `ANTHROPIC_API_KEY`, so harnesses such as
- * Claude Code run unchanged.
+ * to `api.anthropic.com` get the real `x-api-key` in an egress gateway. A
+ * sandbox granted it sees a placeholder `ANTHROPIC_API_KEY`, so harnesses
+ * such as Claude Code run unchanged.
  *
  * ### Serving the model from a gateway
  * **Example:** The key stays in the gateway's Worker
@@ -130,20 +108,18 @@ export interface EgressKindConstructor extends EgressKind<"Anthropic"> {
  * );
  * ```
  *
- * ### Giving a container model access
- * **Example:** Claude Code in a container, with the key kept in the Worker
+ * ### Granting model access to a sandbox
+ * **Example:** Claude Code in a sandbox, with the key kept in the gateway
  * ```typescript
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const model = yield* Anthropic.Egress(Sandbox, {
- *       apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
- *     });
+ *     const gateway = yield* ModelGateway;
  *     const harness = yield* Cloudflare.Containers.Harness(Sandbox);
  *     return Effect.gen(function* () {
  *       return {
  *         open: () =>
- *           harness.start({ size: "large", egress: [model] }).pipe(
+ *           harness.start({ size: "large", egress: [gateway.model] }).pipe(
  *             Effect.flatMap((claude) => claude.start({})),
  *             Effect.map((session) => session.id),
  *           ),
@@ -157,10 +133,7 @@ export interface EgressKindConstructor extends EgressKind<"Anthropic"> {
  * @product Egress
  * @category Anthropic
  */
-export const Egress: EgressKindConstructor = Object.assign(
-  (...args: [GatewayEgressOptions] | [unknown, EgressOptions]) =>
-    args.length >= 2
-      ? containerEgress(args[0], (args as [unknown, EgressOptions])[1])
-      : gatewayEgress(args[0] as GatewayEgressOptions),
-  { [EgressKindTypeId]: "Anthropic" as const },
-) as EgressKindConstructor;
+export const Egress: Egress = Object.assign(gatewayEgress, {
+  [EgressKindTypeId]: "Anthropic" as const,
+  env: SANDBOX_ENV,
+});

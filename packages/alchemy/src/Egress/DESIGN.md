@@ -196,11 +196,13 @@ export class Sandbox extends AI.Sandbox<
     size: "small" | "large";
     egress: GitHub.Egress | Anthropic.Egress;
   }
->()("Sandbox") {}
+>()("Sandbox", { egress: [GitHub.Egress, Anthropic.Egress] }) {}
 ```
 
-Each host installs the tools for the accepted kinds at deploy (`git` and `gh`
-for `GitHub.Egress`). `start` sets the placeholder credentials
+The accepted kinds are also passed as values, because their tools ship with
+them: each host installs the tools for the accepted kinds at deploy (`git`
+and `gh` for `GitHub.Egress`). Declaring `egress` in the type without the
+values doesn't compile. `start` sets the placeholder credentials
 (`GH_TOKEN=alchemy-egress`) at run time, for the egresses actually granted.
 
 A host constructor takes the declaration, the host's props and the program.
@@ -536,6 +538,17 @@ export class AlchemyEgress extends WorkerEntrypoint {
 Calling `interceptOutboundHttps` again with new props replaces them, even on
 open connections, so a renewed grant, `setEgress` and `stop` apply at once.
 
+Routes intercept HTTPS only; a host the Durable Object answers itself (the
+harness's shutdown hook) is intercepted on HTTP and HTTPS. Measured live:
+re-registering a host's intercept can reset a TLS handshake that is in flight
+at that moment (2 of 24 `git ls-remote`s at a 4-second renewal cadence when
+HTTP was re-registered too; rarer, but not zero, with HTTPS alone). At the
+default 5-minute TTL that is one sub-second window per host every 2 minutes.
+If it matters, the fix is to stop re-intercepting on renewal: keep the route
+table in the props and have the relay fetch each gateway's current grant from
+the Durable Object (cached until it nears expiry), so only `start`/`setEgress`
+re-intercept.
+
 ### Anywhere else: a proxy in the sandbox
 
 The image gets the proxy and the accepted kinds' tools at deploy time. No
@@ -683,7 +696,14 @@ hosts and paths, whatever the proxy or relay sent.
 
 The Durable Object stores what it granted and renews each gateway's grant
 before it expires. Only `apply` differs by host (intercept props, or a push to
-the proxy's control port):
+the proxy's control port).
+
+Renewal is an `Alchemy.makeCallback` job (`alchemy/egress`), registered by
+the Durable Object bridge before the user's inner Effect runs, so it shares
+the object's one alarm with the user's callbacks and `alarm` handler instead
+of calling `setAlarm` over them. An object that never grants egress never
+touches its alarm. (An object that calls `storage.setAlarm` directly must use
+callbacks, as with any Alchemy callback.) Sketch:
 
 ```ts
 // alchemy internal: AI/Sandbox.ts — shared by every host, runs in the owning Durable Object
@@ -923,6 +943,16 @@ coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durabl
 
 // 3. makeEgressHandle buffers request bodies. Fix: stream them (a large git push).
 ```
+
+Fixed in PR 3: the egress is stored in the Durable Object (`alchemy:egress`)
+and re-applied by the renewal callback, including once on construction when
+the container is already running; `start` always converges on what's stored
+(it skips re-minting only when this instance applied exactly that set and its
+grants aren't due for renewal); the relay and the gateway stream bodies.
+`makeEgressHandle`, `Cloudflare.Containers.Egress` and the `__alchemyEgress`
+hop are gone. The one host a Durable Object still answers itself is the
+harness's shutdown hook (`alchemy.internal`), through the same relay
+(`props.control`).
 
 ## 16. Every environment
 

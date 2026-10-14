@@ -1,8 +1,7 @@
 /**
  * What an egress does with one request, and where its credential comes
- * from. Shared by every egress kind and both runtimes: the gateway
- * (`Egress.Gateway.serve`) and the Durable Object that owns a Cloudflare
- * container (`Cloudflare.Egress`).
+ * from. Shared by every egress kind; runs in the gateway
+ * (`Egress.Gateway.serve`).
  */
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";

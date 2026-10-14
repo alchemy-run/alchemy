@@ -34,6 +34,13 @@ export const ConfiguredEgressTypeId = "~alchemy/ConfiguredEgress" as const;
  */
 export interface EgressKind<Name extends string = string, Scope = never> {
   readonly [EgressKindTypeId]: Name;
+  /**
+   * Placeholder credentials and settings a sandbox's programs need: set when
+   * an egress of this kind is granted (`GH_TOKEN=alchemy-egress`).
+   */
+  readonly env?: Readonly<Record<string, string>>;
+  /** Tools a sandbox that accepts this kind needs, installed at deploy (`git`, `gh`). */
+  readonly tools?: ReadonlyArray<ImageLayer>;
   /** @internal phantom — the scope `narrow` takes. */
   readonly "~alchemy/EgressScope"?: (scope: Scope) => void;
 }
