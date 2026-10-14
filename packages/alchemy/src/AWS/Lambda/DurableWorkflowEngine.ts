@@ -109,14 +109,18 @@ export const WorkflowHost = <ROut, E, RIn>(
         const instance = WorkflowEngine.WorkflowInstance.initial(workflow, invocation.executionId);
         const result = yield* execute(payload as object, invocation.executionId).pipe(
           Workflow.intoResult,
-          Effect.provideService(WorkflowEngine.WorkflowInstance, instance),
-          Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
-          Effect.provideService(CurrentRun, {
-            durable,
-            context: runContext,
-            clocks: new Map(),
-            instance,
-          }),
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
+              Layer.succeed(WorkflowEngine.WorkflowEngine, engine),
+              Layer.succeed(CurrentRun, {
+                durable,
+                context: runContext,
+                clocks: new Map(),
+                instance,
+              }),
+            ),
+          ),
         );
         // Every wait blocks inside the durable execution, so a run always finishes.
         if (result._tag === "Suspended") {
@@ -459,13 +463,17 @@ const makeEngine = (options: {
           name: `${activity.name}/${attempt}`,
           effect: activity.executeEncoded.pipe(
             Workflow.intoResult,
-            Effect.provideService(WorkflowEngine.WorkflowInstance, activityInstance),
             Effect.flatMap((result) =>
               result._tag === "Complete"
                 ? encodeExit(result.exit)
                 : Effect.die(new Error(`Activity ${activity.name} suspended inside a step`)),
             ),
-            Effect.provide(run.context),
+            // The run's services, with the step's own instance.
+            Effect.provide(
+              Layer.succeedContext(
+                Context.add(run.context, WorkflowEngine.WorkflowInstance, activityInstance),
+              ),
+            ),
           ) as Effect.Effect<string>,
         });
         return new Workflow.Complete({ exit: yield* decodeExit(text) });

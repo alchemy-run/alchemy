@@ -65,7 +65,10 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* request(`${output.url}/ready`);
+      // A fresh workers.dev URL can take a while to start serving.
+      yield* request(`${output.url}/ready`).pipe(
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+      );
       return output;
     }),
     { timeout: 120_000 },

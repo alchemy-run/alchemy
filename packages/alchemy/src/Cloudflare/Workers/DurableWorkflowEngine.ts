@@ -440,15 +440,19 @@ const executionObject = (registration: Registration) =>
             return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
           }),
           Workflow.intoResult,
-          Effect.provideService(WorkflowEngine.WorkflowInstance, instance),
-          Effect.provideService(WorkflowEngine.WorkflowEngine, registration.engine()),
-          Effect.provideService(CurrentExecution, {
-            workflowName: workflow._tag,
-            executionId: row.execution_id,
-            query,
-            complete,
-            scheduleClock,
-          }),
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
+              Layer.succeed(WorkflowEngine.WorkflowEngine, registration.engine()),
+              Layer.succeed(CurrentExecution, {
+                workflowName: workflow._tag,
+                executionId: row.execution_id,
+                query,
+                complete,
+                scheduleClock,
+              }),
+            ),
+          ),
         );
         // Suspended: a clock or a completed deferred wakes it again.
         if (result._tag === "Suspended") return;
