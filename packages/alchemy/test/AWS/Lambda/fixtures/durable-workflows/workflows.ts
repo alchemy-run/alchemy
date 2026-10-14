@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
+import * as Workflows from "@/Workflows.ts";
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {
   reason: Schema.String,
@@ -47,7 +48,7 @@ export const Parent = Workflow.make("Parent", {
 
 // Each step's name is in the execution's history, which is how the tests see what ran.
 export const WorkflowsLive = Layer.mergeAll(
-  Greet.toLayer(({ name }) =>
+  Workflows.layer(Greet, ({ name }) =>
     Effect.gen(function* () {
       const greeting = yield* Activity.make({
         name: "greet",
@@ -58,7 +59,7 @@ export const WorkflowsLive = Layer.mergeAll(
       return greeting;
     }),
   ),
-  Nap.toLayer(({ seconds }) =>
+  Workflows.layer(Nap, ({ seconds }) =>
     Effect.gen(function* () {
       yield* Activity.make({ name: "before", execute: Effect.void });
       yield* DurableClock.sleep({
@@ -70,7 +71,7 @@ export const WorkflowsLive = Layer.mergeAll(
       return "rested";
     }),
   ),
-  Approve.toLayer(() =>
+  Workflows.layer(Approve, () =>
     Effect.gen(function* () {
       yield* Activity.make({ name: "requested", execute: Effect.void });
       const by = yield* DurableDeferred.await(Approval);
@@ -78,7 +79,7 @@ export const WorkflowsLive = Layer.mergeAll(
       return `approved by ${by}`;
     }),
   ),
-  Checkout.toLayer(({ decline }) =>
+  Workflows.layer(Checkout, ({ decline }) =>
     Effect.gen(function* () {
       yield* Activity.make({ name: "reserve", execute: Effect.void }).pipe(
         Checkout.withCompensation(() => Activity.make({ name: "release", execute: Effect.void })),
@@ -93,7 +94,7 @@ export const WorkflowsLive = Layer.mergeAll(
       });
     }),
   ),
-  Parent.toLayer(({ id }) =>
+  Workflows.layer(Parent, ({ id }) =>
     Effect.gen(function* () {
       const greeting = yield* Greet.execute({ id: `${id}-child`, name: "child" });
       return `parent got ${greeting}`;

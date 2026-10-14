@@ -978,4 +978,4 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * @provides WorkflowEngine
  */
 export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
-  Layer.merge(DurableObjectPlatform, DurableObjectEngine(Layer.empty));
+  Layer.merge(DurableObjectPlatform, DurableObjectEngine);

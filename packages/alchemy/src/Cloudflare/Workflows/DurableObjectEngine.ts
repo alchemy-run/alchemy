@@ -15,11 +15,11 @@ import { makeCallback } from "../../Callback.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   CurrentActivity,
-  makeCurrentActivity,
   decodeExit,
   decodeResult,
   encodeExit,
   encodeResult,
+  makeCurrentActivity,
   payloadCodec,
 } from "../../WorkflowEncoding.ts";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
@@ -38,39 +38,42 @@ import type { Worker } from "../Workers/Worker.ts";
  * run happens in one durable callback per execution, so runs never overlap,
  * and a run that fails or is cut short is retried.
  *
- * ### Running a workflow from a Worker
- * **Example:** Start a workflow and read its result
+ * ### Running workflows on Durable Objects
+ * **Example:** Provide the engine to a Worker
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Workflows from "alchemy/Workflows";
  * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
  * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  * import * as Schema from "effect/Schema";
- * import { Activity, Workflow, WorkflowEngine } from "effect/workflow";
+ * import { Activity, Workflow } from "effect/workflow";
  *
  * const SendWelcome = Workflow.make("SendWelcome", {
  *   payload: { userId: Schema.String },
  *   idempotencyKey: ({ userId }) => userId,
  * });
  *
- * const SendWelcomeLive = SendWelcome.toLayer(({ userId }) =>
- *   Activity.make({
- *     name: "send",
- *     execute: Effect.log(`welcome, ${userId}`),
- *   }),
+ * const SendWelcomeLive = Workflows.layer(SendWelcome, ({ userId }) =>
+ *   Activity.make({ name: "send", execute: Effect.log(`welcome, ${userId}`) }),
  * );
  *
  * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
  *   "AppWorker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const engine = yield* WorkflowEngine.WorkflowEngine;
+ *     const welcome = yield* Workflows.RunWorkflow(SendWelcome);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const executionId = yield* SendWelcome.execute({ userId: "u-1" }, { discard: true });
- *         return HttpServerResponse.text(executionId);
- *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
+ *         const run = yield* welcome.start({ userId: "u-1" });
+ *         return HttpServerResponse.text(run.executionId);
+ *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(SendWelcomeLive))),
+ *   }).pipe(
+ *     Effect.provide(
+ *       SendWelcomeLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine)),
+ *     ),
+ *   ),
  * ) {}
  * ```
  *
@@ -78,7 +81,7 @@ import type { Worker } from "../Workers/Worker.ts";
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-const DurableObjectEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
+export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
@@ -252,51 +255,6 @@ const DurableObjectEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never
       return engine;
     }),
   );
-
-/**
- * Host workflows on Durable Objects: provides a `WorkflowEngine` to the
- * given workflow Layers (from `Workflow.toLayer`), and to everything after them.
- *
- * Activities often call runtime-only APIs, like another Durable Object's
- * methods, which need `RuntimeContext`. Every run happens inside a Durable
- * Object event that has one, so that requirement is satisfied for them.
- *
- * ### Hosting workflows
- * **Example:** Provide workflows to a Worker
- * ```typescript
- * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
- *   "AppWorker",
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     const engine = yield* WorkflowEngine.WorkflowEngine;
- *     return {
- *       fetch: Effect.gen(function* () {
- *         yield* SendWelcome.execute({ userId: "u-1" }, { discard: true });
- *         return HttpServerResponse.text("ok");
- *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
- *     };
- *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(Layer.mergeAll(SendWelcomeLive, ChargeLive)))),
- * ) {}
- * ```
- *
- * @layer
- * @provides WorkflowEngine
- * @product Durable Objects
- */
-export const DurableObjectEngine = <ROut, E, RIn>(
-  workflows: Layer.Layer<ROut, E, RIn>,
-): Layer.Layer<
-  ROut | WorkflowEngine.WorkflowEngine,
-  E,
-  Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
-> =>
-  // `Workflow.toLayer` lifts a handler's requirements onto its Layer, but a
-  // handler only runs inside a run, which provides its own RuntimeContext.
-  workflows.pipe(Layer.provideMerge(DurableObjectEngineLayer)) as Layer.Layer<
-    ROut | WorkflowEngine.WorkflowEngine,
-    E,
-    Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
-  >;
 
 // ---------------------------------------------------------------- the execution object
 

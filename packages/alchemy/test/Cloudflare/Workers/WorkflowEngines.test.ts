@@ -8,7 +8,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import makeStack from "./fixtures/durable-workflow/stack.ts";
-import type { PollResult } from "./fixtures/durable-workflow/worker.ts";
+import type { Status } from "./fixtures/durable-workflow/worker.ts";
 
 class NotReady extends Data.TaggedError("NotReady")<{ readonly message: string }> {}
 
@@ -32,12 +32,24 @@ const request = <T>(url: string, method: "GET" | "POST" = "GET") =>
     }),
   );
 
-/** Poll a workflow until it's finished. */
+type RunStatus = Status<unknown, unknown>;
+
+/** Start a run without waiting, and return the URL that reads its status. */
+const start = (url: string, workflow: string, id: string, query = "") =>
+  Effect.map(
+    request<{ executionId: string }>(`${url}/start/${workflow}/${id}${query}`, "POST"),
+    ({ executionId }) => ({
+      executionId,
+      status: `${url}/status/${workflow}/${id}?executionId=${executionId}`,
+    }),
+  );
+
+/** Read a run's status until it's finished. */
 const awaitResult = (url: string) =>
-  request<PollResult>(url).pipe(
+  request<RunStatus>(url).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
-      until: (result) => result.status === "success" || result.status === "failure",
+      until: (status) => status._tag !== "Running" && status._tag !== "NotStarted",
       times: 45,
     }),
   );
@@ -73,8 +85,8 @@ describe.concurrent.each([
       // a deploy: wait until a run actually completes.
       yield* Effect.gen(function* () {
         const id = yield* freshId("probe");
-        const result = yield* request<PollResult>(`${output.url}/run/Greet/${id}`, "POST");
-        if (result.status !== "success") {
+        const result = yield* request<RunStatus>(`${output.url}/run/Greet/${id}`, "POST");
+        if (result._tag !== "Completed") {
           return yield* new NotReady({ message: JSON.stringify(result) });
         }
       }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }));
@@ -89,8 +101,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("greet");
-      const result = yield* request<PollResult>(`${url}/run/Greet/${id}?name=sam`, "POST");
-      expect(result).toEqual({ status: "success", value: "hello sam" });
+      const result = yield* request<RunStatus>(`${url}/run/Greet/${id}?name=sam`, "POST");
+      expect(result).toEqual({ _tag: "Completed", result: "hello sam" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["greet", "log"]);
     }),
     { timeout: 90_000 },
@@ -101,12 +113,12 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("twice");
-      const first = yield* request<{ executionId: string }>(`${url}/start/Greet/${id}`, "POST");
-      const second = yield* request<{ executionId: string }>(`${url}/start/Greet/${id}`, "POST");
+      const first = yield* start(url, "Greet", id);
+      const second = yield* start(url, "Greet", id);
       expect(second.executionId).toBe(first.executionId);
-      expect(yield* awaitResult(`${url}/poll/Greet/${id}`)).toEqual({
-        status: "success",
-        value: "hello world",
+      expect(yield* awaitResult(first.status)).toEqual({
+        _tag: "Completed",
+        result: "hello world",
       });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["greet", "log"]);
     }),
@@ -118,11 +130,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("nap");
-      yield* request(`${url}/start/Nap/${id}?seconds=3`, "POST");
-      expect(yield* awaitResult(`${url}/poll/Nap/${id}`)).toEqual({
-        status: "success",
-        value: "rested",
-      });
+      const run = yield* start(url, "Nap", id, "?seconds=3");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "after"]);
     }),
     { timeout: 90_000 },
@@ -133,7 +142,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("approve");
-      yield* request(`${url}/start/Approve/${id}`, "POST");
+      const run = yield* start(url, "Approve", id);
       // Suspended on the deferred, having run only its first activity.
       yield* request<string[]>(`${url}/journal/${id}`).pipe(
         Effect.repeat({
@@ -142,13 +151,14 @@ describe.concurrent.each([
           times: 30,
         }),
       );
-      expect(yield* request<PollResult>(`${url}/poll/Approve/${id}`)).toEqual({
-        status: "suspended",
-      });
-      yield* request(`${url}/approve/Approve/${id}?by=agent`, "POST");
-      expect(yield* awaitResult(`${url}/poll/Approve/${id}`)).toEqual({
-        status: "success",
-        value: "approved by agent",
+      expect(yield* request<RunStatus>(run.status)).toEqual({ _tag: "Running" });
+      yield* request(
+        `${url}/approve/Approve/${id}?executionId=${run.executionId}&by=agent`,
+        "POST",
+      );
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Completed",
+        result: "approved by agent",
       });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual([
         "requested",
@@ -163,9 +173,9 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("declined");
-      const result = yield* request<PollResult>(`${url}/run/Checkout/${id}?decline=true`, "POST");
+      const result = yield* request<RunStatus>(`${url}/run/Checkout/${id}?decline=true`, "POST");
       expect(result).toEqual({
-        status: "failure",
+        _tag: "Failed",
         error: { _tag: "Declined", reason: "card declined" },
       });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual([
@@ -182,8 +192,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("charged");
-      const result = yield* request<PollResult>(`${url}/run/Checkout/${id}`, "POST");
-      expect(result).toEqual({ status: "success", value: "charged" });
+      const result = yield* request<RunStatus>(`${url}/run/Checkout/${id}`, "POST");
+      expect(result).toEqual({ _tag: "Completed", result: "charged" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["reserve", "charged"]);
     }),
     { timeout: 90_000 },
@@ -194,7 +204,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("interrupt");
-      yield* request(`${url}/start/Approve/${id}`, "POST");
+      const run = yield* start(url, "Approve", id);
       yield* request<string[]>(`${url}/journal/${id}`).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -202,9 +212,8 @@ describe.concurrent.each([
           times: 30,
         }),
       );
-      yield* request(`${url}/interrupt/Approve/${id}`, "POST");
-      const result = yield* awaitResult(`${url}/poll/Approve/${id}`);
-      expect(result.status).toBe("failure");
+      yield* request(`${url}/interrupt/Approve/${id}?executionId=${run.executionId}`, "POST");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["requested"]);
     }),
     { timeout: 90_000 },
@@ -215,8 +224,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("parent");
-      const result = yield* request<PollResult>(`${url}/run/Parent/${id}`, "POST");
-      expect(result).toEqual({ status: "success", value: "parent got hello child" });
+      const result = yield* request<RunStatus>(`${url}/run/Parent/${id}`, "POST");
+      expect(result).toEqual({ _tag: "Completed", result: "parent got hello child" });
       expect(yield* request<string[]>(`${url}/journal/${id}-child`)).toEqual(["greet", "log"]);
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["parent:hello child"]);
     }),
