@@ -9,7 +9,7 @@ The gateway is the same everywhere. It's something you set up, like any other
 Worker, and pass to a sandbox when you start it:
 
 ```ts
-const gateway = yield* Egress.connect(Gateway);
+const gateway = yield* Egress.Connect(Gateway);
 yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ issue })] });
 ```
 
@@ -228,7 +228,7 @@ export class Agent extends Cloudflare.DurableObject<Agent>()(
     const repo = yield* Repo;
     const sandbox = yield* Sandbox;
     // A handle to the gateway: how to reach it, and the key to sign its grants.
-    const gateway = yield* Egress.connect(Gateway);
+    const gateway = yield* Egress.Connect(Gateway);
 
     return Effect.gen(function* () {
       return {
@@ -299,13 +299,13 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const api = yield* Api; // pulls in Agent, and through Egress.connect, the Gateway
+    const api = yield* Api; // pulls in Agent, and through Egress.Connect, the Gateway
     return { api: api.url.as<string>() };
   }).pipe(Effect.provide(SandboxLive)),
 );
 ```
 
-## 6. What `Egress.connect` gives the Durable Object
+## 6. What `Egress.Connect` gives the Durable Object
 
 ```ts
 // alchemy internal: Egress/Gateway.ts
@@ -317,7 +317,7 @@ export interface GatewayHandle {
   grant(egress: ReadonlyArray<EgressRef>, ttl: Duration.Duration): Effect.Effect<Grant>;
 }
 
-export const connect = (gateway: GatewayDeclaration) =>
+export const Connect = (gateway: GatewayDeclaration) =>
   Effect.gen(function* () {
     const host = yield* Cloudflare.Worker; // the Worker hosting the Durable Object
     const target = yield* gateway;
@@ -331,7 +331,7 @@ export const connect = (gateway: GatewayDeclaration) =>
 ```
 
 Each gateway owns its key (`Random("EgressKey", { bytes: 32 })`, declared by
-`Egress.Gateway`). `connect` binds it into the Worker that hosts the Durable
+`Egress.Gateway`). `Connect` binds it into the Worker that hosts the Durable
 Object, so grants are minted locally, without a call to the gateway.
 
 ## 7. How a sandbox's traffic reaches the gateway
@@ -485,7 +485,7 @@ gateway's own key, nothing else.
 // alchemy internal: Egress/Gateway.ts
 export const Gateway = (options: { readonly egress: ReadonlyArray<EgressDeclaration> }) =>
   Effect.gen(function* () {
-    const key = yield* Random("EgressKey", { bytes: 32 }); // bound into this host; `connect` shares it
+    const key = yield* Random("EgressKey", { bytes: 32 }); // bound into this host; `Connect` shares it
     for (const declaration of options.egress) yield* declaration; // binds each secret into this host
     return {
       fetch: Effect.gen(function* () {
@@ -676,7 +676,7 @@ export const encode = (grant: Grant) => toBase64Url(JSON.stringify(grant));
 A grant isn't a credential for GitHub or Anthropic. It lets its holder ask the
 gateway to run the egresses it names, as narrowed, until it expires. The
 tokens stay in the gateway's host, and so does its key (shared only with the
-Workers that `connect` to it).
+Workers that `Connect` to it).
 
 ## 11. Where egress state lives
 
@@ -776,7 +776,7 @@ Fly.Sandbox(Sandbox, { main, image, sizes: { small: "shared-cpu-2x", large: "per
 Local.Sandbox(Sandbox, { main }, program); // alchemy dev: the same proxy
 
 // The Durable Object: the same code on every host
-const gateway = yield* Egress.connect(Gateway);
+const gateway = yield* Egress.Connect(Gateway);
 yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ issue })] });
 ```
 
@@ -784,7 +784,7 @@ yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ iss
 
 ```
 1. #2251 (merged)  ctx.props and ctx.exports in the Effect DX
-2. alchemy/Egress  Egress.Gateway, Egress.connect, Grant (WebCrypto), EgressRef + handlerFor
+2. alchemy/Egress  Egress.Gateway, Egress.Connect, Grant (WebCrypto), EgressRef + handlerFor
 3. Cloudflare      AlchemyEgress relay entrypoint; route via service binding / URL; stored decision
                    + alarm renewal; bugs 1–3; drop the __alchemyEgress hop through the Durable Object
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
@@ -794,7 +794,7 @@ yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ iss
 
 ## 17. Open questions
 
-1. **Sharing the gateway's key:** `connect` binds it into every Worker that grants for that gateway, so minting needs no call. The alternative keeps the key in the gateway alone and mints over RPC (`gateway.grant(...)` through the service binding), at one call per renewal. Worth it?
+1. **Sharing the gateway's key:** `Connect` binds it into every Worker that grants for that gateway, so minting needs no call. The alternative keeps the key in the gateway alone and mints over RPC (`gateway.grant(...)` through the service binding), at one call per renewal. Worth it?
 2. **Certificates in the proxy:** it signs X.509 leaf certificates per host, which Node can't do natively. `@peculiar/x509` (a dependency), hand-rolled DER, or a proxy written in Go?
 3. **The control port** must be reachable by the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
 4. **Bypassing the proxy:** tools that ignore `HTTPS_PROXY` reach the internet directly. That can't leak credentials, but it skips the rules for non-egress hosts. Closing it needs a firewall that only allows the gateway.
