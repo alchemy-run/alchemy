@@ -13,6 +13,7 @@ import type { Input, InputProps } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Assets } from "../Assets.ts";
@@ -37,6 +38,31 @@ const foldEnv = (env: Record<string, any> | undefined): Record<string, string> |
     out[key] = typeof v === "string" ? v : JSON.stringify(v);
   }
   return Object.keys(out).length > 0 ? out : undefined;
+};
+
+/**
+ * Fold what bindings contribute (`env`, `image` layers) into the props, so
+ * they reach the build identity and the image like the declared ones.
+ */
+const withBindings = (
+  news: MicrovmImageProps,
+  bindings: ReadonlyArray<ResourceBinding<MicrovmImage["Binding"]>>,
+): MicrovmImageProps => {
+  const active = bindings.filter(
+    (binding: ResourceBinding<MicrovmImage["Binding"]> & { action?: string }) =>
+      binding.action !== "delete",
+  );
+  const layers = active.flatMap((binding) => binding.data?.image ?? []);
+  const env = active.reduce<Record<string, any>>(
+    (acc, binding) => ({ ...acc, ...binding.data?.env }),
+    {},
+  );
+  if (layers.length === 0 && Object.keys(env).length === 0) return news;
+  return {
+    ...news,
+    ...(layers.length > 0 ? { imageLayers: [...(news.imageLayers ?? []), ...layers] } : {}),
+    ...(Object.keys(env).length > 0 ? { env: { ...env, ...news.env } } : {}),
+  };
 };
 
 const READY_STATES = new Set<string>(["CREATED", "UPDATED"]);
@@ -112,6 +138,7 @@ type ContentInputs = Pick<
   | "isExternal"
   | "external"
   | "build"
+  | "imageLayers"
 >;
 
 /**
@@ -134,6 +161,7 @@ const resolvedContentInputs = (news: Input<MicrovmImageProps>): ContentInputs | 
     isExternal: n.isExternal,
     external: n.external,
     build: n.build,
+    imageLayers: n.imageLayers,
   };
   if (!isResolved(picked)) return undefined;
   // `isResolved` has verified every field; the cast only re-states that
@@ -206,7 +234,12 @@ const artifactContent = (
         port,
         build: news.build,
       });
-      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
+      const dockerfile = buildMicrovmDockerfile(
+        news.dockerfile,
+        runtime,
+        port,
+        news.imageLayers ?? [],
+      );
       const identity = `${bundleHash}:${dockerfile}`;
       const contentHash = yield* sha256(identity);
       const archive = yield* zipFiles([{ path: "Dockerfile", content: dockerfile }, ...files]);
@@ -254,7 +287,11 @@ const artifactContent = (
     // Re-widen: inference normalizes the object-literal union (adding
     // `uri?: undefined`), which defeats `"uri" in content` narrowing.
     Effect.map((content): ArtifactContent => content),
-    Artifacts.cached(`microvm-image-content:${id}`),
+    // Bindings' layers fold in only at reconcile: key on them so `diff`'s
+    // memoized bundle (without them) is never reused for the build.
+    Artifacts.cached(
+      `microvm-image-content:${id}:${(news.imageLayers ?? []).map((layer) => layer.id).join(",")}`,
+    ),
   );
 
 // Materialize + upload the code artifact and compute its build identity hash
@@ -442,7 +479,8 @@ export const MicrovmImageProvider = () =>
         return images.flatMap((image) => (image ? [toAttrs(image)] : []));
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news: declared, bindings, output, session }) {
+      const news = withBindings(declared, bindings);
       const name = yield* resolveName(id, news.name);
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };

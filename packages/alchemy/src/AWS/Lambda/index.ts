@@ -53,6 +53,7 @@ export * from "./LogGroupEventSource.ts";
 export * from "./MicrovmImage.ts";
 export * from "./MicrovmProvider.ts";
 export * from "./MicrovmRpc.ts";
+export * from "./MicrovmSandbox.ts";
 export * from "./NetworkConnector.ts";
 export * from "./Permission.ts";
 export * from "./QueueEventSource.ts";

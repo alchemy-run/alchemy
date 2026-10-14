@@ -4,6 +4,7 @@ import * as Path from "effect/Path";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { type ImageLayer, renderImageLayers } from "../../Docker/ImageLayer.ts";
 import { Stack } from "../../Stack.ts";
 
 /**
@@ -25,14 +26,22 @@ export const buildMicrovmDockerfile = (
   userDockerfile: string | undefined,
   runtime: "bun" | "node",
   port: number,
+  /** Layers bindings contribute (tools, harness CLIs), between the base and the program. */
+  layers: ReadonlyArray<ImageLayer> = [],
 ): string => {
-  const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
+  const base = renderImageLayers({
+    preamble: userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`,
+    layers,
+  });
   const installRuntime =
     runtime === "bun"
       ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
         // `unzip` (and `tar`) present before the installer runs.
         "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
-      : "RUN dnf install -y nodejs && dnf clean all";
+      : userDockerfile === undefined
+        ? "RUN dnf install -y nodejs && dnf clean all"
+        : // A custom base (e.g. `node:24-bookworm`) may already carry node.
+          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs && dnf clean all)";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [
     base,

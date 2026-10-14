@@ -326,6 +326,70 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
         }).pipe(Effect.provide(FetchHttpClient.layer)),
       { timeout: 60_000 },
     );
+
+    it.effect(
+      "a MicroVM's run hook delivers the secret and the first table, once",
+      () =>
+        Effect.gen(function* () {
+          const routes = yield* SubscriptionRef.make<ReadonlyArray<Route>>([]);
+          const first: ReadonlyArray<Route> = [
+            { host: "example.com", gateway: { id: "work", url: "https://gw" }, grant: "g1" },
+          ];
+          let ready = false;
+          const control = yield* serveEgressControl({
+            port: 0,
+            host: "127.0.0.1",
+            routes,
+            hooks: {
+              ready: Effect.sync(() => ready),
+              run: (payload) =>
+                Effect.gen(function* () {
+                  const config = JSON.parse(payload ?? "{}") as {
+                    secret: string;
+                    routes: ReadonlyArray<Route>;
+                  };
+                  yield* SubscriptionRef.set(routes, config.routes);
+                  return Redacted.make(config.secret);
+                }),
+            },
+          });
+          const client = yield* HttpClient.HttpClient;
+          const base = `http://127.0.0.1:${control.port}`;
+          const hook = (name: string, body: unknown = {}) =>
+            client.execute(
+              HttpClientRequest.post(`${base}/aws/lambda-microvms/runtime/v1/${name}`).pipe(
+                HttpClientRequest.bodyJsonUnsafe(body),
+              ),
+            );
+          const put = (authorization: string) =>
+            client.execute(
+              HttpClientRequest.put(`${base}/routes`).pipe(
+                HttpClientRequest.setHeaders({ authorization }),
+                HttpClientRequest.bodyJsonUnsafe([]),
+              ),
+            );
+
+          expect((yield* hook("ready")).status).toBe(503);
+          ready = true;
+          expect((yield* hook("ready")).status).toBe(200);
+          // No secret before the run hook: nothing can replace the table.
+          expect((yield* put("Bearer s3cret")).status).toBe(401);
+
+          const run = (secret: string) =>
+            hook("run", {
+              microvmId: "microvm-1",
+              runHookPayload: JSON.stringify({ secret, routes: first }),
+            });
+          expect((yield* run("s3cret")).status).toBe(200);
+          expect(yield* SubscriptionRef.get(routes)).toEqual(first);
+          // Only Lambda's own (first) run hook is accepted.
+          expect((yield* run("stolen")).status).toBe(409);
+          expect((yield* put("Bearer stolen")).status).toBe(401);
+          expect((yield* put("Bearer s3cret")).status).toBe(204);
+          expect(yield* SubscriptionRef.get(routes)).toEqual([]);
+        }).pipe(Effect.provide(FetchHttpClient.layer)),
+      { timeout: 60_000 },
+    );
   });
 
   describe("streaming", { tags: ["local"] }, () => {

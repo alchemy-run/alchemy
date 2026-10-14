@@ -14,6 +14,7 @@ import {
   type SandboxProcess,
   type SandboxStartOptions,
 } from "../../AI/Sandbox.ts";
+import { MICROVM_SANDBOX_HOST } from "../../AWS/Lambda/MicrovmSandboxHost.ts";
 import type { EgressError } from "../../Egress/Gateway.ts";
 import { toHttpClient } from "../Fetcher.ts";
 import type { ContainerStartupOptions } from "./Container.ts";
@@ -163,7 +164,7 @@ export const connectCloudflareSandbox = (id: string, descriptor: SandboxHostDesc
     if (descriptor.host !== CLOUDFLARE_CONTAINER_HOST) {
       return yield* Effect.die(
         new SandboxError({
-          message: `Sandbox '${id}' is hosted on '${descriptor.host}', which a Cloudflare Durable Object cannot reach yet.`,
+          message: `Sandbox '${id}' is hosted on '${descriptor.host}', which a Cloudflare Durable Object cannot reach.`,
         }),
       );
     }
@@ -176,3 +177,16 @@ export const connectCloudflareSandbox = (id: string, descriptor: SandboxHostDesc
     )) as unknown as ContainerClient;
     return fromContainerClient(container, descriptor.sizes);
   });
+
+/**
+ * @internal Connect declaration `id` to whichever host serves it, from the
+ * Durable Object that owns it: a Cloudflare Container bound to the object,
+ * or AWS Lambda MicroVMs (whose client is loaded only when a sandbox is
+ * hosted there, so other objects never bundle the AWS SDK).
+ */
+export const connectSandbox = (id: string, descriptor: SandboxHostDescriptor) =>
+  descriptor.host === MICROVM_SANDBOX_HOST
+    ? Effect.promise(() => import("../../AWS/Lambda/MicrovmSandboxClient.ts")).pipe(
+        Effect.flatMap((client) => client.connectMicrovmSandbox(id, descriptor)),
+      )
+    : connectCloudflareSandbox(id, descriptor);

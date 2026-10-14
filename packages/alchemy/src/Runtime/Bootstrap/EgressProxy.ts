@@ -5,9 +5,15 @@
  * replaces it at run time through the control endpoint, authenticated with
  * `ALCHEMY_EGRESS_CONTROL_SECRET`.
  *
+ * On an AWS Lambda MicroVM (`ALCHEMY_EGRESS_RUN_HOOK`) the process is
+ * snapshotted at build time, so nothing per-run can be in its env: the
+ * secret, the first table and the program's env arrive in the `/run`
+ * lifecycle hook, which the control endpoint answers.
+ *
  * Everything the program starts (git, gh, a harness CLI) inherits
  * `HTTPS_PROXY` and a CA bundle that trusts the proxy's per-sandbox CA.
  */
+import * as net from "node:net";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
@@ -33,6 +39,42 @@ export const EGRESS_PROXY_CA = "/tmp/alchemy-egress-proxy-ca.pem";
 export const EGRESS_PROXY_CA_BUNDLE = "/tmp/alchemy-egress-proxy-ca-bundle.pem";
 
 const decodeRoutes = Schema.decodeUnknownEffect(Schema.fromJsonString(Routes));
+
+/**
+ * Set at deploy time on AWS Lambda MicroVM sandbox images: the per-run
+ * configuration arrives in the `/run` lifecycle hook (see {@link RunPayload}).
+ */
+export const EGRESS_RUN_HOOK_SWITCH = "ALCHEMY_EGRESS_RUN_HOOK";
+
+/** What the owner passes as `runHookPayload` when it runs a MicroVM sandbox. */
+export const RunPayload = Schema.Struct({
+  /** Authenticates `PUT /routes` from now on. */
+  secret: Schema.String,
+  /** The first route table (absent: pushed once the MicroVM runs). */
+  routes: Schema.optional(Routes),
+  /** Environment for programs started from now on (placeholders, `start({ env })`). */
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+export type RunPayload = typeof RunPayload.Type;
+
+const decodeRunPayload = Schema.decodeUnknownEffect(Schema.fromJsonString(RunPayload));
+
+/** Whether the program's HTTP server (`PORT`) accepts connections: the image is ready to snapshot. */
+const programListening = Effect.callback<boolean>((resume) => {
+  const port = Number(process.env.PORT);
+  if (!Number.isInteger(port) || port <= 0) return resume(Effect.succeed(true));
+  const socket = net.connect(port, "127.0.0.1");
+  let settled = false;
+  const done = (ok: boolean) => {
+    if (settled) return;
+    settled = true;
+    socket.destroy();
+    resume(Effect.succeed(ok));
+  };
+  socket.once("connect", () => done(true));
+  socket.once("error", () => done(false));
+  socket.setTimeout(2_000, () => done(false));
+});
 
 const portFromEnv = (name: string, fallback: number) => {
   const value = Number(process.env[name]);
@@ -73,11 +115,36 @@ export const startEgressProxy: Effect.Effect<
   });
 
   const secret = process.env.ALCHEMY_EGRESS_CONTROL_SECRET;
-  if (secret) {
+  const controlPort = portFromEnv("ALCHEMY_EGRESS_CONTROL_PORT", DEFAULT_CONTROL_PORT);
+  if (process.env[EGRESS_RUN_HOOK_SWITCH]) {
+    // An AWS Lambda MicroVM: this process was snapshotted at build time, so
+    // the control secret, the first route table and the program's env
+    // arrive in the `/run` hook, served on the control port (`hooks.port`).
+    yield* serveEgressControl({
+      host: "0.0.0.0",
+      port: controlPort,
+      routes,
+      hooks: {
+        ready: programListening,
+        run: (payload) =>
+          Effect.gen(function* () {
+            const config = yield* decodeRunPayload(payload ?? "{}").pipe(
+              Effect.mapError(
+                (cause) => new EgressProxyError({ message: "invalid run hook payload", cause }),
+              ),
+            );
+            if (config.routes) yield* SubscriptionRef.set(routes, config.routes);
+            // Read by each program at its own start (git, gh, a harness CLI).
+            if (config.env) yield* Effect.sync(() => Object.assign(process.env, config.env));
+            return Redacted.make(config.secret);
+          }),
+      },
+    });
+  } else if (secret) {
     yield* serveEgressControl({
       // The owner pushes route tables from outside the sandbox.
       host: "0.0.0.0",
-      port: portFromEnv("ALCHEMY_EGRESS_CONTROL_PORT", DEFAULT_CONTROL_PORT),
+      port: controlPort,
       routes,
       secret: Redacted.make(secret),
     });

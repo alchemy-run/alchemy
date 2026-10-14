@@ -452,9 +452,37 @@ export interface EgressControlOptions {
   readonly host?: string;
   /** The table `PUT /routes` replaces. */
   readonly routes: SubscriptionRef.SubscriptionRef<ReadonlyArray<Route>>;
-  /** Callers must send `Authorization: Bearer <secret>`. */
-  readonly secret: Redacted.Redacted<string>;
+  /**
+   * Callers must send `Authorization: Bearer <secret>`. Absent, `PUT /routes`
+   * answers 401 until a {@link EgressControlHooks.run} hook delivers one.
+   */
+  readonly secret?: Redacted.Redacted<string>;
+  /**
+   * Also answer an AWS Lambda MicroVM image's lifecycle hooks on this port
+   * (`hooks.port`): a MicroVM resumes from a snapshot taken at build time,
+   * so its per-run configuration (the control secret, the first route table,
+   * the program's environment) arrives in the `/run` hook's payload.
+   */
+  readonly hooks?: EgressControlHooks;
 }
+
+/** The MicroVM lifecycle hooks the control endpoint answers (`/aws/lambda-microvms/runtime/v1/*`). */
+export interface EgressControlHooks {
+  /** `/ready` during the image build: 200 when ready to snapshot, else 503 (retried). */
+  readonly ready?: Effect.Effect<boolean>;
+  /**
+   * `/run`, once per MicroVM, before it takes traffic: `payload` is the
+   * `runHookPayload` given to `RunMicrovm`. Returns the control secret.
+   * Only the first call is accepted (Lambda's own, which precedes any
+   * traffic); later ones are refused.
+   */
+  readonly run: (
+    payload: string | undefined,
+  ) => Effect.Effect<Redacted.Redacted<string>, EgressProxyError>;
+}
+
+/** Where AWS Lambda MicroVMs call lifecycle hooks. */
+export const MICROVM_HOOK_PREFIX = "/aws/lambda-microvms/runtime/v1/";
 
 const decodeRoutes = Schema.decodeUnknownEffect(Routes);
 
@@ -485,12 +513,48 @@ export const serveEgressControl = (
       ),
     );
     const server = yield* HttpServer.pipe(Effect.provideContext(context));
-    const expected = `Bearer ${Redacted.value(options.secret)}`;
+    let expected = options.secret ? `Bearer ${Redacted.value(options.secret)}` : undefined;
+    let ran = false;
+    const hooks = options.hooks;
+
+    const answerHook = (name: string, request: HttpServerRequest) =>
+      Effect.gen(function* () {
+        if (!hooks || request.method !== "POST") return HttpServerResponse.empty({ status: 404 });
+        if (name === "ready") {
+          const ready = hooks.ready ? yield* hooks.ready : true;
+          return HttpServerResponse.empty({ status: ready ? 200 : 503 });
+        }
+        if (name === "run") {
+          if (ran) return HttpServerResponse.empty({ status: 409 });
+          ran = true;
+          const body = yield* request.json.pipe(Effect.option);
+          const payload =
+            body._tag === "Some" &&
+            typeof body.value === "object" &&
+            body.value !== null &&
+            typeof (body.value as { runHookPayload?: unknown }).runHookPayload === "string"
+              ? (body.value as { runHookPayload: string }).runHookPayload
+              : undefined;
+          const secret = yield* Effect.result(hooks.run(payload));
+          if (secret._tag === "Failure") {
+            yield* Effect.logError("the MicroVM run hook failed", secret.failure);
+            return HttpServerResponse.text(secret.failure.message, { status: 500 });
+          }
+          expected = `Bearer ${Redacted.value(secret.success)}`;
+          return HttpServerResponse.empty({ status: 200 });
+        }
+        // resume, suspend, terminate: nothing to do.
+        return HttpServerResponse.empty({ status: 200 });
+      });
 
     yield* server.serve(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        if (!safeEqual(request.headers.authorization ?? "", expected)) {
+        const path = request.url.split("?")[0]!;
+        if (path.startsWith(MICROVM_HOOK_PREFIX)) {
+          return yield* answerHook(path.slice(MICROVM_HOOK_PREFIX.length), request);
+        }
+        if (expected === undefined || !safeEqual(request.headers.authorization ?? "", expected)) {
           return HttpServerResponse.empty({ status: 401 });
         }
         if (request.method !== "PUT" || request.url.split("?")[0] !== "/routes") {

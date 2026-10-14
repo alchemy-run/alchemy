@@ -17,7 +17,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Container } from "../Containers/Container.ts";
-import { connectCloudflareSandbox } from "../Containers/SandboxClient.ts";
+import { connectSandbox } from "../Containers/SandboxClient.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
@@ -1407,7 +1407,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         Effect.provideService(DurableObjectScope, self as any),
         // `yield* Sandbox` (an `AI.Sandbox` declaration) connects to its
         // host from here.
-        Effect.provideService(SandboxRuntime, { connect: connectCloudflareSandbox }),
+        Effect.provideService(SandboxRuntime, { connect: connectSandbox }),
       );
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState

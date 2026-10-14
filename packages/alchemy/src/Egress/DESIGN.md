@@ -238,19 +238,17 @@ import * as Anthropic from "alchemy/Anthropic";
 import * as AWS from "alchemy/AWS";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { Sandbox } from "./Sandbox.ts";
 
-export default AWS.MicroVM.Sandbox(
+export default AWS.Lambda.MicrovmSandbox(
   Sandbox,
   {
     main: import.meta.url,
-    image: "node:24-bookworm",
     // One microVM image per name, built at deploy; start() picks the image.
-    sizes: { small: "4 GB", large: "32 GB" },
+    sizes: { small: "2 GB", large: "8 GB" },
   },
   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }).pipe(
-    Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata)),
+    Effect.provide(NodeServices.layer),
   ),
 );
 ```
@@ -262,8 +260,8 @@ so each size is its own image. Each host maps every declared name; a missing
 or extra name doesn't compile:
 
 ```ts
-AWS.MicroVM.Sandbox(Sandbox, { sizes: { small: "4 GB" } }, program);
-// ✗ Property 'large' is missing in type '{ small: "4 GB" }'
+AWS.Lambda.MicrovmSandbox(Sandbox, { main, sizes: { small: "2 GB" } }, program);
+// ✗ Property 'large' is missing in type '{ small: "2 GB" }'
 ```
 
 A harness server (`Anthropic.ClaudeCodeServer`, `OpenAI.CodexServer`,
@@ -578,14 +576,27 @@ The image gets the proxy and the accepted kinds' tools at deploy time. No
 gateways, routes or placeholders: those arrive at run time.
 
 ```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts, at deploy
-const image = baseImage.with(
-  ...acceptedKinds(Sandbox).flatMap((kind) => kind.tools), // GitHub.Egress: git, gh
-  { env: { ALCHEMY_EGRESS_PROXY: "1" } }, // the bootstrap starts the proxy
-);
+// alchemy internal: AWS/Lambda/MicrovmSandbox.ts, at deploy: one image per size
+MicrovmImage(`${id}-${size}`, {
+  imageLayers: Sandbox.egress.flatMap((kind) => kind.tools), // GitHub.Egress: git, gh
+  resources: [{ minimumMemoryInMiB: sizes[size] * 1024 }],
+  env: { ALCHEMY_EGRESS_PROXY: "1", ALCHEMY_EGRESS_RUN_HOOK: "1" }, // the bootstrap starts the proxy
+  hooks: { port: 3129, microvmHooks: { run: "ENABLED" }, microvmImageHooks: { ready: "ENABLED" } },
+});
+```
 
+A MicroVM resumes from a snapshot taken at build time: the bootstrap and the
+proxy are already running, and `RunMicrovm` takes no env. So everything
+per-run arrives in the `/run` lifecycle hook's payload (`runHookPayload`,
+16 KB), answered on the proxy's control port:
+
+```ts
 // at start, for the egresses granted
-env: { ...placeholdersOf(granted) } // GH_TOKEN=alchemy-egress: tools think they're signed in
+runHookPayload: JSON.stringify({
+  secret, // authenticates PUT /routes from now on
+  routes, // the first table (pushed after RUNNING when it doesn't fit)
+  env: { ...placeholdersOf(granted), ...options.env }, // GH_TOKEN=alchemy-egress
+}),
 ```
 
 ```ts
@@ -778,33 +789,31 @@ during the TLS handshake until the new instance re-registered).
 
 The microVM host renews: an `Alchemy.makeCallback` job on the Durable Object's
 alarm re-mints at 40% of the TTL and pushes a fresh table to the proxy's
-control port. Not built yet.
+control port. The Durable Object reaches the MicroVM's ports through its
+endpoint: a `CreateMicrovmAuthToken` token scoped to one port
+(`X-aws-proxy-auth`) and `X-aws-proxy-port`; pushes to the control port also
+carry the bearer secret it generated at `start` and stored.
 
 ```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts — the microVM host
+// alchemy internal: AWS/Lambda/MicrovmSandboxClient.ts — the microVM host
 launch: ({ size, routes }) =>
   Effect.gen(function* () {
-    const controlSecret = crypto.randomUUID();
-    yield* state.storage.put("controlSecret", controlSecret);
-    yield* microvms.run({
-      imageIdentifier: imageFor[size], // one image per declared size, built at deploy
-      env: {
-        ...imageEnv, // GH_TOKEN=alchemy-egress, ALCHEMY_EGRESS_PROXY=1
-        ALCHEMY_EGRESS_ROUTES: JSON.stringify(routes), // the first table
-        ALCHEMY_EGRESS_CONTROL_SECRET: controlSecret,
-        HTTPS_PROXY: "http://127.0.0.1:3128",
-        HTTP_PROXY: "http://127.0.0.1:3128",
-        NO_PROXY: "localhost,127.0.0.1",
-        NODE_USE_ENV_PROXY: "1",
-      },
-      ports: [3000, 3129], // the harness; the proxy's control port
+    const secret = randomSecret();
+    const vm = yield* runMicrovm[size]({ // one image per declared size, built at deploy
+      runHookPayload: JSON.stringify({ secret, routes, env: placeholders }),
+      egressNetworkConnectors: [INTERNET_EGRESS],
     });
+    yield* state.storage.put("alchemy:egress:Sandbox", { ttl, egress, microvm: { ...vm, secret } });
   }),
 
 apply: (routes) =>
-  HttpClient.post(`${machineUrl(3129)}/routes`, {
+  HttpClient.put(`https://${vm.endpoint}/routes`, {
     body: JSON.stringify(routes),
-    headers: { authorization: `Bearer ${controlSecret}` },
+    headers: {
+      ...authToken(vm, 3129), // X-aws-proxy-auth, scoped to the control port
+      "X-aws-proxy-port": "3129",
+      authorization: `Bearer ${secret}`,
+    },
   }),
 ```
 
@@ -988,7 +997,7 @@ export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large"; egre
 
 // Sandbox hosts: none of them name a gateway
 Cloudflare.Containers.Sandbox(Sandbox, { main, image, sizes: { small: "basic", large: "standard-4" } }, program);
-AWS.MicroVM.Sandbox(Sandbox, { main, image, sizes: { small: "4 GB", large: "32 GB" } }, program);
+AWS.Lambda.MicrovmSandbox(Sandbox, { main, sizes: { small: "2 GB", large: "8 GB" } }, program);
 AWS.ECS.Sandbox(Sandbox, { main, image, sizes: { small: { cpu: 1, memory: "4 GB" }, large: { cpu: 8, memory: "32 GB" } } }, program);
 Fly.Sandbox(Sandbox, { main, image, sizes: { small: "shared-cpu-2x", large: "performance-8x" } }, program);
 Local.Sandbox(Sandbox, { main }, program); // alchemy dev: the same proxy
@@ -1010,7 +1019,7 @@ yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ re
                    stored egress + per-host intercept diff; bugs 1–3; drop the __alchemyEgress hop
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
                    replaces Sandbox.make; named sizes
-5. AWS microVM     the bootstrap proxy; AWS.MicroVM.Sandbox
+5. AWS microVM     the bootstrap proxy (run hook); AWS.Lambda.MicrovmSandbox; renewal on the DO alarm
 ```
 
 ## 18. Open questions

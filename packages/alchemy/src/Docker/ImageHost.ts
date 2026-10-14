@@ -5,7 +5,7 @@ import type { Resource, ResourceLike } from "../Resource.ts";
 import type { ImageLayer } from "./ImageLayer.ts";
 
 /** Host types whose binding contract accepts `image` layers (and `env`). */
-const IMAGE_HOSTS = new Set(["Cloudflare.Container"]);
+const IMAGE_HOSTS = new Set(["Cloudflare.Container", "AWS.Lambda.MicrovmImage"]);
 
 type ImageBindingHost = Resource<
   string,
