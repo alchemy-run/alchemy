@@ -7,6 +7,7 @@ import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import type { Zone } from "../Zone/Zone.ts";
 
@@ -32,6 +33,7 @@ export const makeHttpDnsBinding = <Client>(options: {
     const self = yield* Self;
 
     return Effect.fn(function* (zone: Zone) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(zone);
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* token.bind`${self.LogicalId}(${zone})`({

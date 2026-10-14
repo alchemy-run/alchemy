@@ -8,6 +8,7 @@ import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import type { Bucket } from "./Bucket.ts";
 import { R2Error, type R2Object } from "./BucketTypes.ts";
 
@@ -38,6 +39,7 @@ export const makeHttpBucketBinding = <Client>(options: {
     const self = yield* Self;
 
     return Effect.fn(function* (bucket: Bucket) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(bucket);
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId } = yield* CloudflareEnvironment.current;
