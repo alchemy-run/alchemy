@@ -5,7 +5,9 @@ description: Declare the outside systems your model calls, implement them with L
 
 import DAG from "../../../components/DAG.astro";
 
-A bank talks to a fraud scorer and a payment processor. Your model declares each one as an **external system**: the calls it makes, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor.
+An external system is a service outside the model that its policies call, such as a payment processor or a fraud scorer. The model declares the calls it makes, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor, so production, tests and stories can each use a different one.
+
+The bank declares two: `FraudCheck` and `Payments`.
 
 <DAG
   nodes={[

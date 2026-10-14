@@ -5,9 +5,11 @@ description: A process that spans several aggregates and takes time, run step by
 
 import DAG from "../../../components/DAG.astro";
 
-A transfer debits one account and credits another. No transaction spans two accounts, so the transfer runs as a **saga**: a process of several steps, each committed on its own. A step that fails after earlier ones succeeded undoes them.
+A saga runs a process that spans several aggregates. An aggregate changes one instance at a time, and no transaction spans two, so a process that touches several runs as a series of steps, each committed on its own. When a step fails after earlier ones succeeded, the saga undoes them with compensations.
 
-A saga is an [Effect workflow](https://effect.website). Each step runs once and its result is kept, so a run that's cut short picks up where it left off, and a saga can wait for hours or days for a decision. A policy usually decides when to start one.
+A saga is an [Effect workflow](https://effect.website/docs/workflow). Each step's result is stored, so a run that's interrupted resumes after its last finished step, and a run can wait hours or days for a signal or a timer. A policy usually decides when to start one.
+
+The bank's transfer is a saga: it debits one account, credits another, and refunds the debit if the credit fails.
 
 <DAG
   nodes={[
