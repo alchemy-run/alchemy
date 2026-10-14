@@ -43,12 +43,11 @@ export const makeHttpQueueBinding = <Client>(options: {
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
     const self = yield* Self;
-    const env = yield* CloudflareEnvironment;
 
     return Effect.fn(function* (queue: Queue) {
-      const { accountId } = yield* env;
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { accountId } = yield* CloudflareEnvironment.current;
         yield* token.bind`${queue.LogicalId}`({
           policies: [
             {

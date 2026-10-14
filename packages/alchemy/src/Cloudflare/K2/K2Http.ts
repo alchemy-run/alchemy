@@ -35,12 +35,11 @@ type K2PermissionGroup = "K2 Produce" | "K2 Consume";
 export const makeK2HttpAuth = Effect.gen(function* () {
   const Token = yield* AccountApiToken;
   const self = yield* Self;
-  const env = yield* CloudflareEnvironment;
 
   return Effect.fn(function* (resource: { LogicalId: string }, permissionGroup: K2PermissionGroup) {
-    const { accountId } = yield* env;
     const token = yield* Token(`${self.LogicalId}Token`);
     if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const { accountId } = yield* CloudflareEnvironment.current;
       yield* token.bind`${resource.LogicalId}`({
         policies: [
           {
