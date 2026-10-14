@@ -7,6 +7,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import type { Scope } from "effect/Scope";
 import type { Dependencies } from "../../Dependencies.ts";
+import type { GatewayHost } from "../../Egress/Gateway.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -320,7 +321,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
   <Self>(): {
     <
       Shape extends MainRpc<DurableObjectState>,
-      Req extends DurableObjectServices | Container.Application<any> = never,
+      Req extends DurableObjectServices | Container.Application<any> | GatewayHost<any> = never,
     >(
       name: string,
       impl: Effect.Effect<
@@ -331,7 +332,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
     ): Effect.Effect<
       DurableObject<Self>,
       never,
-      Worker | Extract<Req, Container.Application<any>>
+      Worker | Extract<Req, Container.Application<any> | GatewayHost<any>>
     > & {
       new (_: never): Shape;
     };

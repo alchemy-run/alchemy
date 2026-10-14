@@ -1,8 +1,8 @@
 /**
- * GitHub access for a container through its Durable Object's egress: `gh`
- * and `git` in the container work with a placeholder token, while the Durable
- * Object checks each request against the declared repositories and
- * permissions, adds the real token, and forwards it.
+ * GitHub egress: `gh` and `git` in a sandbox work with a placeholder token,
+ * while an egress gateway (or the Durable Object that owns a Cloudflare
+ * container) checks each request against the declared repositories,
+ * permissions and scope, adds the real token, and forwards it.
  */
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -13,13 +13,33 @@ import * as Redacted from "effect/Redacted";
 import {
   type Egress as ContainerEgress,
   Egress as makeContainerEgress,
-  egressSecret,
-  type EgressSecret,
   makeEgressHandle,
-  refuse,
 } from "../Cloudflare/Containers/Egress.ts";
 import { ghCliLayer, gitCliLayer } from "../Docker/CliLayers.ts";
+import {
+  bodyBytes,
+  bufferBody,
+  type CredentialInput,
+  egressSecret,
+  type EgressHandler,
+  type EgressSecret,
+  peekBody,
+  refuse,
+  uniqueBindingName,
+} from "../Egress/Handler.ts";
+import {
+  checkSubject,
+  type ConfiguredEgress,
+  ConfiguredEgressTypeId,
+  type EgressKind,
+  EgressKindTypeId,
+  EgressNotServed,
+  type EgressRequest,
+  resolveCredential,
+  type RouteSpec,
+} from "../Egress/Kind.ts";
 import * as Output from "../Output.ts";
+import type { RuntimeContext } from "../RuntimeContext.ts";
 import { GitHubCredentials } from "./Credentials.ts";
 import type { Repository } from "./Repository.ts";
 
@@ -58,10 +78,24 @@ export interface EgressOptions {
   readonly repositories: ReadonlyArray<RepositoryAccess>;
 }
 
-/** Narrow a GitHub egress to one pull request or issue. */
-export type Scope =
-  | { readonly repository: string; readonly pullRequest: number }
-  | { readonly repository: string; readonly issue: number };
+/**
+ * Narrow a GitHub egress to one repository, and optionally to one pull
+ * request or issue in it.
+ */
+export interface Scope {
+  /** `owner/name`. */
+  readonly repository: string;
+  /** Writes only to this issue (and branches `agent/issue-<n>/**`). */
+  readonly issue?: number;
+  /** Writes only to this pull request (and its head branch). */
+  readonly pullRequest?: number;
+  /**
+   * Route GraphQL (`api.github.com/graphql`) to this egress. GraphQL can't be
+   * split by path, so only one granted GitHub egress per sandbox can have it.
+   * @default true
+   */
+  readonly graphql?: boolean;
+}
 
 /** A GitHub egress, which can be narrowed to one pull request or issue. */
 export interface Egress extends ContainerEgress {
@@ -71,6 +105,28 @@ export interface Egress extends ContainerEgress {
    * shrink what was declared.
    */
   readonly narrow: (scope: Scope) => ContainerEgress;
+}
+
+/** A GitHub token: a secret bound into the host, or looked up per subject. */
+export type GitHubToken =
+  | EgressSecret
+  | ((
+      input: CredentialInput,
+    ) => Effect.Effect<string | Redacted.Redacted<string>, unknown, RuntimeContext>);
+
+/** Configures a GitHub egress in a gateway's constructor. */
+export interface GatewayEgressOptions {
+  /**
+   * The token added to requests: a PAT, `GitHub.ProfileToken`, a `Config`, or
+   * a function of the grant's subject (looked up per request, cached per
+   * subject briefly). Never enters the sandbox.
+   */
+  readonly token: GitHubToken;
+  /**
+   * The repositories it may reach, and how. A grant can only narrow to one
+   * of these. @default every repository the token can reach, with any access
+   */
+  readonly repositories?: ReadonlyArray<RepositoryAccess>;
 }
 
 //#endregion
@@ -333,29 +389,535 @@ const rejectPush = (refs: ReadonlyArray<string>, reason: string, sideband: boole
   });
 };
 
-const bodyBytes = (request: HttpClientRequest.HttpClientRequest) =>
+/** Whether `bytes` hold a whole pkt-line command list (up to its flush-pkt). */
+const pktHeadComplete = (bytes: Uint8Array) => {
+  if (bytes.length > 1024 * 1024) return true;
+  const text = new TextDecoder();
+  let offset = 0;
+  while (offset + 4 <= bytes.length) {
+    const length = parseInt(text.decode(bytes.subarray(offset, offset + 4)), 16);
+    if (Number.isNaN(length)) return true;
+    if (length === 0) return true;
+    if (length < 4) return true;
+    offset += length;
+  }
+  return false;
+};
+
+//#region rules
+
+/** Repository name → access. `undefined`: every repository, any access. */
+type Policy = ReadonlyMap<string, RepositoryAccess> | undefined;
+
+const FULL_ACCESS: RepositoryAccess = {
+  repository: "*/*",
+  contents: "write",
+  pullRequests: "write",
+  issues: "write",
+  actions: "write",
+  checks: "write",
+  statuses: "write",
+};
+
+/** A scope, with the branch it may push to (a pull request's head, an issue's agent branches). */
+type NarrowedScope = Scope & { readonly branch?: string };
+
+interface Rules {
+  readonly handlerFor: (scope: NarrowedScope | undefined) => EgressHandler;
+  readonly branchFor: (scope: Scope) => Effect.Effect<string | undefined>;
+}
+
+const LEVEL = { read: 1, write: 2 } as const;
+
+/** Bind each repository's `owner/name` into the host (a declared repository's name is an Output). */
+const resolvePolicy = (repositories: ReadonlyArray<RepositoryAccess>) =>
   Effect.gen(function* () {
-    const body = request.body;
-    if (body._tag !== "Uint8Array") return new Uint8Array();
-    if (request.headers["content-encoding"] !== "gzip") return body.body;
-    return yield* Effect.promise(async () => {
-      const stream = new Response(body.body as BufferSource).body!.pipeThrough(
-        new DecompressionStream("gzip"),
-      );
-      return new Uint8Array(await new Response(stream).arrayBuffer());
-    });
+    const entries = yield* Effect.forEach(repositories, (access, i) =>
+      Effect.gen(function* () {
+        if (typeof access.repository === "string") {
+          return { access, name: Effect.succeed(access.repository.toLowerCase()) };
+        }
+        // A declaration resolves while planning, where the stack provides it.
+        const resource = Effect.isEffect(access.repository)
+          ? yield* access.repository as Effect.Effect<Repository>
+          : access.repository;
+        const fullName = yield* Output.named(
+          resource.fullName as unknown as Output.Output<string>,
+          yield* uniqueBindingName(`ALCHEMY_GITHUB_EGRESS_REPO_${i}`),
+        ).asEffect() as unknown as Effect.Effect<Effect.Effect<string>>;
+        return { access, name: Effect.map(fullName, (n) => n.toLowerCase()) };
+      }),
+    );
+    return Effect.map(
+      Effect.forEach(entries, ({ access, name }) => Effect.map(name, (n) => [n, access] as const)),
+      (pairs): Policy => new Map(pairs),
+    );
   });
 
 /**
- * GitHub access for a container, without the token ever entering it: `gh`
- * and `git` (over HTTPS) work in the container with a placeholder, and the
- * Durable Object that owns the container checks each request against
- * `repositories` (deny by default), adds the real token, and forwards it.
- * Declare it at the top of that Durable Object; pass it, or a narrowed copy,
- * to the container's `start({ egress })`.
+ * The GitHub egress rules for one token: classify each request (REST,
+ * GraphQL, git), check it against the policy and scope, refuse in the form
+ * the client shows, and add the token. Shared by the gateway and the
+ * Durable Object that owns a Cloudflare container.
+ */
+const makeRules = (
+  token: Effect.Effect<Redacted.Redacted<string>>,
+  policy: Effect.Effect<Policy>,
+): Rules => {
+  const github = (path: string, body?: unknown) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      const key = Redacted.value(yield* token);
+      const request = (
+        body === undefined
+          ? HttpClientRequest.get(`https://api.github.com${path}`)
+          : HttpClientRequest.post(`https://api.github.com${path}`).pipe(
+              HttpClientRequest.bodyJsonUnsafe(body),
+            )
+      ).pipe(
+        HttpClientRequest.setHeader("authorization", `token ${key}`),
+        HttpClientRequest.setHeader("user-agent", "alchemy-egress"),
+      );
+      const response = yield* client.execute(request);
+      return (yield* response.json) as any;
+    }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  // GraphQL node id → repository (and number), cached for this object's life.
+  const nodes = new Map<string, ResolvedNode | undefined>();
+  const resolveNode = (id: string) =>
+    Effect.gen(function* () {
+      if (nodes.has(id)) return nodes.get(id);
+      const result = yield* github("/graphql", {
+        query:
+          "query($id: ID!) { node(id: $id) { ... on Repository { nameWithOwner } ... on PullRequest { number repository { nameWithOwner } } ... on Issue { number repository { nameWithOwner } } ... on IssueComment { issue { number } repository { nameWithOwner } } ... on PullRequestReview { pullRequest { number } repository { nameWithOwner } } } }",
+        variables: { id },
+      });
+      const node = result?.data?.node;
+      const resolved: ResolvedNode | undefined = node
+        ? {
+            repository: String(
+              node.nameWithOwner ?? node.repository?.nameWithOwner ?? "",
+            ).toLowerCase(),
+            ...((node.number ?? node.issue?.number ?? node.pullRequest?.number)
+              ? { number: Number(node.number ?? node.issue?.number ?? node.pullRequest?.number) }
+              : {}),
+          }
+        : undefined;
+      if (nodes.size > 4096) nodes.clear();
+      nodes.set(id, resolved);
+      return resolved;
+    });
+
+  /** What a request is, in policy terms; the request (its body replayable); the pushed head. */
+  const classify = (request: HttpClientRequest.HttpClientRequest) =>
+    Effect.gen(function* (): Effect.fn.Return<{
+      readonly classified: Classified;
+      readonly request: HttpClientRequest.HttpClientRequest;
+      readonly head?: Uint8Array;
+    }> {
+      const url = new URL(request.url);
+      if (url.hostname === GIT_HOST) {
+        const repo =
+          /^\/([^/]+)\/([^/]+?)(?:\.git)?\/(info\/refs|git-upload-pack|git-receive-pack)$/.exec(
+            url.pathname,
+          );
+        if (!repo) {
+          return {
+            classified: { kind: "deny", reason: `github.com${url.pathname} is not a git endpoint` },
+            request,
+          };
+        }
+        const repository = `${repo[1]}/${repo[2]}`.toLowerCase();
+        const service = repo[3] === "info/refs" ? url.searchParams.get("service") : repo[3];
+        if (service === "git-receive-pack" && repo[3] === "git-receive-pack") {
+          // Only the command list is read; the pack streams through.
+          const peeked =
+            request.headers["content-encoding"] === "gzip"
+              ? yield* Effect.flatMap(bufferBody(request), (buffered) =>
+                  Effect.map(bodyBytes(buffered), (head) => ({ head, request: buffered })),
+                )
+              : yield* peekBody(request, pktHeadComplete);
+          return {
+            classified: {
+              kind: "repo",
+              repository,
+              permission: "contents",
+              write: true,
+              refs: pushedRefs(peeked.head),
+            },
+            request: peeked.request,
+            head: peeked.head,
+          };
+        }
+        return {
+          classified: {
+            kind: "repo",
+            repository,
+            permission: "contents",
+            write: service === "git-receive-pack",
+          },
+          request,
+        };
+      }
+      if (url.pathname === "/graphql") {
+        const buffered = yield* bufferBody(request);
+        const text = new TextDecoder().decode(yield* bodyBytes(buffered));
+        const document = (() => {
+          try {
+            return JSON.parse(text) as { query?: string; variables?: Record<string, unknown> };
+          } catch {
+            return undefined;
+          }
+        })();
+        const query = document?.query ?? "";
+        const variables = document?.variables ?? {};
+        const mutation = mutationName(query);
+        if (mutation === undefined) {
+          const repository = queryRepository(query, variables);
+          return {
+            classified: repository
+              ? { kind: "repo", repository, permission: "metadata", write: false }
+              : { kind: "allow" },
+            request: buffered,
+          };
+        }
+        const permission = MUTATION_PERMISSION[mutation];
+        if (permission === undefined) {
+          return {
+            classified: { kind: "deny", reason: `the GraphQL mutation ${mutation} is not allowed` },
+            request: buffered,
+          };
+        }
+        const input = (variables.input ?? variables) as Record<string, unknown>;
+        const id = NODE_ID_FIELDS.map((field) => input[field]).find((v) => typeof v === "string");
+        const node = typeof id === "string" ? yield* resolveNode(id) : undefined;
+        if (!node?.repository) {
+          return {
+            classified: { kind: "deny", reason: `can't tell which repository ${mutation} changes` },
+            request: buffered,
+          };
+        }
+        return {
+          classified: {
+            kind: "repo",
+            repository: node.repository,
+            permission,
+            write: true,
+            ...(node.number !== undefined ? { number: node.number } : {}),
+            ...(mutation === "createPullRequest"
+              ? { creates: "pullRequest" as const }
+              : mutation === "createIssue"
+                ? { creates: "issue" as const }
+                : {}),
+          },
+          request: buffered,
+        };
+      }
+      return { classified: classifyRest(request.method, url.pathname), request };
+    });
+
+  /** Allowed, or why not — against the policy (and an optional scope). */
+  const authorize = (classified: Classified, scope: NarrowedScope | undefined) =>
+    Effect.gen(function* () {
+      if (classified.kind === "allow") return undefined;
+      if (classified.kind === "deny") return classified.reason;
+      const repositories = yield* policy;
+      const access =
+        repositories === undefined ? FULL_ACCESS : repositories.get(classified.repository);
+      if (!access) return `${classified.repository} is not an allowed repository`;
+      if (scope && scope.repository.toLowerCase() !== classified.repository) {
+        return `this session works on ${scope.repository} only`;
+      }
+      if (classified.permission !== "metadata") {
+        const granted = access[classified.permission];
+        const needed = classified.write ? "write" : "read";
+        if (!granted || LEVEL[granted] < LEVEL[needed]) {
+          return `${classified.permission}:${needed} is not granted on ${classified.repository}${granted ? ` (granted: ${granted})` : ""}`;
+        }
+      }
+      if (classified.refs) {
+        const branches =
+          scope?.branch !== undefined ? [scope.branch] : (access.push?.branches ?? ["**"]);
+        const allowed = branches.map(glob);
+        const blocked = classified.refs.find(
+          (ref) => !allowed.some((pattern) => pattern.test(ref.replace(/^refs\/heads\//, ""))),
+        );
+        if (blocked) {
+          return `push to ${blocked} is not allowed (allowed: ${(scope?.branch !== undefined ? [scope.branch] : (access.push?.branches ?? [])).join(", ")})`;
+        }
+      }
+      const target = scope?.pullRequest ?? scope?.issue;
+      if (scope && target !== undefined && classified.write) {
+        if (
+          classified.creates === "issue" ||
+          (scope.pullRequest !== undefined && classified.creates)
+        ) {
+          return `this session works on #${target} only`;
+        }
+        if (classified.number !== undefined && classified.number !== target) {
+          return `this session works on #${target} only, not #${classified.number}`;
+        }
+      }
+      return undefined;
+    });
+
+  /**
+   * Refuse in the form the client shows: a GitHub API error for `gh`, a
+   * rejected ref for `git push`, plain text otherwise.
+   */
+  const refusal = (
+    request: HttpClientRequest.HttpClientRequest,
+    classified: Classified,
+    reason: string,
+    head: Uint8Array | undefined,
+  ) =>
+    Effect.gen(function* () {
+      const message = `alchemy egress: ${reason}`;
+      const url = new URL(request.url);
+      if (classified.kind === "repo" && classified.refs && classified.refs.length > 0) {
+        const first = new TextDecoder().decode(head ?? new Uint8Array()).split("\0")[1] ?? "";
+        return rejectPush(classified.refs, message, /side-band(-64k)?/.test(first));
+      }
+      if (API_HOSTS.includes(url.hostname)) {
+        return yield* HttpServerResponse.json(
+          { message, documentation_url: "https://alchemy.run" },
+          { status: 403 },
+        ).pipe(Effect.orDie);
+      }
+      return refuse(reason);
+    });
+
+  /** Add the real token for the host the request goes to. */
+  const authenticate = (request: HttpClientRequest.HttpClientRequest) =>
+    Effect.map(token, (key) => {
+      const url = new URL(request.url);
+      const value =
+        url.hostname === GIT_HOST
+          ? `Basic ${btoa(`x-access-token:${Redacted.value(key)}`)}`
+          : `token ${Redacted.value(key)}`;
+      return HttpClientRequest.setHeader(request, "authorization", value);
+    });
+
+  /** The branch a scope may push to (a pull request's head, looked up once). */
+  const branches = new Map<string, string>();
+  const branchFor = (scope: Scope) =>
+    Effect.gen(function* () {
+      if (scope.issue !== undefined) return `agent/issue-${scope.issue}/**`;
+      if (scope.pullRequest === undefined) return undefined;
+      const key = `${scope.repository}#${scope.pullRequest}`;
+      const cached = branches.get(key);
+      if (cached) return cached;
+      const pull = yield* github(`/repos/${scope.repository}/pulls/${scope.pullRequest}`);
+      const branch =
+        pull?.head?.repo?.full_name?.toLowerCase() === scope.repository.toLowerCase()
+          ? String(pull.head.ref)
+          : // A fork's head isn't pushable with this token: no branch.
+            "\0";
+      branches.set(key, branch);
+      return branch;
+    });
+
+  return {
+    handlerFor: (scope) => (incoming) =>
+      Effect.gen(function* () {
+        const { classified, request, head } = yield* classify(incoming);
+        const reason = yield* authorize(classified, scope);
+        if (reason !== undefined) return yield* refusal(request, classified, reason, head);
+        return yield* authenticate(request);
+      }),
+    branchFor,
+  };
+};
+
+//#endregion
+
+/** What the sandbox's programs need: placeholders, and no prompts. */
+const SANDBOX_ENV = { GH_TOKEN: PLACEHOLDER, GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" };
+
+const containerEgress = (container: unknown, options: EgressOptions) =>
+  Effect.gen(function* () {
+    const token = yield* egressSecret(options.token, "ALCHEMY_GITHUB_EGRESS_TOKEN");
+    const rules = makeRules(token, yield* resolvePolicy(options.repositories));
+
+    const egress = yield* makeContainerEgress(
+      container,
+      [...API_HOSTS, GIT_HOST],
+      rules.handlerFor(undefined),
+      { key: "github", env: SANDBOX_ENV, image: [gitCliLayer, ghCliLayer] },
+    );
+
+    return {
+      ...egress,
+      narrow: (scope: Scope): ContainerEgress => {
+        const target =
+          scope.pullRequest !== undefined
+            ? `#pr${scope.pullRequest}`
+            : scope.issue !== undefined
+              ? `#issue${scope.issue}`
+              : "";
+        return {
+          ...egress,
+          key: `github:${scope.repository.toLowerCase()}${target}`,
+          handle: (request) =>
+            Effect.flatMap(rules.branchFor(scope), (branch) =>
+              makeEgressHandle(
+                rules.handlerFor({ ...scope, ...(branch !== undefined ? { branch } : {}) }),
+              )(request),
+            ),
+        };
+      },
+    } satisfies Egress;
+  });
+
+const invalidScope = (message: string) => Effect.fail(new EgressNotServed({ message }));
+
+const checkScope = (scope: unknown): Effect.Effect<Scope | undefined, EgressNotServed> => {
+  if (scope === undefined) return Effect.succeed(undefined);
+  const s = scope as Scope;
+  if (
+    typeof s !== "object" ||
+    s === null ||
+    typeof s.repository !== "string" ||
+    !/^[^/\s]+\/[^/\s]+$/.test(s.repository)
+  ) {
+    return invalidScope("a GitHub scope needs { repository: 'owner/name' }");
+  }
+  if (s.issue !== undefined && s.pullRequest !== undefined) {
+    return invalidScope("narrow to an issue or a pull request, not both");
+  }
+  return Effect.succeed(s);
+};
+
+/** The hosts and paths a GitHub egress covers (DESIGN.md §7). */
+export const routesForScope = (scope: Scope | undefined): ReadonlyArray<RouteSpec> => {
+  if (scope === undefined) {
+    return [{ host: GIT_HOST }, ...API_HOSTS.map((host) => ({ host }))];
+  }
+  const repository = scope.repository;
+  return [
+    { host: GIT_HOST, paths: [`/${repository}/**`, `/${repository}.git/**`] },
+    {
+      host: "api.github.com",
+      paths: [`/repos/${repository}/**`, ...(scope.graphql === false ? [] : ["/graphql"])],
+    },
+    { host: "uploads.github.com", paths: [`/repos/${repository}/**`] },
+  ];
+};
+
+const gatewayEgress = (options: GatewayEgressOptions) =>
+  Effect.gen(function* () {
+    const credential = yield* resolveCredential(
+      options.token,
+      "ALCHEMY_GITHUB_EGRESS_TOKEN",
+      (secret): string | Redacted.Redacted<string> => secret,
+    );
+    const policy: Effect.Effect<Policy> = options.repositories
+      ? yield* resolvePolicy(options.repositories)
+      : Effect.succeed(undefined);
+
+    // One set of rules (and their lookups) per credential.
+    const cache = new Map<string, { readonly token: string; readonly rules: Rules }>();
+    const rulesFor = (subject: string | undefined, token: Redacted.Redacted<string>) => {
+      const key = subject ?? "";
+      const value = Redacted.value(token);
+      const cached = cache.get(key);
+      if (cached && cached.token === value) return cached.rules;
+      const rules = makeRules(Effect.succeed(token), policy);
+      if (cache.size > 1024) cache.clear();
+      cache.set(key, { token: value, rules });
+      return rules;
+    };
+
+    const allows = (request: EgressRequest) =>
+      Effect.gen(function* () {
+        yield* checkSubject(credential.perSubject, request);
+        const scope = yield* checkScope(request.scope);
+        if (scope === undefined) return;
+        const repositories = yield* policy;
+        if (repositories !== undefined && !repositories.has(scope.repository.toLowerCase())) {
+          return yield* new EgressNotServed({
+            message: `${scope.repository} is not one of this egress's repositories`,
+          });
+        }
+      });
+
+    return {
+      [ConfiguredEgressTypeId]: "GitHub",
+      perSubject: credential.perSubject,
+      allows,
+      routes: (request) => Effect.map(checkScope(request.scope), routesForScope),
+      handler: (request) =>
+        Effect.gen(function* () {
+          const scope = yield* checkScope(request.scope);
+          const raw = yield* credential.get(request.subject);
+          const token = Redacted.isRedacted(raw) ? raw : Redacted.make(raw);
+          const rules = rulesFor(request.subject, token);
+          if (scope === undefined) return rules.handlerFor(undefined);
+          const branch = yield* rules.branchFor(scope);
+          return rules.handlerFor({ ...scope, ...(branch !== undefined ? { branch } : {}) });
+        }),
+      env: SANDBOX_ENV,
+      tools: [gitCliLayer, ghCliLayer],
+    } satisfies ConfiguredEgress<"GitHub">;
+  });
+
+/** The `GitHub.Egress` kind and its constructors. */
+export interface EgressKindConstructor extends EgressKind<"GitHub", Scope> {
+  /**
+   * Configure a GitHub egress in a gateway's constructor
+   * (`Egress.Gateway.serve`).
+   */
+  (options: GatewayEgressOptions): Effect.Effect<ConfiguredEgress<"GitHub">>;
+  /** GitHub access for a container, handled in its owning Durable Object. */
+  (container: unknown, options: EgressOptions): Effect.Effect<Egress>;
+}
+
+/**
+ * GitHub access without the token ever entering the sandbox: `gh` and `git`
+ * (over HTTPS) work with a placeholder, while each request is checked
+ * against `repositories` (deny by default) and the grant's scope, gets the
+ * real token, and is forwarded.
  *
- * ### Giving an agent `gh` and `git`
- * **Example:** Pushes only to agent branches, using your GitHub login
+ * Name it in a gateway declaration (`{ repo: GitHub.Egress }`) and configure
+ * it in the gateway's constructor; or, for a Cloudflare container, declare it
+ * at the top of the Durable Object that owns the container with the
+ * container as the first argument.
+ *
+ * ### Serving GitHub from a gateway
+ * **Example:** Read-only access to one repository, with your GitHub login
+ * ```typescript
+ * export class RepoGateway extends Egress.Gateway<RepoGateway>()("RepoGateway", {
+ *   repo: GitHub.Egress,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "RepoGatewayWorker",
+ *   { main: import.meta.url },
+ *   RepoGateway.serve(
+ *     Effect.gen(function* () {
+ *       return {
+ *         repo: yield* GitHub.Egress({
+ *           token: GitHub.ProfileToken,
+ *           repositories: [{ repository: "alchemy-run/alchemy", contents: "read" }],
+ *         }),
+ *       };
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
+ * **Example:** Each user's own token, looked up per request
+ * ```typescript
+ * repo: yield* GitHub.Egress({
+ *   token: ({ subject }) => tokens.get(subject).pipe(Effect.map((t) => t ?? "")),
+ * }),
+ * ```
+ *
+ * ### Giving a container `gh` and `git`
+ * **Example:** Pushes only to agent branches, from a Durable Object
  * ```typescript
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
@@ -392,282 +954,10 @@ const bodyBytes = (request: HttpClientRequest.HttpClientRequest) =>
  * @product Egress
  * @category GitHub
  */
-export const Egress = (container: unknown, options: EgressOptions) =>
-  Effect.gen(function* () {
-    const token = yield* egressSecret(options.token, "ALCHEMY_GITHUB_EGRESS_TOKEN");
-
-    // Each repository's `owner/name`, read at runtime (a declared repository's
-    // name is an Output of its resource).
-    const repositories = yield* Effect.forEach(options.repositories, (access, i) =>
-      Effect.gen(function* () {
-        if (typeof access.repository === "string") {
-          return { access, name: Effect.succeed(access.repository.toLowerCase()) };
-        }
-        // A declaration resolves while planning, where the stack provides it.
-        const resource = Effect.isEffect(access.repository)
-          ? yield* access.repository as Effect.Effect<Repository>
-          : access.repository;
-        const fullName = yield* Output.named(
-          resource.fullName as unknown as Output.Output<string>,
-          `ALCHEMY_GITHUB_EGRESS_REPO_${i}`,
-        ).asEffect() as unknown as Effect.Effect<Effect.Effect<string>>;
-        return { access, name: Effect.map(fullName, (n) => n.toLowerCase()) };
-      }),
-    );
-    const policy = Effect.map(
-      Effect.forEach(repositories, ({ access, name }) =>
-        Effect.map(name, (n) => [n, access] as const),
-      ),
-      (entries) => new Map(entries),
-    );
-
-    const github = (path: string, body?: unknown) =>
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const key = Redacted.value(yield* token);
-        const request = (
-          body === undefined
-            ? HttpClientRequest.get(`https://api.github.com${path}`)
-            : HttpClientRequest.post(`https://api.github.com${path}`).pipe(
-                HttpClientRequest.bodyJsonUnsafe(body),
-              )
-        ).pipe(
-          HttpClientRequest.setHeader("authorization", `token ${key}`),
-          HttpClientRequest.setHeader("user-agent", "alchemy-egress"),
-        );
-        const response = yield* client.execute(request);
-        return (yield* response.json) as any;
-      }).pipe(
-        Effect.provide(FetchHttpClient.layer),
-        Effect.orElseSucceed(() => undefined),
-      );
-
-    // GraphQL node id → repository (and number), cached for this object's life.
-    const nodes = new Map<string, ResolvedNode | undefined>();
-    const resolveNode = (id: string) =>
-      Effect.gen(function* () {
-        if (nodes.has(id)) return nodes.get(id);
-        const result = yield* github("/graphql", {
-          query:
-            "query($id: ID!) { node(id: $id) { ... on Repository { nameWithOwner } ... on PullRequest { number repository { nameWithOwner } } ... on Issue { number repository { nameWithOwner } } ... on IssueComment { issue { number } repository { nameWithOwner } } ... on PullRequestReview { pullRequest { number } repository { nameWithOwner } } } }",
-          variables: { id },
-        });
-        const node = result?.data?.node;
-        const resolved: ResolvedNode | undefined = node
-          ? {
-              repository: String(
-                node.nameWithOwner ?? node.repository?.nameWithOwner ?? "",
-              ).toLowerCase(),
-              ...((node.number ?? node.issue?.number ?? node.pullRequest?.number)
-                ? { number: Number(node.number ?? node.issue?.number ?? node.pullRequest?.number) }
-                : {}),
-            }
-          : undefined;
-        nodes.set(id, resolved);
-        return resolved;
-      });
-
-    /** What a request is, in policy terms. */
-    const classify = (request: HttpClientRequest.HttpClientRequest) =>
-      Effect.gen(function* (): Effect.fn.Return<Classified> {
-        const url = new URL(request.url);
-        if (url.hostname === GIT_HOST) {
-          const repo =
-            /^\/([^/]+)\/([^/]+?)(?:\.git)?\/(info\/refs|git-upload-pack|git-receive-pack)$/.exec(
-              url.pathname,
-            );
-          if (!repo)
-            return { kind: "deny", reason: `github.com${url.pathname} is not a git endpoint` };
-          const repository = `${repo[1]}/${repo[2]}`.toLowerCase();
-          const service = repo[3] === "info/refs" ? url.searchParams.get("service") : repo[3];
-          if (service === "git-receive-pack" && repo[3] === "git-receive-pack") {
-            return {
-              kind: "repo",
-              repository,
-              permission: "contents",
-              write: true,
-              refs: pushedRefs(yield* bodyBytes(request)),
-            };
-          }
-          return {
-            kind: "repo",
-            repository,
-            permission: "contents",
-            write: service === "git-receive-pack",
-          };
-        }
-        if (url.pathname === "/graphql") {
-          const text = new TextDecoder().decode(yield* bodyBytes(request));
-          const document = (() => {
-            try {
-              return JSON.parse(text) as { query?: string; variables?: Record<string, unknown> };
-            } catch {
-              return undefined;
-            }
-          })();
-          const query = document?.query ?? "";
-          const variables = document?.variables ?? {};
-          const mutation = mutationName(query);
-          if (mutation === undefined) {
-            const repository = queryRepository(query, variables);
-            return repository
-              ? { kind: "repo", repository, permission: "metadata", write: false }
-              : { kind: "allow" };
-          }
-          const permission = MUTATION_PERMISSION[mutation];
-          if (permission === undefined) {
-            return { kind: "deny", reason: `the GraphQL mutation ${mutation} is not allowed` };
-          }
-          const input = (variables.input ?? variables) as Record<string, unknown>;
-          const id = NODE_ID_FIELDS.map((field) => input[field]).find((v) => typeof v === "string");
-          const node = typeof id === "string" ? yield* resolveNode(id) : undefined;
-          if (!node?.repository) {
-            return { kind: "deny", reason: `can't tell which repository ${mutation} changes` };
-          }
-          return {
-            kind: "repo",
-            repository: node.repository,
-            permission,
-            write: true,
-            ...(node.number !== undefined ? { number: node.number } : {}),
-            ...(mutation === "createPullRequest"
-              ? { creates: "pullRequest" as const }
-              : mutation === "createIssue"
-                ? { creates: "issue" as const }
-                : {}),
-          };
-        }
-        return classifyRest(request.method, url.pathname);
-      });
-
-    const LEVEL = { read: 1, write: 2 } as const;
-
-    /** Allowed, or why not — against the declared access (and an optional scope). */
-    const authorize = (classified: Classified, scope: (Scope & { branch: string }) | undefined) =>
-      Effect.gen(function* () {
-        if (classified.kind === "allow") return undefined;
-        if (classified.kind === "deny") return classified.reason;
-        const access = (yield* policy).get(classified.repository);
-        if (!access) return `${classified.repository} is not an allowed repository`;
-        if (scope && scope.repository.toLowerCase() !== classified.repository) {
-          return `this session works on ${scope.repository} only`;
-        }
-        if (classified.permission !== "metadata") {
-          const granted = access[classified.permission];
-          const needed = classified.write ? "write" : "read";
-          if (!granted || LEVEL[granted] < LEVEL[needed]) {
-            return `${classified.permission}:${needed} is not granted on ${classified.repository}${granted ? ` (granted: ${granted})` : ""}`;
-          }
-        }
-        if (classified.refs) {
-          const allowed = (scope ? [scope.branch] : (access.push?.branches ?? ["**"])).map(glob);
-          const blocked = classified.refs.find(
-            (ref) => !allowed.some((pattern) => pattern.test(ref.replace(/^refs\/heads\//, ""))),
-          );
-          if (blocked) {
-            return `push to ${blocked} is not allowed (allowed: ${(scope ? [scope.branch] : (access.push?.branches ?? [])).join(", ")})`;
-          }
-        }
-        if (scope && classified.write) {
-          const target = "pullRequest" in scope ? scope.pullRequest : scope.issue;
-          if (classified.creates === "issue" || ("pullRequest" in scope && classified.creates)) {
-            return `this session works on #${target} only`;
-          }
-          if (classified.number !== undefined && classified.number !== target) {
-            return `this session works on #${target} only, not #${classified.number}`;
-          }
-        }
-        return undefined;
-      });
-
-    /**
-     * Refuse in the form the client shows: a GitHub API error for `gh`, a
-     * rejected ref for `git push`, plain text otherwise.
-     */
-    const refusal = (
-      request: HttpClientRequest.HttpClientRequest,
-      classified: Classified,
-      reason: string,
-    ) =>
-      Effect.gen(function* () {
-        const message = `alchemy egress: ${reason}`;
-        const url = new URL(request.url);
-        if (classified.kind === "repo" && classified.refs && classified.refs.length > 0) {
-          const first = new TextDecoder().decode(yield* bodyBytes(request)).split("\0")[1] ?? "";
-          return rejectPush(classified.refs, message, /side-band(-64k)?/.test(first));
-        }
-        if (API_HOSTS.includes(url.hostname)) {
-          return yield* HttpServerResponse.json(
-            { message, documentation_url: "https://alchemy.run" },
-            { status: 403 },
-          ).pipe(Effect.orDie);
-        }
-        return refuse(reason);
-      });
-
-    /** Add the real token for the host the request goes to. */
-    const authenticate = (request: HttpClientRequest.HttpClientRequest) =>
-      Effect.map(token, (key) => {
-        const url = new URL(request.url);
-        const value =
-          url.hostname === GIT_HOST
-            ? `Basic ${btoa(`x-access-token:${Redacted.value(key)}`)}`
-            : `token ${Redacted.value(key)}`;
-        return HttpClientRequest.setHeader(request, "authorization", value);
-      });
-
-    const handlerFor =
-      (scope: (Scope & { branch: string }) | undefined) =>
-      (request: HttpClientRequest.HttpClientRequest) =>
-        Effect.gen(function* () {
-          const classified = yield* classify(request);
-          const reason = yield* authorize(classified, scope);
-          if (reason !== undefined) return yield* refusal(request, classified, reason);
-          return yield* authenticate(request);
-        });
-
-    const containerSide = {
-      env: { GH_TOKEN: PLACEHOLDER, GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" },
-      image: [gitCliLayer, ghCliLayer],
-    };
-
-    const egress = yield* makeContainerEgress(
-      container,
-      [...API_HOSTS, GIT_HOST],
-      handlerFor(undefined),
-      { key: "github", ...containerSide },
-    );
-
-    /** The branch a scope may push to (a pull request's head, looked up once). */
-    const branches = new Map<string, string>();
-    const branchFor = (scope: Scope) =>
-      Effect.gen(function* () {
-        if ("issue" in scope) return `agent/issue-${scope.issue}/**`;
-        const key = `${scope.repository}#${scope.pullRequest}`;
-        const cached = branches.get(key);
-        if (cached) return cached;
-        const pull = yield* github(`/repos/${scope.repository}/pulls/${scope.pullRequest}`);
-        const branch =
-          pull?.head?.repo?.full_name?.toLowerCase() === scope.repository.toLowerCase()
-            ? String(pull.head.ref)
-            : // A fork's head isn't pushable with this token: no branch.
-              "\0";
-        branches.set(key, branch);
-        return branch;
-      });
-
-    return {
-      ...egress,
-      narrow: (scope: Scope): ContainerEgress => {
-        const target = "pullRequest" in scope ? `pr${scope.pullRequest}` : `issue${scope.issue}`;
-        return {
-          ...egress,
-          key: `github:${scope.repository.toLowerCase()}#${target}`,
-          handle: (request) =>
-            Effect.flatMap(branchFor(scope), (branch) =>
-              makeEgressHandle(handlerFor({ ...scope, branch }))(request),
-            ),
-        };
-      },
-    } satisfies Egress;
-  });
+export const Egress: EgressKindConstructor = Object.assign(
+  (...args: [GatewayEgressOptions] | [unknown, EgressOptions]) =>
+    args.length >= 2
+      ? containerEgress(args[0], (args as [unknown, EgressOptions])[1])
+      : gatewayEgress(args[0] as GatewayEgressOptions),
+  { [EgressKindTypeId]: "GitHub" as const },
+) as EgressKindConstructor;

@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import path from "pathe";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
+import type { GatewayHost } from "../../Egress/Gateway.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
 import type * as Output from "../../Output.ts";
@@ -2599,7 +2600,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self> & Dependencies<Deps>,
         never,
-        Self | Extract<Deps, Container.Application<any>> | Providers
+        Self | Extract<Deps, Container.Application<any> | GatewayHost<any>> | Providers
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2613,7 +2614,7 @@ export const Worker: ResourceClassLike<Worker> &
           ): Layer.Layer<
             Self,
             never,
-            | Extract<Deps, Container.Application<any>>
+            | Extract<Deps, Container.Application<any> | GatewayHost<any>>
             | Providers
             | Exclude<PropsReq | InitReq, Self | WorkerServices | Tag<WorkerTypeId>>
           >;
@@ -2623,7 +2624,12 @@ export const Worker: ResourceClassLike<Worker> &
       <
         const Id extends string,
         Shape extends WorkerShape,
-        Req extends WorkerServices | Container.Application<any> | PlatformServices | Tag,
+        Req extends
+          | WorkerServices
+          | Container.Application<any>
+          | GatewayHost<any>
+          | PlatformServices
+          | Tag,
         PropsReq = never,
       >(
         id: Id,
@@ -2634,7 +2640,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers | PropsReq
+        Extract<Req, Container.Application<any> | GatewayHost<any>> | Providers | PropsReq
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2700,7 +2706,7 @@ export const Worker: ResourceClassLike<Worker> &
     <
       const Id extends string,
       Shape extends WorkerShape,
-      Req extends WorkerServices | Container.Application<any> | PlatformServices,
+      Req extends WorkerServices | Container.Application<any> | GatewayHost<any> | PlatformServices,
     >(
       id: Id,
       props: InputProps<WorkerProps>,
@@ -2708,7 +2714,7 @@ export const Worker: ResourceClassLike<Worker> &
     ): Effect.Effect<
       Worker & Rpc<Shape>,
       never,
-      Extract<Req, Container.Application<any>> | Providers
+      Extract<Req, Container.Application<any> | GatewayHost<any>> | Providers
     > &
       Named<Id> &
       PlatformIdentity<Id>;
