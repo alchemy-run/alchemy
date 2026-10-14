@@ -1,18 +1,20 @@
 ---
 title: Effect workflows
-description: Run Effect workflows on Durable Objects. Declare a workflow with effect/workflow, host it with Cloudflare.DurableWorkflows, start it from a Worker, and let it sleep, wait for signals and undo steps durably.
+description: Run Effect workflows on Cloudflare, on Durable Objects or Cloudflare Workflows. Declare a workflow with effect/workflow, host it in a Worker, start it, and let it sleep, wait for signals and undo steps durably.
 ---
 
 An Effect workflow is a durable process written with `effect/workflow`: a
 series of steps whose results are stored, so a run that's interrupted
 resumes after its last finished step, and a run can wait hours or days for
-a timer or a signal. `Cloudflare.DurableWorkflows` runs them on Durable
-Objects, one object per run.
+a timer or a signal. On Cloudflare they run on Durable Objects
+(`Cloudflare.DurableWorkflows`) or on Cloudflare Workflows
+(`Cloudflare.EffectWorkflows`), with the same workflow code.
 
 Reach for Effect workflows when you want the same workflow code to run
-anywhere Effect's `WorkflowEngine` does: on Durable Objects here, in memory
-in tests, or on another engine elsewhere. If you want Cloudflare's own
-managed product instead, see [Workflows](/cloudflare/compute/workflows).
+anywhere Effect's `WorkflowEngine` does: on Cloudflare, on
+[AWS Lambda](/aws/compute/effect-workflows), or in memory in tests. To write
+against Cloudflare Workflows' own step API instead, see
+[Workflows](/cloudflare/compute/workflows).
 
 ## Define a workflow
 
@@ -88,6 +90,21 @@ export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
 
 Each workflow gets its own Durable Object class on the Worker, named after
 it (`GreetWorkflow`), and deploying the Worker deploys them.
+
+## Or run it on Cloudflare Workflows
+
+`Cloudflare.EffectWorkflows` hosts the same workflow Layers on Cloudflare
+Workflows instead: one Workflow class, `EffectWorkflows`, runs them all, and
+each run is one Workflow instance. Swap the Layer and nothing else changes:
+
+```typescript
+Effect.provide(Cloudflare.EffectWorkflows(GreetLive))
+```
+
+Steps run with `step.do`, sleeps with `step.sleep`, and signals are
+Workflow events, so runs show up in the Cloudflare dashboard step by step.
+Cloudflare's limits apply: steps per instance, the size of each step's
+result, and a year at most for a wait.
 
 ## Start it without waiting
 
@@ -168,7 +185,7 @@ export const RecordLive = Layer.unwrap(
 );
 ```
 
-## How a run executes
+## How a run executes on Durable Objects
 
 A run is one Durable Object instance, named by its execution id, with its
 journal in that instance's SQLite: the payload, each finished step's
