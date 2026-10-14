@@ -1,9 +1,9 @@
 ---
-title: Stories
-description: Specify your domain with given / when / then stories that run the real model in memory.
+title: Testing a model
+description: Test your model's rules, views, policies and deadlines with stories that run it in memory.
 ---
 
-A story is a specification you can run: given some history, when a command is sent, then these events are recorded. It runs your real model in memory, with its policies, a clock you control, and outside systems you answer yourself.
+Your model is tested with [stories](/domain/story): given some history, when a command is sent, then these events are recorded. This page sets up a story runner and covers what a story can check.
 
 ## Create a story runner
 
@@ -64,23 +64,13 @@ it.effect("an overdraft is rejected with the evidence", () =>
 
 Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.effect` runs it.
 
-## Use the steps
+## Check every outcome
 
-| Step | Does |
-| --- | --- |
-| `given(ref, ...events)` | Records history on an instance before the story starts. It reaches views, never policies. |
-| `provide(service, value)` | Provides a service to the following commands, as their middleware would, such as `CurrentActor` |
-| `when(ref, command)` | Sends a command. Policies run until they finish or wait on an external system. |
-| `then(ref, ...events)` | Checks the next events recorded on an instance. With no events, checks nothing new was recorded. |
-| `rejected(rejection)` | Checks the last command was rejected with exactly this |
-| `replied(reply)` | Checks the last command's reply |
-| `state(ref, assert)` | Checks an instance's current state |
-| `view(view, ref, expected)` | Checks a view key's state, or part of it |
-| `emitted(view, ref, expected)` | Checks every event a view key has emitted |
-| `streamed(stream, ref, ...events)` | Checks the next entries a projection appended to a stream key |
-| `expectCall(op, args)` | Checks a policy called an external system and is waiting for the answer |
-| `resolve(op, value)` | Answers the oldest waiting call to an external system |
-| `clock(at)` | Moves the clock; scheduled commands that are now due fire |
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+
+Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
+
+Commands run as whoever `provide` says, as their middleware would. Here `asSam` provides `CurrentActor`, so the account's ownership check passes.
 
 ## Answer outside systems
 

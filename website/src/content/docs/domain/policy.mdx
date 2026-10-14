@@ -191,7 +191,7 @@ return Effect.fn(function* ({ source, event }) {
   const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
 ```
 
-An external system is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/stories), each call waits until the test resolves it, so you can check what the policy does with every possible answer. See [External systems](/domain/external-systems).
+An external system is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/story), each call waits until the test resolves it, so you can check what the policy does with every possible answer. See [External System](/domain/external-system).
 
 ## Act as the system
 

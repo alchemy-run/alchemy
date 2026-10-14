@@ -3,6 +3,8 @@ title: Deadlines
 description: Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
 ---
 
+import DAG from "../../../components/DAG.astro";
+
 A saga that waits needs a deadline. A large transfer waits for a support agent's approval, and expires if nobody approves it within 24 hours. Schedule a command for the deadline, and let the aggregate decide whichever comes first.
 
 ## Declare a command that reports the deadline
@@ -66,105 +68,60 @@ The schedule is durable: it fires even if everything restarted in between. Sched
 
 ## Let the aggregate decide the race
 
-Approval and expiry are both commands on the same transfer, which handles one at a time. Whichever arrives first changes the transfer's state, and the other finds nothing to do: `ExpireTransfer` records nothing for an approved transfer, and `ApproveTransfer` rejects an expired one with `NotAwaitingApproval`.
+Approval and expiry are both commands to the same transfer. One may come from a support agent at any moment, the other from the schedule after 24 hours.
 
-```typescript
-// src/Transfer/ApproveTransfer.ts
-import * as Domain from "alchemy/Domain";
-import { AccountId } from "../Account/AccountId.ts";
-import { NotPermitted } from "../Account/ChangeOwner.ts";
-import { Actor } from "../Actor.ts";
-import { Cents } from "../Money.ts";
-import { Session } from "../Session.ts";
-import { TransferId } from "./TransferId.ts";
+<DAG
+  nodes={[
+    { id: "agent", label: "Support agent", type: "approves", kind: "client", col: 0, row: 0 },
+    { id: "schedule", label: "Schedule", type: "set by the policy", col: 0, row: 2 },
+    { id: "approve", label: "ApproveTransfer", type: "any time", kind: "command", col: 1, row: 0 },
+    { id: "expire", label: "ExpireTransfer", type: "after 24 hours", kind: "command", col: 1, row: 2 },
+    { id: "transfer", label: "Transfer", type: "one at a time", kind: "aggregate", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "agent", to: "approve" },
+    { from: "schedule", to: "expire", dashed: true },
+    { from: "approve", to: "transfer" },
+    { from: "expire", to: "transfer" },
+  ]}
+  caption="Both commands reach the same transfer, which handles one at a time."
+/>
 
-/** The transfer is not waiting for approval: it never needed it, or it expired. */
-export class NotAwaitingApproval extends Domain.Rejection("NotAwaitingApproval") {}
+The transfer handles one command at a time, so whichever arrives first changes its state, and its `decide` turns the other away. Approval is only accepted while the transfer is awaiting approval:
 
-/** Carries the transfer so `TransferExecution` can carry it out. */
-export class TransferApproved extends Domain.Event("TransferApproved", {
-  transferId: TransferId,
-  from: AccountId,
-  to: AccountId,
-  amount: Cents,
-  requestedBy: Actor,
-  approvedBy: Actor,
-}) {}
-
-/** A support agent approves a large transfer before its approval window closes. */
-export class ApproveTransfer extends Domain.Command("ApproveTransfer", {
-  target: TransferId,
-  middleware: [Session],
-  events: [TransferApproved],
-  rejects: [NotAwaitingApproval, NotPermitted],
-}) {}
+```typescript title="src/Transfer/Transfer.ts"
+ApproveTransfer: Effect.fn(function* (s, _, { id }) {
+  const approvedBy = yield* CurrentActor;
+  if (approvedBy._tag !== "Agent") return yield* new NotPermitted();
+  if (s._tag !== "AwaitingApproval") return yield* new NotAwaitingApproval();
 ```
+
+Expiry fails the transfer only if it's still waiting, and records nothing otherwise:
+
+```typescript title="src/Transfer/Transfer.ts"
+ExpireTransfer: (s, _, { id }) =>
+  s._tag === "AwaitingApproval"
+    ? [new TransferFailed({ transferId: id, reason: "not approved in time" })]
+    : [],
+```
+
+So an approved transfer ignores its expiry, and an expired transfer rejects a late approval with `NotAwaitingApproval`.
 
 ## Test it with the clock
 
 A story has its own clock. `Story.clock` moves it, and any scheduled command that's now due fires.
 
-```typescript
-// test/deadlines.test.ts
-import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account/Account.ts";
-import { MoneyDeposited } from "../src/Account/DepositMoney.ts";
-import { AccountOpened } from "../src/Account/OpenAccount.ts";
-import { agent, customer } from "../src/Actor.ts";
-import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "../src/Bank.ts";
-import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CurrentActor } from "../src/CurrentActor.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
-import { Payments } from "../src/Settlement/Payments.ts";
-import { ApproveTransfer, NotAwaitingApproval } from "../src/Transfer/ApproveTransfer.ts";
-import { TransferFailed } from "../src/Transfer/FailTransfer.ts";
-import { RequestTransfer, TransferRequested } from "../src/Transfer/RequestTransfer.ts";
-import { Transfer } from "../src/Transfer/Transfer.ts";
-
-const story = Story.make(Bank, {
-  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
-});
-const sam = customer("c-1");
-const from = Account.ref("a-1");
-const to = Account.ref("a-2");
-const transfer = Transfer.ref("t-1");
-const opened = (customerId: string) =>
-  new AccountOpened({ customerId: CustomerId.make(customerId), owner: customerId });
-
-it.effect("an unapproved transfer expires when its window closes", () =>
-  story(
-    Story.clock("2026-01-01T09:00:00Z"),
-    Story.given(from, opened("c-1"), new MoneyDeposited({ amount: 100_000, balanceAfter: 100_000 })),
-    Story.given(to, opened("c-2")),
-    Story.provide(CurrentActor, sam),
-    Story.when(transfer, new RequestTransfer({ from: from.id, to: to.id, amount: 20_000 })),
-    Story.then(
-      transfer,
-      new TransferRequested({
-        transferId: transfer.id,
-        from: from.id,
-        to: to.id,
-        amount: 20_000,
-        requestedBy: sam,
-        needsApproval: true,
-      }),
-    ),
-    // A minute before the deadline, nothing has happened.
-    Story.clock("2026-01-02T08:59:00Z"),
-    Story.then(transfer),
-    // At the deadline, the transfer expires.
-    Story.clock("2026-01-02T09:00:00Z"),
-    Story.then(transfer, new TransferFailed({ transferId: transfer.id, reason: "not approved in time" })),
-    // Approval now comes too late.
-    Story.provide(CurrentActor, agent("support-7")),
-    Story.when(transfer, new ApproveTransfer()),
-    Story.rejected(new NotAwaitingApproval()),
-  ),
-);
+```typescript title="test/deadlines.test.ts"
+// A minute before the deadline, nothing has happened.
+Story.clock("2026-01-02T08:59:00Z"),
+Story.then(transfer),
+// At the deadline, the transfer expires.
+Story.clock("2026-01-02T09:00:00Z"),
+Story.then(transfer, new TransferFailed({ transferId: transfer.id, reason: "not approved in time" })),
+// Approval now comes too late.
+Story.provide(CurrentActor, agent("support-7")),
+Story.when(transfer, new ApproveTransfer()),
+Story.rejected(new NotAwaitingApproval()),
 ```
 
 `Story.then(transfer)` with no events checks that nothing new was recorded.

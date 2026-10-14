@@ -1,9 +1,28 @@
 ---
-title: External systems
+title: External System
 description: Declare the outside systems your model calls, implement them with Layers, and turn their events into commands.
 ---
 
-A bank talks to a fraud scorer and a payment processor. Your model declares each one as an external system, so it depends on what it asks for and never on a vendor. Events from outside become commands.
+import DAG from "../../../components/DAG.astro";
+
+A bank talks to a fraud scorer and a payment processor. Your model declares each one as an **external system**: the calls it makes, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor.
+
+<DAG
+  nodes={[
+    { id: "policy", label: "SettlementRefund", type: "calls refund", kind: "policy", col: 0, row: 0 },
+    { id: "payments", label: "Payments", type: "what the model asks for", kind: "external", col: 1, row: 0 },
+    { id: "stripe", label: "StripePayments", type: "Layer · production", col: 2, row: 0 },
+    { id: "story", label: "Story", type: "you answer each call", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "policy", to: "payments" },
+    { from: "payments", to: "stripe" },
+    { from: "payments", to: "story", dashed: true },
+  ]}
+  caption="The model depends on the declaration. Production and tests plug in different implementations."
+/>
+
+It works in the other direction too: events from outside, like a webhook from Stripe, become commands.
 
 ## Declare an external system
 

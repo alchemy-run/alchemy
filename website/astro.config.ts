@@ -258,6 +258,8 @@ export default defineConfig({
     "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
     // Get started was folded into the overview and the tutorial.
     "/domain/getting-started": "/domain/tutorial/part-1",
+    "/domain/stories": "/domain/testing-models",
+    "/domain/external-systems": "/domain/external-system",
   },
   prefetch: true,
   devToolbar: { enabled: false },
@@ -1501,7 +1503,16 @@ export default defineConfig({
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },
                 { label: "Policy", link: "/domain/policy" },
+                { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
+                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Testing",
+              items: [
+                { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },
             {
@@ -1525,7 +1536,6 @@ export default defineConfig({
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Sagas and compensation", link: "/domain/sagas" },
                 { label: "Deadlines", link: "/domain/deadlines" },
-                { label: "External systems", link: "/domain/external-systems" },
               ],
             },
             {
@@ -1533,13 +1543,6 @@ export default defineConfig({
               items: [
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "In memory", link: "/domain/in-memory" },
-              ],
-            },
-            {
-              label: "Testing",
-              items: [
-                { label: "Stories", link: "/domain/stories" },
-                { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },
             { ...providerResourcesEntry("Domain"), label: "Reference" },
