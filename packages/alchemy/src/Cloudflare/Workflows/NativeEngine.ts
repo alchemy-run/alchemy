@@ -7,14 +7,15 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
+  CurrentActivity,
   decodeExit,
   decodeResult,
   encodeExit,
   encodeResult,
+  makeCurrentActivity,
   payloadCodec,
-} from "../../WorkflowEncoding.ts";
+} from "../../Workflows/Encoding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import { Workflow, type WorkflowHandle } from "./Workflow.ts";
 import { WorkflowStep } from "./WorkflowRuntime.ts";
@@ -25,52 +26,6 @@ interface Invocation {
   readonly executionId: string;
   readonly payload: unknown;
 }
-
-/**
- * Host Effect workflows on Cloudflare Workflows: provides a `WorkflowEngine` to
- * the given workflow Layers (from `Workflow.toLayer`), and to everything after
- * them. One Cloudflare Workflow class, `NativeEngine`, runs them all; each
- * execution is one instance, named after the workflow and its execution id.
- *
- * Steps run with `step.do`, so a finished step is replayed rather than run
- * again. `DurableClock.sleep` is `step.sleep`, and `DurableDeferred.await`
- * waits for an event that `DurableDeferred.done` sends.
- *
- * ### Hosting workflows
- * **Example:** Provide workflows to a Worker
- * ```typescript
- * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
- *   "AppWorker",
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     const engine = yield* WorkflowEngine.WorkflowEngine;
- *     return {
- *       fetch: Effect.gen(function* () {
- *         yield* SendWelcome.execute({ userId: "u-1" }, { discard: true });
- *         return HttpServerResponse.text("ok");
- *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
- *     };
- *   }).pipe(Effect.provide(Cloudflare.Workflows.NativeEngine(SendWelcomeLive))),
- * ) {}
- * ```
- *
- * @layer
- * @provides WorkflowEngine
- * @product Workflows
- */
-export const NativeEngine = <ROut, E, RIn>(
-  workflows: Layer.Layer<ROut, E, RIn>,
-): Layer.Layer<
-  ROut | WorkflowEngine.WorkflowEngine,
-  E,
-  Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
-> =>
-  // A handler only runs inside a run, which provides its own RuntimeContext.
-  workflows.pipe(Layer.provideMerge(NativeEngineLayer)) as Layer.Layer<
-    ROut | WorkflowEngine.WorkflowEngine,
-    E,
-    Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
-  >;
 
 type Execute = (
   payload: object,
@@ -183,8 +138,46 @@ const resultOf = (
     }
   });
 
-/** A `WorkflowEngine` on Cloudflare Workflows. */
-const NativeEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> = Layer.effect(
+/**
+ * Run Effect workflows on Cloudflare Workflows. One Cloudflare Workflow class,
+ * `NativeEngine`, runs every workflow the Worker implements; each execution is
+ * one instance, named after the workflow and its execution id.
+ *
+ * Steps run with `step.do`, so a finished step is replayed rather than run
+ * again. `DurableClock.sleep` is `step.sleep`, and `DurableDeferred.await`
+ * waits for an event that a run's `signal` sends.
+ *
+ * ### Running workflows on Cloudflare Workflows
+ * **Example:** Provide the engine to a Worker
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
+ *   "AppWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const welcome = yield* Workflows.RunWorkflow(SendWelcome);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const run = yield* welcome.start({ userId: "u-1" });
+ *         return HttpServerResponse.text(run.executionId);
+ *       }),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(SendWelcomeLive.pipe(Layer.provideMerge(Cloudflare.Workflows.NativeEngine))),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * @layer
+ * @provides WorkflowEngine
+ * @product Workflows
+ */
+export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> = Layer.effect(
   WorkflowEngine.WorkflowEngine,
   Effect.gen(function* () {
     const handlers = new Map<
@@ -341,7 +334,17 @@ const NativeEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worke
               // The run's services, with the step's own instance.
               Effect.provide(
                 Layer.succeedContext(
-                  Context.add(run.context, WorkflowEngine.WorkflowInstance, activityInstance),
+                  run.context.pipe(
+                    Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                    Context.add(
+                      CurrentActivity,
+                      makeCurrentActivity(
+                        instance.workflow._tag,
+                        instance.executionId,
+                        activity.name,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ) as Effect.Effect<string>,

@@ -1,6 +1,6 @@
 ---
 title: Effect workflows
-description: Run Effect workflows on Cloudflare, on Durable Objects or Cloudflare Workflows. Declare a workflow with effect/workflow, host it in a Worker, start it, and let it sleep, wait for signals and undo steps durably.
+description: Run Effect workflows on Cloudflare, on Durable Objects or Cloudflare Workflows. Declare a workflow with effect/workflow, implement it with Workflows.layer, start runs with Workflows.RunWorkflow, and let them sleep, wait for signals and undo steps durably.
 ---
 
 An Effect workflow is a durable process written with `effect/workflow`: a
@@ -38,16 +38,18 @@ started, so a retried request never starts a second one.
 
 ## Implement its steps
 
-`toLayer` implements the workflow. Each step is an `Activity`: a named
-Effect whose result is stored the first time it completes. When the run
-replays, a finished step returns its stored result instead of running again.
+`Workflows.layer` implements the workflow. Each step is an `Activity`: a
+named Effect whose result is stored the first time it completes. When the
+run replays, a finished step returns its stored result instead of running
+again.
 
 ```typescript
 // src/Greet.ts
+import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";
 import { Activity } from "effect/workflow";
 
-export const GreetLive = Greet.toLayer(({ name }) =>
+export const GreetLive = Workflows.layer(Greet, ({ name }) =>
   Activity.make({
     name: "greet",
     success: Schema.String,
@@ -59,46 +61,92 @@ export const GreetLive = Greet.toLayer(({ name }) =>
 A step that returns a value or fails with a typed error declares `success`
 and `error` schemas, because its result is stored as JSON.
 
-## Host it on Durable Objects
+## Run it on Durable Objects
 
-`Cloudflare.Workflows.DurableObjectEngine` takes the workflow Layers and provides the
-engine. Provide it to the Worker, and capture the engine during init:
-handlers run later, outside the init's `Effect.provide`.
+`Cloudflare.Workflows.DurableObjectEngine` is the engine. Provide it under
+the workflow Layers, and provide both to the Worker:
 
 ```typescript
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { WorkflowEngine } from "effect/workflow";
-import { Greet, GreetLive } from "./Greet.ts";
+import * as Layer from "effect/Layer";
+import { GreetLive } from "./Greet.ts";
 
 export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
   "AppWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const engine = yield* WorkflowEngine.WorkflowEngine;
-    return {
-      fetch: Effect.gen(function* () {
-        const greeting = yield* Greet.execute({ id: "g-1", name: "sam" });
-        return HttpServerResponse.text(greeting);
-      }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
-    };
-  }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(GreetLive))),
+    return {};
+  }).pipe(
+    Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine))),
+  ),
 ) {}
 ```
 
 Each workflow gets its own Durable Object class on the Worker, named after
 it (`GreetWorkflow`), and deploying the Worker deploys them.
 
-## Or run it on Cloudflare Workflows
+## Start a run
 
-`Cloudflare.Workflows.NativeEngine` hosts the same workflow Layers on Cloudflare
-Workflows instead: one Workflow class, `NativeEngine`, runs them all, and
-each run is one Workflow instance. Swap the Layer and nothing else changes:
+`Workflows.RunWorkflow` gives you a client for the workflow. Resolve it
+during init, and start runs from your handlers:
 
 ```typescript
-Effect.provide(Cloudflare.Workflows.NativeEngine(GreetLive))
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Greet, GreetLive } from "./Greet.ts";
+
+export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
+  "AppWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const greet = yield* Workflows.RunWorkflow(Greet);
+    return {
+      fetch: Effect.gen(function* () {
+        const run = yield* greet.start({ id: "g-1", name: "sam" });
+        return HttpServerResponse.text(run.executionId);
+      }),
+    };
+  }).pipe(
+    Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine))),
+  ),
+) {}
+```
+
+`start` returns as soon as the run is started, with a handle to it.
+Starting again with the same key returns the run already started, so a
+retried request never starts a second one.
+
+`RunWorkflow` only compiles where the workflow is implemented: running a
+workflow with no `Workflows.layer` in the Worker is a type error.
+
+## Read a run
+
+Store the run's `executionId`, and get the run back with `get`:
+
+```typescript
+const run = greet.get(executionId);
+const status = yield* run.status;
+```
+
+`status` is `NotStarted`, `Running`, `Completed` with its result, `Failed`
+with its error, `Interrupted`, or `Died` with a defect. `run.result` waits
+for the run to finish, which suits tests and scripts more than requests.
+
+## Or run it on Cloudflare Workflows
+
+`Cloudflare.Workflows.NativeEngine` runs the same workflow Layers on
+Cloudflare Workflows instead: one Workflow class, `NativeEngine`, runs them
+all, and each run is one Workflow instance. Swap the engine and nothing else
+changes:
+
+```typescript
+Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.NativeEngine)))
 ```
 
 Steps run with `step.do`, sleeps with `step.sleep`, and signals are
@@ -106,23 +154,10 @@ Workflow events, so runs show up in the Cloudflare dashboard step by step.
 Cloudflare's limits apply: steps per instance, the size of each step's
 result, and a year at most for a wait.
 
-## Start it without waiting
-
-`execute` waits for the result. Pass `discard: true` to start the run and
-get its execution id back straight away, then read its result with `poll`:
-
-```typescript
-const executionId = yield* Greet.execute({ id: "g-2", name: "alex" }, { discard: true });
-const result = yield* Greet.poll(executionId);
-```
-
-`poll` returns nothing for a run that doesn't exist, `Suspended` for one
-that's still waiting, and `Complete` with its exit once it's done.
-
 ## Sleep durably
 
-`DurableClock.sleep` waits on the run's Durable Object alarm, so the wait
-survives restarts and costs nothing while it lasts:
+`DurableClock.sleep` waits on a Durable Object alarm or a Workflow sleep, so
+the wait survives restarts and costs nothing while it lasts:
 
 ```typescript
 yield* DurableClock.sleep({ name: "cool-off", duration: "1 hour" });
@@ -143,13 +178,10 @@ export const Approval = DurableDeferred.make("approval", { success: Schema.Strin
 const approvedBy = yield* DurableDeferred.await(Approval);
 ```
 
-Complete it from anywhere with the engine, using a token that names the run:
+Send it with the run's `signal`:
 
 ```typescript
-yield* DurableDeferred.done(Approval, {
-  token: DurableDeferred.tokenFromExecutionId(Approval, { workflow: Approve, executionId }),
-  exit: Exit.succeed("agent-7"),
-});
+yield* greet.get(executionId).signal(Approval, "agent-7");
 ```
 
 ## Undo a step when a later one fails
@@ -163,27 +195,27 @@ yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
 );
 ```
 
-`interrupt(executionId)` stops a run where it waits, and its compensations
-run too.
+`run.interrupt` stops a run where it waits, and its compensations run too.
 
 ## Call other Durable Objects from a step
 
-Steps often call another Durable Object's methods. Those are runtime-only
-(they need `RuntimeContext`), which every run has, because each run happens
-inside a Durable Object event. `DurableObjectEngine` satisfies that requirement
-for the workflow Layers, so they can resolve namespaces while the Worker
-starts and call them from their steps:
+Steps often call another Durable Object's methods. Resolve the namespace
+when the Layer builds, and call it from a step:
 
 ```typescript
 export const RecordLive = Layer.unwrap(
   Effect.gen(function* () {
     const journals = yield* Journal;
-    return Record.toLayer(({ id }) =>
+    return Workflows.layer(Record, ({ id }) =>
       Activity.make({ name: "append", execute: journals.getByName(id).append("done") }),
     );
   }),
 );
 ```
+
+Those methods are runtime-only: they need `RuntimeContext`, which init
+doesn't have. Steps only run inside a run, which has one, so
+`Workflows.layer` doesn't pass that requirement on to the Worker.
 
 ## How a run executes on Durable Objects
 

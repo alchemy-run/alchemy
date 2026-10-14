@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
@@ -42,3 +43,36 @@ export const decodeResult = (workflow: Workflow.AnyWithProps, text: string) =>
     Effect.map((exit) => new Workflow.Complete({ exit })),
     Effect.orDie,
   );
+
+/**
+ * The step a workflow engine is running: provided around each `Activity` so
+ * the step's own work can derive stable ids from it. A step that runs again,
+ * after a retry or a crash, sees the same values.
+ *
+ * @internal
+ */
+export class CurrentActivity extends Context.Service<
+  CurrentActivity,
+  {
+    readonly workflow: string;
+    readonly executionId: string;
+    readonly activity: string;
+    /** The next id in this step's sequence, restarting on every attempt. */
+    readonly next: () => string;
+  }
+>()("alchemy/Workflow/CurrentActivity") {}
+
+/** @internal */
+export const makeCurrentActivity = (
+  workflow: string,
+  executionId: string,
+  activity: string,
+): CurrentActivity["Service"] => {
+  let sequence = 0;
+  return {
+    workflow,
+    executionId,
+    activity,
+    next: () => `${workflow}/${executionId}/${activity}/${++sequence}`,
+  };
+};

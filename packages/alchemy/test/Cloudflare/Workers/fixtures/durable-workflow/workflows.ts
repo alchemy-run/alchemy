@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
+import * as Workflows from "@/Workflows/index.ts";
 import { Journal } from "./journal.ts";
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {
@@ -57,7 +58,7 @@ export const WorkflowsLive = Layer.unwrap(
         .append(entry)
         .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }), Effect.orDie);
 
-    const GreetLive = Greet.toLayer(({ id, name }) =>
+    const GreetLive = Workflows.layer(Greet, ({ id, name }) =>
       Effect.gen(function* () {
         const greeting = yield* Activity.make({
           name: "greet",
@@ -69,7 +70,7 @@ export const WorkflowsLive = Layer.unwrap(
       }),
     );
 
-    const NapLive = Nap.toLayer(({ id, seconds }) =>
+    const NapLive = Workflows.layer(Nap, ({ id, seconds }) =>
       Effect.gen(function* () {
         yield* Activity.make({ name: "before", execute: record(id, "before") });
         yield* DurableClock.sleep({
@@ -82,7 +83,7 @@ export const WorkflowsLive = Layer.unwrap(
       }),
     );
 
-    const ApproveLive = Approve.toLayer(({ id }) =>
+    const ApproveLive = Workflows.layer(Approve, ({ id }) =>
       Effect.gen(function* () {
         yield* Activity.make({ name: "requested", execute: record(id, "requested") });
         const by = yield* DurableDeferred.await(Approval);
@@ -91,7 +92,7 @@ export const WorkflowsLive = Layer.unwrap(
       }),
     );
 
-    const CheckoutLive = Checkout.toLayer(({ id, decline }) =>
+    const CheckoutLive = Workflows.layer(Checkout, ({ id, decline }) =>
       Effect.gen(function* () {
         yield* Activity.make({ name: "reserve", execute: record(id, "reserve") }).pipe(
           Checkout.withCompensation(() =>
@@ -109,7 +110,7 @@ export const WorkflowsLive = Layer.unwrap(
       }),
     );
 
-    const ParentLive = Parent.toLayer(({ id }) =>
+    const ParentLive = Workflows.layer(Parent, ({ id }) =>
       Effect.gen(function* () {
         const greeting = yield* Greet.execute({ id: `${id}-child`, name: "child" });
         yield* Activity.make({ name: "parent", execute: record(id, `parent:${greeting}`) });
