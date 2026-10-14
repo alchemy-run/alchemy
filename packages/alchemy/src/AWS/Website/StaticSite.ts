@@ -11,7 +11,6 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { isResource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -24,8 +23,8 @@ import {
   MANAGED_CACHING_OPTIMIZED_POLICY_ID,
 } from "../CloudFront/ManagedPolicies.ts";
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
@@ -219,6 +218,20 @@ export interface StaticSiteProps {
  *     hostedZoneId: zone.hostedZoneId,
  *   },
  *   errorPage: "404.html",
+ * });
+ * ```
+ *
+ * **Example:** Site With A Cloudflare Domain
+ * ```typescript
+ * // DNS lives in Cloudflare (e.g. a Cloudflare Registrar domain): the
+ * // certificate is validated and the hostname CNAMEd to CloudFront through
+ * // the Cloudflare zone. Requires `Cloudflare.providers()` in the stack.
+ * const site = yield* StaticSite("Web", {
+ *   path: "./site",
+ *   domain: {
+ *     name: "www.example.com",
+ *     dns: Cloudflare.DNS.Adapter(),
+ *   },
  * });
  * ```
  *
@@ -541,17 +554,21 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       );
     }
 
-    const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
-            hostedZoneId: domain.hostedZoneId,
-            tags: props.tags,
-          });
+    const managed =
+      domain && !domain.cert
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
+        : undefined;
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const kvStore = yield* KeyValueStore("KvStore", {});
     kvStoreArn = kvStore.keyValueStoreArn;
@@ -687,9 +704,9 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
         functionAssociations,
       },
       customErrorResponses,
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: certificate.certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -700,19 +717,21 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     const dist = distribution;
     distributionId = dist.distributionId;
 
-    if (domain && domain.dns !== false) {
+    const dns =
+      domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
+    if (domain && dns) {
       yield* Effect.forEach(
         [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
         (name, index) =>
-          Route53Record(`AliasRecord${index + 1}`, {
-            // Optional — the Record provider infers the most specific
-            // public zone containing `name` when omitted.
-            hostedZoneId: domain.hostedZoneId,
+          // The DNS host infers the zone containing `name` unless one is
+          // pinned.
+          dns.alias(`AliasRecord${index + 1}`, {
             name,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: dist.hostedZoneId,
-              dnsName: dist.domainName,
+            target: {
+              hostname: dist.domainName,
+              route53Alias: { hostedZoneId: dist.hostedZoneId },
             },
           }),
         { concurrency: "unbounded" },
