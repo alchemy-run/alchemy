@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
+import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -348,4 +349,87 @@ test.provider(
       ).toContain("ServerHost");
     }),
   { tags, timeout: 60_000 },
+);
+
+// Slow: the network connector takes ~3 minutes to become ACTIVE.
+test.provider.skipIf(!!process.env.FAST)(
+  "vpc routes outbound traffic through the VPC",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The VPC's Amazon-provided resolver (base + 2) only answers from
+      // inside the VPC: a function without VPC egress can't reach it.
+      const resolverUrl = (url: string) => `${url}/dns?server=10.61.0.2&name=aws.amazon.com`;
+      const deploy = (withVpc: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* AWS.EC2.Network("WebVpc", {
+              cidrBlock: "10.61.0.0/16",
+              availabilityZones: 2,
+            });
+            const sg = yield* AWS.EC2.SecurityGroup("WebVpcSg", { vpcId: network.vpcId });
+            return yield* AWS.Lambda.WebFunction("VpcFunction", {
+              main: asyncFetchMain,
+              authType: "ApplicationManaged",
+              ...(withVpc
+                ? { vpc: { subnetIds: network.privateSubnetIds, securityGroupIds: [sg.groupId] } }
+                : {}),
+            });
+          }),
+        );
+
+      const dns = (url: string) =>
+        send(HttpClientRequest.get(resolverUrl(url))).pipe(
+          Effect.flatMap((response) => response.json),
+          Effect.map((body) => body as { ok: boolean; addresses?: string[]; error?: string }),
+        );
+
+      const before = yield* deploy(false);
+      expect((yield* dns(before.url)).ok).toBe(false);
+
+      const after = yield* deploy(true);
+      expect(after.revisionId).not.toBe(before.revisionId);
+      const resolved = yield* dns(after.url).pipe(
+        Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: (r) => r.ok, times: 20 }),
+      );
+      expect(resolved.ok).toBe(true);
+      expect(resolved.addresses?.length).toBeGreaterThan(0);
+
+      // Out-of-band: the revision pins a version of a WebFunction connector.
+      const revision = yield* LambdaWeb.getWebFunctionRevision({
+        functionName: after.functionName,
+        revisionId: after.revisionId,
+      });
+      const connectorArn = revision.serviceConfig.egressNetworkConnectorArn!;
+      expect(connectorArn).toMatch(/:network-connector:.+:\d+$/);
+      const connectorId = connectorArn.split(":").at(-2)!;
+      const connector = yield* lambdacore.getNetworkConnector({ Identifier: connectorId });
+      expect(connector.State).toBe("ACTIVE");
+      expect(
+        connector.Configuration?.VpcEgressConfiguration?.AssociatedComputeResourceTypes,
+      ).toEqual(["WebFunction"]);
+
+      // VPC egress needs a single-Region endpoint.
+      const multiRegion = yield* stack
+        .plan(
+          AWS.Lambda.WebFunction("VpcFunction", {
+            main: asyncFetchMain,
+            authType: "ApplicationManaged",
+            vpc: { subnetIds: ["subnet-0"], securityGroupIds: ["sg-0"] },
+            regions: ["us-east-1"],
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(String(multiRegion)).toContain("WebFunctionVpcRequiresHomeRegion");
+
+      yield* stack.destroy();
+      yield* expectFunctionDeleted(after.functionName, after.roleName);
+      const connectorGone = yield* lambdacore.getNetworkConnector({ Identifier: connectorId }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+      );
+      expect(connectorGone).toBe(true);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: [...tags, "provider:aws:ec2"], timeout: 900_000 },
 );

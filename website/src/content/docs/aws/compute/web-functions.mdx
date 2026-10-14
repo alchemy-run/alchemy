@@ -242,6 +242,26 @@ const internal = yield* AWS.Lambda.WebFunction("Internal", {
 });
 ```
 
+## Reach private resources
+
+Set `vpc` to send the server's outbound traffic through your VPC, for
+example to reach a database in private subnets:
+
+```typescript
+const api = yield* AWS.Lambda.WebFunction("Api", {
+  main: "./src/server.ts",
+  authType: "ApplicationManaged",
+  vpc: {
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [appSg.groupId],
+  },
+});
+```
+
+Use at least two subnets in different Availability Zones, and allow the
+security group on the database. Private subnets need a NAT gateway to
+reach the internet. A function with `vpc` can't also use `regions`.
+
 ## Add another endpoint
 
 Each endpoint is a separate way in, with its own URL, auth, and limits.

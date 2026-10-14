@@ -1,6 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as iam from "@distilled.cloud/aws/iam";
+import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
@@ -14,6 +15,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createHostRuntimeContext, type HostRuntimeContext } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
@@ -24,6 +26,13 @@ import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
+import type { NetworkConnectorProps } from "./NetworkConnector.ts";
+import {
+  createConnector,
+  getConnector,
+  syncConnector,
+  waitForDeleted,
+} from "./NetworkConnectorLifecycle.ts";
 import {
   activeRevisionId,
   createEndpointConfig,
@@ -51,6 +60,9 @@ const PREBUILT_ENTRY_FILE = "__alchemy_web_entry.mjs";
 /** Inline policy denying the execution role `logs:CreateLogGroup` on its own groups. */
 const LOG_GROUP_GUARD_POLICY = "AlchemyDenyLogGroupCreate";
 
+/** Inline policy on the egress operator role. */
+const EGRESS_POLICY = "AlchemyWebFunctionEgress";
+
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const DEFAULT_MAX_CONCURRENCY = 64;
 
@@ -59,6 +71,19 @@ export const isWebFunction = (value: unknown): value is WebFunction =>
   value !== null &&
   "Type" in value &&
   (value as { Type?: unknown }).Type === WebFunctionTypeId;
+
+/** Subnets and security groups for a Web Function's outbound VPC traffic. */
+export interface WebFunctionVpc {
+  /** Subnets the connector creates network interfaces in. */
+  subnetIds: string[];
+  /** Security groups applied to the connector's network interfaces. */
+  securityGroupIds: string[];
+}
+
+/** `vpc` was combined with `regions`; VPC egress works only in the home Region. */
+export class WebFunctionVpcRequiresHomeRegion extends Data.TaggedError(
+  "WebFunctionVpcRequiresHomeRegion",
+)<{ functionId: string; message: string }> {}
 
 export interface WebFunctionProps extends PlatformProps {
   /**
@@ -150,6 +175,19 @@ export interface WebFunctionProps extends PlatformProps {
    */
   rateLimit?: number;
   /**
+   * Route the server's outbound traffic through your VPC so it can reach
+   * private resources such as RDS. Alchemy creates a Lambda network
+   * connector (and the operator role Lambda uses to manage its network
+   * interfaces) in these subnets and attaches it to every revision. Use at
+   * least two subnets in different Availability Zones; private subnets need
+   * a NAT gateway to reach the internet. Bindings such as `AWS.RDS.Connect`
+   * can request the same access, and both are merged.
+   *
+   * VPC access works only with single-Region endpoints, so it can't be
+   * combined with `regions`. Changing it creates a new revision.
+   */
+  vpc?: WebFunctionVpc;
+  /**
    * Tags applied to the Web Function.
    */
   tags?: Record<string, string>;
@@ -199,6 +237,11 @@ export interface WebFunction extends Resource<
   {
     env?: Record<string, any>;
     policyStatements?: PolicyStatement[];
+    /**
+     * VPC access requested by a binding (e.g. `AWS.RDS.Connect` with
+     * `subnetIds`/`securityGroupIds`). Merged with the `vpc` prop.
+     */
+    vpc?: WebFunctionVpc;
   },
   Providers
 > {}
@@ -349,6 +392,29 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * const internal = yield* AWS.Lambda.WebFunction("Internal", {
  *   main: "./src/server.ts",
  *   authType: "IamAuth",
+ * });
+ * ```
+ *
+ * ### Private network access
+ * Set `vpc` to send the server's outbound traffic through your VPC, for
+ * example to reach an RDS database in private subnets. Alchemy creates and
+ * manages the Lambda network connector this needs.
+ *
+ * **Example:** Reaching resources in private subnets
+ * ```typescript
+ * const network = yield* AWS.EC2.Network("Network", {
+ *   cidrBlock: "10.0.0.0/16",
+ *   nat: "single",
+ * });
+ * const appSg = yield* AWS.EC2.SecurityGroup("AppSg", { vpcId: network.vpcId });
+ *
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   authType: "ApplicationManaged",
+ *   vpc: {
+ *     subnetIds: network.privateSubnetIds,
+ *     securityGroupIds: [appSg.groupId],
+ *   },
  * });
  * ```
  *
@@ -545,6 +611,9 @@ export const WebFunctionProvider = () =>
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
         );
+        const vpcRequests = active.flatMap((binding) =>
+          binding?.data?.vpc ? [binding.data.vpc] : [],
+        );
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
             RoleName: roleName,
@@ -559,7 +628,162 @@ export const WebFunctionProvider = () =>
             .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
-        return env;
+        return { env, vpcRequests };
+      });
+
+      /** The `vpc` prop and binding requests, merged (set-union). */
+      const mergeVpc = (
+        prop: WebFunctionVpc | undefined,
+        requests: WebFunctionVpc[],
+      ): WebFunctionVpc | undefined => {
+        const all = [...(prop ? [prop] : []), ...requests];
+        return all.length === 0
+          ? undefined
+          : {
+              subnetIds: [...new Set(all.flatMap((v) => v.subnetIds))].sort(),
+              securityGroupIds: [...new Set(all.flatMap((v) => v.securityGroupIds))].sort(),
+            };
+      };
+
+      const requireHomeRegion = (
+        id: string,
+        vpc: WebFunctionVpc | undefined,
+        regions: string[] | undefined,
+      ) =>
+        vpc !== undefined && regions !== undefined && regions.length > 0
+          ? Effect.fail(
+              new WebFunctionVpcRequiresHomeRegion({
+                functionId: id,
+                message: `AWS.Lambda.WebFunction "${id}": \`vpc\` can't be combined with \`regions\`: Lambda routes VPC egress only for single-Region endpoints`,
+              }),
+            )
+          : Effect.void;
+
+      /** Name shared by the egress connector and its operator role. */
+      const egressName = (id: string) =>
+        createPhysicalName({ id: `${id}-egress`, maxLength: 64, delimiter: "-" });
+
+      /**
+       * The role Lambda assumes to create and tag the connector's network
+       * interfaces in your subnets (the permissions AWS documents for Web
+       * Function connectors).
+       */
+      const ensureOperatorRole = Effect.fn(function* (id: string, roleName: string) {
+        const existing = yield* iam
+          .getRole({ RoleName: roleName })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        const role =
+          existing ??
+          (yield* iam
+            .createRole({
+              RoleName: roleName,
+              AssumeRolePolicyDocument: JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "lambda.amazonaws.com" },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              }),
+              Tags: createTagsList(yield* createInternalTags(id)),
+            })
+            .pipe(
+              Effect.catchTag("EntityAlreadyExistsException", () =>
+                iam.getRole({ RoleName: roleName }),
+              ),
+            ));
+        yield* iam.putRolePolicy({
+          RoleName: roleName,
+          PolicyName: EGRESS_POLICY,
+          PolicyDocument: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: ["ec2:CreateNetworkInterface"],
+                Resource: [
+                  "arn:aws:ec2:*:*:network-interface/*",
+                  "arn:aws:ec2:*:*:subnet/*",
+                  "arn:aws:ec2:*:*:security-group/*",
+                ],
+              },
+              {
+                Effect: "Allow",
+                Action: ["ec2:CreateTags"],
+                Resource: "arn:aws:ec2:*:*:network-interface/*",
+                Condition: {
+                  StringEquals: {
+                    "ec2:ManagedResourceOperator": "network-connectors.lambda.amazonaws.com",
+                  },
+                },
+              },
+            ],
+          } satisfies PolicyDocument),
+        });
+        return role.Role.Arn;
+      });
+
+      /**
+       * Ensure the egress connector for `vpc` and return the version-qualified
+       * ARN a revision references. A config change publishes a new connector
+       * version, which the next revision picks up.
+       */
+      const syncEgress = Effect.fn(function* ({
+        id,
+        vpc,
+        session,
+      }: {
+        id: string;
+        vpc: WebFunctionVpc;
+        session: ScopedPlanStatusSession;
+      }) {
+        const name = yield* egressName(id);
+        const operatorRole = yield* ensureOperatorRole(id, name);
+        const props: NetworkConnectorProps = {
+          subnetIds: vpc.subnetIds,
+          securityGroupIds: vpc.securityGroupIds,
+          associatedComputeResourceTypes: ["WebFunction"],
+          operatorRole,
+        };
+        const found = yield* getConnector(name);
+        const observed = found && found.State !== "DELETE_FAILED" ? found : undefined;
+        const connector = observed
+          ? yield* syncConnector(observed, name, props, session)
+          : yield* createConnector(name, props, id, session);
+        return (
+          connector.LatestVersionArn ??
+          connector.VersionArn ??
+          `${connector.Arn}:${connector.LatestVersion ?? connector.Version}`
+        );
+      });
+
+      /**
+       * Delete the egress connector and its operator role, if any. The role
+       * goes last: Lambda uses it to remove the connector's interfaces.
+       */
+      const deleteEgress = Effect.fn(function* (id: string, session: ScopedPlanStatusSession) {
+        const name = yield* egressName(id);
+        const connector = yield* getConnector(name);
+        if (connector !== undefined) {
+          yield* lambdacore
+            .deleteNetworkConnector({ Identifier: connector.Id })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* waitForDeleted(connector.Id, session);
+        }
+        yield* iam
+          .deleteRolePolicy({ RoleName: name, PolicyName: EGRESS_POLICY })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        yield* iam.deleteRole({ RoleName: name }).pipe(
+          Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          Effect.retry({
+            while: (e) =>
+              e._tag === "DeleteConflictException" || e._tag === "ConcurrentModificationException",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+          }),
+        );
       });
 
       const getFunction = (functionName: string) =>
@@ -694,6 +918,8 @@ export const WebFunctionProvider = () =>
           desired.serviceConfig.timeoutSeconds &&
         (observed.serviceConfig.maxConcurrencyPerEnvironment ?? DEFAULT_MAX_CONCURRENCY) ===
           desired.serviceConfig.maxConcurrencyPerEnvironment &&
+        (observed.serviceConfig.egressNetworkConnectorArn ?? undefined) ===
+          desired.serviceConfig.egressNetworkConnectorArn &&
         deepEqual(
           observed.serviceConfig.environmentVariables ?? {},
           desired.serviceConfig.environmentVariables ?? {},
@@ -781,6 +1007,7 @@ export const WebFunctionProvider = () =>
               ? ({ ...desired, exports: stripEffects(desired.exports) } as typeof desired)
               : desired;
           if (!isResolved(news)) return;
+          yield* requireHomeRegion(id, news.vpc, news.regions);
           // Creating, or adopted without prior props: reconcile converges.
           if (!output || !olds) return undefined;
           // Generated names are engine-owned; only an explicit functionName
@@ -859,11 +1086,16 @@ export const WebFunctionProvider = () =>
 
           // Execution role + binding grants.
           const roleArn = yield* ensureRole(id, roleName);
-          const bindingEnv = yield* syncBindings({
+          const { env: bindingEnv, vpcRequests } = yield* syncBindings({
             roleName,
             policyName: names.policyName,
             bindings,
           });
+          const vpc = mergeVpc(news.vpc, vpcRequests);
+          yield* requireHomeRegion(id, vpc, news.regions);
+          const egressNetworkConnectorArn = vpc
+            ? yield* syncEgress({ id, vpc, session })
+            : undefined;
           yield* syncLogGroups({ id, functionName, roleName });
 
           // Code: bundle, then upload to the versioned assets bucket Lambda
@@ -902,6 +1134,7 @@ export const WebFunctionProvider = () =>
               timeoutSeconds: toTimeoutSeconds(news.timeout),
               maxConcurrencyPerEnvironment:
                 news.maxConcurrencyPerEnvironment ?? DEFAULT_MAX_CONCURRENCY,
+              ...(egressNetworkConnectorArn ? { egressNetworkConnectorArn } : {}),
               environmentVariables: {
                 ...userEnv,
                 ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}),
@@ -1018,7 +1251,7 @@ export const WebFunctionProvider = () =>
           yield* session.note(`https://${settled.domainName}`);
           return toAttributes(fn, settled, { roleName, roleArn }, { hash: identityHash });
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ id, output, session }) {
           // The role may already be gone — every step is idempotent. Grants
           // go first; the log-group guard stays until the function is gone.
           yield* iam.listRolePolicies({ RoleName: output.roleName }).pipe(
@@ -1053,6 +1286,9 @@ export const WebFunctionProvider = () =>
             }),
           );
           yield* waitForFunctionGone(output.functionName);
+          // The egress connector outlives a `vpc` removal (old revisions may
+          // still reference it) and goes with the function.
+          yield* deleteEgress(id, session);
 
           yield* iam
             .deleteRolePolicy({ RoleName: output.roleName, PolicyName: LOG_GROUP_GUARD_POLICY })

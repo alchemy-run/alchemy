@@ -1,5 +1,6 @@
 // An async Web Function in the Cloudflare Worker / Hono shape: a default
 // export with a Web-standard `fetch`.
+import { Resolver } from "node:dns/promises";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default {
@@ -18,6 +19,19 @@ export default {
         },
       });
       return new Response(body, { headers: { "content-type": "text/plain" } });
+    }
+
+    if (url.pathname === "/dns") {
+      // Query a specific DNS server, e.g. a VPC's Amazon-provided resolver,
+      // which is only reachable from inside that VPC.
+      const resolver = new Resolver({ timeout: 2000, tries: 1 });
+      resolver.setServers([url.searchParams.get("server")!]);
+      try {
+        const addresses = await resolver.resolve4(url.searchParams.get("name") ?? "aws.amazon.com");
+        return Response.json({ ok: true, addresses });
+      } catch (error) {
+        return Response.json({ ok: false, error: String(error) });
+      }
     }
 
     if (url.pathname === "/endpoint") {
