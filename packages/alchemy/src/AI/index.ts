@@ -4,11 +4,25 @@ export * from "./HarnessEngine.ts";
 export {
   makeHarnessServer,
   npmInstallLayer,
-  serveHarnessHttp,
   systemPackagesLayer,
+  type HarnessServer,
   type HarnessServerOptions,
 } from "./HarnessServer.ts";
 export * from "./Parameter.ts";
+export {
+  isSandbox,
+  Sandbox,
+  SandboxError,
+  type SandboxClient,
+  type SandboxEgress,
+  type SandboxExecOptions,
+  type SandboxExecOutput,
+  type SandboxPort,
+  type SandboxProcess,
+  type SandboxSize,
+  type SandboxSpec,
+  type SandboxStartOptions,
+} from "./Sandbox.ts";
 export * from "./Session.ts";
 export * from "./HarnessRpcs.ts";
 export * from "./SessionStore.ts";

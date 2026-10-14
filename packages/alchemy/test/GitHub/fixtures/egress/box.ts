@@ -1,4 +1,4 @@
-import * as Cloudflare from "@/Cloudflare";
+import * as AI from "@/AI/index.ts";
 
 /** A shell for `gh` and `git`, with GitHub access only through its Durable Object's egress. */
-export class EgressBox extends Cloudflare.Container<EgressBox, {}>()("GitHubEgressBox") {}
+export class EgressBox extends AI.Sandbox<EgressBox, { size: "small" }>()("GitHubEgressBox") {}

@@ -379,6 +379,7 @@ const bodyBytes = (request: HttpClientRequest.HttpClientRequest) =>
  *         open: (pullRequest: number) =>
  *           harness
  *             .start({
+ *               size: "large",
  *               egress: [github.narrow({ repository: "alchemy-run/alchemy", pullRequest })],
  *             })
  *             .pipe(Effect.flatMap((claude) => claude.start({}))),

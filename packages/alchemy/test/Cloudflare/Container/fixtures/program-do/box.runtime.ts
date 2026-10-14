@@ -2,13 +2,15 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { ProgramBox } from "./box.ts";
 
 /** Lives on the container's writable filesystem: lost on restart unless snapshotted. */
 const FILE = "/tmp/program-box.txt";
 
-export default ProgramBox.make(
-  { main: import.meta.url, runtime: "node", schedulingPolicy: "durable_object" },
+export default Cloudflare.Containers.Sandbox(
+  ProgramBox,
+  { main: import.meta.url, runtime: "node", sizes: { small: "lite", large: "standard-1" } },
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     return {

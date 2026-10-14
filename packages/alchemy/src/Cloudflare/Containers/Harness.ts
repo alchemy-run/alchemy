@@ -30,6 +30,13 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { connectHarness } from "../../AI/HarnessRpcs.ts";
 import {
+  isSandbox,
+  type Sandbox as AISandbox,
+  type SandboxClient,
+  type SandboxSize,
+  type SandboxStartOptions,
+} from "../../AI/Sandbox.ts";
+import {
   type Harness as AIHarness,
   type Session,
   SessionError,
@@ -51,6 +58,7 @@ import type {
   ContainerStartOptions,
 } from "./ContainerClient.ts";
 import { makeEgress } from "./Egress.ts";
+import { cloudflareSandboxOf } from "./SandboxClient.ts";
 
 /** The host the container calls when it is told to shut down. */
 export const HARNESS_CONTROL_HOST = "alchemy.internal";
@@ -207,7 +215,7 @@ interface SnapshotMeta {
  * (restoring the container's last snapshot); `list` and `events` read this
  * Durable Object's storage and never need the container.
  */
-export interface Harness {
+export interface Harness<StartOptions = ContainerStartOptions | undefined> {
   /**
    * Start the container if it isn't running — restoring its latest snapshot
    * — with these options (its `egress` decides what it can reach), and
@@ -215,7 +223,7 @@ export interface Harness {
    * in this Durable Object.
    */
   readonly start: (
-    options?: ContainerStartOptions,
+    ...options: undefined extends StartOptions ? [options?: StartOptions] : [options: StartOptions]
   ) => Effect.Effect<AIHarness, SessionError, RuntimeContext>;
   /** Sessions recorded in this Durable Object, newest first. */
   readonly list: () => Effect.Effect<ReadonlyArray<SessionInfo>, never, RuntimeContext>;
@@ -241,10 +249,14 @@ const RECENT_SNAPSHOT_MS = 5_000;
  * sessions' history lives in this Durable Object, and the container's
  * filesystem is snapshotted when it shuts down and restored when it starts
  * again. Declare it at the top of the Durable Object that owns the
- * container; its program serves the harness (e.g. `{ fetch: claude.fetch }`).
+ * container; its program serves the harness (e.g. `Anthropic.ClaudeCodeServer(…)`
+ * as the program of `Cloudflare.Containers.Sandbox`).
  *
- * Snapshots need the container's `schedulingPolicy: "durable_object"`;
- * without it, history is still kept but the filesystem starts fresh.
+ * It takes an `AI.Sandbox` declaration hosted by `Cloudflare.Containers.Sandbox`
+ * (`start({ size, … })`), or a `Cloudflare.Container` (`start({ instance, … })`).
+ * Snapshots need the container's `schedulingPolicy: "durable_object"` (every
+ * sandbox has it); without it, history is still kept but the filesystem
+ * starts fresh.
  *
  * ### Running sessions that survive restarts
  * **Example:** A Durable Object with many sessions
@@ -283,10 +295,19 @@ const RECENT_SNAPSHOT_MS = 5_000;
  * @product Containers
  * @category Containers
  */
-export const Harness = (
-  container: Container.Decl.Any,
+export const Harness: {
+  <D extends AISandbox.Decl.Any>(
+    sandbox: D,
+    options?: HarnessOptions,
+  ): Effect.Effect<Harness<SandboxStartOptions<SandboxSize<D>>>, never, DurableObjectState>;
+  (
+    container: Container.Decl.Any,
+    options?: HarnessOptions,
+  ): Effect.Effect<Harness<ContainerStartOptions | undefined>, never, DurableObjectState>;
+} = (
+  container: Container.Decl.Any | AISandbox.Decl.Any,
   options: HarnessOptions = {},
-): Effect.Effect<Harness, never, DurableObjectState> =>
+): Effect.Effect<Harness<any>, never, DurableObjectState> =>
   Effect.gen(function* () {
     // Deploy: the container reports its SIGTERM to this object.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -295,8 +316,24 @@ export const Harness = (
       ).Application) as ContainerApplication;
       yield* application.bind`Harness`({ env: { [SNAPSHOT_ON_SHUTDOWN]: "1" } });
     }
-    const sandbox =
-      (yield* container as unknown as Effect.Effect<ContainerClient>) as ContainerClient;
+    const handle = yield* container as unknown as Effect.Effect<ContainerClient | SandboxClient>;
+    // A sandbox's `start({ size })` maps onto its container's `start({ instance })`.
+    const hosted = isSandbox(container) ? cloudflareSandboxOf(handle) : undefined;
+    if (isSandbox(container) && hosted === undefined) {
+      return yield* Effect.die(
+        new SessionError({
+          message:
+            "Cloudflare.Containers.Harness needs a sandbox hosted by Cloudflare.Containers.Sandbox.",
+        }),
+      );
+    }
+    const sandbox = hosted ? hosted.container : (handle as ContainerClient);
+    const toContainerOptions = (
+      startOptions: ContainerStartOptions | SandboxStartOptions | undefined,
+    ): ContainerStartOptions | undefined =>
+      hosted && startOptions
+        ? hosted.startOptions(startOptions as SandboxStartOptions)
+        : (startOptions as ContainerStartOptions | undefined);
     const state = yield* DurableObjectState;
     const port = options.port ?? 3000;
 
@@ -841,8 +878,8 @@ export const Harness = (
       );
 
     return {
-      start: (startOptions) =>
-        startContainer(startOptions).pipe(
+      start: (startOptions?: ContainerStartOptions | SandboxStartOptions) =>
+        startContainer(toContainerOptions(startOptions)).pipe(
           Effect.andThen(connect),
           Effect.map(durableHarness),
           Effect.mapError((cause) =>
@@ -863,5 +900,5 @@ export const Harness = (
           }
           yield* sandbox.destroy().pipe(Effect.ignore);
         }),
-    } satisfies Harness;
-  });
+    } satisfies Harness<ContainerStartOptions | SandboxStartOptions | undefined>;
+  }) as any;

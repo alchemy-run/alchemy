@@ -63,24 +63,52 @@ export interface ClaudeCodeServerProps {
  *
  * At deploy time it installs Anthropic's official Agent SDK (which ships the
  * unmodified `claude` binary) into the container image and binds its
- * credentials into the container environment. At runtime it returns an
- * `AI.Harness`: start sessions, prompt, steer, interrupt, and stream
- * normalized `AI.SessionEvent`s.
+ * credentials into the container environment. At runtime it serves an
+ * `AI.Harness` over HTTP (`fetch`): code outside the container connects with
+ * `AI.connectHarness` to start sessions, prompt, steer, interrupt, and
+ * stream normalized `AI.SessionEvent`s.
  *
- * ### Running Claude Code in a container
- * **Example:** A container that serves Claude Code sessions
+ * ### Running Claude Code in a sandbox
+ * **Example:** A sandbox that serves Claude Code sessions
  * ```typescript
- * import * as AI from "alchemy/AI";
  * import * as Anthropic from "alchemy/Anthropic";
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import { Sandbox } from "./Sandbox.ts"; // an AI.Sandbox declaration
  *
- * export default Sandbox.make(
- *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
+ * export default Cloudflare.Containers.Sandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     runtime: "node",
+ *     image: "node:22-bookworm",
+ *     sizes: { small: "lite", large: "standard-4" },
+ *   },
+ *   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }),
+ * );
+ * ```
+ *
+ * **Example:** Serving it alongside your own routes
+ * ```typescript
+ * export default Cloudflare.Containers.Sandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     runtime: "node",
+ *     image: "node:22-bookworm",
+ *     sizes: { small: "lite", large: "standard-4" },
+ *   },
  *   Effect.gen(function* () {
  *     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
  *       apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
  *       cwd: "/workspace/app",
  *     });
- *     return { fetch: yield* AI.serveHarnessHttp(claude) };
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url === "/health") return HttpServerResponse.text("ok");
+ *         return yield* claude.fetch;
+ *       }),
+ *     };
  *   }),
  * );
  * ```

@@ -26,19 +26,24 @@ export interface CodexServerProps {
 /**
  * OpenAI Codex, running inside the container it is yielded in: installs the
  * `codex` CLI into the image, binds its credentials, and at runtime drives
- * `codex app-server` as an `AI.Harness`.
+ * `codex app-server` as an `AI.Harness`, served over HTTP (`fetch`).
  *
- * ### Running Codex in a container
- * **Example:** A container that serves Codex sessions
+ * ### Running Codex in a sandbox
+ * **Example:** A sandbox that serves Codex sessions
  * ```typescript
- * export default Sandbox.make(
- *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
+ * export default Cloudflare.Containers.Sandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     runtime: "node",
+ *     image: "node:22-bookworm",
+ *     sizes: { small: "lite", large: "standard-4" },
+ *   },
  *   Effect.gen(function* () {
- *     const codex = yield* OpenAI.CodexServer("Codex", {
+ *     return yield* OpenAI.CodexServer("Codex", {
  *       apiKey: yield* Config.Redacted("OPENAI_API_KEY"),
  *       cwd: "/workspace/app",
  *     });
- *     return { fetch: yield* AI.serveHarnessHttp(codex) };
  *   }),
  * );
  * ```

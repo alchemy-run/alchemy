@@ -34,7 +34,8 @@ export interface ServerProps {
 
 /**
  * OpenCode, running inside the container it is yielded in (driven over its
- * Agent Client Protocol mode, `opencode acp`), exposed as an `AI.Harness`.
+ * Agent Client Protocol mode, `opencode acp`), served over HTTP as an
+ * `AI.Harness` (`fetch`).
  *
  * ### Running OpenCode in a container
  * **Example:** OpenCode with an Anthropic key

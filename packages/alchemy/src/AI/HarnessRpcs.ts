@@ -188,7 +188,7 @@ export const followEvents = <E, R>(
   });
 
 /**
- * Connect to a harness served with `AI.serveHarnessHttp` through any
+ * Connect to a harness server (`Anthropic.ClaudeCodeServer`, …) through any
  * `HttpClient` — e.g. a container port from a Durable Object
  * (`Cloudflare.toHttpClient(yield* sandbox.getTcpPort(3000))`). The client
  * lives in the ambient `Scope`.

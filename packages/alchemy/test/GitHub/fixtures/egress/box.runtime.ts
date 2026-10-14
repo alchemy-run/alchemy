@@ -4,14 +4,16 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
 import { EgressBox } from "./box.ts";
 
-export default EgressBox.make(
+export default Cloudflare.Containers.Sandbox(
+  EgressBox,
   {
     main: import.meta.url,
     runtime: "node",
     image: "node:22-bookworm-slim",
-    schedulingPolicy: "durable_object",
+    sizes: { small: "lite" },
   },
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner;

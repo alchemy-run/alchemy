@@ -2,7 +2,6 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as AI from "@/AI/index.ts";
 import * as Anthropic from "@/Anthropic/index.ts";
 import { Dockerfile } from "@/Docker/index.ts";
 import * as OpenAI from "@/OpenAI/index.ts";
@@ -48,9 +47,9 @@ export default Sandbox.make(
       string,
       Effect.Effect<HttpServerResponse.HttpServerResponse, never, any>
     > = {
-      claude: yield* AI.serveHarnessHttp(claude),
-      codex: yield* AI.serveHarnessHttp(codex),
-      opencode: yield* AI.serveHarnessHttp(opencode),
+      claude: claude.fetch,
+      codex: codex.fetch,
+      opencode: opencode.fetch,
     };
     return {
       fetch: Effect.gen(function* () {

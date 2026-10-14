@@ -22,7 +22,7 @@ export interface AcpServerProps {
 
 /**
  * Any Agent Client Protocol agent, running inside the container it is
- * yielded in, exposed as an `AI.Harness`. Covers the long tail of coding
+ * yielded in, served over HTTP as an `AI.Harness` (`fetch`). Covers the long tail of coding
  * agents (Gemini CLI, Grok, …) with one integration.
  *
  * ### Running an ACP agent
