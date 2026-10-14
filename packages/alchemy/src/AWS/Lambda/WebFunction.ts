@@ -397,6 +397,10 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * });
  * ```
  *
+ * Put CloudFront in front with a `CloudFront.Distribution` origin
+ * `{ webFunction: internal }`, which grants only that distribution access.
+ * Grant other callers with `AWS.Lambda.WebFunctionPermission`.
+ *
  * ### Private network access
  * Set `vpc` to send the server's outbound traffic through your VPC, for
  * example to reach an RDS database in private subnets. Alchemy creates and
