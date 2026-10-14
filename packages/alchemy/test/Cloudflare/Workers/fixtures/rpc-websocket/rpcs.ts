@@ -22,6 +22,8 @@ export const SocketStats = Schema.Struct({
 export class SocketRpcs extends RpcGroup.make(
   Rpc.make("greet", { payload: { name: Schema.String }, success: Greeting }),
   Rpc.make("increment", { success: Schema.Number }),
+  // Holds a call open past the client's ping timeout, with no frames meanwhile.
+  Rpc.make("slow", { payload: { millis: Schema.Number }, success: Schema.Number }),
   Rpc.make("reject", { success: Schema.Never, error: Rejected }),
   Rpc.make("numbers", {
     payload: { count: Schema.Number },

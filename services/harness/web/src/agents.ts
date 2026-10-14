@@ -29,7 +29,9 @@ const socketUrl = (id: string) =>
 const connect = (id: string) =>
   Effect.gen(function* () {
     const protocol = yield* Layer.build(
-      RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
+      // Effect's default ping timeout (one 5s interval) drops a socket whose call is
+      // quiet for 5s, such as a `start` that clones the repository.
+      RpcClient.layerProtocolSocket({ retryTransientErrors: true, pingTimeout: "15 seconds" }).pipe(
         Layer.provide(
           Layer.mergeAll(Socket.layerWebSocket(socketUrl(id)), RpcSerialization.layerJson),
         ),
