@@ -16,6 +16,12 @@ export default class ProgramBoxWorker extends Cloudflare.Worker<ProgramBoxWorker
         if (url.pathname === "/write-read") {
           return HttpServerResponse.text(yield* objects.getByName("write").writeAndRead("hello"));
         }
+        if (url.pathname === "/memory") {
+          const size = url.searchParams.get("size") === "large" ? "large" : "small";
+          return HttpServerResponse.text(
+            String(yield* objects.getByName(`memory-${size}`).memoryAt(size)),
+          );
+        }
         if (url.pathname === "/snapshot") {
           return yield* HttpServerResponse.json(
             yield* objects.getByName("snapshot").snapshotRoundTrip("persisted"),

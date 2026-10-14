@@ -1,7 +1,7 @@
-import * as AI from "alchemy/AI";
 import * as Anthropic from "alchemy/Anthropic";
+import * as Cloudflare from "alchemy/Cloudflare";
 import { Dockerfile } from "alchemy/Docker";
-import * as Effect from "effect/Effect";
+import { INSTANCE } from "./machine.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 
 /**
@@ -10,7 +10,8 @@ import { Sandbox, WORKSPACE } from "./Sandbox.ts";
  * at runtime (see Agent.ts). It holds no credentials — the Durable Object
  * that owns the container adds them to its requests.
  */
-export default Sandbox.make(
+export default Cloudflare.Containers.Sandbox(
+  Sandbox,
   {
     main: import.meta.url,
     runtime: "node",
@@ -21,15 +22,12 @@ export default Sandbox.make(
       RUN mkdir -p ${WORKSPACE}
     `,
     // Scheduled by its Durable Object, which snapshots and restores it.
-    schedulingPolicy: "durable_object",
+    sizes: { large: INSTANCE },
   },
-  Effect.gen(function* () {
-    const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
-      model: "claude-haiku-4-5-20251001",
-      // Stream the model's thinking (shown in the UI as reasoning).
-      thinking: { type: "enabled", budgetTokens: 4000 },
-      cwd: WORKSPACE,
-    });
-    return { fetch: yield* AI.serveHarnessHttp(claude) };
+  Anthropic.ClaudeCodeServer("Claude", {
+    model: "claude-haiku-4-5-20251001",
+    // Stream the model's thinking (shown in the UI as reasoning).
+    thinking: { type: "enabled", budgetTokens: 4000 },
+    cwd: WORKSPACE,
   }),
 );

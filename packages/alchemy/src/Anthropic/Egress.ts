@@ -35,7 +35,7 @@ const PLACEHOLDER = "alchemy-egress";
  *     return Effect.gen(function* () {
  *       return {
  *         open: () =>
- *           harness.start({ egress: [model] }).pipe(
+ *           harness.start({ size: "large", egress: [model] }).pipe(
  *             Effect.flatMap((claude) => claude.start({})),
  *             Effect.map((session) => session.id),
  *           ),

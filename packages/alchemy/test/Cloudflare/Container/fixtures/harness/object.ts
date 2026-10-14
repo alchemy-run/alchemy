@@ -35,7 +35,7 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
         /** Run one turn and return its reply. */
         turn: (sessionId: string, prompt: string) =>
           Effect.gen(function* () {
-            const claude = yield* harness.start({ egress: [model], instance: "standard-1" });
+            const claude = yield* harness.start({ size: "standard", egress: [model] });
             // The workspace is ours to set up — unless a checkpoint already
             // brought it back.
             yield* run(
@@ -67,7 +67,7 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
             );
             // The checkpoint runs in the background; let it finish.
             yield* Effect.sleep("3 seconds");
-            yield* box.destroy().pipe(Effect.ignore);
+            yield* box.stop().pipe(Effect.ignore);
             yield* state.storage.sql.exec(
               "DELETE FROM alchemy_harness_meta WHERE key = 'snapshot'",
             );
@@ -78,8 +78,8 @@ export class HarnessObject extends Cloudflare.DurableObject<HarnessObject>()(
          */
         probe: () =>
           Effect.gen(function* () {
-            yield* box.destroy().pipe(Effect.ignore);
-            yield* harness.start({ egress: [model], instance: "standard-1" });
+            yield* box.stop().pipe(Effect.ignore);
+            yield* harness.start({ size: "standard", egress: [model] });
             return yield* run(
               `node -e "fetch('https://api.anthropic.com/v1/models').then(() => console.log('ok'), (e) => console.log(String(e.cause ?? e)))"`,
             );

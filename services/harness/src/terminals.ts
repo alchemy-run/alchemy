@@ -1,6 +1,5 @@
 import type { RuntimeContext } from "alchemy";
-import { SessionError } from "alchemy/AI";
-import type { ContainerClient } from "alchemy/Cloudflare";
+import { type SandboxClient, SessionError } from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as PubSub from "effect/PubSub";
@@ -31,7 +30,7 @@ const failure = (cause: unknown) =>
  * outlives the clients watching it: they come and go, and each one that
  * connects gets the recent output first.
  */
-export const makeTerminals = (sandbox: ContainerClient, options: { readonly cwd: string }) => {
+export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: string }) => {
   const shells = new Map<string, Shell>();
 
   const remember = (shell: Shell, chunk: string) => {

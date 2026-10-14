@@ -1,4 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
+import * as AI from "@/AI/index.ts";
 
-/** A bundled program, scheduled by its Durable Object (so it can be snapshotted). */
-export class ProgramBox extends Cloudflare.Container<ProgramBox, {}>()("ProgramBox") {}
+/** A bundled program in a sandbox, scheduled by its Durable Object (so it can be snapshotted). */
+export class ProgramBox extends AI.Sandbox<ProgramBox, { size: "small" | "large" }>()(
+  "ProgramBox",
+) {}

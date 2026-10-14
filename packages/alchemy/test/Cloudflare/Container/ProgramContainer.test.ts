@@ -9,10 +9,10 @@ import ProgramBoxStack, { state } from "./fixtures/program-do/stack.ts";
 const HOOK_TIMEOUT = 600_000;
 
 /**
- * A bundled program (`Container.make`) under `schedulingPolicy:
- * "durable_object"`: the program is the Container's one image, started by
- * `start()` without an image, and snapshotted and restored by its
- * Durable Object.
+ * A bundled program hosted as an `AI.Sandbox` on a Cloudflare Container
+ * (`Cloudflare.Containers.Sandbox`, scheduled by its Durable Object): the
+ * program is the Container's one image, started by `start({ size })`, and
+ * snapshotted and restored by its Durable Object.
  */
 describe.each([
   { dev: true, mode: "local" },
@@ -50,6 +50,20 @@ describe.each([
       "start() runs the bundled program",
       Effect.gen(function* () {
         expect(yield* get("/write-read")).toBe("hello");
+      }),
+      { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 300_000 },
+    );
+
+    // Docker gives every local container the host's memory: sizes only differ live.
+    test.skipIf(dev)(
+      "start({ size }) starts on the size's instance type",
+      Effect.gen(function* () {
+        // lite: 256 MiB; standard-1: 4 GiB.
+        const small = Number(yield* get("/memory?size=small"));
+        const large = Number(yield* get("/memory?size=large"));
+        expect(small).toBeGreaterThan(0);
+        expect(small).toBeLessThan(1024 ** 3);
+        expect(large).toBeGreaterThan(2 * 1024 ** 3);
       }),
       { tags: [mode, "provider:cloudflare", "provider:cloudflare:container"], timeout: 300_000 },
     );

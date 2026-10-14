@@ -6,7 +6,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { INSTANCE, makeMachine } from "./machine.ts";
+import { makeMachine, SIZE } from "./machine.ts";
 import { AgentRpcs } from "./rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
@@ -68,7 +68,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         }
       }),
     ).pipe(
-      Effect.catchTag("ContainerError", (cause) =>
+      Effect.catchTag("SandboxError", (cause) =>
         Effect.fail(new SessionError({ message: cause.message })),
       ),
     );
@@ -101,7 +101,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
           egress: [model, github],
           // Package registries and docs; GitHub and the model go through egress.
           enableInternet: true,
-          instance: INSTANCE,
+          size: SIZE,
         })
         .pipe(Effect.tap(() => ensureWorkspace));
       // Reported as `starting` while a stopped machine comes up.

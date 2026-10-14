@@ -76,23 +76,22 @@ const unavailable = (name: string) =>
     ),
   );
 
-/** A stand-in harness for the deploy pass, where no process can be spawned. */
-const deployStub = (name: string): Harness => ({
-  name,
-  capabilities: {
-    steering: "interrupt-restart",
-    queuedPrompts: false,
-    fork: false,
-    rollback: false,
-    subagents: false,
-    plans: false,
-    reasoning: false,
-    modelSwitching: false,
-  },
-  start: () => unavailable(name),
-  get: () => unavailable(name),
-  list: () => unavailable(name),
-});
+/**
+ * A harness served over HTTP as {@link HarnessRpcs}: a host's whole
+ * program. Return it from a container's implementation (or use its `fetch`
+ * in your own), and drive it from outside the sandbox with
+ * `AI.remoteHarness`.
+ */
+// A type alias, not an interface: a server is a whole host program, and a
+// program's shape is checked against an index signature (`MainRpc`), which
+// interfaces never satisfy.
+export type HarnessServer = {
+  readonly fetch: Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    HttpServerRequest.HttpServerRequest | Scope.Scope
+  >;
+};
 
 /**
  * The shared shape of every harness server (`Anthropic.ClaudeCodeServer`,
@@ -103,12 +102,12 @@ const deployStub = (name: string): Harness => ({
  *   harness CLI is baked into the host's image and its credentials land in
  *   the host's environment.
  * - **Runtime** (inside the deployed host): builds the native driver and
- *   wraps it with the shared engine ({@link makeHarness}). Sessions and their
- *   event log live for the life of the host process.
+ *   wraps it with the shared engine ({@link makeHarness}), served over HTTP.
+ *   Sessions and their event log live for the life of the host process.
  */
 export const makeHarnessServer = <R>(
   options: HarnessServerOptions<R>,
-): Effect.Effect<Harness, never, Exclude<R, Scope.Scope>> =>
+): Effect.Effect<HarnessServer, never, Exclude<R, Scope.Scope> | RuntimeContext> =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       yield* bindIntoImageHost(`harness:${options.id}`, {
@@ -127,7 +126,7 @@ export const makeHarnessServer = <R>(
         ],
         ...(options.env ? { env: options.env } : {}),
       });
-      return deployStub(options.id);
+      return { fetch: unavailable(options.id) };
     }
     // Bound env values travel packed (Redacted markers, JSON) for Alchemy's
     // own accessors; the harness CLI reads raw `process.env`, so unpack them.
@@ -149,16 +148,16 @@ export const makeHarnessServer = <R>(
     );
     const driver: HarnessDriver = native;
     const store = yield* Layer.build(MemorySessionStore).pipe(Scope.provide(scope));
-    return yield* makeHarness(driver).pipe(
+    const harness = yield* makeHarness(driver).pipe(
       Effect.provideContext(store),
       Effect.provideService(Scope.Scope, scope),
     );
+    return { fetch: yield* serveHarnessHttp(harness) };
   });
 
 /**
  * Serve a harness over HTTP as {@link HarnessRpcs} (NDJSON, streaming
- * events). Use it as a container's `fetch` so code outside the sandbox (a
- * Durable Object, a Worker) can drive the harness with `AI.remoteHarness`.
+ * events). Harness servers do this themselves (`claude.fetch`).
  */
 export const serveHarnessHttp = (
   harness: Harness,

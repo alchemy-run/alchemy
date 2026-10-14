@@ -39,11 +39,12 @@ export class EgressObject extends Cloudflare.DurableObject<EgressObject>()(
         );
       return {
         /** With the declared access. */
-        run: (script: string) => box.start({ egress: [github] }).pipe(Effect.andThen(sh(script))),
+        run: (script: string) =>
+          box.start({ size: "small", egress: [github] }).pipe(Effect.andThen(sh(script))),
         /** Narrowed to one issue. */
         runOnIssue: (issue: number, script: string) =>
           box
-            .start({ egress: [github.narrow({ repository: EGRESS_REPO, issue })] })
+            .start({ size: "small", egress: [github.narrow({ repository: EGRESS_REPO, issue })] })
             .pipe(Effect.andThen(sh(script))),
       };
     });

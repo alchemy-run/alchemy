@@ -378,6 +378,36 @@ type ContainerShape<Shape> = {
  * when needed. Scope closure kills an unfinished exec process, but does not
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
  *
+ * ### Programs Scheduled by a Durable Object
+ * A program the Durable Object starts and stops (an agent's machine, a
+ * harness server) is an `AI.Sandbox`: declare its sizes, then host it with
+ * `Cloudflare.Containers.Sandbox`. The program is the Container's one image;
+ * each size is an instance type chosen at `start({ size })`.
+ *
+ * **Example:** A sandbox running Claude Code
+ * ```typescript
+ * // src/Sandbox.ts
+ * export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()(
+ *   "Sandbox",
+ * ) {}
+ *
+ * // src/Sandbox.cloudflare.ts
+ * export default Cloudflare.Containers.Sandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     runtime: "node",
+ *     image: "node:24-bookworm",
+ *     sizes: { small: "lite", large: "standard-4" },
+ *   },
+ *   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }),
+ * );
+ *
+ * // In the Durable Object
+ * const sandbox = yield* Sandbox;
+ * yield* sandbox.start({ size: "large" });
+ * ```
+ *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
  * through its Durable Object binding:

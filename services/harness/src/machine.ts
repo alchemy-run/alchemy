@@ -1,8 +1,11 @@
-import type { ContainerClient } from "alchemy/Cloudflare";
+import type { SandboxClient } from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import type { Machine } from "./rpcs.ts";
 
-/** The Cloudflare Containers size sessions run on. */
+/** The sandbox size sessions run on. */
+export const SIZE = "large";
+
+/** The Cloudflare Containers instance type of {@link SIZE}. */
 export const INSTANCE = "standard-4";
 
 /**
@@ -22,7 +25,7 @@ fi`;
 
 /** The session's machine: whether it runs, its size, where, and live usage. */
 export const makeMachine = (
-  sandbox: ContainerClient,
+  sandbox: SandboxClient,
   /** A start or stop in progress, if any. */
   transition: () => "starting" | "suspending" | undefined,
 ) => {
