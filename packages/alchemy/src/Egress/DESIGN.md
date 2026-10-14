@@ -599,6 +599,32 @@ runHookPayload: JSON.stringify({
 }),
 ```
 
+The proxy's CA is per-run too. Minted at boot, it would be in the snapshot:
+every MicroVM of the image would share its private key and its cached
+leaves. So on a MicroVM the proxy starts with no CA and no routes (it
+decrypts nothing; a routed host before `/run` is refused, never sent out
+with its placeholder), and the trust bundle holds the system roots alone.
+The `/run` hook mints this MicroVM's CA, rewrites the bundle at the same
+path (so `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO` set at
+boot stay valid), installs it in the proxy (terminators for an older CA
+are closed), and only then applies the first route table:
+
+```ts
+// alchemy internal: Runtime/Bootstrap/EgressProxy.ts, the run hook
+const ca = yield* makeLocalCa; // this MicroVM's own
+yield* writeTrustBundle(EGRESS_PROXY_CA_BUNDLE, [ca.pem]); // same path, renamed over
+yield* proxy.useCa(ca);
+yield* SubscriptionRef.set(routes, config.routes);
+```
+
+Who trusts it: each program reads the bundle at its own start. The program
+(the bootstrap's own process) starts before `/run`, but it never trusted the
+bundle: `NODE_EXTRA_CA_CERTS` is read at process start and is set only
+afterwards. git, gh and a harness CLI are children it spawns per request,
+after `/run` (their placeholder credentials arrive there), so they read the
+new bundle. A child spawned before `/run` trusts the system roots alone, and
+fails closed on a routed host.
+
 ```ts
 // alchemy internal: Runtime/Bootstrap/index.ts — the image's entrypoint, before `main`
 await trustEgressCa(); // exists today: writes the CA bundle, sets SSL_CERT_FILE etc.
