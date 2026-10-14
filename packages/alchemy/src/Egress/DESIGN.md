@@ -27,17 +27,18 @@ yield* sandbox.start({
 });
 ```
 
-Nothing is fixed at build time. The Durable Object stores what it granted,
-asks each gateway for a short-lived signed **grant**, and pushes a route table
-(which host and path go to which gateway, with which grant) to the sandbox. It
-renews the grants before they expire. Only the transport differs by host: a
-Cloudflare Container reaches a gateway over a native Worker binding, anything
-else through a proxy in the sandbox over HTTPS.
+Nothing is fixed at build time. The Durable Object stores what it granted and
+pushes a route table (which host and path go to which gateway) to the
+sandbox's host. Each gateway signs short-lived **grants** for its egresses,
+renewed before they expire: on Cloudflare by the relay that forwards the
+container's requests, anywhere else by the Durable Object. Only the transport
+differs by host: a Cloudflare Container reaches a gateway over a native Worker
+binding, anything else through a proxy in the sandbox over HTTPS.
 
 ```
                      Durable Object that owns the sandbox
                        stores the egresses it granted (and ttl)
-                       asks each gateway for a grant; renews them
+                       Cloudflare: the relay mints grants; elsewhere: it renews them
                             │ push the route table
           ┌─────────────────┴─────────────────┐
           ▼                                   ▼
@@ -501,53 +502,75 @@ A request that matches no route goes straight out, with no credential.
 ### Cloudflare Container: intercept into a relay entrypoint
 
 Interception is per host. The Durable Object intercepts each routed host into
-its own Worker's `AlchemyEgress` entrypoint (#2251's `ctx.exports`), with that
-host's routes in the props. The relay runs in the Worker, never in the Durable
-Object, and the container can't see the props:
+its own Worker's `AlchemyEgress` entrypoint (#2251's `ctx.exports`). The props
+carry the host's routes and what was granted, never a grant. The relay runs in
+the Worker, never in the Durable Object, and the container can't see the props:
 
 ```ts
-// alchemy internal: Cloudflare/Containers/ContainerClient.ts — in the owning Durable Object
-const applyRoutes = (routes: ReadonlyArray<Route>) =>
+// what one host is intercepted with
+interface RelayProps {
+  readonly routes: ReadonlyArray<{ host: string; paths?: ReadonlyArray<string>; gateway: { id: string; url: string } }>;
+  readonly egress: { readonly [gatewayId: string]: ReadonlyArray<EgressRef> }; // each routed gateway's whole grant
+  readonly ttl: number;
+}
+```
+
+```ts
+// alchemy internal: Cloudflare/Containers/Egress.ts — in the owning Durable Object
+const applyHosts = (hosts: Record<string, RelayProps>, previous: Record<string, RelayProps>) =>
   Effect.gen(function* () {
     const ctx = yield* Cloudflare.DurableObjectState;
-    for (const [host, forHost] of groupByHost(routes)) {
-      const relay = yield* ctx.exports.AlchemyEgress({ props: { routes: forHost } });
-      yield* container.interceptOutboundHttps(host, relay);
+    for (const [host, props] of Object.entries(hosts)) {
+      if (canonicalJson(props) === canonicalJson(previous[host])) continue; // unchanged: left alone
+      yield* container.interceptOutboundHttps(host, yield* ctx.exports.AlchemyEgress({ props }));
     }
-    for (const host of removedHosts(routes)) {
+    for (const host of Object.keys(previous).filter((host) => !(host in hosts))) {
       yield* container.interceptOutboundHttps(host, yield* ctx.exports.AlchemyEgress({ props: { routes: [] } }));
     }
   });
 ```
 
+The relay mints each gateway's grant itself, over the gateway's service
+binding (`ALCHEMY_EGRESS_<id>`, bound into the Durable Object's Worker by
+`yield* Gateway`). Grants are cached per isolate by gateway, refs and ttl, and
+minted again once they are within 40% of their lifetime of expiring. A request
+keeps the grant it started with, so a long transfer outlives any number of
+expiries:
+
 ```ts
-// alchemy internal: the generated Worker entry exports AlchemyEgress next to `default`
+// alchemy internal: Cloudflare/Containers/EgressRelay.ts — the generated Worker entry exports it
+const grants = new Map<string, { grant: string; expires: number; renewAt: number }>(); // plain values
+const minting = new Map<string, Promise<CachedGrant>>(); // concurrent requests mint once
+
 export class AlchemyEgress extends WorkerEntrypoint {
-  fetch(request: Request) {
-    const { routes } = this.ctx.props as { routes: ReadonlyArray<Route> };
+  async fetch(request: Request) {
+    const { routes, egress, ttl } = this.ctx.props as RelayProps;
     const route = mostSpecific(routes, new URL(request.url).pathname);
     if (!route) return fetch(request); // not an egress request: straight out
-    const forwarded = toGatewayRequest(request, route.grant); // Authorization: Macaroon, x-alchemy-target
-    // A gateway Worker: its service binding, no public hop. Anything else: its URL.
-    const binding = this.env[`ALCHEMY_EGRESS_${route.gateway.id}`] as Fetcher | undefined;
-    return binding ? binding.fetch(forwarded) : fetch(route.gateway.url, forwarded);
+    const gateway = this.env[`ALCHEMY_EGRESS_${route.gateway.id}`] as Fetcher;
+    const key = `${route.gateway.id} ${ttl} ${canonicalJson(egress[route.gateway.id])}`;
+    const cached = grants.get(key);
+    const grant =
+      cached && Date.now() < cached.renewAt
+        ? cached.grant
+        : await mintOnce(key, () => gateway.mint(egress[route.gateway.id], ttl)); // shares a mint in flight
+    return gateway.fetch(route.gateway.url, toGatewayRequest(request, grant)); // Authorization: Macaroon
   }
 }
 ```
 
-Calling `interceptOutboundHttps` again with new props replaces them, even on
-open connections, so a renewed grant, `setEgress` and `stop` apply at once.
+A mint another request started is awaited for at most 10 seconds (its I/O
+belongs to that request), then the waiter mints its own.
+
+An intercept is re-registered only when its host's props change: `start` with
+different egress, `setEgress`, `stop`. Re-registering can reset a TLS
+handshake in flight (measured: 2 of 24 `git ls-remote`s when every renewal
+re-registered), so renewal never does it, and a host whose routes and granted
+egress are unchanged keeps its intercept through `setEgress`.
 
 Routes intercept HTTPS only; a host the Durable Object answers itself (the
-harness's shutdown hook) is intercepted on HTTP and HTTPS. Measured live:
-re-registering a host's intercept can reset a TLS handshake that is in flight
-at that moment (2 of 24 `git ls-remote`s at a 4-second renewal cadence when
-HTTP was re-registered too; rarer, but not zero, with HTTPS alone). At the
-default 5-minute TTL that is one sub-second window per host every 2 minutes.
-If it matters, the fix is to stop re-intercepting on renewal: keep the route
-table in the props and have the relay fetch each gateway's current grant from
-the Durable Object (cached until it nears expiry), so only `start`/`setEgress`
-re-intercept.
+harness's shutdown hook) is intercepted on HTTP and HTTPS, with
+`{ control: { className, id, key } }` as its props.
 
 ### Anywhere else: a proxy in the sandbox
 
@@ -694,84 +717,68 @@ hosts and paths, whatever the proxy or relay sent.
 
 ## 10. Keeping routes fresh
 
-The Durable Object stores what it granted and renews each gateway's grant
-before it expires. Only `apply` differs by host (intercept props, or a push to
-the proxy's control port).
-
-Renewal is an `Alchemy.makeCallback` job (`alchemy/egress`), registered by
-the Durable Object bridge before the user's inner Effect runs, so it shares
-the object's one alarm with the user's callbacks and `alarm` handler instead
-of calling `setAlarm` over them. An object that never grants egress never
-touches its alarm. (An object that calls `storage.setAlarm` directly must use
-callbacks, as with any Alchemy callback.) Sketch:
+The Durable Object stores what it granted and applies it to its host. Hosts
+differ in who renews grants: on Cloudflare the relay mints and renews them
+itself (section 8), so the Durable Object never renews and holds no alarm.
+Anywhere else the proxy in the sandbox can't mint, so the Durable Object
+renews and pushes (`host.renews`).
 
 ```ts
-// alchemy internal: AI/Sandbox.ts — shared by every host, runs in the owning Durable Object
+// alchemy internal: shared by every host, runs in the owning Durable Object
 interface EgressState {
   readonly ttl: Duration.Duration;
   readonly egress: ReadonlyArray<EgressRef>; // each names its gateway
+  readonly hosts: Record<string, RelayProps>; // what each host is intercepted with (Cloudflare)
 }
-const load = state.storage.get<EgressState>("egress");
-const save = (next: EgressState) => state.storage.put("egress", next);
 
-/** Renew at 40% of the TTL: one renewal can fail and the next still lands before expiry. */
-const renewIn = (ttl: Duration.Duration) => Duration.toMillis(ttl) * 0.4;
-
-/** One grant per gateway, then one route table for all of them. */
+/** One mint per gateway: checks scopes, resolves dynamic routes, finds conflicts. */
 const routes = (s: EgressState) =>
   Effect.gen(function* () {
     const table: Route[] = [];
     for (const [gatewayId, refs] of groupByGateway(s.egress)) {
-      const gateway = gatewayClient(gatewayId);
-      const grant = Grant.encode(yield* gateway.mint(refs, s.ttl));
-      for (const ref of refs) table.push(...routesOf(ref, { id: gateway.id, url: gateway.url }, grant));
+      const minted = yield* gatewayClient(gatewayId).mint(refs, s.ttl);
+      for (const ref of refs) table.push(...routesOf(ref, minted));
     }
     return yield* checkConflicts(table); // EgressRouteConflict
-  });
-
-const refresh = (s: EgressState) =>
-  Effect.gen(function* () {
-    yield* host.apply(yield* routes(s)); // Cloudflare: re-intercept; elsewhere: push to :3129
-    yield* state.storage.setAlarm(Date.now() + renewIn(s.ttl));
   });
 
 start: ({ size, egress, ttl }) =>
   Effect.gen(function* () {
     const stored = yield* load;
-    const next: EgressState = {
-      ttl: ttl !== undefined ? Duration.decode(ttl) : (stored?.ttl ?? Duration.minutes(5)),
-      egress: egress !== undefined ? egress.map((e) => e.ref) : (stored?.egress ?? []),
-    };
+    const next = merge(stored, { egress, ttl }); // omitted fields are kept
+    if (yield* host.running) {
+      if (same(stored, next)) return; // already applied: no mint, no intercept
+      return yield* host.apply(next, yield* routes(next)); // only changed hosts
+    }
     const table = yield* routes(next); // conflicts fail start before anything is stored
-    yield* save(next);
-    if (!(yield* host.running)) yield* host.launch({ size, routes: table });
-    yield* host.apply(table);
-    yield* state.storage.setAlarm(Date.now() + renewIn(next.ttl));
-  }),
-
-alarm: () =>
-  Effect.gen(function* () {
-    const s = yield* load;
-    if (s && (yield* host.running)) yield* refresh(s); // from storage: correct after an eviction
+    yield* host.apply(next, table, { fresh: true }); // before the program runs
+    yield* host.launch({ size, routes: table });
+    if (host.renews) yield* scheduleRenewal(next.ttl);
   }),
 
 setEgress: ({ egress, ttl }) =>
   Effect.gen(function* () {
-    const s = (yield* load)!;
-    const next: EgressState = {
-      ttl: ttl !== undefined ? Duration.decode(ttl) : s.ttl,
-      egress: egress !== undefined ? egress.map((e) => e.ref) : s.egress,
-    };
-    yield* save(next);
-    yield* refresh(next);
+    const next = merge(yield* load, { egress, ttl });
+    yield* host.apply(next, yield* routes(next)); // stores; only changed hosts
   }),
 
 stop: () =>
-  host.apply([]).pipe( // routes nothing from now on
+  host.clear().pipe( // refuses every routed host; the stored egress stays
     Effect.andThen(host.stop()),
-    Effect.andThen(state.storage.deleteAlarm()),
   ),
 ```
+
+On Cloudflare, `apply` diffs each host's props against what's stored and
+re-intercepts only the ones that differ (section 8), then stores the new
+props. A Durable Object constructed while its container still runs (evicted,
+aborted, redeployed) re-registers the stored props once, with no mint: an
+intercept registered by the previous instance doesn't survive it intact
+(measured: after `ctx.abort()`, new connections to `github.com` were reset
+during the TLS handshake until the new instance re-registered).
+
+The microVM host renews: an `Alchemy.makeCallback` job on the Durable Object's
+alarm re-mints at 40% of the TTL and pushes a fresh table to the proxy's
+control port. Not built yet.
 
 ```ts
 // alchemy internal: AWS/MicroVM/Sandbox.ts — the microVM host
@@ -863,32 +870,41 @@ host.
 // Resolved per request, in the gateway: dynamic credentials (its database), by subject.
 
 // Decided at run time, stored by the owning Durable Object:
-yield* state.storage.get("egress");
+yield* state.storage.get("alchemy:egress");
 // {
-//   ttl: "5 minutes",
+//   ttl: 300000,
 //   egress: [
 //     { gateway: "WorkGateway", egress: "model" },
 //     { gateway: "WorkGateway", egress: "repo", scope: { repository: "alchemy-run/alchemy", issue: 42 } },
 //     { gateway: "UserGateway", egress: "repo", scope: { repository: "sam/dotfiles" }, subject: "u_123" },
 //   ],
+//   hosts: { // Cloudflare: what each host is intercepted with; {} while stopped
+//     "github.com": { routes: [/* Work's and User's paths */], egress: { WorkGateway: [...], UserGateway: [...] }, ttl: 300000 },
+//     "api.anthropic.com": { routes: [/* the whole host */], egress: { WorkGateway: [...] }, ttl: 300000 },
+//   },
 // }
 
-// Applied copies: the route table, with one grant per gateway, in the intercept props or the proxy.
+// Minted grants, never stored: on Cloudflare in the relay's isolate cache (plain strings, until
+// they near expiry); elsewhere in the proxy's route table, pushed by the Durable Object.
 ```
 
 ```ts
-yield* sandbox.start({ size, egress, ttl }); // stores, applies
-yield* sandbox.setEgress({ egress: [work.model] }); // stores, applies; omitted fields are kept
-yield* sandbox.start({ size }); // no egress: re-applies what's stored
-yield* sandbox.stop(); // stops; the stored egress stays for the next start()
+yield* sandbox.start({ size, egress, ttl }); // applies the changed hosts, stores
+yield* sandbox.setEgress({ egress: [work.model] }); // the same; omitted fields are kept
+yield* sandbox.start({ size }); // running: nothing to do; stopped: applies what's stored
+yield* sandbox.stop(); // refuses the routed hosts, stops; the stored egress stays for the next start()
 ```
 
 Every failure converges from storage:
 
 ```ts
-// The Durable Object is evicted while the sandbox runs: the next alarm (≤40% of ttl) re-applies.
-// The proxy restarts: its startup grants may have expired; the next alarm pushes fresh routes.
-// A crash between storing and applying: the next alarm applies what's stored.
+// Cloudflare
+// The Durable Object restarts while the sandbox runs: its new instance re-registers the stored hosts once.
+// A crash while applying: nothing new is stored, so the next start/setEgress re-diffs against the old hosts.
+// A gateway can't mint: the relay keeps a cached grant until it expires, then answers 502 (fail closed).
+
+// Elsewhere
+// The proxy restarts: its startup grants may have expired; the next renewal pushes fresh routes.
 // A gateway is down at renewal: its routes keep their old grant until it expires, then fail closed.
 ```
 
@@ -896,14 +912,19 @@ Every failure converges from storage:
 
 ```ts
 // The sandbox loses access at once, on every host:
-yield* sandbox.setEgress({ egress: [work.model] }); // new, narrower grants replace the old ones
-yield* sandbox.stop(); // an empty route table
+yield* sandbox.setEgress({ egress: [work.model] }); // changed hosts get new props: narrower grants from the next request
+yield* sandbox.stop(); // every routed host refused
 
 // A credential stops working everywhere at once: delete or rotate it in the gateway's database.
 
 // A grant copied out of the sandbox works until it expires: at most `ttl`.
-// On Cloudflare the grants are in the intercept props, which the container can't read.
+// On Cloudflare grants never enter the sandbox or the props: the relay mints them in the Worker.
 ```
+
+On Cloudflare a request already in flight when its host is re-intercepted
+keeps the grant it started with; requests after it mint for the new props
+(the cache key includes the granted refs, so a narrower grant is never
+served from an older, wider one).
 
 If `ttl` is ever too long for writes, a gateway can keep a revocation list
 keyed by grant id. It still wouldn't need to know who owns the sandbox.
@@ -936,7 +957,7 @@ caller's thread (no public network).
 coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durable Object is evicted
 //    - interception is lost if the Durable Object restarts while the container runs (fails closed)
 //    - a repeated start({ egress }) re-applies the original set, undoing setEgress
-//    Fix: section 12 (stored egress, re-applied by the alarm).
+//    Fix: section 12 (stored egress and hosts, re-registered on construction).
 
 // 2. start({ egress }) skips re-intercepting when the set looks unchanged (found by the spike).
 //    Fix: always apply what's stored.
@@ -945,10 +966,10 @@ coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durabl
 ```
 
 Fixed in PR 3: the egress is stored in the Durable Object (`alchemy:egress`)
-and re-applied by the renewal callback, including once on construction when
-the container is already running; `start` always converges on what's stored
-(it skips re-minting only when this instance applied exactly that set and its
-grants aren't due for renewal); the relay and the gateway stream bodies.
+with the props each host is intercepted with, and re-registered once on
+construction when the container is already running; `start` converges on the
+asked-for egress by diffing hosts (unchanged hosts are untouched); the relay
+mints and renews grants itself; the relay and the gateway stream bodies.
 `makeEgressHandle`, `Cloudflare.Containers.Egress` and the `__alchemyEgress`
 hop are gone. The one host a Durable Object still answers itself is the
 harness's shutdown hook (`alchemy.internal`), through the same relay
@@ -985,8 +1006,8 @@ yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ re
                    Egress.Gateway declaration + serve(effect) (mint, fetch); yield* Gateway
                    (GrantableEgress, narrow, for); Grant (WebCrypto); routes (host + path, conflicts);
                    accepted kinds on AI.Sandbox
-3. Cloudflare      AlchemyEgress relay entrypoint; routes via service binding / URL; stored egress +
-                   alarm renewal; bugs 1–3; drop the __alchemyEgress hop through the Durable Object
+3. Cloudflare      AlchemyEgress relay entrypoint (mints grants lazily over the gateway's binding);
+                   stored egress + per-host intercept diff; bugs 1–3; drop the __alchemyEgress hop
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
                    replaces Sandbox.make; named sizes
 5. AWS microVM     the bootstrap proxy; AWS.MicroVM.Sandbox

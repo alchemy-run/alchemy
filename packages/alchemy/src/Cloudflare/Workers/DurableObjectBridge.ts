@@ -19,7 +19,6 @@ import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
   makeDurableObjectCallbackFactory,
-  runAlarmCallbackInitializers,
 } from "./AlarmCallback.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
@@ -92,9 +91,7 @@ export const makeDurableObjectBridge =
                       RuntimeContext,
                       instanceRuntimeContext,
                     ).pipe(Layer.provideMerge(doContext));
-                    // Alchemy's own callbacks (container egress renewal)
-                    // register before the user's.
-                    return Effect.andThen(runAlarmCallbackInitializers(this.#state), instance).pipe(
+                    return instance.pipe(
                       Effect.provide(instanceContext),
                       Effect.ensuring(Effect.sync(seal)),
                     );

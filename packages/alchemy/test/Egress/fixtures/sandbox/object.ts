@@ -21,18 +21,23 @@ export class EgressSandboxObject extends Cloudflare.DurableObject<EgressSandboxO
     return Effect.gen(function* () {
       const { fetch } = yield* sandbox.getTcpPort(3000);
       return {
-        /** Start with A's repository and B's (B without GraphQL: one host, two gateways). */
+        /**
+         * Start with A's repository and B's (B without GraphQL: one host, two
+         * gateways), and A's drip (a host of its own).
+         */
         start: (ttlMillis: number) =>
           sandbox.start({
             size: "small",
             egress: [
               a.repo.narrow({ repository: REPO_A }),
               b.repo.narrow({ repository: REPO_B, graphql: false }),
+              a.drip,
             ],
             ttl: ttlMillis,
           }),
-        /** Narrow the running sandbox to A's repository. */
-        narrow: () => sandbox.setEgress({ egress: [a.repo.narrow({ repository: REPO_A })] }),
+        /** Narrow the running sandbox to A's egress: the GitHub hosts change, the drip's doesn't. */
+        narrow: () =>
+          sandbox.setEgress({ egress: [a.repo.narrow({ repository: REPO_A }), a.drip] }),
         /** Run a script in the sandbox, without starting it (or re-applying its egress). */
         sh: (script: string) =>
           fetch(
@@ -42,21 +47,10 @@ export class EgressSandboxObject extends Cloudflare.DurableObject<EgressSandboxO
             Effect.map((body) => body as unknown as Shell),
           ),
         running: () => sandbox.running,
-        /** What's stored, and the pending renewal (diagnostics). */
+        /** What's stored (diagnostics). */
         debug: () =>
-          Effect.sync(() => ({
-            now: Date.now(),
-            stored: null as unknown,
-            jobs: state.raw.storage.sql
-              .exec("SELECT callback, id, run_at FROM alchemy_alarm_callbacks")
-              .toArray(),
-          })).pipe(
-            Effect.flatMap((debug) =>
-              Effect.promise(() => state.raw.storage.get("alchemy:egress")).pipe(
-                Effect.map((stored) => ({ ...debug, stored })),
-              ),
-            ),
-            Effect.orElseSucceed(() => ({ error: true })),
+          Effect.promise(() => state.raw.storage.get("alchemy:egress")).pipe(
+            Effect.map((stored) => ({ now: Date.now(), stored })),
           ),
         /** Reset this object (a new instance, with nothing in memory); its container keeps running. */
         abort: () => state.abort("egress test: restart the Durable Object"),

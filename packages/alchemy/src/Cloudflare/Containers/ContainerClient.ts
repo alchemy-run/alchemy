@@ -34,15 +34,14 @@ import {
 import { httpSchemePort } from "./ContainerPlatform.ts";
 import {
   applyEgress,
-  applyRoutes,
-  cancelRenewal,
+  clearEgress,
   type ContainerEgress,
   containerEnv,
-  forgetApplied,
-  installRenewal,
-  isApplied,
+  isIntercepted,
+  isStored,
   loadEgress,
   nextEgress,
+  reapplyStored,
   storeEgress,
   TRUST_EGRESS_CA_THEN_EXEC,
 } from "./Egress.ts";
@@ -61,7 +60,7 @@ export interface ContainerEgressOptions<Egress extends ContainerEgress = Contain
    * hosts goes straight out. Omitted: what's stored is kept.
    */
   readonly egress?: ReadonlyArray<Egress>;
-  /** Each grant's lifetime; grants are renewed at 40% of it. @default "5 minutes" (or what's stored) */
+  /** Each grant's lifetime; the relay mints a new one when 40% of it is left. @default "5 minutes" (or what's stored) */
   readonly ttl?: Duration.Input;
 }
 
@@ -447,7 +446,13 @@ export const fromContainer = (
       ) {
         return undefined;
       }
-      return { state, next: nextEgress(stored, options) };
+      const next = nextEgress(stored, options);
+      // Already applied to the running container: nothing to mint or intercept.
+      const current =
+        isStored(stored, next) &&
+        (Object.keys(stored?.hosts ?? {}).length > 0 ||
+          (next.egress.length === 0 && controlsOf(state).length === 0));
+      return { state, next, current };
     });
 
   const setEgress = (options: ContainerEgressOptions) =>
@@ -455,7 +460,8 @@ export const fromContainer = (
       const state = yield* ownState;
       const container = yield* attached;
       const next = nextEgress(yield* loadEgress(state), options);
-      if (container.running) return yield* applyEgress(state, container, next);
+      // Only hosts whose routes or granted egress changed are re-intercepted.
+      if (container.running) return yield* applyEgress(state, container, next, { fresh: false });
       // Stopped: checked (conflicts, refusals) and stored; applied at the next start.
       yield* storeEgress(state, next);
     });
@@ -469,10 +475,10 @@ export const fromContainer = (
       const plan = yield* planEgress({ egress, ttl });
       // Fast path: the steady state is one cheap `running` read, no lock.
       if (container.running) {
-        // Always converge on what's stored, unless this instance already
-        // applied exactly that and its grants aren't due for renewal.
-        if (plan && !(yield* isApplied(plan.state, plan.next))) {
-          yield* applyEgress(plan.state, container, plan.next);
+        // Converge on the asked-for egress; hosts whose props are unchanged
+        // are left alone (the relay renews grants without re-intercepting).
+        if (plan && !plan.current) {
+          yield* applyEgress(plan.state, container, plan.next, { fresh: false });
         }
         return;
       }
@@ -504,7 +510,7 @@ export const fromContainer = (
           readyPorts.clear();
           // Intercept before the program runs, so it never sees a moment
           // with wider access than its egress.
-          if (plan) yield* applyEgress(plan.state, container, plan.next);
+          if (plan) yield* applyEgress(plan.state, container, plan.next, { fresh: true });
           yield* Effect.try({
             try: () => container.start(withOwnImage(container, options)),
             catch: classifyStartError,
@@ -525,31 +531,19 @@ export const fromContainer = (
           yield* Effect.forkDetach(
             Effect.tryPromise({ try: () => container.monitor(), catch: containerError }).pipe(
               Effect.ignore,
-              Effect.ensuring(
-                Effect.sync(() => {
-                  readyPorts.clear();
-                  if (plan) forgetApplied(plan.state);
-                }),
-              ),
+              Effect.ensuring(Effect.sync(() => readyPorts.clear())),
             ),
           );
         }),
       );
     });
 
-  /** Clear the routes (revoking the grants at once), stop renewing, then stop. */
+  /** Refuse every routed host (revoking access at once), then stop. */
   const destroy = (error?: unknown) =>
     Effect.gen(function* () {
       const container = yield* attached;
       const state = getState?.();
-      if (state) {
-        const stored = yield* loadEgress(state).pipe(Effect.orElseSucceed(() => undefined));
-        if (container.running && stored && stored.hosts.length > 0) {
-          yield* applyRoutes(state, container, [], stored.hosts).pipe(Effect.ignore);
-        }
-        yield* cancelRenewal(state, stored);
-        forgetApplied(state);
-      }
+      if (state) yield* clearEgress(state, container).pipe(Effect.ignore);
       yield* Effect.tryPromise({ try: () => container.destroy(error), catch: containerError });
     });
 
@@ -630,7 +624,7 @@ export const fromContainer = (
     const state = getState?.();
     return state
       ? loadEgress(state).pipe(
-          Effect.map((stored) => (stored?.hosts.length ?? 0) > 0),
+          Effect.map(isIntercepted),
           Effect.orElseSucceed(() => false),
         )
       : Effect.succeed(false);
@@ -684,6 +678,9 @@ export const fromContainer = (
   };
 };
 
+/** Durable Object instances whose stored intercepts were re-registered on construction. */
+const reapplied = new WeakSet<object>();
+
 /**
  * @internal What `yield* Container` runs inside a Durable Object: register the
  * container's bindings, then return its handle. Methods declared on the
@@ -696,9 +693,12 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
-  // Renew this container's egress grants on the object's alarm (and
-  // re-apply them if the object restarted while the container runs).
-  if (globalThis.__ALCHEMY_RUNTIME__ && state.raw) installRenewal(state.raw);
+  // A container still running from before this instance (the object was
+  // evicted, aborted or redeployed): re-register its stored intercepts once.
+  if (globalThis.__ALCHEMY_RUNTIME__ && state.raw && !reapplied.has(state.raw)) {
+    reapplied.add(state.raw);
+    yield* reapplyStored(state.raw);
+  }
   const client = fromContainer(
     () => state.container,
     id,
