@@ -30,11 +30,11 @@ export const TransferExecutionLive = TransferExecution.toLayer(
           });
           return;
         case "TransferApproved":
-          return yield* executions.signal(source, Decision, "approved");
+          return yield* executions.get(source).signal(Decision, "approved");
         case "TransferFailed":
           // A transfer that expired waiting for approval; a saga that already
           // finished ignores it.
-          return yield* executions.signal(source, Decision, "expired");
+          return yield* executions.get(source).signal(Decision, "expired");
       }
     });
   }),

@@ -150,7 +150,7 @@ Start a saga from a policy, on the event that records the request. The command t
   caption="The request is a fact before the process starts, so it's never lost, and the caller never waits for the process."
 />
 
-`yield* ExecuteTransfer` gives the saga's client. `start` begins a run, or returns the one already started with that key. Policies run at least once, so key the saga by the aggregate it's about: a policy that runs twice still starts one transfer.
+`yield* ExecuteTransfer` gives the saga's client. `start` begins a run, or returns the one already started with that key, as a handle to the run. Policies run at least once, so key the saga by the aggregate it's about: a policy that runs twice still starts one transfer.
 
 ```typescript title="src/Transfer/TransferExecution.ts"
 case "TransferRequested":
@@ -172,7 +172,7 @@ sagas: [ExecuteTransfer],
 
 ## Don't wait for it in a policy
 
-`start` returns as soon as the run is recorded. The client also has `result`, which waits for the run to finish, but a run can take days, and a policy that waits holds up every later event on its key. Use `result` in tests and scripts. Anything that needs to react to how a saga ends should react to the events it reports instead, like `TransferCompleted` or `TransferFailed`.
+`start` returns as soon as the run is recorded. Its run handle also has `result`, which waits for the run to finish, but a run can take days, and a policy that waits holds up every later event on its key. Use `result` in tests and scripts. Anything that needs to react to how a saga ends should react to the events it reports instead, like `TransferCompleted` or `TransferFailed`.
 
 ## Wait for a decision
 
@@ -185,18 +185,18 @@ if (needsApproval) {
 }
 ```
 
-The policy passes on the decision with `signal`:
+The policy passes on the decision with the run's `signal`. `get` returns the run with a key:
 
 ```typescript title="src/Transfer/TransferExecution.ts"
 case "TransferApproved":
-  return yield* executions.signal(source, Decision, "approved");
+  return yield* executions.get(source).signal(Decision, "approved");
 ```
 
 The Transfer decides the race between approval and expiry, so there's one source of truth for it. See [Deadlines](/domain/deadlines).
 
 ## Follow it
 
-`TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish: the saga reports every step to the Transfer, so the view has everything a client should see. A saga's own client can read a run too, with `status` and `result`, which suits operators and tests more than apps.
+`TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish: the saga reports every step to the Transfer, so the view has everything a client should see.
 
 ```typescript
 // test/followTransfer.ts
@@ -215,6 +215,15 @@ export const followTransfer = Effect.fn(function* (bank: CustomerClient, transfe
   );
 });
 ```
+
+The saga's own client reads a run too, which suits operators and tests more than apps. `get` returns the run with a key:
+
+```typescript
+const run = executions.get(transferId);
+const status = yield* run.status;
+```
+
+`status` is `NotStarted`, `Running`, `Completed` with its result, `Rejected` with its rejection, `Interrupted`, or `Died` with a defect. Runs read the same as [Effect workflow runs](/cloudflare/compute/effect-workflows), on every engine.
 
 ## Test it
 

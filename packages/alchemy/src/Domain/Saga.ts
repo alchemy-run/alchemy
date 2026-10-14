@@ -1,12 +1,10 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { type DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
+import { makeRun } from "../Workflows.ts";
 import { targetId } from "./Aggregate.ts";
 import type * as Rejection from "./Rejection.ts";
 
@@ -55,33 +53,38 @@ export type Status<A, E> =
   | { readonly _tag: "Running" }
   | { readonly _tag: "Completed"; readonly result: A }
   | { readonly _tag: "Rejected"; readonly rejection: E }
-  | { readonly _tag: "Interrupted" };
+  | { readonly _tag: "Interrupted" }
+  | { readonly _tag: "Died"; readonly defect: unknown };
 
-/** What starting a saga returns. */
-export interface Receipt {
+/** One run of a saga. */
+export interface Run<A, E> {
   /** The run's id: the saga's key. */
   readonly executionId: string;
-}
-
-/**
- * A saga's client, provided by the model that lists it. Every method is
- * addressed by the saga's key.
- */
-export interface Client<Key, Input, A, E> {
-  /** Start a run, or return the run already started with this key. */
-  readonly start: (key: Key | { readonly id: Key }, input: Input) => Effect.Effect<Receipt>;
   /** Where the run is now. */
-  readonly status: (key: Key | { readonly id: Key }) => Effect.Effect<Status<A, E>>;
-  /** Wait for the run to finish: its result, or its rejection. */
-  readonly result: (key: Key | { readonly id: Key }) => Effect.Effect<A, E>;
+  readonly status: Effect.Effect<Status<A, E>>;
+  /**
+   * Wait for the run to finish: its result, or its rejection. A run can take
+   * days, so wait in tests and scripts, not in a policy or a request.
+   */
+  readonly result: Effect.Effect<A, E>;
   /** Complete a `DurableDeferred` the run waits on. */
   readonly signal: <S extends Schema.Constraint, Er extends Schema.Constraint>(
-    key: Key | { readonly id: Key },
     deferred: DurableDeferred.DurableDeferred<S, Er>,
     value: S["Type"],
   ) => Effect.Effect<void>;
   /** Stop the run: it fails where it waits, and its compensations run. */
-  readonly interrupt: (key: Key | { readonly id: Key }) => Effect.Effect<void>;
+  readonly interrupt: Effect.Effect<void>;
+}
+
+/**
+ * A saga's client, provided by the model that lists it. A run is addressed
+ * by the saga's key.
+ */
+export interface Client<Key, Input, A, E> {
+  /** Start a run, or return the run already started with this key. Returns at once. */
+  readonly start: (key: Key | { readonly id: Key }, input: Input) => Effect.Effect<Run<A, E>>;
+  /** The run with this key. */
+  readonly get: (key: Key | { readonly id: Key }) => Run<A, E>;
 }
 
 /**
@@ -303,16 +306,22 @@ export interface SagaClass<
 
 // ---------------------------------------------------------------- the client
 
-/** Poll a run every so often while waiting for it to finish. */
-const POLL = Schedule.min([Schedule.exponential("50 millis"), Schedule.spaced("1 second")]);
-
 /** @internal Build a saga's client over a workflow engine. */
 export const client = (
   saga: Any,
   engine: WorkflowEngine.WorkflowEngine["Service"],
 ): Client<unknown, unknown, unknown, unknown> => {
   const workflow = saga.workflow;
-  const poll = (executionId: string) => engine.poll(workflow, executionId);
+  const get = (key: unknown): Run<unknown, unknown> => {
+    const run = makeRun(engine, workflow, targetId(key));
+    return {
+      ...run,
+      // A saga fails only with its rejections.
+      status: Effect.map(run.status, (status): Status<unknown, unknown> =>
+        status._tag === "Failed" ? { _tag: "Rejected", rejection: status.error } : status,
+      ),
+    };
+  };
   return {
     start: (key, input) =>
       Effect.gen(function* () {
@@ -322,37 +331,8 @@ export const client = (
           payload: { ...(input as object), key: executionId },
           discard: true,
         });
-        return { executionId };
-      }) as Effect.Effect<Receipt>,
-    status: (key) =>
-      Effect.map(poll(targetId(key)), (result): Status<unknown, unknown> => {
-        if (Option.isNone(result)) return { _tag: "NotStarted" };
-        if (result.value._tag === "Suspended") return { _tag: "Running" };
-        const exit = result.value.exit;
-        if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-        const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-        return failure?._tag === "Fail"
-          ? { _tag: "Rejected", rejection: failure.error }
-          : { _tag: "Interrupted" };
-      }) as Effect.Effect<Status<unknown, unknown>>,
-    result: (key) =>
-      poll(targetId(key)).pipe(
-        Effect.flatMap((result) =>
-          Option.isSome(result) && result.value._tag === "Complete"
-            ? Effect.succeed(result.value.exit)
-            : Effect.fail("running" as const),
-        ),
-        Effect.retry({ schedule: POLL }),
-        Effect.orDie,
-        Effect.flatten,
-      ) as Effect.Effect<unknown, unknown>,
-    signal: (key, deferred, value) =>
-      engine.deferredDone(deferred, {
-        workflowName: workflow._tag,
-        executionId: targetId(key),
-        deferredName: deferred.name,
-        exit: Exit.succeed(value),
-      }) as Effect.Effect<void>,
-    interrupt: (key) => engine.interrupt(workflow, targetId(key)),
+        return get(executionId);
+      }) as Effect.Effect<Run<unknown, unknown>>,
+    get,
   };
 };

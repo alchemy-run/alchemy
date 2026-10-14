@@ -582,7 +582,7 @@ const make =
                 never,
                 Saga.Client<unknown, unknown, unknown, unknown>
               >;
-              yield* client.signal(s.key, s.deferred as never, s.value);
+              yield* client.get(s.key).signal(s.deferred as never, s.value);
               yield* settle(step);
               break;
             }
@@ -591,7 +591,7 @@ const make =
                 never,
                 Saga.Client<unknown, unknown, unknown, unknown>
               >;
-              const actual = yield* client.status(s.key);
+              const actual = yield* client.get(s.key).status;
               if (!equal(statusJson(actual), statusJson(s.expected))) {
                 return yield* fail(
                   `${s.saga.sagaName}\n  expected ${show(statusJson(s.expected))}\n  actual   ${show(statusJson(actual))}`,

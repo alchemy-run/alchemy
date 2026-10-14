@@ -303,8 +303,8 @@ describe("Domain.Saga", () => {
       const wallets = yield* Wallet;
       const debits = yield* DebitTwice;
       yield* wallets.send(alice, new Open({ balance: 100 }));
-      yield* debits.start("t-1", { from: "alice", amount: 40 });
-      yield* debits.result("t-1");
+      const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
+      yield* run.result;
       // Debited once: the retry's send had the same command id.
       expect((yield* wallets.state(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
@@ -321,7 +321,7 @@ describe("Domain.Saga", () => {
       const first = yield* transfers.start("t-9", input);
       const second = yield* transfers.start("t-9", input);
       expect(second.executionId).toBe(first.executionId);
-      expect(yield* transfers.result("t-9")).toEqual({ approvedBy: null });
+      expect(yield* first.result).toEqual({ approvedBy: null });
       expect((yield* wallets.state(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Bank.layer(Handlers).pipe(Layer.provide(InMemory)))),
   );
