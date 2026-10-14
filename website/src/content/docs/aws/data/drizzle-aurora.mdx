@@ -49,7 +49,7 @@ import { bootstrap } from "./bootstrap.ts";
 const schemaVersion = yield* bootstrap;
 ```
 
-The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/bootstrap.ts) creates `todos` and the restricted `app_iam` login through the Data API. This is initial setup only, not a versioned migration runner. The application role gets table CRUD but cannot create objects in `public`.
+The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/bootstrap.ts) creates `todos` and the restricted `app_iam` login through the Data API. This is initial setup only, not a versioned migration runner; to apply versioned migrations on deploy, pass them to Aurora's `migrations` prop (see [Apply the committed SQL](#apply-the-committed-sql)). The application role gets table CRUD but cannot create objects in `public`.
 
 ## Bind the application identity
 
@@ -168,31 +168,19 @@ git commit -m "feat(db): update Aurora schema and migration"
 
 Review the staged SQL, snapshots, destructive operations, and rename decisions before committing. Commit the entire generated migration directory with the schema. The release process consumes committed SQL; deployment must not generate or silently rewrite it.
 
-### Configure the migration connection
+### Apply the committed SQL
+
+Pass the committed directory to Aurora. `alchemy deploy` applies pending migrations over the Data API once the writer is available, so the deploying machine needs no network route to the private cluster:
 
 ```typescript
-// drizzle.migrate.config.ts
-import { defineConfig } from "drizzle-kit";
-import config from "./drizzle.config.ts";
-
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error("DATABASE_URL is required for migrations");
-
-export default defineConfig({
-  ...config,
-  dbCredentials: { url },
+const aurora = yield* AWS.RDS.Aurora("Database", {
+  // ...
+  dataApi: true,
+  migrations: "./migrations",
 });
 ```
 
-Inject a migration-role PostgreSQL URL for the `app` database through the runner's secret store, using `sslmode=verify-full` and the RDS CA trust bundle. The runner needs its own network route and security-group access to the private cluster; Lambda's binding grants neither to a laptop or CI job. Keep this DDL-capable identity separate from `app_iam`.
-
-### Apply the committed SQL
-
-```sh
-pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts
-```
-
-Run from the authorized migration runner before releasing code that requires the new schema. Keep an existing `drizzle-kit migrate` workflow; `alchemy deploy` is not its replacement. Neither `AWS.RDS.Aurora` nor `AWS.RDS.DBCluster` accepts a `migrations` prop, and the example's Action only performs its explicit bootstrap SQL.
+Each migration and its row in `__alchemy_migrations` commit in one transaction, authenticated with the cluster's master secret. The Data API runs one statement per call, so keep drizzle-kit's default `--> statement-breakpoint` separators. A database previously migrated by drizzle-kit is adopted on first deploy. Editing or deleting an applied migration fails the deploy; add a new migration instead.
 
 ## Run the integration test
 

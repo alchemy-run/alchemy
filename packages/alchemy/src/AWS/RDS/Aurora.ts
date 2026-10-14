@@ -379,12 +379,17 @@ export const Aurora = (id: string, props: AuroraProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
+      const engine = props.engine ?? "aurora-postgresql";
       if (props.migrations && props.dataApi === false) {
         return yield* Effect.die(
           `Aurora '${id}': "migrations" are applied over the Data API and require "dataApi" to be enabled.`,
         );
       }
-      const engine = props.engine ?? "aurora-postgresql";
+      if (props.migrations && engine !== "aurora-postgresql" && engine !== "aurora-mysql") {
+        return yield* Effect.die(
+          `Aurora '${id}': "migrations" support the "aurora-postgresql" and "aurora-mysql" engines (got "${engine}").`,
+        );
+      }
       const engineVersion = props.engineVersion;
       const databaseName = props.databaseName ?? "app";
       const username = props.secret?.username ?? "app";

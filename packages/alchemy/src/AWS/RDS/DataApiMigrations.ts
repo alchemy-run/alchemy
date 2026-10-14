@@ -97,6 +97,11 @@ const makeDataApiMigrationExecutor = Effect.fn(function* (target: {
   } satisfies SqlExecutor;
 });
 
+const auroraDialects: Record<string, MigrationDialect | undefined> = {
+  "aurora-postgresql": "postgres",
+  "aurora-mysql": "mysql",
+};
+
 /**
  * Apply migrations to an Aurora cluster's database over the RDS Data API.
  * The cluster supplies the ARN, engine, default database, and default
@@ -118,6 +123,12 @@ export const runDataApiMigrations = Effect.fn(function* (options: {
       message: `DB cluster '${dbClusterIdentifier}' not found`,
     });
   }
+  const dialect = auroraDialects[cluster.Engine ?? ""];
+  if (!dialect) {
+    return yield* new MigrationError({
+      message: `DB cluster '${dbClusterIdentifier}' runs ${cluster.Engine ?? "an unknown engine"}; migrations support aurora-postgresql and aurora-mysql`,
+    });
+  }
   if (!cluster.HttpEndpointEnabled) {
     return yield* new MigrationError({
       message: `DB cluster '${dbClusterIdentifier}' does not have the Data API enabled (set enableHttpEndpoint: true)`,
@@ -135,7 +146,7 @@ export const runDataApiMigrations = Effect.fn(function* (options: {
     stamped: options.stamped,
     withExecutor: (apply) =>
       makeDataApiMigrationExecutor({
-        dialect: cluster.Engine?.includes("mysql") ? "mysql" : "postgres",
+        dialect,
         resourceArn,
         secretArn,
         database: cluster.DatabaseName,

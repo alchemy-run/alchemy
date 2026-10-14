@@ -304,9 +304,12 @@ export interface DBInstanceProps {
   /**
    * SQL migrations to apply to the cluster's database on deploy, over the
    * RDS Data API once this instance is available. Accepts a directory path,
-   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Aurora cluster
-   * members only: the cluster needs `enableHttpEndpoint: true`, and only one
-   * instance per cluster (the writer) should declare migrations.
+   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Aurora PostgreSQL and
+   * Aurora MySQL cluster members only: the cluster needs
+   * `enableHttpEndpoint: true`, and only one instance per cluster (the
+   * writer) should declare migrations. MySQL commits DDL implicitly, so on
+   * Aurora MySQL a migration's DDL is not rolled back if a later statement
+   * fails.
    *
    * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
    * database previously migrated by drizzle-kit or Prisma is adopted by a
@@ -1874,9 +1877,6 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (yield* diffMigrations({ news, output })) {
-            return { action: "update" } as const;
-          }
           const storage = yield* toStorageConfiguration(news);
           if (output !== undefined) {
             const instance = yield* readInstance(output.dbInstanceIdentifier);
@@ -1912,6 +1912,10 @@ export const DBInstanceProvider = () =>
             ) {
               return { action: "update" } as const;
             }
+          }
+          // After observation, so a vanished instance keeps `stables: []`.
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
