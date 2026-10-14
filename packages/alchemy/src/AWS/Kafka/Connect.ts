@@ -68,13 +68,9 @@ export interface ConnectRead extends Binding.Service<
   "AWS.Kafka.ConnectRead",
   (
     cluster: ServerlessCluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
-export const ConnectRead = Binding.Service<ConnectRead>(
-  "AWS.Kafka.ConnectRead",
-);
+export const ConnectRead = Binding.Service<ConnectRead>("AWS.Kafka.ConnectRead");
 
 /**
  * Write-only (producer) runtime access to an MSK {@link ServerlessCluster}'s
@@ -107,13 +103,9 @@ export interface ConnectWrite extends Binding.Service<
   "AWS.Kafka.ConnectWrite",
   (
     cluster: ServerlessCluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
-export const ConnectWrite = Binding.Service<ConnectWrite>(
-  "AWS.Kafka.ConnectWrite",
-);
+export const ConnectWrite = Binding.Service<ConnectWrite>("AWS.Kafka.ConnectWrite");
 
 /**
  * Full read-write runtime access to an MSK {@link ServerlessCluster}'s data
@@ -144,10 +136,6 @@ export interface ConnectReadWrite extends Binding.Service<
   "AWS.Kafka.ConnectReadWrite",
   (
     cluster: ServerlessCluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
-export const ConnectReadWrite = Binding.Service<ConnectReadWrite>(
-  "AWS.Kafka.ConnectReadWrite",
-);
+export const ConnectReadWrite = Binding.Service<ConnectReadWrite>("AWS.Kafka.ConnectReadWrite");

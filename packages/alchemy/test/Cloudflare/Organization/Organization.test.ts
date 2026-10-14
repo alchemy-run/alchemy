@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/cloudflare/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Organizations are entitlement-gated (closed rollout for tenant /
 // enterprise customers). On the standard testing account every
@@ -51,16 +48,12 @@ test.provider(
       if (canList) {
         // Entitled account — nothing to assert here; the lifecycle test
         // covers the real behavior.
-        yield* Effect.logInfo(
-          "account is organizations-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is organizations-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* organizations
-        .listOrganizations({ pageSize: 1 })
-        .pipe(Effect.flip);
+      const error = yield* organizations.listOrganizations({ pageSize: 1 }).pipe(Effect.flip);
       expect(error._tag).toEqual("Forbidden");
 
       const createError = yield* organizations
@@ -70,6 +63,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:organization", "live"] },
 );
 
 // Canonical `list()` test — ungated probe. `list()` enumerates every
@@ -85,9 +79,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Organization.Organization,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Organization.Organization);
 
       const canList = yield* probeEntitlement;
       if (canList) {
@@ -108,6 +100,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:organization", "live"] },
 );
 
 // Gated live enumeration: on an entitled account, a deployed organization
@@ -120,24 +113,18 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Organization.Organization("ListOrg", {
-            name: ORG_NAME_CRUD,
-          });
+          return yield* Cloudflare.Organization.Organization("ListOrg", { name: ORG_NAME_CRUD });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Organization.Organization,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Organization.Organization);
       const all = yield* provider.list();
 
-      expect(
-        all.some((o) => o.organizationId === deployed.organizationId),
-      ).toBe(true);
+      expect(all.some((o) => o.organizationId === deployed.organizationId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:organization", "live"], timeout: 120_000 },
 );
 
 // Poll until the organization is gone after destroy. Cloudflare answers
@@ -176,9 +163,7 @@ test.provider.skipIf(!entitled)(
       expect(v1.profile).toEqual(PROFILE);
 
       // Out-of-band verification via the distilled API.
-      const live = yield* organizations.getOrganization({
-        organizationId: v1.organizationId,
-      });
+      const live = yield* organizations.getOrganization({ organizationId: v1.organizationId });
       expect(live.name).toEqual(ORG_NAME_CRUD);
       expect(live.profile).toEqual(PROFILE);
 
@@ -198,9 +183,7 @@ test.provider.skipIf(!entitled)(
       expect(v2.name).toEqual(ORG_NAME_CRUD_RENAMED);
       expect(v2.profile?.businessEmail).toEqual("ops@alchemy.run");
 
-      const updated = yield* organizations.getOrganization({
-        organizationId: v2.organizationId,
-      });
+      const updated = yield* organizations.getOrganization({ organizationId: v2.organizationId });
       expect(updated.name).toEqual(ORG_NAME_CRUD_RENAMED);
       expect(updated.profile?.businessEmail).toEqual("ops@alchemy.run");
 
@@ -219,5 +202,5 @@ test.provider.skipIf(!entitled)(
 
       yield* expectGone(v1.organizationId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:organization", "live"], timeout: 120_000 },
 );

@@ -26,10 +26,7 @@ export interface ListLanguageModels extends Binding.Service<
   () => Effect.Effect<
     (
       request?: transcribe.ListLanguageModelsRequest,
-    ) => Effect.Effect<
-      transcribe.ListLanguageModelsResponse,
-      transcribe.ListLanguageModelsError
-    >
+    ) => Effect.Effect<transcribe.ListLanguageModelsResponse, transcribe.ListLanguageModelsError>
   >
 > {}
 export const ListLanguageModels = Binding.Service<ListLanguageModels>(

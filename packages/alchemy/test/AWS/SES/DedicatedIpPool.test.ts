@@ -1,13 +1,13 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { DedicatedIpPool } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { DedicatedIpPool } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,9 +23,7 @@ const getPool = (name: string) =>
 
 const assertPoolDeleted = (name: string) =>
   getPool(name).pipe(
-    Effect.flatMap((found) =>
-      found ? Effect.fail(new PoolStillExists({ name })) : Effect.void,
-    ),
+    Effect.flatMap((found) => (found ? Effect.fail(new PoolStillExists({ name })) : Effect.void)),
     Effect.retry({
       while: (e) => e._tag === "PoolStillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -58,7 +56,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertPoolDeleted(pool.poolName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 // Switching a pool to MANAGED enables managed dedicated IPs, which bill
@@ -101,7 +99,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SES_DEDICATED_IP)(
       yield* stack.destroy();
       yield* assertPoolDeleted(pool.poolName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 // MANAGED -> STANDARD is not supported by AWS in place, so it replaces the
@@ -131,7 +129,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SES_DEDICATED_IP)(
       yield* stack.destroy();
       yield* assertPoolDeleted(second.poolName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 // A pool the account already pays for must not be silently taken over just
@@ -177,7 +175,7 @@ test.provider(
       yield* deletePoolIfExists(FOREIGN_POOL);
       yield* assertPoolDeleted(FOREIGN_POOL);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -223,16 +221,14 @@ test.provider(
       const { Tags: afterTags } = yield* sesv2.listTagsForResource({
         ResourceArn: `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${FOREIGN_POOL}`,
       });
-      expect(
-        Object.fromEntries(afterTags.map((t) => [t.Key, t.Value]))[
-          "alchemy::id"
-        ],
-      ).toBe("Foreign");
+      expect(Object.fromEntries(afterTags.map((t) => [t.Key, t.Value]))["alchemy::id"]).toBe(
+        "Foreign",
+      );
 
       yield* stack.destroy();
       yield* assertPoolDeleted(FOREIGN_POOL);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 // A STANDARD pool holding no dedicated IPs is free, so the rename path runs
@@ -267,5 +263,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertPoolDeleted("alchemy-test-pool-b");
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );

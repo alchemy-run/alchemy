@@ -8,8 +8,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+import { isInstantNamespaceLocalId } from "./InstantNamespaceLocal.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
   isResourceOfType(value, "Cloudflare.KV.Namespace");
@@ -79,6 +81,13 @@ export const ProviderLive = () =>
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && "mode" in output && output.mode === "instant") {
+        return {
+          action: "replace",
+          // Titles are unique across modes; an unresolved title may also reuse it.
+          deleteFirst: !isResolved(news) || news.title === output.title,
+        } as const;
+      }
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -113,11 +122,7 @@ export const ProviderLive = () =>
             accountId: acct,
             namespaceId: output.namespaceId,
           })
-          .pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -182,12 +187,14 @@ export const ProviderLive = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((ns) => ({
-              title: ns.title,
-              namespaceId: ns.id,
-              supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
-              accountId,
-            })),
+            (page.result ?? [])
+              .filter((ns) => ns.mode !== "instant")
+              .map((ns) => ({
+                title: ns.title,
+                namespaceId: ns.id,
+                supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
+                accountId,
+              })),
           ),
         ),
       );
@@ -207,9 +214,7 @@ export const ProviderLive = () =>
               supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
               accountId: output.accountId,
             })),
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
           );
       }
       const title = yield* createTitle(id, olds?.title);
@@ -236,8 +241,9 @@ export const ProviderLocal = () =>
   Provider.succeed(Namespace, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.namespaceId) return { action: "update" } as const;
+      if (isInstantNamespaceLocalId(output.namespaceId)) return { action: "replace" } as const;
       if (!isResolved(news)) return undefined;
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -250,7 +256,7 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       return {
         title: yield* createTitle(id, news.title),
         namespaceId: output?.namespaceId ?? generateLocalId(),
@@ -282,7 +288,7 @@ const createTitle = (id: string, title: string | undefined) =>
 const findNamespaceByTitle = Effect.fn(function* (title: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* kv.listNamespaces.items({ accountId }).pipe(
-    Stream.filter((ns) => ns.title === title),
+    Stream.filter((ns) => ns.title === title && ns.mode !== "instant"),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );

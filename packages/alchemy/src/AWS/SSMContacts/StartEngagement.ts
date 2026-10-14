@@ -39,6 +39,4 @@ export interface StartEngagement extends Binding.Service<
     ) => Effect.Effect<ssm.StartEngagementResult, ssm.StartEngagementError>
   >
 > {}
-export const StartEngagement = Binding.Service<StartEngagement>(
-  "AWS.SSMContacts.StartEngagement",
-);
+export const StartEngagement = Binding.Service<StartEngagement>("AWS.SSMContacts.StartEngagement");

@@ -38,12 +38,7 @@ export interface ListGeofences extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListGeofencesRequest,
-    ) => Effect.Effect<
-      location.ListGeofencesResponse,
-      location.ListGeofencesError
-    >
+    ) => Effect.Effect<location.ListGeofencesResponse, location.ListGeofencesError>
   >
 > {}
-export const ListGeofences = Binding.Service<ListGeofences>(
-  "AWS.Location.ListGeofences",
-);
+export const ListGeofences = Binding.Service<ListGeofences>("AWS.Location.ListGeofences");

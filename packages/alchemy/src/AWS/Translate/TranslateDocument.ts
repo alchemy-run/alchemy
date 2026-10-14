@@ -38,10 +38,7 @@ export interface TranslateDocument extends Binding.Service<
   () => Effect.Effect<
     (
       request: translate.TranslateDocumentRequest,
-    ) => Effect.Effect<
-      translate.TranslateDocumentResponse,
-      translate.TranslateDocumentError
-    >
+    ) => Effect.Effect<translate.TranslateDocumentResponse, translate.TranslateDocumentError>
   >
 > {}
 export const TranslateDocument = Binding.Service<TranslateDocument>(

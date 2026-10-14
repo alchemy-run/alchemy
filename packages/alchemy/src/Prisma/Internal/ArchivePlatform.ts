@@ -1,10 +1,10 @@
-import * as Effect from "effect/Effect";
 import { createWriteStream } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { posix } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import * as Effect from "effect/Effect";
 import { verifiedFileChunks, type VerifiedFile } from "./ArtifactFile.ts";
 
 /**
@@ -38,9 +38,7 @@ interface CloseableDirectoryHandle {
   readonly close: () => void | Promise<void>;
 }
 
-export const closeDirectoryHandle = async (
-  handle: CloseableDirectoryHandle,
-) => {
+export const closeDirectoryHandle = async (handle: CloseableDirectoryHandle) => {
   try {
     await handle.close();
   } catch {
@@ -81,14 +79,9 @@ export const readDirectoryEntriesSecure = (options: {
           }
           const name = entry.name;
           if (name.length === 0) continue;
-          const relativeName = options.relativePrefix
-            ? `${options.relativePrefix}/${name}`
-            : name;
+          const relativeName = options.relativePrefix ? `${options.relativePrefix}/${name}` : name;
           observedEntries += 1;
-          if (
-            options.entriesAlreadyObserved + observedEntries >
-            options.maxEntries
-          ) {
+          if (options.entriesAlreadyObserved + observedEntries > options.maxEntries) {
             throw entryLimitError(options.maxEntries);
           }
           if (options.ignore.some((pattern) => pattern.test(relativeName))) {
@@ -122,14 +115,11 @@ export const readDirectoryEntriesSecure = (options: {
         );
       }
       return {
-        entries: entries.sort((a, b) =>
-          a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-        ),
+        entries: entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
         observedEntries,
       };
     },
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 
 export const writeCompressedArchiveSecure = (
@@ -163,8 +153,7 @@ export const writeCompressedArchiveSecure = (
         { signal },
       );
     },
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 
 export const isArchivedRegularFile = (
@@ -179,9 +168,7 @@ export const isArchivedRegularFile = (
     const entry = byName.get(currentName);
     if (entry?.type === "file") return true;
     if (entry?.type !== "symlink") return false;
-    const target = posix.normalize(
-      posix.join(posix.dirname(currentName), entry.linkname),
-    );
+    const target = posix.normalize(posix.join(posix.dirname(currentName), entry.linkname));
     if (target === ".." || target.startsWith("../") || target.startsWith("/")) {
       return false;
     }
@@ -196,7 +183,7 @@ async function* tarChunks(
 ): AsyncGenerator<Uint8Array> {
   for (const entry of entries) {
     if (entry.type === "symlink") {
-      yield createHeader({
+      yield* createEntryHeaders({
         name: entry.name,
         mode: entry.mode,
         size: 0,
@@ -206,7 +193,7 @@ async function* tarChunks(
       continue;
     }
 
-    yield createHeader({
+    yield* createEntryHeaders({
       name: entry.name,
       mode: entry.mode,
       size: entry.file.size,
@@ -238,19 +225,53 @@ async function* tarChunks(
   yield new Uint8Array(1024);
 }
 
-const createHeader = (entry: {
+interface TarHeader {
   readonly name: string;
   readonly mode: number;
   readonly size: number;
-  readonly type: "file" | "symlink";
+  readonly type: "file" | "symlink" | "pax";
   readonly linkname?: string;
-}) => {
-  const header = new Uint8Array(512);
-  const { name, prefix } = splitTarName(entry.name);
-  if (entry.linkname && byteLength(entry.linkname) > 100) {
-    throw new Error(
-      `Archive symlink target is too long for tar header: ${entry.linkname}`,
+}
+
+const paxRecord = (key: string, value: string) => {
+  const body = ` ${key}=${value}\n`;
+  let length = byteLength(body) + 1;
+  while (byteLength(String(length)) + byteLength(body) !== length) {
+    length = byteLength(String(length)) + byteLength(body);
+  }
+  return `${length}${body}`;
+};
+
+function* createEntryHeaders(entry: TarHeader): Generator<Uint8Array> {
+  const longPath = splitTarName(entry.name) === undefined;
+  const longLink = entry.linkname !== undefined && byteLength(entry.linkname) > 100;
+  if (longPath || longLink) {
+    const data = new TextEncoder().encode(
+      (longPath ? paxRecord("path", entry.name) : "") +
+        (longLink ? paxRecord("linkpath", entry.linkname!) : ""),
     );
+    yield createHeader({
+      name: "PaxHeaders/entry",
+      mode: 0o644,
+      size: data.byteLength,
+      type: "pax",
+    });
+    yield data;
+    const padding = paddingLength(data.byteLength);
+    if (padding > 0) yield new Uint8Array(padding);
+  }
+  yield createHeader({
+    ...entry,
+    name: longPath ? "PaxEntry" : entry.name,
+    linkname: longLink ? "PaxLink" : entry.linkname,
+  });
+}
+
+const createHeader = (entry: TarHeader) => {
+  const header = new Uint8Array(512);
+  const { name, prefix } = splitTarName(entry.name)!;
+  if (entry.linkname && byteLength(entry.linkname) > 100) {
+    throw new Error(`Archive symlink target is too long for tar header: ${entry.linkname}`);
   }
 
   writeString(header, 0, 100, name);
@@ -260,7 +281,7 @@ const createHeader = (entry: {
   writeOctal(header, 124, 12, entry.size);
   writeOctal(header, 136, 12, 0);
   header.fill(0x20, 148, 156);
-  writeString(header, 156, 1, entry.type === "symlink" ? "2" : "0");
+  writeString(header, 156, 1, entry.type === "pax" ? "x" : entry.type === "symlink" ? "2" : "0");
   if (entry.linkname) writeString(header, 157, 100, entry.linkname);
   writeString(header, 257, 6, "ustar");
   writeString(header, 263, 2, "00");
@@ -273,7 +294,7 @@ const createHeader = (entry: {
   return header;
 };
 
-const splitTarName = (name: string): { name: string; prefix?: string } => {
+const splitTarName = (name: string): { name: string; prefix?: string } | undefined => {
   if (byteLength(name) <= 100) return { name };
   const slashIndexes = Array.from(name.matchAll(/\//g), (match) => match.index);
   for (const index of slashIndexes.reverse()) {
@@ -284,27 +305,17 @@ const splitTarName = (name: string): { name: string; prefix?: string } => {
       return { name: suffix, prefix };
     }
   }
-  throw new Error(`Archive path is too long for tar header: ${name}`);
+  return undefined;
 };
 
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
-const writeString = (
-  buffer: Uint8Array,
-  offset: number,
-  length: number,
-  value: string,
-) => {
+const writeString = (buffer: Uint8Array, offset: number, length: number, value: string) => {
   const bytes = new TextEncoder().encode(value);
   buffer.set(bytes.slice(0, length), offset);
 };
 
-const writeOctal = (
-  buffer: Uint8Array,
-  offset: number,
-  length: number,
-  value: number,
-) => {
+const writeOctal = (buffer: Uint8Array, offset: number, length: number, value: number) => {
   const text = value
     .toString(8)
     .padStart(length - 1, "0")

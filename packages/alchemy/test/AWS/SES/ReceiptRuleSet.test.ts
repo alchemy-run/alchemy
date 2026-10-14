@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ReceiptRuleSet } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as ses from "@distilled.cloud/aws/ses";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ReceiptRuleSet } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -54,7 +54,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertRuleSetDeleted(ruleSet.ruleSetName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -85,5 +85,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertRuleSetDeleted("alchemy-test-ses-ruleset-b");
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );

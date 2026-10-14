@@ -33,7 +33,6 @@ export interface ConvertRecoveryPointToSnapshot extends Binding.Service<
     >
   >
 > {}
-export const ConvertRecoveryPointToSnapshot =
-  Binding.Service<ConvertRecoveryPointToSnapshot>(
-    "AWS.RedshiftServerless.ConvertRecoveryPointToSnapshot",
-  );
+export const ConvertRecoveryPointToSnapshot = Binding.Service<ConvertRecoveryPointToSnapshot>(
+  "AWS.RedshiftServerless.ConvertRecoveryPointToSnapshot",
+);

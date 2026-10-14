@@ -33,12 +33,7 @@ export interface DescribeStacks extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<cloudformation.DescribeStacksInput, "StackName">,
-    ) => Effect.Effect<
-      cloudformation.DescribeStacksOutput,
-      cloudformation.DescribeStacksError
-    >
+    ) => Effect.Effect<cloudformation.DescribeStacksOutput, cloudformation.DescribeStacksError>
   >
 > {}
-export const DescribeStacks = Binding.Service<DescribeStacks>(
-  "AWS.CloudFormation.DescribeStacks",
-);
+export const DescribeStacks = Binding.Service<DescribeStacks>("AWS.CloudFormation.DescribeStacks");

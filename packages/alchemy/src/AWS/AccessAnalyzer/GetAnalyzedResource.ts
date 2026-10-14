@@ -33,10 +33,7 @@ export interface GetAnalyzedResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAnalyzedResourceRequest,
-    ) => Effect.Effect<
-      aa.GetAnalyzedResourceResponse,
-      aa.GetAnalyzedResourceError
-    >
+    ) => Effect.Effect<aa.GetAnalyzedResourceResponse, aa.GetAnalyzedResourceError>
   >
 > {}
 

@@ -28,10 +28,7 @@ export interface GetCallAnalyticsJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetCallAnalyticsJobRequest,
-    ) => Effect.Effect<
-      transcribe.GetCallAnalyticsJobResponse,
-      transcribe.GetCallAnalyticsJobError
-    >
+    ) => Effect.Effect<transcribe.GetCallAnalyticsJobResponse, transcribe.GetCallAnalyticsJobError>
   >
 > {}
 export const GetCallAnalyticsJob = Binding.Service<GetCallAnalyticsJob>(

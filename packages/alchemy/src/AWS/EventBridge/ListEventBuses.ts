@@ -2,8 +2,7 @@ import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListEventBusesRequest
-  extends eventbridge.ListEventBusesRequest {}
+export interface ListEventBusesRequest extends eventbridge.ListEventBusesRequest {}
 
 /**
  * Lists the event buses in the account (`events:ListEventBuses`).
@@ -28,12 +27,7 @@ export interface ListEventBuses extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListEventBusesRequest,
-    ) => Effect.Effect<
-      eventbridge.ListEventBusesResponse,
-      eventbridge.ListEventBusesError
-    >
+    ) => Effect.Effect<eventbridge.ListEventBusesResponse, eventbridge.ListEventBusesError>
   >
 > {}
-export const ListEventBuses = Binding.Service<ListEventBuses>(
-  "AWS.EventBridge.ListEventBuses",
-);
+export const ListEventBuses = Binding.Service<ListEventBuses>("AWS.EventBridge.ListEventBuses");

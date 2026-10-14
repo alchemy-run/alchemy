@@ -36,7 +36,6 @@ export interface ListPendingInvitationResources extends Binding.Service<
     >
   >
 > {}
-export const ListPendingInvitationResources =
-  Binding.Service<ListPendingInvitationResources>(
-    "AWS.RAM.ListPendingInvitationResources",
-  );
+export const ListPendingInvitationResources = Binding.Service<ListPendingInvitationResources>(
+  "AWS.RAM.ListPendingInvitationResources",
+);

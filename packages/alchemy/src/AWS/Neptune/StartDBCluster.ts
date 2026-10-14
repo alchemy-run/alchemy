@@ -28,13 +28,6 @@ export interface StartDBCluster extends Binding.Service<
   "AWS.Neptune.StartDBCluster",
   (
     cluster: DBCluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      neptune.StartDBClusterResult,
-      neptune.StartDBClusterError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<neptune.StartDBClusterResult, neptune.StartDBClusterError>>
 > {}
-export const StartDBCluster = Binding.Service<StartDBCluster>(
-  "AWS.Neptune.StartDBCluster",
-);
+export const StartDBCluster = Binding.Service<StartDBCluster>("AWS.Neptune.StartDBCluster");

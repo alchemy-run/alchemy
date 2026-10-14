@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DescribeReportDefinitions} — pagination knobs only.
  */
-export interface DescribeReportDefinitionsRequest
-  extends cur.DescribeReportDefinitionsRequest {}
+export interface DescribeReportDefinitionsRequest extends cur.DescribeReportDefinitionsRequest {}
 
 /**
  * Runtime binding for `cur:DescribeReportDefinitions`.
@@ -39,14 +38,10 @@ export interface DescribeReportDefinitions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeReportDefinitionsRequest,
-    ) => Effect.Effect<
-      cur.DescribeReportDefinitionsResponse,
-      cur.DescribeReportDefinitionsError
-    >
+    ) => Effect.Effect<cur.DescribeReportDefinitionsResponse, cur.DescribeReportDefinitionsError>
   >
 > {}
 
-export const DescribeReportDefinitions =
-  Binding.Service<DescribeReportDefinitions>(
-    "AWS.CostAndUsageReport.DescribeReportDefinitions",
-  );
+export const DescribeReportDefinitions = Binding.Service<DescribeReportDefinitions>(
+  "AWS.CostAndUsageReport.DescribeReportDefinitions",
+);

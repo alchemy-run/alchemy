@@ -1,3 +1,10 @@
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import {
   AutoScalingGroup,
@@ -8,12 +15,6 @@ import {
 } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Output from "@/Output";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { getAutoScalingTestSubnetId } from "../TestNetwork.ts";
 
 export const lifecycleFleetAsgName = "alchemy-test-lifecycle-e2e-asg";
@@ -29,18 +30,15 @@ export class LifecycleTestFunction extends AWS.Lambda.Function<AWS.Lambda.Functi
  * `Output`s resolved at deploy time only, so this composition is safe to
  * re-execute inside the deployed Lambda without runtime guards.
  */
-export class LifecycleFleet extends Context.Service<
-  LifecycleFleet,
-  { group: AutoScalingGroup }
->()("AutoScalingLifecycleFleet") {}
+export class LifecycleFleet extends Context.Service<LifecycleFleet, { group: AutoScalingGroup }>()(
+  "AutoScalingLifecycleFleet",
+) {}
 
 export const LifecycleFleetLive = Layer.effect(
   LifecycleFleet,
   Effect.gen(function* () {
     const imageId = amazonLinux2023();
-    const subnetId = Output.fromEffect(
-      getAutoScalingTestSubnetId.pipe(Effect.orDie),
-    );
+    const subnetId = Output.fromEffect(getAutoScalingTestSubnetId.pipe(Effect.orDie));
 
     const template = yield* LaunchTemplate("LifecycleTemplate", {
       imageId,
@@ -62,6 +60,9 @@ export default LifecycleTestFunction.make(
   {
     main: import.meta.url,
     functionUrl: true,
+    // /complete-bogus makes a live Auto Scaling call; a cold start plus SDK
+    // round-trip can exceed Lambda's 3s default and surface as a 502.
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     const { group } = yield* LifecycleFleet;
@@ -124,11 +125,7 @@ export default LifecycleTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.Lambda.EventSource,
-        CompleteLifecycleActionHttp,
-        LifecycleFleetLive,
-      ),
+      Layer.mergeAll(AWS.Lambda.EventSource, CompleteLifecycleActionHttp, LifecycleFleetLive),
     ),
   ),
 );

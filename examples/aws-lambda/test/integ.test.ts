@@ -1,7 +1,7 @@
-import * as AWS from "alchemy/AWS";
-import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
 

@@ -122,10 +122,7 @@ export const SecurityConfigurationProvider = () =>
   Provider.effect(
     SecurityConfiguration,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: Partial<SecurityConfigurationProps>,
-      ) =>
+      const toName = (id: string, props: Partial<SecurityConfigurationProps>) =>
         props.securityConfigurationName
           ? Effect.succeed(props.securityConfigurationName)
           : createPhysicalName({ id, maxLength: 64 });
@@ -133,11 +130,7 @@ export const SecurityConfigurationProvider = () =>
       const readConfiguration = Effect.fn(function* (name: string) {
         return yield* emr
           .describeSecurityConfiguration({ Name: name })
-          .pipe(
-            Effect.catchTag("SecurityConfigurationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("SecurityConfigurationNotFound", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (name: string, document: string) => ({
@@ -161,9 +154,7 @@ export const SecurityConfigurationProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.securityConfigurationName ??
-            (yield* toName(id, olds ?? {}));
+          const name = output?.securityConfigurationName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readConfiguration(name);
           if (found === undefined) return undefined;
           // Security configurations don't support tags, so an existing
@@ -173,8 +164,7 @@ export const SecurityConfigurationProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news!;
-          const name =
-            output?.securityConfigurationName ?? (yield* toName(id, props));
+          const name = output?.securityConfigurationName ?? (yield* toName(id, props));
           const desired = toDocument(props.securityConfiguration);
 
           // 1. Observe — cloud state is authoritative.
@@ -187,34 +177,22 @@ export const SecurityConfigurationProvider = () =>
           //      race, not a failure.
           if (
             observed?.SecurityConfiguration !== undefined &&
-            canonicalDocument(observed.SecurityConfiguration) !==
-              canonicalDocument(desired)
+            canonicalDocument(observed.SecurityConfiguration) !== canonicalDocument(desired)
           ) {
             yield* emr
               .deleteSecurityConfiguration({ Name: name })
-              .pipe(
-                Effect.catchTag(
-                  "SecurityConfigurationNotFound",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("SecurityConfigurationNotFound", () => Effect.void));
           }
           if (
             observed?.SecurityConfiguration === undefined ||
-            canonicalDocument(observed.SecurityConfiguration) !==
-              canonicalDocument(desired)
+            canonicalDocument(observed.SecurityConfiguration) !== canonicalDocument(desired)
           ) {
             yield* emr
               .createSecurityConfiguration({
                 Name: name,
                 SecurityConfiguration: desired,
               })
-              .pipe(
-                Effect.catchTag(
-                  "SecurityConfigurationAlreadyExists",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("SecurityConfigurationAlreadyExists", () => Effect.void));
           }
 
           // 4. Return fresh attributes.
@@ -228,30 +206,21 @@ export const SecurityConfigurationProvider = () =>
             .deleteSecurityConfiguration({
               Name: output.securityConfigurationName,
             })
-            .pipe(
-              Effect.catchTag(
-                "SecurityConfigurationNotFound",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("SecurityConfigurationNotFound", () => Effect.void));
         }),
 
         list: () =>
           emr.listSecurityConfigurations.items({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((summary) =>
-                summary.Name ? [summary.Name] : [],
-              ),
+              Array.from(chunk).flatMap((summary) => (summary.Name ? [summary.Name] : [])),
             ),
             Effect.flatMap(
               Effect.forEach(
                 (name) =>
                   readConfiguration(name).pipe(
                     Effect.map((found) =>
-                      found === undefined
-                        ? []
-                        : [toAttrs(name, found.SecurityConfiguration ?? "")],
+                      found === undefined ? [] : [toAttrs(name, found.SecurityConfiguration ?? "")],
                     ),
                   ),
                 { concurrency: 4 },

@@ -32,10 +32,7 @@ export interface ListInvestigations extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<detective.ListInvestigationsRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.ListInvestigationsResponse,
-      detective.ListInvestigationsError
-    >
+    ) => Effect.Effect<detective.ListInvestigationsResponse, detective.ListInvestigationsError>
   >
 > {}
 export const ListInvestigations = Binding.Service<ListInvestigations>(

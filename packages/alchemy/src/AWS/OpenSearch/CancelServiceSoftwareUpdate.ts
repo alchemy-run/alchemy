@@ -31,7 +31,6 @@ export interface CancelServiceSoftwareUpdate extends Binding.Service<
     >
   >
 > {}
-export const CancelServiceSoftwareUpdate =
-  Binding.Service<CancelServiceSoftwareUpdate>(
-    "AWS.OpenSearch.CancelServiceSoftwareUpdate",
-  );
+export const CancelServiceSoftwareUpdate = Binding.Service<CancelServiceSoftwareUpdate>(
+  "AWS.OpenSearch.CancelServiceSoftwareUpdate",
+);

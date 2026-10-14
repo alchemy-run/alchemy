@@ -31,6 +31,4 @@ export interface GetKxVolume extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxVolumeResponse, SVC.GetKxVolumeError>
   >
 > {}
-export const GetKxVolume = Binding.Service<GetKxVolume>(
-  "AWS.FinSpace.GetKxVolume",
-);
+export const GetKxVolume = Binding.Service<GetKxVolume>("AWS.FinSpace.GetKxVolume");

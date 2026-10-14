@@ -9,7 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { fromChatbotTags, toChatbotTags } from "./internal.ts";
+import { fromChatbotTags, inChatbotRegion, toChatbotTags } from "./internal.ts";
 
 export interface SlackChannelConfigurationProps {
   /**
@@ -157,10 +157,7 @@ export const SlackChannelConfigurationProvider = () =>
         id: string,
         props: Pick<SlackChannelConfigurationProps, "configurationName">,
       ) {
-        return (
-          props.configurationName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.configurationName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const configurationArn = Effect.fn(function* (configurationName: string) {
@@ -172,12 +169,14 @@ export const SlackChannelConfigurationProvider = () =>
       // describeSlackChannelConfigurations is a filter — an unknown ARN
       // yields an empty list rather than a not-found error.
       const observeConfiguration = (arn: string) =>
-        chatbot
-          .describeSlackChannelConfigurations({ ChatConfigurationArn: arn })
-          .pipe(Effect.map((r) => r.SlackChannelConfigurations?.[0]));
+        chatbot.describeSlackChannelConfigurations({ ChatConfigurationArn: arn }).pipe(
+          inChatbotRegion,
+          Effect.map((r) => r.SlackChannelConfigurations?.[0]),
+        );
 
       const observedTags = (arn: string) =>
         chatbot.listTagsForResource({ ResourceARN: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => fromChatbotTags(r.Tags)),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
@@ -200,10 +199,9 @@ export const SlackChannelConfigurationProvider = () =>
         stables: ["configurationName", "chatConfigurationArn", "slackTeamId"],
         list: () =>
           Effect.gen(function* () {
-            const configurations =
-              yield* chatbot.describeSlackChannelConfigurations
-                .items({})
-                .pipe(Stream.runCollect);
+            const configurations = yield* chatbot.describeSlackChannelConfigurations
+              .items({})
+              .pipe(Stream.runCollect, inChatbotRegion);
             return Array.from(configurations).map((config) => {
               const arn = config.ChatConfigurationArn;
               return toAttributes(arn.slice(arn.lastIndexOf("/") + 1), config);
@@ -211,11 +209,8 @@ export const SlackChannelConfigurationProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, olds ?? {}));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, olds ?? {}));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const found = yield* observeConfiguration(arn);
           if (found === undefined) return undefined;
           const attrs = toAttributes(configurationName, found);
@@ -233,11 +228,8 @@ export const SlackChannelConfigurationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const configurationName =
-            output?.configurationName ??
-            (yield* createConfigurationName(id, news));
-          const arn =
-            output?.chatConfigurationArn ??
-            (yield* configurationArn(configurationName));
+            output?.configurationName ?? (yield* createConfigurationName(id, news));
+          const arn = output?.chatConfigurationArn ?? (yield* configurationArn(configurationName));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredTopics = [...(news.snsTopicArns ?? [])].sort();
@@ -266,10 +258,9 @@ export const SlackChannelConfigurationProvider = () =>
                 Tags: toChatbotTags(desiredTags),
               })
               .pipe(
+                inChatbotRegion,
                 Effect.map((r) => r.ChannelConfiguration),
-                Effect.catchTag("ConflictException", () =>
-                  observeConfiguration(arn),
-                ),
+                Effect.catchTag("ConflictException", () => observeConfiguration(arn)),
               );
           }
 
@@ -279,16 +270,12 @@ export const SlackChannelConfigurationProvider = () =>
             live !== undefined &&
             live.SlackChannelId === news.slackChannelId &&
             live.IamRoleArn === news.iamRoleArn &&
-            JSON.stringify([...live.SnsTopicArns].sort()) ===
-              JSON.stringify(desiredTopics) &&
+            JSON.stringify([...live.SnsTopicArns].sort()) === JSON.stringify(desiredTopics) &&
             (live.LoggingLevel ?? "NONE") === (news.loggingLevel ?? "NONE") &&
             JSON.stringify(
-              live.GuardrailPolicyArns
-                ? [...live.GuardrailPolicyArns].sort()
-                : undefined,
+              live.GuardrailPolicyArns ? [...live.GuardrailPolicyArns].sort() : undefined,
             ) === JSON.stringify(desiredGuardrails) &&
-            (live.UserAuthorizationRequired ?? false) ===
-              (news.userAuthorizationRequired ?? false);
+            (live.UserAuthorizationRequired ?? false) === (news.userAuthorizationRequired ?? false);
           if (!inSync) {
             live = yield* chatbot
               .updateSlackChannelConfiguration({
@@ -301,7 +288,10 @@ export const SlackChannelConfigurationProvider = () =>
                 GuardrailPolicyArns: news.guardrailPolicyArns,
                 UserAuthorizationRequired: news.userAuthorizationRequired,
               })
-              .pipe(Effect.map((r) => r.ChannelConfiguration));
+              .pipe(
+                inChatbotRegion,
+                Effect.map((r) => r.ChannelConfiguration),
+              );
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -309,19 +299,23 @@ export const SlackChannelConfigurationProvider = () =>
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {
-            yield* chatbot.tagResource({
-              ResourceARN: arn,
-              Tags: upsert.map(({ Key, Value }) => ({
-                TagKey: Key,
-                TagValue: Value,
-              })),
-            });
+            yield* chatbot
+              .tagResource({
+                ResourceARN: arn,
+                Tags: upsert.map(({ Key, Value }) => ({
+                  TagKey: Key,
+                  TagValue: Value,
+                })),
+              })
+              .pipe(inChatbotRegion);
           }
           if (removed.length > 0) {
-            yield* chatbot.untagResource({
-              ResourceARN: arn,
-              TagKeys: removed,
-            });
+            yield* chatbot
+              .untagResource({
+                ResourceARN: arn,
+                TagKeys: removed,
+              })
+              .pipe(inChatbotRegion);
           }
 
           yield* session.note(configurationName);
@@ -342,6 +336,7 @@ export const SlackChannelConfigurationProvider = () =>
               ChatConfigurationArn: output.chatConfigurationArn,
             })
             .pipe(
+              inChatbotRegion,
               // Idempotent delete — a missing configuration is not an error.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );

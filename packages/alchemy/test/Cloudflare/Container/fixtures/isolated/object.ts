@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { IsolatedContainer } from "./container.ts";
 
 /** Durable Object backing one {@link IsolatedContainer} instance. */
@@ -10,25 +10,20 @@ export class IsolatedObject extends Cloudflare.DurableObject<IsolatedObject>()(
     const container = yield* IsolatedContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       return {
-        // RPC into the container (forces start + proves it's up).
-        ping: () => container.ping(),
+        // RPC into the container (starts it + proves it's up).
+        ping: () => start.pipe(Effect.andThen(container.ping())),
         // HTTP over the container's TCP port.
         hello: () =>
           Effect.gen(function* () {
+            yield* start;
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(IsolatedContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

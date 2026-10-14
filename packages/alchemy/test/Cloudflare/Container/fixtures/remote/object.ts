@@ -1,7 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Redacted from "effect/Redacted";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * A sibling resource whose output is threaded into the container's `env`,
@@ -23,6 +24,8 @@ export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
     const bucket = yield* EnvBucket;
     return {
       image: "mendhak/http-https-echo:latest",
+      vcpu: 1,
+      memoryMib: 4096,
       observability: { logs: { enabled: true } },
       env: {
         // Tells the echo image to include `process.env` in its JSON response.
@@ -45,23 +48,27 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
     const container = yield* RemoteContainer;
 
     return Effect.gen(function* () {
+      // Starting is idempotent: a no-op once the container is running.
+      const start = container.start({ enableInternet: true });
       const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            yield* start;
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
+        // The proxy pattern from #1334: forward the incoming request to the
+        // container verbatim. In production the incoming web Request carries
+        // an https:// URL, which workerd's container ports reject — the
+        // runtime must downgrade the scheme on the container hop.
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          yield* start;
+          return yield* fetch(request);
+        }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(RemoteContainer, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

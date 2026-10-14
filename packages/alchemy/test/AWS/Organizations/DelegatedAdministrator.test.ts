@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DelegatedAdministrator } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,18 +19,21 @@ const { test } = Test.make({ providers: AWS.providers() });
 // isn't an org management/delegated account, which `list()` catches and maps to
 // `[]`. So this case passes on any account — it just returns `[]` when the
 // account can't enumerate delegated administrators.
-test.provider("list enumerates delegated administrators", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DelegatedAdministrator);
-    const all = yield* provider.list();
+test.provider(
+  "list enumerates delegated administrators",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(DelegatedAdministrator);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    for (const item of all) {
-      expect(typeof item.accountId).toBe("string");
-      expect(typeof item.servicePrincipal).toBe("string");
-    }
-  }),
+      for (const item of all) {
+        expect(typeof item.accountId).toBe("string");
+        expect(typeof item.servicePrincipal).toBe("string");
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
 );
 
 // Full lifecycle list test — requires an org MANAGEMENT account plus a member
@@ -41,8 +44,7 @@ test.provider("list enumerates delegated administrators", () =>
 // skipped by default.
 const memberAccountId = process.env.AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID;
 const servicePrincipal =
-  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ??
-  "config.amazonaws.com";
+  process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ?? "config.amazonaws.com";
 
 test.provider.skipIf(!memberAccountId)(
   "list contains the deployed delegated administrator",
@@ -65,13 +67,13 @@ test.provider.skipIf(!memberAccountId)(
       expect(
         all.some(
           (item) =>
-            item.accountId === admin.accountId &&
-            item.servicePrincipal === admin.servicePrincipal,
+            item.accountId === admin.accountId && item.servicePrincipal === admin.servicePrincipal,
         ),
       ).toBe(true);
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -116,12 +118,10 @@ test.provider.skipIf(!memberAccountId)(
       // interrupted deploy leaves behind: `creating`, no attributes, and
       // every Output-valued prop lost in the round-trip.
       const state = yield* yield* State;
-      const stage = "test"; // scratch stacks default to the "test" stage
+      const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
@@ -130,9 +130,7 @@ test.provider.skipIf(!memberAccountId)(
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.DelegatedAdministrator state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.DelegatedAdministrator state row found after deploy"),
         );
       }
       yield* state.set({
@@ -160,5 +158,8 @@ test.provider.skipIf(!memberAccountId)(
 
       yield* stack.destroy();
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:organizations", "live"],
+    timeout: 240_000,
+  },
 );

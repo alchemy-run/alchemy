@@ -35,7 +35,6 @@ export interface ListSuppressedDestinations extends Binding.Service<
     >
   >
 > {}
-export const ListSuppressedDestinations =
-  Binding.Service<ListSuppressedDestinations>(
-    "AWS.SES.ListSuppressedDestinations",
-  );
+export const ListSuppressedDestinations = Binding.Service<ListSuppressedDestinations>(
+  "AWS.SES.ListSuppressedDestinations",
+);

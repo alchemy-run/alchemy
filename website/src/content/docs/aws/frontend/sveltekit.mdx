@@ -5,7 +5,7 @@ sidebar:
   order: 12
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
@@ -25,20 +25,7 @@ The build integration is not bundled with alchemy. Install
 `/sveltekit` and `/sveltekit/aws` exports from your project at deploy
 time. It is only used at build time, so a dev dependency is enough:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add -d ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers dev={devDeps} />
 
 ## Configure SvelteKit
 
@@ -96,18 +83,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.SvelteKit("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from alchemy",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from alchemy",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -144,14 +128,16 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     sveltekit({
-      alias: { $lib: "src/lib" },
+      prerender: { handleHttpError: "warn" },
     }),
   ],
 });
 ```
 
-The `kit` prop on the resource is a deploy-time override layer merged
-over those options (the override wins):
+The `kit` prop on the resource is the deploy-time override bag:
+JSON-serializable kit config merged over those options (the prop
+wins). Use it for per-stage values or alchemy `Output`s your config
+file can't compute:
 
 ```typescript
 // alchemy.run.ts
@@ -162,8 +148,10 @@ export const Website = AWS.Website.SvelteKit("Website", {
 });
 ```
 
-Don't set `kit.adapter` — Alchemy injects its own wrangler-free AWS
-adapter (an adapter declared in your `sveltekit(...)` call is
+No functions or plugins in the bag — `preprocess`, `vitePlugin`, and
+the other construction-time options belong in your `sveltekit(...)`
+call. Don't set `kit.adapter` — Alchemy injects its own wrangler-free
+AWS adapter (an adapter declared in your `sveltekit(...)` call is
 replaced with a warning).
 
 ## Local dev
@@ -182,9 +170,9 @@ local address and no AWS resources are created. Wrap the site in
 
 ```typescript
 const site = yield* AWS.Website.SvelteKit("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.

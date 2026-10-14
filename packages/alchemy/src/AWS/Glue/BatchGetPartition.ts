@@ -38,13 +38,8 @@ export interface BatchGetPartition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchGetPartitionRequest,
-    ) => Effect.Effect<
-      glue.BatchGetPartitionResponse,
-      glue.BatchGetPartitionError
-    >
+    ) => Effect.Effect<glue.BatchGetPartitionResponse, glue.BatchGetPartitionError>
   >
 > {}
 
-export const BatchGetPartition = Binding.Service<BatchGetPartition>(
-  "AWS.Glue.BatchGetPartition",
-);
+export const BatchGetPartition = Binding.Service<BatchGetPartition>("AWS.Glue.BatchGetPartition");

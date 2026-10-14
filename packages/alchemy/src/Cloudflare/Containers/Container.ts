@@ -1,42 +1,28 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
-import type { ResourceClassLike } from "../../Resource.ts";
+import type { ResourceClass, ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass } from "../../Util/effect.ts";
-import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { type WorkerShape } from "../Workers/Worker.ts";
-import type {
-  ContainerApplication,
-  ContainerApplicationProps,
-} from "./ContainerApplication.ts";
+import type { ContainerApplication } from "./ContainerApplication.ts";
+import {
+  makeContainerHandle,
+  type ContainerClient,
+  type ReservedContainerKey,
+} from "./ContainerClient.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
 
-export const ContainerTag = (
-  id: string,
-): Context.Key<Container.Instance, Container.Instance> =>
-  Context.Service<Container.Instance>(`Container<${id}>`);
-
 export const isContainer = <T>(value: T): value is T & Container =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === ContainerTypeId;
+  typeof value === "object" && value !== null && "Type" in value && value.Type === ContainerTypeId;
 
 export class ContainerError extends Data.TaggedError("ContainerError")<{
   readonly message: string;
@@ -49,9 +35,7 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
  * is still provisioning. Mirrors `@cloudflare/containers`'
  * `NO_CONTAINER_INSTANCE_ERROR` (surfaced as HTTP 503 by native).
  */
-export class NoContainerInstanceError extends Data.TaggedError(
-  "NoContainerInstanceError",
-)<{
+export class NoContainerInstanceError extends Data.TaggedError("NoContainerInstanceError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -62,9 +46,7 @@ export class NoContainerInstanceError extends Data.TaggedError(
  * Hammering `start()` while rate limited only prolongs it, so callers should
  * back off rather than retry tightly.
  */
-export class ContainerRateLimitedError extends Data.TaggedError(
-  "ContainerRateLimitedError",
-)<{
+export class ContainerRateLimitedError extends Data.TaggedError("ContainerRateLimitedError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -75,22 +57,33 @@ export class ContainerRateLimitedError extends Data.TaggedError(
  * detection (`!this.container.running` mid-wait); not curable by continuing to
  * poll the same instance.
  */
-export class ContainerCrashedError extends Data.TaggedError(
-  "ContainerCrashedError",
-)<{
+export class ContainerCrashedError extends Data.TaggedError("ContainerCrashedError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
+/**
+ * The container is not running. Ports and RPC methods never start it; call
+ * `start()` first.
+ */
+export class ContainerNotRunningError extends Data.TaggedError("ContainerNotRunningError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+// Upstream changed ContainerStartupOptions to an intersection with an
+// image/containerSnapshot union, which an interface cannot extend.
+export type ContainerStartupOptions = cf.ContainerStartupOptions;
 
 import type {
+  DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
 
 export type {
+  DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
@@ -126,31 +119,24 @@ export type {
 export type ImageContainerProps<Req = never> =
   | InputProps<ExternalContainerProps>
   | InputProps<RemoteContainerProps>
+  | InputProps<DurableObjectContainerProps>
   | Effect.Effect<
-      InputProps<ExternalContainerProps> | InputProps<RemoteContainerProps>,
+      | InputProps<ExternalContainerProps>
+      | InputProps<RemoteContainerProps>
+      | InputProps<DurableObjectContainerProps>,
       Config.ConfigError,
       Req
     >;
 
-export type Container<Id extends string = string> = Named<Id> & {
-  get running(): Effect.Effect<boolean, never, RuntimeContext>;
-  start(
-    options?: ContainerStartupOptions,
-  ): Effect.Effect<void, never, RuntimeContext>;
-  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
-  destroy(error?: any): Effect.Effect<void, never, RuntimeContext>;
-  signal(signo: number): Effect.Effect<void, never, RuntimeContext>;
-  getTcpPort(port: number): Effect.Effect<Fetcher, never, RuntimeContext>;
-  setInactivityTimeout(
-    durationMs: number | bigint,
-  ): Effect.Effect<void, never, RuntimeContext>;
-  interceptOutboundHttp(
-    addr: string,
-    binding: Fetcher,
-  ): Effect.Effect<void, never, RuntimeContext>;
-  interceptAllOutboundHttp(
-    binding: Fetcher,
-  ): Effect.Effect<void, never, RuntimeContext>;
+/**
+ * The handle `yield* MyContainer` returns inside a Durable Object. See
+ * {@link ContainerClient}.
+ */
+export type Container<Id extends string = string> = Named<Id> & ContainerClient;
+
+/** An RPC shape may not redeclare the container handle's own methods. */
+type ContainerShape<Shape> = {
+  [K in keyof Shape]: K extends ReservedContainerKey ? never : Shape[K];
 };
 
 /**
@@ -167,7 +153,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * runtime. Keeping them separate ensures the bundler only includes
  * the tiny class in the DO's output.
  *
- * See the [Platform concept](/infrastructure-as-effects/functions-and-servers)
+ * See the [Runtime concept](/infrastructure-as-effects/runtime)
  * page for how this fits into the async / effect / layer
  * progression.
  * ### Container Layer
@@ -185,7 +171,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
  *   {
- *     exec: (cmd: string) => Effect.Effect<{
+ *     shell: (cmd: string) => Effect.Effect<{
  *       exitCode: number;
  *       stdout: string;
  *       stderr: string;
@@ -203,7 +189,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *     const cp = yield* ChildProcessSpawner;
  *
  *     return Sandbox.of({
- *       exec: (command) =>
+ *       shell: (command) =>
  *         cp.spawn(ChildProcess.make(command, { shell: true })).pipe(
  *           Effect.flatMap(({ exitCode, stdout, stderr }) =>
  *             Effect.all({
@@ -282,6 +268,180 @@ export type Container<Id extends string = string> = Named<Id> & {
  * };
  * ```
  *
+ * ### Native Durable Object Containers
+ * Use `schedulingPolicy: "durable_object"` to let a Durable Object pick its
+ * image and instance size at runtime. One Container is one image: `image`
+ * copies a registry image, `context`/`dockerfile` builds one. Alchemy pins the
+ * image to a digest and prepares it before the Worker is uploaded.
+ *
+ * `yield* Node` returns the container's handle without starting it.
+ * `start()` starts the Container's own image. Its `exec` takes an argument
+ * vector and returns a scoped process with streams, an exit code, and an
+ * `output()` collector.
+ *
+ * **Example:** Execute a command in a Container's image
+ * ```typescript
+ * export class Node extends Cloudflare.Container<Node>()("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * }) {}
+ *
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const node = yield* Node;
+ *     return Effect.succeed({
+ *       exec: (args: string[]) =>
+ *         Effect.gen(function* () {
+ *           // Starts the Node image; a no-op when the container is running.
+ *           yield* node.start({
+ *             instance: "lite",
+ *             entrypoint: ["sleep", "infinity"],
+ *             enableInternet: false,
+ *           });
+ *           const process = yield* node.exec(args);
+ *           const result = yield* process.output();
+ *           return { text: new TextDecoder().decode(result.stdout), exitCode: result.exitCode };
+ *         }).pipe(Effect.scoped),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Several Images in One Durable Object
+ * Cloudflare gives each Durable Object class one container application and
+ * each object one container instance. Bind several Containers to choose
+ * between their images. Every binding adds its image to the class's
+ * application under the Container's id. Each handle's `start()` starts its
+ * own image; start one at a time and `destroy()` before switching.
+ *
+ * **Example:** A Durable Object with Node and Python images
+ * ```typescript
+ * export class Node extends Cloudflare.Container<Node>()("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * }) {}
+ *
+ * export class Python extends Cloudflare.Container<Python>()("Python", {
+ *   schedulingPolicy: "durable_object",
+ *   context: "./python",
+ * }) {}
+ *
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const node = yield* Node;
+ *     const python = yield* Python;
+ *     const run = (cmd: string[]) =>
+ *       Effect.scoped(Effect.flatMap(node.exec(cmd), (process) => process.output()));
+ *     return Effect.succeed({
+ *       node: (cmd: string[]) =>
+ *         node
+ *           .start({ entrypoint: ["sleep", "infinity"], enableInternet: false })
+ *           .pipe(Effect.andThen(run(cmd))),
+ *       python: (cmd: string[]) =>
+ *         Effect.gen(function* () {
+ *           // Every handle controls the same instance: switch images explicitly.
+ *           if (yield* node.running) yield* node.destroy();
+ *           yield* python.start({ entrypoint: ["sleep", "infinity"], enableInternet: false });
+ *           return yield* Effect.scoped(
+ *             Effect.flatMap(python.exec(cmd), (process) => process.output()),
+ *           );
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Application-wide settings (`ssh`, `authorizedKeys`, `observability`) may be
+ * declared on any of the class's Containers. Two Containers declaring
+ * different values fail the deploy with `ContainerApplicationSettingsConflict`.
+ *
+ * **Example:** Save and restore the writable filesystem
+ * ```typescript
+ * const snapshot = yield* node.snapshotContainer({ name: "workspace" });
+ * // Persist this handle in Durable Object storage before stopping the instance.
+ * yield* state.storage.put("snapshot", snapshot);
+ * yield* node.destroy();
+ * yield* node.start({
+ *   containerSnapshot: snapshot,
+ *   entrypoint: ["sleep", "infinity"],
+ *   enableInternet: false,
+ * });
+ * ```
+ *
+ * Snapshots capture the writable root filesystem, not memory, processes, or
+ * mounted filesystems. Restoring starts a new entrypoint process. Snapshot
+ * handles expire after 30 days without a restore. `exec` does not start a
+ * stopped container or invoke a shell; pass `['sh', '-c', command]` explicitly
+ * when needed. Scope closure kills an unfinished exec process, but does not
+ * signal its descendants. Use an Effect timeout to bound a command's lifetime.
+ *
+ * ### Native Durable Objects on Async Workers
+ * A plain Durable Object class on an async Worker attaches its Containers
+ * through its Durable Object binding:
+ * `Cloudflare.DurableObject(className, { containers })`. Each Container adds
+ * its image to the class's application, and the class reads it from
+ * `ctx.container.images` under the Container's id. A Container may be listed
+ * by several classes; each class gets its own copy of the image key.
+ *
+ * **Example:** Two classes sharing the Node image
+ * ```typescript
+ * // alchemy.run.ts
+ * const Node = Cloudflare.Container("Node", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "node:24-slim",
+ * });
+ * const Python = Cloudflare.Container("Python", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "python:3.13-slim",
+ * });
+ * const Rust = Cloudflare.Container("Rust", {
+ *   schedulingPolicy: "durable_object",
+ *   image: "rust:1.90-slim",
+ * });
+ * export const Worker = Cloudflare.Worker("App", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     AGENT: Cloudflare.DurableObject("Agent", { containers: [Node, Python] }),
+ *     REVIEWER: Cloudflare.DurableObject("Reviewer", { containers: [Node, Rust] }),
+ *   },
+ * });
+ * ```
+ *
+ * A Durable Object-managed Container placed directly in `env` fails with
+ * `DurableObjectContainerBindingError`; only fleet Containers bind that way.
+ *
+ * **Example:** Starting an image from the class
+ * ```typescript
+ * // src/worker.ts
+ * import { DurableObject } from "cloudflare:workers";
+ *
+ * export class Agent extends DurableObject {
+ *   async run(cmd: string[]) {
+ *     const container = this.ctx.container!;
+ *     if (!container.running) {
+ *       container.start({
+ *         image: container.images.Node,
+ *         entrypoint: ["sleep", "infinity"],
+ *         enableInternet: false,
+ *       });
+ *     }
+ *     return (await container.exec(cmd)).output();
+ *   }
+ * }
+ * ```
+ *
+ * Local development runs every image through workerd and Docker.
+ *
+ * Switching an existing application to this scheduling policy requires a new
+ * application and a new Durable Object class/namespace. Alchemy rejects an
+ * in-place policy change; existing Durable Object storage is not transferred.
+ * Replacing only a wrapper with the native API while retaining the original
+ * policy and class preserves the namespace. Deployment properties such as
+ * `maxInstances`, `instanceType`, `env`, and `rollout` are not valid with the
+ * new policy; pass per-instance settings to `start()`.
+ *
  * ### Image Sources
  * A container's image comes from one of three sources, picked by which
  * prop you set:
@@ -293,8 +453,8 @@ export type Container<Id extends string = string> = Named<Id> & {
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
  * ship an arbitrary image as-is: they have no runtime to provide, so
- * you declare the class with its props inline and register it purely
- * via `Cloudflare.Containers.layer` from the hosting Durable Object.
+ * you declare the class with its props inline and bind it with
+ * `yield* MyContainer` from the hosting Durable Object.
  *
  * **Example:** Effect-native image (`main`)
  * ```typescript
@@ -326,6 +486,62 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
+ * Builds are cached by default at
+ * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
+ * The generated physical name includes the stage and resource instance, so
+ * subsequent updates in that stage can reuse matching images. Replacement or
+ * destroy/recreate can change the name and start a new cache. This does not
+ * automatically share one repository across every container in the stage.
+ * The same defaults apply to inline Dockerfiles and Effect-native `main` builds.
+ *
+ * **Example:** Reuse builds across stages
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ *   publish: { repository: "web" },
+ * }) {}
+ * ```
+ *
+ * `repository: "web"` names the destination repository, not a source image or
+ * the container application. With the default registry host, Alchemy lowercases
+ * the name and expands it to `registry.cloudflare.com/<account-id>/web`.
+ * Supply only the repository name, without a registry host, account ID, tag,
+ * or digest. A build produces these references:
+ *
+ * ```text
+ * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
+ * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
+ * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+ * ```
+ *
+ * The build hash identifies the inputs; the manifest digest identifies the
+ * published artifact. Applications and stages in the same account can use
+ * `publish: { repository: "web" }` to reuse matching published builds. Changed
+ * inputs produce another hash tag in the same repository. Builds targeting
+ * that repository import reusable layers from its shared `:buildcache` tag,
+ * including when full input hashes differ. This mutable tag points to the
+ * latest exported inline cache, not a combined cache of every historical
+ * image. Reusing a finished image does not move the layer-cache tag.
+ *
+ * Pin base images and downloaded dependencies: changes outside the build
+ * context cannot invalidate the input hash. Each stage still has its own
+ * Container application, runtime settings, and instances; only images and
+ * build layers are shared.
+ *
+ * **Example:** Publish an existing image into a named repository
+ * ```typescript
+ * export class Proxy extends Cloudflare.Container<Proxy>()("Proxy", {
+ *   image: "nginx:alpine",
+ *   publish: { repository: "web-proxy" },
+ * }) {}
+ * // Re-publishes nginx into registry.cloudflare.com/<account-id>/web-proxy
+ * // and deploys registry.cloudflare.com/<account-id>/web-proxy@sha256:<manifest-digest>.
+ * ```
+ *
+ * Remote images are re-published without building them. An image already in
+ * the target registry keeps its existing repository; `publish.repository`
+ * does not copy it into another one.
+ *
  * **Example:** Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's
@@ -344,30 +560,28 @@ export type Container<Id extends string = string> = Named<Id> & {
  *   Effect.gen(function* () {
  *     const web = yield* Web;
  *     return Effect.gen(function* () {
+ *       const { fetch } = yield* web.getTcpPort(8080);
  *       return {
  *         hello: () =>
  *           Effect.gen(function* () {
- *             const { fetch } = yield* web.getTcpPort(8080);
+ *             yield* web.start();
  *             const res = yield* fetch(HttpClientRequest.get("http://container/"));
  *             return yield* res.text;
  *           }),
  *       };
  *     });
- *   }).pipe(Effect.provide(Cloudflare.Containers.layer(Web))),
+ *   }),
  * ) {}
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the container program doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -377,18 +591,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -413,7 +616,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *     observability: { logs: { enabled: true } },
  *   })),
  *   Effect.gen(function* () {
- *     return Sandbox.of({ exec: (cmd) => ... });
+ *     return Sandbox.of({ shell: (cmd) => ... });
  *   }),
  * );
  * ```
@@ -506,8 +709,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ) {}
  * ```
  *
- * Either way, start it with
- * `Cloudflare.Containers.layer(Api, { enableInternet: true })` — without
+ * Either way, start it with `api.start({ enableInternet: true })` — without
  * outbound networking the container never reaches the database.
  * `Cloudflare.Hyperdrive.Connect` is the one that cannot work here: it
  * *is* a workerd binding, so no container process can resolve it.
@@ -534,15 +736,21 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```
  *
  * ### Calling from a Durable Object
- * `yield* Sandbox` resolves a **running** container instance — every
- * method declared on the container's shape **plus** a `getTcpPort`
- * helper. Provide `Cloudflare.Containers.layer(Sandbox, …)` on the
- * DO's init to configure how the container runs; that layer binds,
- * starts, and monitors it and satisfies the `Sandbox` tag. Because
- * only the class is imported, the runtime implementation in
+ * `yield* Sandbox` binds the container to the Durable Object and returns
+ * its handle: every method declared on the container's shape, plus
+ * `start`, `running`, `destroy`, `getTcpPort`, `exec` and the rest of the
+ * native container API. Binding never starts the container. Because only
+ * the class is imported, the runtime implementation in
  * `Sandbox.runtime.ts` is tree-shaken out of the DO's bundle.
  *
- * **Example:** Running a container from a DO
+ * `start()` is idempotent: it starts the container unless it is already
+ * running, and concurrent calls start it once. Call it at the top of each
+ * operation. Its options apply only when that call actually starts the
+ * container. RPC methods and ports wait until the container's port accepts
+ * connections, but never start it: a stopped container fails with
+ * `ContainerNotRunningError`.
+ *
+ * **Example:** Starting a container from a DO
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
@@ -550,22 +758,44 @@ export type Container<Id extends string = string> = Named<Id> & {
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       // An Effect is a lazy value: define "start" once, run it per call.
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *
+ * A container's shape cannot declare a method the handle already has
+ * (`start`, `exec`, `image`, `getTcpPort`, …); declaring one is a type
+ * error, because the handle's method would shadow the RPC call.
+ *
+ * ### Using a Container from a Layer
+ * A Layer can `yield*` a container like any other service. It runs in the
+ * Durable Object that hosts it, and starts the container when an operation
+ * needs it. Layers never stop a shared container; let it sleep through
+ * `setInactivityTimeout`, or stop it from the Durable Object that owns it.
+ *
+ * **Example:** A service backed by a container
+ * ```typescript
+ * export const WriteFileLive = Layer.effect(
+ *   WriteFile,
+ *   Effect.gen(function* () {
+ *     const devBox = yield* DevBox;
+ *     const start = devBox.start({ enableInternet: true });
+ *
+ *     return ({ path, contents }) =>
+ *       start.pipe(Effect.andThen(devBox.writeFile(path, contents)));
+ *   }),
+ * );
+ * ```
+ *
  * ### HTTP Requests to Container Ports
- * Use `getTcpPort` on the running container instance to get a `fetch`
- * handle for a specific port. This lets you make HTTP requests to
- * servers running inside the container process.
+ * Use `getTcpPort` to get a `fetch` handle for a port inside the
+ * container. Each request waits until the port accepts connections, then
+ * is sent once.
  *
  * **Example:** Fetching from a container port
  * ```typescript
@@ -580,6 +810,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *       return {
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* sandbox.start({ enableInternet: true });
  *             const response = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
  *             );
@@ -587,11 +818,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *
@@ -599,42 +826,39 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @product Containers
  * @category Workers & Compute
  */
-export const Container: ResourceClassLike<ContainerApplication> & {
-  <DOShape = unknown, const Id extends string = string, PropsReq = never>(
-    id: Id,
-    props: ImageContainerProps<PropsReq>,
-  ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
-  <Self>(): {
-    <const Id extends string, PropsReq = never>(
+export const Container: ResourceClassLike<ContainerApplication> &
+  Pick<ResourceClass<ContainerApplication>, "ref"> & {
+    <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
-    ): Container.Decl<Self, {}, Id, PropsReq>;
-  };
-  <Self, Shape>(): {
-    <const Id extends string>(
-      id: Id,
-    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
-  };
-} = Object.assign(
+    ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
+    <Self>(): {
+      <const Id extends string, PropsReq = never>(
+        id: Id,
+        props: ImageContainerProps<PropsReq>,
+      ): Container.Decl<Self, {}, Id, PropsReq>;
+    };
+    <Self, Shape extends ContainerShape<Shape>>(): {
+      <const Id extends string>(
+        id: Id,
+      ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
+    };
+  } = Object.assign(
   (...args: any[]) => {
     if (args.length === 0) {
       return (...args: any[]) => {
         if (args.length === 1) {
           const [id] = args as [string];
           const tag = ContainerPlatform()(id);
-          // `yield* MyContainer` resolves the *started* instance tag, which is
-          // provided by `layer(MyContainer)`. The bind effect (which
-          // registers the DO + Worker bindings and produces the runtime
-          // handle) is stashed so `startContainer` can run it from inside that
-          // layer — see ContainerPlatform.bind / StartContainer.ts.
+          // `yield* MyContainer` binds the container to the hosting Durable
+          // Object and returns its handle. It never starts the container.
           // NOTE: no `~alchemy/Container/ClassName` marker here — an
           // effectful (`main`) container is not bindable on an async
           // Worker's `env` (its application is created by the `.make()`
           // Layer inside an Effect-native Durable Object host), so it must
           // not be picked up by bindWorkerAsyncBindings' container branch.
-          return Object.assign(effectClass(ContainerTag(id)), {
+          return Object.assign(effectClass(makeContainerHandle(id, ContainerPlatform.bind(tag))), {
             "~alchemy/Id": id,
-            "~alchemy/Container/Binding": ContainerPlatform.bind(tag),
             make: (props: any, impl: any) => tag.make(props, impl),
             // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
             Application: tag,
@@ -647,9 +871,8 @@ export const Container: ResourceClassLike<ContainerApplication> & {
     } else {
       const [id, props] = args as [string, any];
       const resource = ContainerPlatform(id, props);
-      return Object.assign(effectClass(ContainerTag(id)), {
+      return Object.assign(effectClass(makeContainerHandle(id, ContainerPlatform.bind(resource))), {
         "~alchemy/Id": id,
-        "~alchemy/Container/Binding": ContainerPlatform.bind(resource),
         // The Durable Object class name this container backs when bound on
         // an async Worker's `env` (see bindWorkerAsyncBindings). Defaults to
         // the binding name at bind time when no explicit `className` is set.
@@ -657,6 +880,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
         // the unresolved lookup and let `bindContainerClass` await it.
         "~alchemy/Container/ClassName": Effect.isEffect(props)
           ? Effect.map(
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
               props as Effect.Effect<{ className?: string } | undefined>,
               (resolved) => resolved?.className,
             )
@@ -669,6 +893,13 @@ export const Container: ResourceClassLike<ContainerApplication> & {
   },
   {
     Type: ContainerTypeId,
+    // Read `ContainerPlatform` lazily: this module and ContainerPlatform.ts
+    // import each other, so it may not be initialized at module load.
+    ref: (id: string, options?: { stage?: string; stack?: string }) =>
+      (ContainerPlatform as unknown as Pick<ResourceClass<ContainerApplication>, "ref">).ref(
+        id,
+        options,
+      ),
   },
 ) as any;
 
@@ -694,28 +925,17 @@ export declare namespace Container {
      * identifies an async-bindable Container declaration in a Worker's `env`
      * (see `bindWorkerAsyncBindings`).
      */
-    readonly "~alchemy/Container/ClassName":
-      | string
-      | undefined
-      | Effect.Effect<string | undefined>;
+    readonly "~alchemy/Container/ClassName": string | undefined | Effect.Effect<string | undefined>;
     /**
      * The underlying {@link ContainerApplication} resource declaration —
      * `yield*` it to get the application's Output attributes.
      */
-    Application: Effect.Effect<ContainerApplication<Self>, never, Providers>;
+    Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
         | InputProps<EffectfulContainerProps>
-        | Effect.Effect<
-            InputProps<EffectfulContainerProps>,
-            Config.ConfigError,
-            PropsReq
-          >,
-      impl: Effect.Effect<
-        Shape & WorkerShape<WorkerReq>,
-        Config.ConfigError,
-        InitReq
-      >,
+        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+      impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;
   }
@@ -728,17 +948,5 @@ export declare namespace Container {
     "~alchemy/Self": Self;
   }
 
-  export type Instance<Shape = any> = Container &
-    Shape & {
-      getTcpPort: (portNumber: number) => Effect.Effect<{
-        fetch: {
-          (
-            request: HttpClientRequest.HttpClientRequest,
-          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
-          (
-            request: HttpServerRequest.HttpServerRequest,
-          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
-        };
-      }>;
-    };
+  export type Instance<Shape = any> = Container & Shape;
 }

@@ -1,13 +1,14 @@
-import * as AWS from "@/AWS";
-import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
-import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
+import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
+import { InstanceProfile, Role } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -17,17 +18,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // returns an empty list once deletion completes (bounded poll — the provider's
 // delete already waits, this is a cheap final confirmation).
 const assertGroupGone = (name: string) =>
-  autoscaling
-    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
-    .pipe(
-      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
-      Effect.repeat({
-        until: (count) => count === 0,
-        schedule: Schedule.spaced("3 seconds"),
-        times: 10,
-      }),
-      Effect.map((count) => expect(count).toBe(0)),
-    );
+  autoscaling.describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any).pipe(
+    Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+    Effect.repeat({
+      until: (count) => count === 0,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
+    Effect.map((count) => expect(count).toBe(0)),
+  );
 
 const launchTemplateName = "alchemy-test-asg-lt-oob";
 
@@ -84,14 +83,15 @@ test.provider(
       const provider = yield* Provider.findProvider(AutoScalingGroup);
       const all = yield* provider.list();
 
-      expect(
-        all.some((g) => g.autoScalingGroupName === group.autoScalingGroupName),
-      ).toBe(true);
+      expect(all.some((g) => g.autoScalingGroupName === group.autoScalingGroupName)).toBe(true);
 
       yield* stack.destroy();
       yield* assertGroupGone("alchemy-test-asg-list");
     }).pipe(Effect.ensuring(cleanupLaunchTemplate)),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
+    timeout: 240_000,
+  },
 );
 
 // Whole-resource `launchTemplate: template` spelling. The engine resolves the
@@ -157,9 +157,7 @@ test.provider(
       // The group is wired to the template by ID with the version pinned to
       // the template's resolved default version (not "$Default").
       expect(deployed.group.launchTemplateId).toEqual(deployed.templateId);
-      expect(deployed.group.launchTemplateVersion).toEqual(
-        String(deployed.templateDefaultVersion),
-      );
+      expect(deployed.group.launchTemplateVersion).toEqual(String(deployed.templateDefaultVersion));
 
       // Duration.Input props round-trip as whole seconds in the attributes.
       expect(deployed.group.defaultCooldown).toEqual(45);
@@ -171,14 +169,97 @@ test.provider(
         AutoScalingGroupNames: [wholeAsgName],
       } as any);
       const live = described.AutoScalingGroups?.[0];
-      expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(
-        deployed.templateId,
-      );
+      expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(deployed.templateId);
       expect(live?.DefaultCooldown).toEqual(45);
       expect(live?.HealthCheckGracePeriod).toEqual(120);
 
       yield* stack.destroy();
       yield* assertGroupGone(wholeAsgName);
     }).pipe(Effect.ensuring(cleanupWholeAsg)),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
+    timeout: 240_000,
+  },
+);
+
+// An omitted `desiredCapacity` belongs to whoever scales the group (ECS
+// managed scaling, a scaling policy): redeploys must not reset it to
+// `minSize`. The launch template names an instance profile created in the
+// same deploy, which IAM may not have propagated yet (`InvalidIamInstanceProfile`
+// is retried). `Launch` is suspended before scaling out so no instance starts.
+test.provider(
+  "keeps an externally scaled desired capacity across redeploys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const subnetId = yield* getAutoScalingTestSubnetId;
+
+      const program = (maxSize: number) =>
+        Effect.gen(function* () {
+          const role = yield* Role("ScaledGroupRole", {
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: ["sts:AssumeRole"],
+                },
+              ],
+            },
+          });
+          const profile = yield* InstanceProfile("ScaledGroupProfile", {
+            roleName: role.roleName,
+          });
+          const template = yield* LaunchTemplate("ScaledGroupTemplate", {
+            imageId: amazonLinux2023(),
+            instanceType: "t3.micro",
+            instanceProfileName: profile.instanceProfileName,
+          });
+          return yield* AutoScalingGroup("ScaledGroup", {
+            launchTemplate: template,
+            subnetIds: [subnetId],
+            minSize: 0,
+            maxSize,
+          });
+        });
+
+      const describe = (name: string) =>
+        autoscaling
+          .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+          .pipe(Effect.map((r) => r.AutoScalingGroups?.[0]));
+
+      const created = yield* stack.deploy(program(1));
+      const name = created.autoScalingGroupName;
+      expect((yield* describe(name))?.DesiredCapacity).toBe(0);
+
+      // An external scaler raises the desired capacity.
+      yield* autoscaling.suspendProcesses({
+        AutoScalingGroupName: name,
+        ScalingProcesses: ["Launch"],
+      } as any);
+      yield* autoscaling.setDesiredCapacity({
+        AutoScalingGroupName: name,
+        DesiredCapacity: 1,
+      } as any);
+
+      // A redeploy that updates the group leaves the live value alone.
+      yield* stack.deploy(program(2));
+      const live = yield* describe(name);
+      expect(live?.MaxSize).toBe(2);
+      expect(live?.DesiredCapacity).toBe(1);
+
+      yield* stack.destroy();
+      yield* assertGroupGone(name);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:autoscaling",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

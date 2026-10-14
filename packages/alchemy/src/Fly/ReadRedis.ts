@@ -1,7 +1,7 @@
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Redis, RedisCommandError, RedisUrlMissing } from "./Redis.ts";
+import type { ReadClient } from "../Redis/index.ts";
+import type { Redis } from "./Redis.ts";
 
 /**
  * Bind a {@link Redis} database with read access (`get`, `ping`).
@@ -18,6 +18,7 @@ import type { Redis, RedisCommandError, RedisUrlMissing } from "./Redis.ts";
  * ```
  *
  * @binding
+ * @product Redis
  */
 export interface ReadRedis extends Binding.Service<
   ReadRedis,
@@ -27,17 +28,4 @@ export interface ReadRedis extends Binding.Service<
 
 export const ReadRedis = Binding.Service<ReadRedis>("Fly.ReadRedis");
 
-export interface ReadRedisClient {
-  get(
-    key: string,
-  ): Effect.Effect<
-    string | null,
-    RedisCommandError | RedisUrlMissing,
-    RuntimeContext
-  >;
-  ping(): Effect.Effect<
-    string,
-    RedisCommandError | RedisUrlMissing,
-    RuntimeContext
-  >;
-}
+export type ReadRedisClient = ReadClient;

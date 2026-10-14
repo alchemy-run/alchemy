@@ -31,13 +31,8 @@ export interface GetLandingZone extends Binding.Service<
   () => Effect.Effect<
     (
       request: controltower.GetLandingZoneInput,
-    ) => Effect.Effect<
-      controltower.GetLandingZoneOutput,
-      controltower.GetLandingZoneError
-    >
+    ) => Effect.Effect<controltower.GetLandingZoneOutput, controltower.GetLandingZoneError>
   >
 > {}
 
-export const GetLandingZone = Binding.Service<GetLandingZone>(
-  "AWS.ControlTower.GetLandingZone",
-);
+export const GetLandingZone = Binding.Service<GetLandingZone>("AWS.ControlTower.GetLandingZone");

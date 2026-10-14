@@ -33,7 +33,6 @@ export interface GetSensitiveDataOccurrences extends Binding.Service<
     >
   >
 > {}
-export const GetSensitiveDataOccurrences =
-  Binding.Service<GetSensitiveDataOccurrences>(
-    "AWS.Macie2.GetSensitiveDataOccurrences",
-  );
+export const GetSensitiveDataOccurrences = Binding.Service<GetSensitiveDataOccurrences>(
+  "AWS.Macie2.GetSensitiveDataOccurrences",
+);

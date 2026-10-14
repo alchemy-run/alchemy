@@ -34,10 +34,7 @@ export interface RejectPredictions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RejectPredictionsRequest,
-    ) => Effect.Effect<
-      datazone.RejectPredictionsOutput,
-      datazone.RejectPredictionsError
-    >
+    ) => Effect.Effect<datazone.RejectPredictionsOutput, datazone.RejectPredictionsError>
   >
 > {}
 export const RejectPredictions = Binding.Service<RejectPredictions>(

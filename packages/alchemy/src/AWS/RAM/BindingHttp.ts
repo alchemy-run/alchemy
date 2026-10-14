@@ -53,9 +53,7 @@ export const makeRAMHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`AWS.RAM.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.RAM.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

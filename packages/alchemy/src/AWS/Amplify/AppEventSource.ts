@@ -31,8 +31,7 @@ export interface DeploymentStatusChangeDetail {
 }
 
 /** A deployment-status-change EventBridge event delivered to the handler. */
-export type DeploymentStatusChangeEvent =
-  EventRecord<DeploymentStatusChangeDetail>;
+export type DeploymentStatusChangeEvent = EventRecord<DeploymentStatusChangeDetail>;
 
 export interface DeploymentStatusChangeEventSourceProps extends EventRouteProps {
   /**

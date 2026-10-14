@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ObservabilityConfiguration } from "@/AWS/AppRunner";
-import * as Test from "@/Test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ObservabilityConfiguration } from "@/AWS/AppRunner";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,6 +23,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:apprunner", "live"] },
 );
 
 // No ACTIVE revision of the named configuration remains. Unlike auto
@@ -64,33 +65,23 @@ test.provider(
       };
 
       // Create.
-      const created = yield* stack.deploy(
-        ObservabilityConfiguration("Obs", props),
-      );
+      const created = yield* stack.deploy(ObservabilityConfiguration("Obs", props));
       expect(created.observabilityConfigurationName).toBe("alchemy-test-obs");
       expect(created.observabilityConfigurationArn).toContain(
         ":observabilityconfiguration/alchemy-test-obs/",
       );
       expect(created.traceVendor).toBe("AWSXRAY");
-      expect(created.observabilityConfigurationRevision).toBeGreaterThanOrEqual(
-        1,
-      );
+      expect(created.observabilityConfigurationRevision).toBeGreaterThanOrEqual(1);
 
       // Out-of-band verification via distilled.
       const described = yield* apprunner.describeObservabilityConfiguration({
         ObservabilityConfigurationArn: created.observabilityConfigurationArn,
       });
-      expect(described.ObservabilityConfiguration.Status?.toUpperCase()).toBe(
-        "ACTIVE",
-      );
-      expect(
-        described.ObservabilityConfiguration.TraceConfiguration?.Vendor,
-      ).toBe("AWSXRAY");
+      expect(described.ObservabilityConfiguration.Status?.toUpperCase()).toBe("ACTIVE");
+      expect(described.ObservabilityConfiguration.TraceConfiguration?.Vendor).toBe("AWSXRAY");
 
       // No-op redeploy must not create a new revision.
-      const noop = yield* stack.deploy(
-        ObservabilityConfiguration("Obs", props),
-      );
+      const noop = yield* stack.deploy(ObservabilityConfiguration("Obs", props));
       expect(noop.observabilityConfigurationRevision).toBe(
         created.observabilityConfigurationRevision,
       );
@@ -102,14 +93,15 @@ test.provider(
           observabilityConfigurationName: "alchemy-test-obs-b",
         }),
       );
-      expect(replaced.observabilityConfigurationName).toBe(
-        "alchemy-test-obs-b",
-      );
+      expect(replaced.observabilityConfigurationName).toBe("alchemy-test-obs-b");
       yield* assertConfigGone("alchemy-test-obs");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();
       yield* assertConfigGone("alchemy-test-obs-b");
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apprunner", "live"],
+    timeout: 120_000,
+  },
 );

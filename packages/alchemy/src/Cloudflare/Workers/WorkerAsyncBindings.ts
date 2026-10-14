@@ -2,10 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import type { ResourceBinding } from "../../Resource.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import { defaultProviderMode } from "../../ProviderMode.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import {
   Application,
@@ -19,35 +19,44 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
+import {
+  containerApplicationSettings,
+  DurableObjectContainerBindingError,
+  durableObjectContainerBinding,
+  isDurableObjectContainerResource,
+  workerContainerBinding,
+} from "../Containers/ContainerConfiguration.ts";
+import { declareDurableObjectApplication } from "../Containers/DurableObjectApplication.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
-import {
-  getHyperdriveDevOrigin,
-  getHyperdriveRefDevOrigin,
-} from "../Hyperdrive/ConnectBinding.ts";
+import { getHyperdriveDevOriginForHost } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
-import { isHyperdriveRef } from "../Hyperdrive/Ref.ts";
 import { isImages } from "../Images/Images.ts";
+import { isStream as isK2Stream } from "../K2/Stream.ts";
+import { isInstantNamespace } from "../KV/InstantNamespace.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
+import { bindS3Credentials, isS3Credentials, resolveBucket } from "../R2/S3CredentialsBinding.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
 import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
-import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
+import { isWorkflowLike, WorkflowResource, type WorkflowBinding } from "../Workflows/Workflow.ts";
+import { asScriptNameOutput, makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
+  type DurableObjectLike,
   isDurableObjectLike,
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
@@ -60,6 +69,7 @@ import {
   isSelfUrl,
   isWorker,
   type Worker,
+  type WorkerObservability,
   type WorkerProps,
 } from "./Worker.ts";
 import type { WorkerAccessApplication } from "./WorkerAccess.ts";
@@ -71,6 +81,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
+  if (globalThis.__ALCHEMY_RUNTIME__) return;
+
   // Access enrollment (`access` prop): push this Worker's
   // `worker`/`preview_worker` destinations onto the application's binding
   // contract. The application deploys with — and converges on — every
@@ -124,6 +136,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       ],
     });
   }
+  const env: Record<string, unknown> = props.assets
+    ? { ASSETS: { kind: "Cloudflare.Workers.Assets" } }
+    : {};
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error
@@ -136,7 +151,21 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       // resolution below — yielding the Container class would resolve its
       // *started instance* tag, which only exists inside a Durable Object.
       if (isContainerDecl(bindingEff)) {
+        env[bindingName] = bindingEff;
         yield* bindContainerClass(resource, bindingName, bindingEff);
+        continue;
+      }
+      // `Cloudflare.R2.S3Credentials` is also an Effect (its Effect-native
+      // form resolves to a runtime accessor): bind its deploy-time half under
+      // the env key instead of yielding it.
+      if (isS3Credentials(bindingEff)) {
+        env[bindingName] = bindingEff;
+        yield* bindS3Credentials(
+          resource,
+          bindingName,
+          yield* resolveBucket(bindingEff.bucket),
+          bindingEff.access,
+        );
         continue;
       }
       // Bindings can be passed as a plain resource value, an Effect that
@@ -149,6 +178,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           ? yield* bindingEff as Effect.Effect<unknown>
           : bindingEff
       ) as WorkerBindingResource;
+      env[bindingName] = binding;
 
       // Queue producer bindings may need the dev-mode remote-producer shim
       // (a LOCAL worker binding a LIVE queue): `maybeQueueShim` registers
@@ -173,10 +203,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         continue;
       }
 
-      const bindingMeta:
-        | BindingSpec
-        | Output.Output<WorkerBinding>
-        | undefined = toBinding(bindingName, binding);
+      const bindingMeta: BindingSpec | Output.Output<WorkerBinding> | undefined = toBinding(
+        bindingName,
+        binding,
+      );
 
       if (Output.isOutput(bindingMeta)) {
         // A whole-resource Output resolves to the resource's raw attributes;
@@ -202,7 +232,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         if (isWorkflowLike(binding)) {
           const className = binding.className ?? binding.name;
           const scriptName = binding.scriptName ?? resource.workerName;
-          const workflowName = makeWorkflowName(scriptName, className);
+          const workflowName = binding.workflowName ?? makeWorkflowName(scriptName, className);
           resolvedBindingMeta = {
             ...resolvedBindingMeta,
             workflowName,
@@ -210,33 +240,61 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
           // A locally-hosted Workflow (no `scriptName`) must be registered
           // with Cloudflare via `putWorkflow` once the host Worker exists.
-          // Cross-script references are binding-only; both sides derive the
-          // same physical workflow name from the host script and class.
-          if (!binding.scriptName) {
-            yield* WorkflowResource(binding.name, {
-              workflowName,
-              className,
-              scriptName: resource.workerName,
-              limits: binding.limits,
-            });
+          // Cross-script references are binding-only; both sides use the
+          // explicit physical name when supplied, or derive the same default
+          // from the host script and class.
+          const workflow = binding.scriptName
+            ? undefined
+            : yield* WorkflowResource(binding.name, {
+                workflowName: binding.workflowName,
+                className,
+                scriptName: binding.workflowName === undefined ? resource.workerName : undefined,
+                limits: binding.limits,
+                schedules: binding.schedules,
+              });
+          if (workflow) {
+            // Host linkage must not block the named identity's adoption probe.
+            if (binding.workflowName !== undefined) {
+              yield* workflow.bind`${resource}`({
+                scriptName: resource.workerName,
+              });
+            }
+            resolvedBindingMeta = {
+              ...resolvedBindingMeta,
+              workflowName: binding.workflowName ?? workflow.workflowName,
+            };
           }
+
+          // Local outputs depend on registration and preserve deployed identity.
+          env[bindingName] = {
+            kind: binding.kind,
+            name: binding.name,
+            className,
+            workflowName: workflow ? workflow.workflowName : Output.asOutput(workflowName),
+            scriptName: workflow ? workflow.scriptName : asScriptNameOutput(scriptName),
+          } satisfies WorkflowBinding;
         }
+
+        // Durable Object-managed Containers attached to a hosted class. Both
+        // halves describe this env entry, so they share its `sid`.
+        const containers =
+          isDurableObjectLike(binding) && binding.containers?.length
+            ? yield* bindDurableObjectContainers(resource, bindingName, binding)
+            : undefined;
 
         yield* resource.bind`${bindingName}`({
           bindings: [resolvedBindingMeta],
+          containers,
           hyperdrives: isHyperdriveConnection(binding)
-            ? getHyperdriveDevOrigin(binding)
-            : isHyperdriveRef(binding)
-              ? getHyperdriveRefDevOrigin(binding)
-              : undefined,
+            ? yield* getHyperdriveDevOriginForHost(binding, resource)
+            : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
           // worker-only bindings and `SendEmail` descriptors piped through
           // `Alchemy.remote()` carry the internal `devRemote` flag on their
           // binding value; contribute it as binding data so the wire binding
           // stays pure.
           devRemote:
-            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) &&
-            binding.devRemote
+            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote
               ? { [bindingName]: true }
               : undefined,
         });
@@ -247,6 +305,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
     }
+  }
+  if (resource.Props?.isExternal === true) {
+    Object.assign(resource, { env });
   }
 });
 
@@ -269,16 +330,17 @@ export const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
  * Structural check for a yielded {@link ContainerApplication} resource
  * instance (same import-cycle note as above).
  */
-const isContainerApplicationResource = (
-  value: unknown,
-): value is ContainerApplication =>
+const isContainerApplicationResource = (value: unknown): value is ContainerApplication =>
   typeof value === "object" &&
   value !== null &&
   (value as { Type?: unknown }).Type === "Cloudflare.Container";
 
 /**
- * Wire a Container bound directly on an async Worker's `env`
- * (`env: { Sandbox: Cloudflare.Container("Sandbox", { image }) }`). Mirrors
+ * Wire a fleet Container bound directly on an async Worker's `env`
+ * (`env: { Sandbox: Cloudflare.Container("Sandbox", { image }) }`). A
+ * Durable Object-managed Container fails with
+ * {@link DurableObjectContainerBindingError}: it attaches through
+ * `Cloudflare.DurableObject(className, { containers })` instead. Mirrors
  * v1 alchemy, where a Container binding is a Durable Object namespace plus
  * its ContainerApplication in one declaration:
  *
@@ -302,9 +364,8 @@ const bindContainerClass = Effect.fn(function* (
   // the props Effect runs.
   const declaredClassName = decl["~alchemy/Container/ClassName"];
   const className =
-    (Effect.isEffect(declaredClassName)
-      ? yield* declaredClassName
-      : declaredClassName) ?? bindingName;
+    (Effect.isEffect(declaredClassName) ? yield* declaredClassName : declaredClassName) ??
+    bindingName;
   // Resolve the ContainerApplication resource declaration carried on the
   // class. An effectful (`main`) container has no application declaration of
   // its own here (it is created by its `.make()` Layer inside a Durable
@@ -317,6 +378,14 @@ const bindContainerClass = Effect.fn(function* (
   if (!isContainerApplicationResource(application)) {
     return yield* Effect.die(
       `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
+    );
+  }
+  if (isDurableObjectContainerResource(application)) {
+    return yield* Effect.die(
+      new DurableObjectContainerBindingError({
+        bindingName,
+        message: `Worker binding '${bindingName}' is a Durable Object-managed Container ('${application.LogicalId}'). Attach it to the Durable Object class that starts it: env: { ${bindingName}: Cloudflare.DurableObject("${className}", { containers: [${application.LogicalId}] }) }.`,
+      }),
     );
   }
   // Both halves of the Worker's side describe the same env entry, so they
@@ -334,7 +403,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [{ className, dev: application.dev }],
+    containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
@@ -343,6 +412,67 @@ const bindContainerClass = Effect.fn(function* (
       ),
     },
   });
+});
+
+/**
+ * Binding mistakes die with a {@link DurableObjectContainerBindingError}: the
+ * Worker declaration hook cannot fail, and these are programmer errors.
+ *
+ * Attach the Durable Object-managed Containers of
+ * `Cloudflare.DurableObject(className, { containers })` to the class: each
+ * adds its image to the class's one container application (declared once per
+ * class, deduped by id) and returns the Worker's `containers` row for it. The
+ * same machinery as an Effect-native Durable Object's `yield* Container`.
+ */
+const bindDurableObjectContainers = Effect.fn(function* (
+  resource: Worker,
+  bindingName: string,
+  binding: DurableObjectLike,
+) {
+  const className = binding.className ?? binding.name;
+  if (binding.scriptName !== undefined) {
+    return yield* Effect.die(
+      new DurableObjectContainerBindingError({
+        bindingName,
+        message: `Worker binding '${bindingName}' attaches containers to Durable Object class '${className}' hosted by another Worker. Attach containers where the class is hosted.`,
+      }),
+    );
+  }
+  const classApplication = yield* declareDurableObjectApplication(resource, className);
+  const namespaceId = resource.durableObjectNamespaces.pipe(
+    Output.map((namespaces) => namespaces?.[className]),
+  );
+  const rows = [];
+  for (const decl of binding.containers ?? []) {
+    const declaration = (decl as { Application?: unknown }).Application;
+    const application =
+      isYieldableEffectLike(declaration) && !Output.isOutput(declaration)
+        ? yield* declaration as Effect.Effect<unknown>
+        : undefined;
+    if (
+      !isContainerApplicationResource(application) ||
+      !isDurableObjectContainerResource(application)
+    ) {
+      return yield* Effect.die(
+        new DurableObjectContainerBindingError({
+          bindingName,
+          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (image, or context/dockerfile).`,
+        }),
+      );
+    }
+    yield* classApplication.bind`${application.LogicalId}`({
+      durableObjects: { namespaceId },
+      container: {
+        id: application.LogicalId,
+        settings: containerApplicationSettings(application),
+      },
+    });
+    rows.push({
+      ...durableObjectContainerBinding(className, classApplication, application),
+      attachedBy: "binding" as const,
+    });
+  }
+  return rows;
 });
 
 type BindingSpec = InputProps<WorkerBinding>;
@@ -483,6 +613,13 @@ const toBinding = (
       name: bindingName,
       serviceId: binding.serviceId,
     };
+  } else if (isMtlsCertificate(binding)) {
+    // `env.NAME` is a Fetcher whose subrequests present the certificate.
+    return {
+      type: "mtls_certificate",
+      name: bindingName,
+      certificateId: binding.mtlsCertificateId,
+    };
   } else if (isDatabase(binding)) {
     return {
       type: "d1",
@@ -495,12 +632,10 @@ const toBinding = (
       name: bindingName,
       bucketName: binding.bucketName,
       jurisdiction: binding.jurisdiction.pipe(
-        Output.map((jurisdiction) =>
-          jurisdiction === "default" ? undefined : jurisdiction,
-        ),
+        Output.map((jurisdiction) => (jurisdiction === "default" ? undefined : jurisdiction)),
       ),
     };
-  } else if (isKVNamespace(binding)) {
+  } else if (isKVNamespace(binding) || isInstantNamespace(binding)) {
     return {
       type: "kv_namespace",
       name: bindingName,
@@ -548,7 +683,7 @@ const toBinding = (
       name: bindingName,
       namespace: binding.name,
     };
-  } else if (isHyperdriveConnection(binding) || isHyperdriveRef(binding)) {
+  } else if (isHyperdriveConnection(binding)) {
     return {
       type: "hyperdrive",
       name: bindingName,
@@ -558,6 +693,15 @@ const toBinding = (
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
     // Tested BEFORE `isWorker` — the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
+    if (binding.worker === undefined) {
+      // One of this Worker's own named entrypoints: lowered like `Self`.
+      return {
+        type: "self_service",
+        name: bindingName,
+        entrypoint: binding.entrypoint,
+        props: binding.props,
+      };
+    }
     return {
       type: "service",
       name: bindingName,
@@ -621,23 +765,24 @@ const toBinding = (
       name: bindingName,
       pipeline: binding.name,
     };
+  } else if (isK2Stream(binding)) {
+    return {
+      type: "k2",
+      name: bindingName,
+      stream: binding.streamId,
+    };
   } else if (Output.isOutput(binding)) {
-    return Output.map(
-      binding,
-      (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
-        // A `VpcService.lookup(...)` data source resolves to the service's
-        // attributes branded with the resource `Type`; classify it like the
-        // managed resource instead of a plain json env value.
-        isVpcService(value)
-          ? {
-              type: "vpc_service" as const,
-              name: bindingName,
-              serviceId: (value as VpcServiceLookup).serviceId,
-            }
-          : toValueBinding(
-              bindingName,
-              value as Json | Redacted.Redacted<Json>,
-            ),
+    return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
+      // A `VpcService.lookup(...)` data source resolves to the service's
+      // attributes branded with the resource `Type`; classify it like the
+      // managed resource instead of a plain json env value.
+      isVpcService(value)
+        ? {
+            type: "vpc_service" as const,
+            name: bindingName,
+            serviceId: (value as VpcServiceLookup).serviceId,
+          }
+        : toValueBinding(bindingName, value as Json | Redacted.Redacted<Json>),
     );
   } else {
     return {
@@ -648,18 +793,15 @@ const toBinding = (
   }
 };
 
-export const getCronBindings = (
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-) => Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+export const getCronBindings = (bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>) =>
+  Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
 
 /**
  * Merge the Workers Cache settings contributed by `yield* Cloudflare.cache()`
  * bindings. Commutative: the cache is enabled (and cross-version) if any
  * contributor asked for it.
  */
-export const getCacheBinding = (
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-) => {
+export const getCacheBinding = (bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>) => {
   const configs = bindings.flatMap((b) => (b.data.cache ? [b.data.cache] : []));
   if (configs.length === 0) {
     return undefined;
@@ -668,4 +810,31 @@ export const getCacheBinding = (
     enabled: configs.some((c) => c.enabled),
     crossVersionCache: configs.some((c) => c.crossVersionCache) || undefined,
   };
+};
+
+const DEFAULT_OBSERVABILITY: WorkerObservability = {
+  enabled: true,
+  logs: {
+    enabled: true,
+    invocationLogs: true,
+  },
+};
+
+/**
+ * Resolve the observability metadata to upload. An explicit
+ * `news.observability.traces` wins; otherwise the traces contributed by
+ * `Cloudflare.Telemetry()` (a single binding row — rows are collapsed by
+ * sid) fill in without clobbering the logs config. A cache-style `??` on
+ * the whole object would drop the default `logs.invocationLogs`.
+ */
+export const resolveObservability = (
+  news: Pick<WorkerProps, "observability">,
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+): WorkerObservability => {
+  const observability = news.observability ?? DEFAULT_OBSERVABILITY;
+  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data.observability
+    ?.traces;
+  return observability.traces != null || bound == null
+    ? observability
+    : { ...observability, traces: bound };
 };

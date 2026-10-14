@@ -10,9 +10,6 @@ export const RemoveEndpointsHttp = Layer.effect(
     operation: ga.removeEndpoints,
     // Like AddEndpoints, Global Accelerator authorizes endpoint removal as
     // an update to the endpoint group, so both actions are required.
-    actions: [
-      "globalaccelerator:RemoveEndpoints",
-      "globalaccelerator:UpdateEndpointGroup",
-    ],
+    actions: ["globalaccelerator:RemoveEndpoints", "globalaccelerator:UpdateEndpointGroup"],
   }),
 );

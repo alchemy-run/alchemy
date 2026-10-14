@@ -3,34 +3,103 @@ import * as Option from "effect/Option";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
-import { serveRpc, type Rpc } from "../../Rpc.ts";
-import {
-  packEnvValueKeepRedacted,
-  unpackEnvValue,
-} from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
-import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
+import { serveRpc } from "../../Rpc.ts";
+import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
+import type { ProcessContext } from "../../Server/Process.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import { ContainerTypeId } from "./Container.ts";
+import { ContainerTypeId, type Container } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
+import {
+  containerApplicationSettings,
+  durableObjectContainerBinding,
+  isDurableObjectContainerResource,
+  workerContainerBinding,
+} from "./ContainerConfiguration.ts";
+import { declareDurableObjectApplication } from "./DurableObjectApplication.ts";
+
+const toHttpUrl = (url: string) =>
+  url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
+
+/**
+ * workerd container ports reject TLS outright ("Connecting to a container
+ * using HTTPS is not currently supported") — but the common proxy pattern
+ * forwards the incoming Worker request, whose production URL is `https://`,
+ * straight to the port. The hop into the container is already secure, so
+ * downgrade the scheme before forwarding, exactly like Cloudflare's own
+ * `@cloudflare/containers` `containerFetch` does
+ * (`request.url.replace("https:", "http:")`).
+ */
+export const httpSchemePort = <
+  P extends {
+    fetch: (...args: any[]) => any;
+    connect: (...args: any[]) => any;
+  },
+>(
+  port: P,
+): P =>
+  ({
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      input instanceof Request
+        ? port.fetch(toHttpUrl(input.url), input)
+        : port.fetch(toHttpUrl(String(input)), init),
+    connect: (address: any, options?: any) => port.connect(address, options),
+  }) as any as P;
+
+const bindContainer = Effect.fn(function* <Shape, Req = never>(
+  containerEff:
+    | ContainerApplication<Shape>
+    | Effect.Effect<ContainerApplication<Shape>, never, Req>,
+) {
+  const namespace = yield* DurableObject;
+  const worker = yield* Worker;
+
+  const container = Effect.isEffect(containerEff) ? yield* containerEff : containerEff;
+
+  if (isDurableObjectContainerResource(container)) {
+    // The class has one container application. Every Container bound to it
+    // declares the same resource (deduped by id), attaches it to the
+    // namespace, and adds its application-wide settings; the Worker merges
+    // each Container's image into the class's `containers` entry.
+    const application = yield* declareDurableObjectApplication(worker, namespace.name);
+    yield* application.bind`${container.LogicalId}`({
+      durableObjects: { namespaceId: namespace.namespaceId },
+      container: {
+        id: container.LogicalId,
+        settings: containerApplicationSettings(container),
+      },
+    });
+    yield* worker.bind`${namespace.name}:${container.LogicalId}`({
+      containers: [durableObjectContainerBinding(namespace.name, application, container)],
+    });
+    return;
+  }
+
+  yield* container.bind`${namespace}`({
+    durableObjects: {
+      namespaceId: namespace.namespaceId,
+    },
+  });
+
+  yield* worker.bind`${container.LogicalId}`({
+    containers: [workerContainerBinding(namespace.name, container)],
+  });
+});
 
 export const ContainerPlatform: Platform<
   ContainerApplication,
   ContainerServices,
   ContainerShape,
-  Server.ProcessContext,
+  ProcessContext,
   Container
-> = Platform(
+> & { bind: typeof bindContainer } = Platform(
   "Cloudflare.Container",
   {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
+    createRuntimeContext: (id: string): ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
 
@@ -45,9 +114,7 @@ export const ContainerPlatform: Platform<
           // dispatched to the matching shape method, everything else falls
           // through to the user's `fetch` handler. The DO side talks to this
           // via `makeFetchRpcStub` over the container's TCP port.
-          const finalHandler = options?.shape
-            ? serveRpc(options.shape, handler)
-            : handler;
+          const finalHandler = options?.shape ? serveRpc(options.shape, handler) : handler;
           runners.push(
             Effect.gen(function* () {
               const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
@@ -83,12 +150,12 @@ export const ContainerPlatform: Platform<
           }),
         get: <T>(key: string) =>
           // Read straight from `process.env` — see `unpackEnvValue` for why
-          // this must never resolve through `Config.string`.
+          // this must never resolve through `Config.String`.
           Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
+          })) as unknown as ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
           default: Effect.all(
@@ -108,75 +175,10 @@ export const ContainerPlatform: Platform<
             },
           ),
         })),
-      } as Server.ProcessContext;
+      } as ProcessContext;
     },
   },
   {
-    bind: Effect.fn(function* <Shape, Req = never>(
-      containerEff:
-        | (ContainerApplication & Rpc<Shape>)
-        | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
-    ) {
-      const namespace = yield* DurableObject;
-
-      const container = Effect.isEffect(containerEff)
-        ? yield* containerEff as unknown as Effect.Effect<
-            ContainerApplication & Rpc<Shape>
-          >
-        : containerEff;
-
-      yield* container.bind`${namespace}`({
-        durableObjects: {
-          namespaceId: namespace.namespaceId,
-        },
-      });
-
-      const worker = yield* Worker;
-      const className = namespace.name;
-
-      yield* worker.bind`${container.LogicalId}`({
-        containers: [{ className, dev: container.dev }],
-      });
-
-      // TODO(sam): register this in the Container Execution Context
-      // const _httpEffect = yield* init;
-      return Effect.gen(function* () {
-        const state = yield* DurableObjectState;
-        return {
-          id: container.LogicalId,
-          running: Effect.sync(() => state.container!.running ?? false),
-          destroy: (error?: any) =>
-            Effect.promise(() => state.container!.destroy(error)),
-          signal: (signo: number) =>
-            Effect.sync(() => state.container!.signal(signo)),
-          getTcpPort: (port: number) =>
-            Effect.sync(() =>
-              fromCloudflareFetcher(state.container!.getTcpPort(port)),
-            ),
-          setInactivityTimeout: (durationMs: number | bigint) =>
-            Effect.promise(() =>
-              state.container!.setInactivityTimeout(durationMs),
-            ),
-          interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptOutboundHttp(addr, binding),
-              ),
-            ),
-          interceptAllOutboundHttp: (binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptAllOutboundHttp(binding),
-              ),
-            ),
-          monitor: () =>
-            Effect.promise(
-              () => state.container?.monitor() ?? Promise.resolve(),
-            ),
-          start: (options?: ContainerStartupOptions) =>
-            Effect.sync(() => state.container!.start(options)),
-        } as unknown;
-      });
-    }),
+    bind: bindContainer,
   },
 );

@@ -2,14 +2,12 @@
 
 Deploys a SvelteKit app to AWS with `AWS.Website.SvelteKit` — no `svelte.config.js` adapter, no CDK.
 
-The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-free in-memory AWS adapter, deploys the server output on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `server.environment` are exposed to server routes through `process.env`.
+The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-free in-memory AWS adapter, deploys the server output on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `env` are exposed to server routes through `process.env`.
 
 ```ts
 const site = yield* AWS.Website.SvelteKit("SvelteKitSite", {
-  server: {
-    environment: {
-      GREETING: "Hello from alchemy",
-    },
+  env: {
+    GREETING: "Hello from SvelteKit on AWS!",
   },
 });
 ```

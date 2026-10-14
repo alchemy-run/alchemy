@@ -200,8 +200,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
           // For a single, unweighted target group, AWS also accepts the legacy
           // top-level TargetGroupArn; sending only ForwardConfig is canonical.
           TargetGroupArn:
-            action.targetGroups.length === 1 &&
-            action.targetGroups[0].weight === undefined
+            action.targetGroups.length === 1 && action.targetGroups[0].weight === undefined
               ? resolveTargetGroupArn(action.targetGroups[0].targetGroupArn)
               : undefined,
         };
@@ -294,9 +293,7 @@ export interface ListenerRuleCondition {
  * Serialize a list of {@link ListenerRuleCondition} into the wire
  * `RuleCondition[]` shape AWS expects.
  */
-export const serializeConditions = (
-  conditions: ListenerRuleCondition[],
-): elbv2.RuleCondition[] =>
+export const serializeConditions = (conditions: ListenerRuleCondition[]): elbv2.RuleCondition[] =>
   conditions.flatMap((condition): elbv2.RuleCondition[] => {
     const out: elbv2.RuleCondition[] = [];
     if (condition.hostHeader) {

@@ -18,6 +18,23 @@ export const alchemyMetadataKeys = {
   id: "alchemy.id",
   type: "alchemy.type",
   replica: "alchemy.replica",
+  instance: "alchemy.instance",
+  fqn: "alchemy.fqn",
+  baseName: "alchemy.base-name",
+  generation: "alchemy.generation",
+  workload: "alchemy.workload",
+  sequence: "alchemy.sequence",
+  count: "alchemy.count",
+  image: "alchemy.image",
+  containerImageSet: "alchemy.container-image-set",
+  phase: "alchemy.phase",
+  protocol: "alchemy.deployment-protocol",
+  roles: "alchemy.readiness-roles",
+  role: "alchemy.readiness-role",
+  predecessors: "alchemy.predecessors",
+  restored: "alchemy.idle-policy-restored",
+  checkedInstance: "alchemy.checked-instance",
+  secretsVersion: "alchemy.min-secrets-version",
 } as const;
 
 export type FlyAlchemyType = "Fly.Machine" | "Fly.Service";
@@ -37,21 +54,13 @@ export const toTagKeyFromMetadata = (metadataKey: string): string =>
 export const toMachineMetadata = (
   tags: Record<string, string> | null | undefined,
 ): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags ?? {}).map(([key, value]) => [
-      toMetadataKey(key),
-      value,
-    ]),
-  );
+  Object.fromEntries(Object.entries(tags ?? {}).map(([key, value]) => [toMetadataKey(key), value]));
 
 export const fromMachineMetadata = (
   metadata: Record<string, string> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(metadata ?? {}).map(([key, value]) => [
-      toTagKeyFromMetadata(key),
-      value,
-    ]),
+    Object.entries(metadata ?? {}).map(([key, value]) => [toTagKeyFromMetadata(key), value]),
   );
 
 export const createInternalMetadata = Effect.fn(function* (id: string) {
@@ -61,10 +70,7 @@ export const createInternalMetadata = Effect.fn(function* (id: string) {
 /**
  * Stamp alchemy ownership plus `alchemy.type` onto Machine config.metadata.
  */
-export const createMachineMetadata = Effect.fn(function* (
-  id: string,
-  type: FlyAlchemyType,
-) {
+export const createMachineMetadata = Effect.fn(function* (id: string, type: FlyAlchemyType) {
   return {
     ...(yield* createInternalMetadata(id)),
     [alchemyMetadataKeys.type]: type,
@@ -75,15 +81,10 @@ export const stripInternalMetadata = (
   metadata: Record<string, string> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(metadata ?? {}).filter(
-      ([key]) => !key.startsWith(ALCHEMY_METADATA_PREFIX),
-    ),
+    Object.entries(metadata ?? {}).filter(([key]) => !key.startsWith(ALCHEMY_METADATA_PREFIX)),
   );
 
-export const hasAlchemyMetadata = Effect.fn(function* (
-  id: string,
-  metadata: Tags | undefined,
-) {
+export const hasAlchemyMetadata = Effect.fn(function* (id: string, metadata: Tags | undefined) {
   const expected = yield* createInternalMetadata(id);
   return hasTags(expected, metadata);
 });
@@ -151,8 +152,7 @@ export const sanitizeFlyAppName = (name: string): string => {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const clipped =
-    lowered.length > 30 ? lowered.slice(0, 30).replace(/-+$/g, "") : lowered;
+  const clipped = lowered.length > 30 ? lowered.slice(0, 30).replace(/-+$/g, "") : lowered;
   const raw = clipped.length === 0 ? "f" : clipped;
   return /^[a-z]/.test(raw) ? raw : `f${raw}`.slice(0, 30);
 };
@@ -167,8 +167,7 @@ export const sanitizeFlyVolumeName = (name: string): string => {
     .replace(/[^a-z0-9_]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
-  const clipped =
-    lowered.length > 30 ? lowered.slice(0, 30).replace(/_+$/g, "") : lowered;
+  const clipped = lowered.length > 30 ? lowered.slice(0, 30).replace(/_+$/g, "") : lowered;
   const raw = clipped.length === 0 ? "f" : clipped;
   return /^[a-z]/.test(raw) ? raw : `f${raw}`.slice(0, 30);
 };
@@ -181,21 +180,14 @@ export const sanitizeFlyVolumeName = (name: string): string => {
  * an 8–16 char RFC4648 base32 instance suffix. Truncated 30-char names
  * keep that suffix (the human prefix is what gets cut).
  */
-export const matchesAlchemyPhysicalName = (
-  name: string | undefined,
-): boolean => {
+export const matchesAlchemyPhysicalName = (name: string | undefined): boolean => {
   if (name === undefined || name.length === 0 || name.length > 30) {
     return false;
   }
   if (!/^[a-z][a-z0-9_-]*$/.test(name)) return false;
   const parts = name.split(/[-_]/);
   const last = parts.at(-1) ?? "";
-  if (
-    parts.length >= 2 &&
-    last.length >= 8 &&
-    last.length <= 16 &&
-    /^[a-z2-7]+$/.test(last)
-  ) {
+  if (parts.length >= 2 && last.length >= 8 && last.length <= 16 && /^[a-z2-7]+$/.test(last)) {
     return true;
   }
   const compact = name.replaceAll("-", "").replaceAll("_", "");

@@ -1,17 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // DLP is a paid Zero Trust add-on. On the standard testing account
 // `POST /accounts/{id}/dlp/profiles/custom` fails with HTTP 403 code
@@ -55,7 +52,10 @@ test.provider.skipIf(entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:dlp", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!entitled)(
@@ -132,5 +132,8 @@ test.provider.skipIf(!entitled)(
         .pipe(Effect.flip);
       expect(gone._tag).toEqual("DlpProfileNotFound");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:dlp", "live"],
+    timeout: 90_000,
+  },
 );

@@ -35,7 +35,6 @@ export interface ListWorkflowStepExecutions extends Binding.Service<
     >
   >
 > {}
-export const ListWorkflowStepExecutions =
-  Binding.Service<ListWorkflowStepExecutions>(
-    "AWS.ImageBuilder.ListWorkflowStepExecutions",
-  );
+export const ListWorkflowStepExecutions = Binding.Service<ListWorkflowStepExecutions>(
+  "AWS.ImageBuilder.ListWorkflowStepExecutions",
+);

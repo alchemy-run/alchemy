@@ -43,7 +43,6 @@ export interface InvokeWithResponseStream extends Binding.Service<
     >
   >
 > {}
-export const InvokeWithResponseStream =
-  Binding.Service<InvokeWithResponseStream>(
-    "AWS.Lambda.InvokeWithResponseStream",
-  );
+export const InvokeWithResponseStream = Binding.Service<InvokeWithResponseStream>(
+  "AWS.Lambda.InvokeWithResponseStream",
+);

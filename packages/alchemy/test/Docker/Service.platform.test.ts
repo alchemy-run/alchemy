@@ -1,9 +1,12 @@
-import * as Docker from "@/Docker";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Docker from "@/Docker";
+import * as Test from "@/Test/Alchemy";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
@@ -32,6 +35,22 @@ test.provider(
       // The bundled image is content-addressed: <physical-name>:<hash>.
       expect(service.code?.hash).toBeTruthy();
       expect(service.image).toContain(service.code!.hash);
+
+      // The engine hands the resource's identity to the bundler, which writes
+      // the bundle to the resource's own directory under `.alchemy` (and not
+      // to a stray `dist/` in the package that contains `main`).
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dotAlchemy } = yield* AlchemyContext;
+      const bundled = yield* fs.readFileString(
+        path.join(
+          dotAlchemy,
+          "bundles",
+          `${stack.name}-${stack.stage}-DockerPlatformService`,
+          "index.mjs",
+        ),
+      );
+      expect(bundled).toContain("/ticks");
       expect(service.ports).toEqual([
         {
           external: SERVICE_EXTERNAL_PORT,
@@ -88,9 +107,7 @@ test.provider(
       const docker = yield* Docker.Docker;
       const gone = yield* docker.service.inspect(service.id).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(gone).toBe(true);
 
@@ -98,11 +115,12 @@ test.provider(
       // cleaned up with the service.
       const imageGone = yield* docker.image.inspect(imageRef).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(imageGone).toBe(true);
     }),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:docker", "provider:docker:service", "local"],
+    timeout: 420_000,
+  },
 );

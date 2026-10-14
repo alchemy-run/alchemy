@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as s3files from "@distilled.cloud/aws/s3files";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,7 +23,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:s3files", "live"], timeout: 60_000 },
 );
 
 // Ungated reachability probe: the account can enumerate file systems in the
@@ -35,7 +35,7 @@ test.provider(
       const listed = yield* s3files.listFileSystems({ maxResults: 5 });
       expect(Array.isArray(listed.fileSystems)).toBe(true);
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:s3files", "live"], timeout: 60_000 },
 );
 
 // S3 Files runs on EFS infrastructure — the file system role is assumed by
@@ -108,9 +108,7 @@ test.provider(
                       "events:PutTargets",
                       "events:RemoveTargets",
                     ],
-                    Resource: [
-                      "arn:aws:events:*:*:rule/DO-NOT-DELETE-S3-Files*",
-                    ],
+                    Resource: ["arn:aws:events:*:*:rule/DO-NOT-DELETE-S3-Files*"],
                   },
                   {
                     Effect: "Allow",
@@ -150,9 +148,7 @@ test.provider(
       expect(created.fileSystem.fileSystemId).toContain("fs-");
       expect(created.fileSystem.fileSystemArn).toContain(":file-system/");
       expect(created.fileSystem.status).toBe("available");
-      expect(created.accessPoint.fileSystemId).toBe(
-        created.fileSystem.fileSystemId,
-      );
+      expect(created.accessPoint.fileSystemId).toBe(created.fileSystem.fileSystemId);
       expect(created.accessPoint.status).toBe("available");
 
       // Out-of-band verification via distilled.
@@ -173,10 +169,11 @@ test.provider(
 
       // Destroy and verify the file system is gone out-of-band.
       yield* stack.destroy();
-      const gone = yield* waitUntilFileSystemGone(
-        created.fileSystem.fileSystemId,
-      );
+      const gone = yield* waitUntilFileSystemGone(created.fileSystem.fileSystemId);
       expect(gone).toBe(true);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "provider:aws:s3files", "live"],
+    timeout: 600_000,
+  },
 );

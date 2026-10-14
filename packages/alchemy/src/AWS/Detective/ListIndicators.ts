@@ -32,12 +32,7 @@ export interface ListIndicators extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.ListIndicatorsRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.ListIndicatorsResponse,
-      detective.ListIndicatorsError
-    >
+    ) => Effect.Effect<detective.ListIndicatorsResponse, detective.ListIndicatorsError>
   >
 > {}
-export const ListIndicators = Binding.Service<ListIndicators>(
-  "AWS.Detective.ListIndicators",
-);
+export const ListIndicators = Binding.Service<ListIndicators>("AWS.Detective.ListIndicators");

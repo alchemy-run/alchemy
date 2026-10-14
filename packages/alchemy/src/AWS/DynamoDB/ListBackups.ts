@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface ListBackupsRequest extends Omit<
-  DynamoDB.ListBackupsInput,
-  "TableName"
-> {}
+export interface ListBackupsRequest extends Omit<DynamoDB.ListBackupsInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:ListBackups`.
@@ -37,6 +34,4 @@ export interface ListBackups extends Binding.Service<
     ) => Effect.Effect<DynamoDB.ListBackupsOutput, DynamoDB.ListBackupsError>
   >
 > {}
-export const ListBackups = Binding.Service<ListBackups>(
-  "AWS.DynamoDB.ListBackups",
-);
+export const ListBackups = Binding.Service<ListBackups>("AWS.DynamoDB.ListBackups");

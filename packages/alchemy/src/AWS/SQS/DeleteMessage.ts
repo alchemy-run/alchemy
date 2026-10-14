@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface DeleteMessageRequest extends Omit<
-  sqs.DeleteMessageRequest,
-  "QueueUrl"
-> {}
+export interface DeleteMessageRequest extends Omit<sqs.DeleteMessageRequest, "QueueUrl"> {}
 
 /**
  * Runtime binding for `sqs:DeleteMessage`.
@@ -43,6 +40,4 @@ export interface DeleteMessage extends Binding.Service<
   >
 > {}
 
-export const DeleteMessage = Binding.Service<DeleteMessage>(
-  "AWS.SQS.DeleteMessage",
-);
+export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.SQS.DeleteMessage");

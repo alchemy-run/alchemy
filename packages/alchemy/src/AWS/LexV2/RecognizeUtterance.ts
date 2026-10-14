@@ -46,10 +46,7 @@ export interface RecognizeUtterance extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RecognizeUtteranceRequest,
-    ) => Effect.Effect<
-      lexr.RecognizeUtteranceResponse,
-      lexr.RecognizeUtteranceError
-    >
+    ) => Effect.Effect<lexr.RecognizeUtteranceResponse, lexr.RecognizeUtteranceError>
   >
 > {}
 

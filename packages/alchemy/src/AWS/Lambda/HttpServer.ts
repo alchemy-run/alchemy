@@ -7,43 +7,45 @@ import type {
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
+import * as HttpMiddleware from "effect/http/HttpMiddleware";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
+import { withInvocationDeadline } from "./InvocationDeadline.ts";
 
-export const isFunctionURLEvent = (
-  event: any,
-): event is LambdaFunctionURLEvent => {
-  return event.requestContext?.http?.method !== undefined;
-};
+export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
+  event.requestContext?.http?.method !== undefined;
 
 /**
  * REST API (v1) AWS_PROXY events have a top-level `httpMethod` and a
  * `requestContext.resourcePath` field. They lack the `requestContext.http.*`
  * shape of Function URL / HTTP API (v2) events.
  */
-export const isApiGatewayProxyEvent = (
-  event: any,
-): event is APIGatewayProxyEvent => {
-  return (
-    typeof event?.httpMethod === "string" &&
-    event?.requestContext?.resourcePath !== undefined
-  );
-};
+export const isApiGatewayProxyEvent = (event: any): event is APIGatewayProxyEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.resourcePath !== undefined;
 
 /**
  * Application Load Balancer target events carry a `requestContext.elb` marker
  * (the target group ARN) and a top-level `httpMethod` + `path`.
  */
-export const isAlbEvent = (event: any): event is ALBEvent => {
-  return (
-    typeof event?.httpMethod === "string" &&
-    event?.requestContext?.elb !== undefined
-  );
-};
+export const isAlbEvent = (event: any): event is ALBEvent =>
+  typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
+
+// `HttpMiddleware.tracer` records the request on the `http.server` span only
+// when the request finishes. A span the deadline flush ends early would ship
+// without it, so record the method and path up front.
+const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const span = yield* Effect.option(Effect.currentSpan);
+    if (Option.isSome(span)) {
+      span.value.attribute("http.request.method", request.method);
+      span.value.attribute("url.path", new URL(request.url, "http://localhost").pathname);
+    }
+    return yield* self;
+  });
 
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `HttpMiddleware.tracer` creates the `http.server` root span per request
@@ -51,17 +53,25 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // fetch path. With the default no-op tracer this is free; with a telemetry
   // exporter installed the span is exported when the invocation scope
   // flushes.
-  const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
+  //
+  // The invocation deadline flush sits INSIDE the span so it can find the
+  // `http.server` root span in context and end it — with
+  // `InvocationTimeoutError` as its status — before draining the exporters.
+  // The dispatcher's outer guard stands down when this one takes the
+  // deadline; see `withInvocationDeadline`.
+  const safeHandler = handler.pipe(
+    Http.safeHttpEffect,
+    withInvocationDeadline,
+    annotateRequestSpan,
+    HttpMiddleware.tracer,
+  );
   return (
     event: any,
   ):
     | Effect.Effect<
         ALBResult | APIGatewayProxyResult | LambdaFunctionURLResult,
         never,
-        Exclude<
-          Effect.Services<typeof handler>,
-          HttpServerRequest.HttpServerRequest | Scope
-        >
+        Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >
     | undefined => {
     if (isFunctionURLEvent(event)) {
@@ -70,16 +80,14 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toLambdaFunctionURLResult),
       ) as Effect.Effect<
         LambdaFunctionURLResult,
         never,
-        Exclude<
-          Effect.Services<typeof handler>,
-          HttpServerRequest.HttpServerRequest | Scope
-        >
+        Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
     if (isAlbEvent(event)) {
@@ -87,6 +95,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
@@ -97,38 +106,29 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       ) as Effect.Effect<
         ALBResult,
         never,
-        Exclude<
-          Effect.Services<typeof handler>,
-          HttpServerRequest.HttpServerRequest | Scope
-        >
+        Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
     if (isApiGatewayProxyEvent(event)) {
       const webRequest = apiGatewayProxyEventToWebRequest(event);
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
-        remoteAddress: Option.fromNullishOr(
-          event.requestContext?.identity?.sourceIp,
-        ),
+        remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         APIGatewayProxyResult,
         never,
-        Exclude<
-          Effect.Services<typeof handler>,
-          HttpServerRequest.HttpServerRequest | Scope
-        >
+        Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
   };
 };
 
-const functionUrlEventToWebRequest = (
-  event: LambdaFunctionURLEvent,
-): Request => {
+const functionUrlEventToWebRequest = (event: LambdaFunctionURLEvent): Request => {
   // `requestContext.http.protocol` is the HTTP version ("HTTP/1.1"), never a
   // URL scheme — without `x-forwarded-proto` (real Function URLs always set
   // it; local emulators may not) fall back to https.
@@ -180,10 +180,7 @@ const albEventToWebRequest = (event: ALBEvent): Request => {
     }
   }
 
-  const protocol =
-    headers.get("x-forwarded-proto") ??
-    headers.get("X-Forwarded-Proto") ??
-    "http";
+  const protocol = headers.get("x-forwarded-proto") ?? headers.get("X-Forwarded-Proto") ?? "http";
   const host = headers.get("host") ?? headers.get("Host") ?? "alb";
 
   // Unlike API Gateway, ALB does NOT URL-decode the path or query-string
@@ -191,9 +188,7 @@ const albEventToWebRequest = (event: ALBEvent): Request => {
   // (re-encoding would double-encode).
   const queryParts: string[] = [];
   if (event.multiValueQueryStringParameters) {
-    for (const [k, vs] of Object.entries(
-      event.multiValueQueryStringParameters,
-    )) {
+    for (const [k, vs] of Object.entries(event.multiValueQueryStringParameters)) {
       if (!vs) continue;
       for (const v of vs) {
         queryParts.push(`${k}=${v ?? ""}`);
@@ -224,9 +219,7 @@ const albEventToWebRequest = (event: ALBEvent): Request => {
   });
 };
 
-const apiGatewayProxyEventToWebRequest = (
-  event: APIGatewayProxyEvent,
-): Request => {
+const apiGatewayProxyEventToWebRequest = (event: APIGatewayProxyEvent): Request => {
   const headers = new Headers();
   if (event.multiValueHeaders) {
     for (const [key, values] of Object.entries(event.multiValueHeaders)) {
@@ -246,15 +239,9 @@ const apiGatewayProxyEventToWebRequest = (
     }
   }
 
-  const protocol =
-    headers.get("x-forwarded-proto") ??
-    headers.get("X-Forwarded-Proto") ??
-    "https";
+  const protocol = headers.get("x-forwarded-proto") ?? headers.get("X-Forwarded-Proto") ?? "https";
   const host =
-    headers.get("host") ??
-    headers.get("Host") ??
-    event.requestContext.domainName ??
-    "lambda";
+    headers.get("host") ?? headers.get("Host") ?? event.requestContext.domainName ?? "lambda";
   const stage = event.requestContext.stage;
   // API Gateway prefixes paths with the stage when invoked via the default
   // execute-api endpoint; `event.path` already contains that. Use it as-is.
@@ -262,14 +249,10 @@ const apiGatewayProxyEventToWebRequest = (
 
   const queryParts: string[] = [];
   if (event.multiValueQueryStringParameters) {
-    for (const [k, vs] of Object.entries(
-      event.multiValueQueryStringParameters,
-    )) {
+    for (const [k, vs] of Object.entries(event.multiValueQueryStringParameters)) {
       if (!vs) continue;
       for (const v of vs) {
-        queryParts.push(
-          `${encodeURIComponent(k)}=${encodeURIComponent(v ?? "")}`,
-        );
+        queryParts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v ?? "")}`);
       }
     }
   } else if (event.queryStringParameters) {
@@ -308,8 +291,7 @@ const toLambdaFunctionURLResult = (
     const context = yield* Effect.context();
     const webResponse = HttpServerResponse.toWeb(response, { context });
     const headers = new Headers(webResponse.headers);
-    const cookies =
-      typeof headers.getSetCookie === "function" ? headers.getSetCookie() : [];
+    const cookies = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : [];
 
     headers.delete("set-cookie");
 
@@ -321,9 +303,7 @@ const toLambdaFunctionURLResult = (
       };
     }
 
-    const bytes = new Uint8Array(
-      yield* Effect.promise(() => webResponse.arrayBuffer()),
-    );
+    const bytes = new Uint8Array(yield* Effect.promise(() => webResponse.arrayBuffer()));
     const isTextual = isTextualContentType(headers.get("content-type"));
     const body =
       bytes.length === 0
@@ -369,9 +349,7 @@ const toApiGatewayProxyResult = (
       };
     }
 
-    const bytes = new Uint8Array(
-      yield* Effect.promise(() => webResponse.arrayBuffer()),
-    );
+    const bytes = new Uint8Array(yield* Effect.promise(() => webResponse.arrayBuffer()));
     const isTextual = isTextualContentType(headers.get("content-type"));
     const isBase64 = bytes.length > 0 && !isTextual;
     const body =

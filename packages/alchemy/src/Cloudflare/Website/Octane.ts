@@ -19,9 +19,7 @@ import {
  */
 const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
-export interface OctaneProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -56,21 +54,23 @@ export interface OctaneProps<
  * A Cloudflare Worker deployed from an [OctaneJS](https://octanejs.dev)
  * fullstack project.
  *
- * Octane wraps Vite, so `Octane` is deliberately thin: it drives the
- * project's own `vite build` — `@octanejs/vite-plugin` (from the app's
- * `vite.config.ts`) builds the client bundle and the SSR server bundle, and
- * the app's `adapter: cloudflare()` (from `@octanejs/adapter-cloudflare`,
- * selected in `octane.config.ts`) emits the module Worker entry at
- * `dist/server/worker.js`. That entry deploys as the Worker script and
- * `dist/client` deploys as static assets — no Wrangler configuration and
- * no build command required.
+ * Alchemy preserves Octane's native compiler and client build, builds the
+ * server for Workers, and generates the Worker entry. By default,
+ * `dist/server/worker.js` deploys as the Worker script and `dist/client`
+ * deploys as static assets; custom Octane `build.outDir` values are also
+ * supported. No hosting adapter, Wrangler configuration, or separate build
+ * command is required.
  *
- * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
- * your project; the integration is loaded from its `/octane` export. The
- * project also needs `octane`, `@octanejs/vite-plugin`, and
- * `@octanejs/adapter-cloudflare`. Input files are content-hashed
- * (respecting `.gitignore` by default) so unchanged projects skip the
- * build and deploy entirely.
+ * Requires `@alchemy.run/frontend-frameworks` alongside `octane` and
+ * `@octanejs/vite-plugin` in your project. Keep the native `octane()` plugin,
+ * Tailwind, and other Vite plugins in `vite.config.ts`, and application
+ * routes and callbacks in `octane.config.ts`. These files load without
+ * being rewritten. Existing `adapter: cloudflare()` declarations from
+ * `@octanejs/adapter-cloudflare` remain supported but are optional; adapters
+ * for other hosting targets are rejected.
+ *
+ * Input files are content-hashed (respecting `.gitignore` by default) so
+ * unchanged projects skip the build and deploy entirely.
  *
  * Octane's server runtime needs synchronous SHA-256 and
  * `AsyncLocalStorage`, so the `nodejs_compat` compatibility flag (enabled
@@ -84,16 +84,14 @@ export interface OctaneProps<
  *
  * ### Deploying an Octane App
  * A single call builds and deploys the app — server-rendered routes,
- * server (API) routes, and client assets included. The app's own
- * `octane.config.ts` must select the Cloudflare adapter:
+ * server (API) routes, and client assets included. Define the app's routes
+ * in `octane.config.ts`; `Cloudflare.Website.Octane` selects the Worker build:
  *
  * **Example:** octane.config.ts
  * ```typescript
- * import { cloudflare } from "@octanejs/adapter-cloudflare";
  * import { defineConfig, RenderRoute } from "@octanejs/vite-plugin";
  *
  * export default defineConfig({
- *   adapter: cloudflare(),
  *   router: {
  *     routes: [new RenderRoute({ path: "/", entry: ["App", "/src/App.tsx"] })],
  *   },
@@ -114,7 +112,7 @@ export interface OctaneProps<
  *
  * ### Bindings
  * Values passed via `env` reach Octane middleware and `ServerRoute`
- * handlers through the adapter's runtime contract: `context.platform` is
+ * handlers through `context.platform`. The generated Worker entry supplies
  * the Cloudflare `{ env, ctx }` pair, so `platform.env.MY_KV` is the live
  * binding and `platform.ctx.waitUntil` schedules background work.
  *
@@ -132,7 +130,7 @@ export interface OctaneProps<
  *
  * const site = yield* Cloudflare.Website.Octane("Website", {
  *   env: {
- *     API_KEY: Config.redacted("API_KEY"),
+ *     API_KEY: Config.Redacted("API_KEY"),
  *   },
  * });
  * ```
@@ -198,9 +196,10 @@ export const Octane: {
         | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -211,35 +210,43 @@ export const Octane: {
       | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<OctaneProps<Bindings>>
+    | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | InputProps<OctaneProps<Bindings>>
+          | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+      ) => effectClass(Octane(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // Octane's server bundle externalizes `node:` modules for
-            // workerd's native node-compat — `getCompatibility` already
-            // adds `nodejs_compat` to every non-python Worker.
-            main: undefined!,
-            source: {
-              provider: OCTANE_SOURCE_PROVIDER,
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // Octane's server bundle externalizes `node:` modules for
+          // workerd's native node-compat — `getCompatibility` already
+          // adds `nodejs_compat` to every non-python Worker.
+          main: undefined!,
+          source: {
+            provider: OCTANE_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-              },
+              memo: props?.memo,
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

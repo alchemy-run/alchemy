@@ -41,10 +41,7 @@ export interface DescribeAccessPoints extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeAccessPointsRequest,
-    ) => Effect.Effect<
-      efs.DescribeAccessPointsResponse,
-      efs.DescribeAccessPointsError
-    >
+    ) => Effect.Effect<efs.DescribeAccessPointsResponse, efs.DescribeAccessPointsError>
   >
 > {}
 export const DescribeAccessPoints = Binding.Service<DescribeAccessPoints>(

@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { Sandbox } from "./Sandbox.ts";
 
 const _agentEff = Effect.gen(function* () {
@@ -29,13 +29,7 @@ const _gen = Effect.gen(function* () {
     return {
       getProfile: () => state.storage.get<string>("Profile"),
     };
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, {
-        enableInternet: true,
-      }),
-    ),
-  );
+  });
 });
 
 export const Agent2 = Cloudflare.DurableObject(
@@ -53,13 +47,7 @@ export const Agent2 = Cloudflare.DurableObject(
         getProfile: () => state.storage.get<string>("Profile"),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 );
 
 export class Agent3 extends Cloudflare.DurableObject<Agent3>()(
@@ -78,13 +66,7 @@ export class Agent3 extends Cloudflare.DurableObject<Agent3>()(
         getProfile: () => state.storage.get<string>("Profile"),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}
 
 export default class Agent extends Cloudflare.DurableObject<Agent>()(
@@ -135,10 +117,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
           if (!session) return;
-          const text =
-            typeof message === "string"
-              ? message
-              : new TextDecoder().decode(message);
+          const text = typeof message === "string" ? message : new TextDecoder().decode(message);
           for (const peer of sessions.values()) {
             yield* peer.send(`[${session.id}] ${text}`);
           }
@@ -157,11 +136,5 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(Sandbox, {
-        enableInternet: true,
-      }),
-    ),
-  ),
+  }),
 ) {}

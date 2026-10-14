@@ -8,16 +8,13 @@ import type { Service } from "./Service.ts";
  * Calls `apprunner:DisassociateCustomDomain` with the Lambda's IAM role,
  * scoped to the bound service.
  */
-export const DisassociateCustomDomainHttp = makeAppRunnerHttpBinding(
-  DisassociateCustomDomain,
-  {
-    operation: apprunner.disassociateCustomDomain,
-    spec: (service: Service) => ({
-      identifiers: { ServiceArn: service.serviceArn },
-      iam: () => ({
-        actions: ["apprunner:DisassociateCustomDomain"],
-        resources: [service.serviceArn],
-      }),
+export const DisassociateCustomDomainHttp = makeAppRunnerHttpBinding(DisassociateCustomDomain, {
+  operation: apprunner.disassociateCustomDomain,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:DisassociateCustomDomain"],
+      resources: [service.serviceArn],
     }),
-  },
-);
+  }),
+});

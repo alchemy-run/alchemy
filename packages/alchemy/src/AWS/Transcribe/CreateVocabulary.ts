@@ -32,10 +32,7 @@ export interface CreateVocabulary extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.CreateVocabularyRequest,
-    ) => Effect.Effect<
-      transcribe.CreateVocabularyResponse,
-      transcribe.CreateVocabularyError
-    >
+    ) => Effect.Effect<transcribe.CreateVocabularyResponse, transcribe.CreateVocabularyError>
   >
 > {}
 export const CreateVocabulary = Binding.Service<CreateVocabulary>(

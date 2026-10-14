@@ -27,12 +27,7 @@ export interface ListUsageTotals extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListUsageTotalsRequest,
-    ) => Effect.Effect<
-      inspector2.ListUsageTotalsResponse,
-      inspector2.ListUsageTotalsError
-    >
+    ) => Effect.Effect<inspector2.ListUsageTotalsResponse, inspector2.ListUsageTotalsError>
   >
 > {}
-export const ListUsageTotals = Binding.Service<ListUsageTotals>(
-  "AWS.Inspector2.ListUsageTotals",
-);
+export const ListUsageTotals = Binding.Service<ListUsageTotals>("AWS.Inspector2.ListUsageTotals");

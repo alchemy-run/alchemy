@@ -42,7 +42,6 @@ export interface GetCommitmentPurchaseAnalysis extends Binding.Service<
   >
 > {}
 
-export const GetCommitmentPurchaseAnalysis =
-  Binding.Service<GetCommitmentPurchaseAnalysis>(
-    "AWS.CostExplorer.GetCommitmentPurchaseAnalysis",
-  );
+export const GetCommitmentPurchaseAnalysis = Binding.Service<GetCommitmentPurchaseAnalysis>(
+  "AWS.CostExplorer.GetCommitmentPurchaseAnalysis",
+);

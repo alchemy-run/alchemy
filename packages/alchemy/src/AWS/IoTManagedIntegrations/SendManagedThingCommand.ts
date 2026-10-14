@@ -54,10 +54,7 @@ export interface SendManagedThingCommand extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendManagedThingCommandRequest,
-    ) => Effect.Effect<
-      mi.SendManagedThingCommandResponse,
-      mi.SendManagedThingCommandError
-    >
+    ) => Effect.Effect<mi.SendManagedThingCommandResponse, mi.SendManagedThingCommandError>
   >
 > {}
 export const SendManagedThingCommand = Binding.Service<SendManagedThingCommand>(

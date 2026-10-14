@@ -44,14 +44,10 @@ export interface DescribeScalingActivities extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeScalingActivitiesRequest,
-    ) => Effect.Effect<
-      autoscaling.ActivitiesType,
-      autoscaling.DescribeScalingActivitiesError
-    >
+    ) => Effect.Effect<autoscaling.ActivitiesType, autoscaling.DescribeScalingActivitiesError>
   >
 > {}
 
-export const DescribeScalingActivities =
-  Binding.Service<DescribeScalingActivities>(
-    "AWS.AutoScaling.DescribeScalingActivities",
-  );
+export const DescribeScalingActivities = Binding.Service<DescribeScalingActivities>(
+  "AWS.AutoScaling.DescribeScalingActivities",
+);

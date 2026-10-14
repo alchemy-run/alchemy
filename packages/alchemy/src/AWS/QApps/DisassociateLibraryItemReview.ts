@@ -43,7 +43,6 @@ export interface DisassociateLibraryItemReview extends Binding.Service<
   >
 > {}
 
-export const DisassociateLibraryItemReview =
-  Binding.Service<DisassociateLibraryItemReview>(
-    "AWS.QApps.DisassociateLibraryItemReview",
-  );
+export const DisassociateLibraryItemReview = Binding.Service<DisassociateLibraryItemReview>(
+  "AWS.QApps.DisassociateLibraryItemReview",
+);

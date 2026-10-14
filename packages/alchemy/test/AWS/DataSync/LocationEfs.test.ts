@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as datasync from "@distilled.cloud/aws/datasync";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -27,8 +27,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeLocationEfs({
-          LocationArn:
-            "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
+          LocationArn: "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
@@ -37,19 +36,19 @@ test.provider(
         expect(err._tag).toBe("LocationNotFound");
       }
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:datasync", "live"], timeout: 60_000 },
 );
 
 // The live lifecycle requires an EFS file system + mount target; the mount
 // target's ENI takes 1–3 minutes to become available and again to release on
-// teardown, so the full cycle is gated behind AWS_TEST_SLOW=1.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// teardown (~100s observed), so the full cycle is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "create EFS location from a file system + mount target, delete",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const region = yield* Region;
+      const region = yield* yield* Region;
       const vpc = yield* getDefaultVpc;
       const subnets = yield* EC2.describeSubnets({
         Filters: [
@@ -101,5 +100,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const gone = yield* waitUntilLocationGone(arn);
       expect(gone).toBe(true);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:datasync", "provider:aws:ec2", "provider:aws:efs", "live"],
+    timeout: 600_000,
+  },
 );

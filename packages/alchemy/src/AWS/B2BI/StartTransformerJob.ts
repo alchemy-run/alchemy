@@ -41,10 +41,7 @@ export interface StartTransformerJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartTransformerJobRequest,
-    ) => Effect.Effect<
-      b2bi.StartTransformerJobResponse,
-      b2bi.StartTransformerJobError
-    >
+    ) => Effect.Effect<b2bi.StartTransformerJobResponse, b2bi.StartTransformerJobError>
   >
 > {}
 export const StartTransformerJob = Binding.Service<StartTransformerJob>(

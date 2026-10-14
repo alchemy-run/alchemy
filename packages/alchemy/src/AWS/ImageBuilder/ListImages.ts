@@ -28,12 +28,7 @@ export interface ListImages extends Binding.Service<
   () => Effect.Effect<
     (
       request?: imagebuilder.ListImagesRequest,
-    ) => Effect.Effect<
-      imagebuilder.ListImagesResponse,
-      imagebuilder.ListImagesError
-    >
+    ) => Effect.Effect<imagebuilder.ListImagesResponse, imagebuilder.ListImagesError>
   >
 > {}
-export const ListImages = Binding.Service<ListImages>(
-  "AWS.ImageBuilder.ListImages",
-);
+export const ListImages = Binding.Service<ListImages>("AWS.ImageBuilder.ListImages");

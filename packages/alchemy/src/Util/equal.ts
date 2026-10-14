@@ -41,10 +41,7 @@ export const arrayEqualsUnordered = <T extends string | number>(
 /**
  * Shallow equality of two string records (same keys, same values).
  */
-export const recordsEqual = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
+export const recordsEqual = (a: Record<string, string>, b: Record<string, string>): boolean => {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
@@ -52,4 +49,27 @@ export const recordsEqual = (
     if (a[k] !== b[k]) return false;
   }
   return true;
+};
+
+/**
+ * True when any DEFINED leaf of `desired` differs from the corresponding
+ * value in `observed`. Keys the caller left undefined are ignored, so the
+ * comparison only covers configuration the user actually expressed.
+ */
+export const subsetDiffers = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return false;
+  if (Array.isArray(desired)) {
+    if (!Array.isArray(observed) || observed.length !== desired.length) {
+      return true;
+    }
+    return desired.some((value, i) => subsetDiffers(value, observed[i]));
+  }
+  if (typeof desired === "object" && desired !== null) {
+    if (typeof observed !== "object" || observed === null) return true;
+    return Object.entries(desired).some(
+      ([key, value]) =>
+        value !== undefined && subsetDiffers(value, (observed as Record<string, unknown>)[key]),
+    );
+  }
+  return desired !== observed;
 };

@@ -8,9 +8,6 @@ export const DeleteSMSSandboxPhoneNumberHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.DeleteSMSSandboxPhoneNumber",
     operation: sns.deleteSMSSandboxPhoneNumber,
-    actions: [
-      "sns:DeleteSMSSandboxPhoneNumber",
-      "sms-voice:DeleteVerifiedDestinationNumber",
-    ],
+    actions: ["sns:DeleteSMSSandboxPhoneNumber", "sms-voice:DeleteVerifiedDestinationNumber"],
   }),
 );

@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface SelectRequest extends Omit<
-  sdb.SelectRequest,
-  "SelectExpression"
-> {
+export interface SelectRequest extends Omit<sdb.SelectRequest, "SelectExpression"> {
   /**
    * The select expression (`select output_list from domain [where ...]`).
    *
@@ -53,9 +50,7 @@ export interface Select extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    (
-      request: SelectRequest,
-    ) => Effect.Effect<sdb.SelectResponse, sdb.SelectError, RuntimeContext>
+    (request: SelectRequest) => Effect.Effect<sdb.SelectResponse, sdb.SelectError, RuntimeContext>
   >
 > {}
 export const Select = Binding.Service<Select>("AWS.SimpleDB.Select");

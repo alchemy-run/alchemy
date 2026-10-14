@@ -7,19 +7,22 @@ import * as Effect from "effect/Effect";
 // assembly plus scheduler microtasks. Outside workerd (deploy/plan in Node,
 // vitest) the import rejects and the fallback stub is used; the `.catch` is
 // attached immediately so the rejection is always handled.
-const modulePromise: Promise<typeof import("cloudflare:workers")> =
-  import("cloudflare:workers").catch(
-    () =>
-      ({
-        env: {},
-        DurableObject: class {},
-        WorkflowEntrypoint: class {
-          async run() {}
-        },
-      }) as any,
-  );
+// Type the import before chaining to avoid expanding the full module namespace
+// while TypeScript infers the catch result.
+const moduleImport: Promise<typeof import("cloudflare:workers")> = import("cloudflare:workers");
+const modulePromise: Promise<typeof import("cloudflare:workers")> = moduleImport.catch(
+  () =>
+    ({
+      env: {},
+      DurableObject: class {},
+      WorkflowEntrypoint: class {
+        async run() {}
+      },
+    }) as any,
+);
 
-const cloudflare_workers: Effect.Effect<typeof import("cloudflare:workers")> =
-  Effect.promise(() => modulePromise);
+const cloudflare_workers: Effect.Effect<typeof import("cloudflare:workers")> = Effect.promise(
+  () => modulePromise,
+);
 
 export default cloudflare_workers;

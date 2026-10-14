@@ -30,12 +30,7 @@ export interface ListFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.ListFacesRequest,
-    ) => Effect.Effect<
-      rekognition.ListFacesResponse,
-      rekognition.ListFacesError
-    >
+    ) => Effect.Effect<rekognition.ListFacesResponse, rekognition.ListFacesError>
   >
 > {}
-export const ListFaces = Binding.Service<ListFaces>(
-  "AWS.Rekognition.ListFaces",
-);
+export const ListFaces = Binding.Service<ListFaces>("AWS.Rekognition.ListFaces");

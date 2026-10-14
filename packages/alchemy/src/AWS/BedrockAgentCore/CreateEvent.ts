@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Memory } from "./Memory.ts";
 
-export interface CreateEventRequest extends Omit<
-  agentcore.CreateEventInput,
-  "memoryId"
-> {}
+export interface CreateEventRequest extends Omit<agentcore.CreateEventInput, "memoryId"> {}
 
 /**
  * Records an interaction event into a memory's short-term store.
@@ -67,6 +64,4 @@ export interface CreateEvent extends Binding.Service<
     ) => Effect.Effect<agentcore.CreateEventOutput, agentcore.CreateEventError>
   >
 > {}
-export const CreateEvent = Binding.Service<CreateEvent>(
-  "AWS.BedrockAgentCore.CreateEvent",
-);
+export const CreateEvent = Binding.Service<CreateEvent>("AWS.BedrockAgentCore.CreateEvent");

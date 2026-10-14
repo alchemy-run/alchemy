@@ -12,14 +12,13 @@ export const toTagList = (tags: Record<string, string>): securitylake.Tag[] =>
 
 export const fromTagList = (
   tags: readonly securitylake.Tag[] | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.key, tag.value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.key, tag.value]));
 
 /** Observed cloud tags for a Security Lake resource ARN ({} on any failure). */
 export const readSecurityLakeTags = (resourceArn: string) =>
   securitylake.listTagsForResource({ resourceArn }).pipe(
     Effect.map((response) => fromTagList(response.tags)),
-    Effect.catch(() => Effect.succeed<Record<string, string>>({})),
+    Effect.orElseSucceed(() => ({})),
   );
 
 /**

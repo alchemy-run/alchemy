@@ -103,35 +103,20 @@ export interface Intent extends Resource<
  */
 export const Intent = Resource<Intent>("AWS.LexV2.Intent");
 
-const createIntentName = (
-  id: string,
-  props: { intentName?: string | undefined },
-) =>
+const createIntentName = (id: string, props: { intentName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.intentName) return props.intentName;
     return toLexName(yield* createPhysicalName({ id, maxLength: 100 }));
   });
 
-const describeIntent = Effect.fn(function* (
-  botId: string,
-  localeId: string,
-  intentId: string,
-) {
+const describeIntent = Effect.fn(function* (botId: string, localeId: string, intentId: string) {
   return yield* lexm
     .describeIntent({ botId, botVersion: "DRAFT", localeId, intentId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 /** Find an intent of the locale by exact name (used when state was lost). */
-const findIntentByName = Effect.fn(function* (
-  botId: string,
-  localeId: string,
-  intentName: string,
-) {
+const findIntentByName = Effect.fn(function* (botId: string, localeId: string, intentName: string) {
   const pages = yield* lexm.listIntents
     .pages({
       botId,
@@ -152,18 +137,13 @@ const findIntentByName = Effect.fn(function* (
   return yield* describeIntent(botId, localeId, summary.intentId);
 });
 
-const utterancesOf = (
-  intent: lexm.DescribeIntentResponse | lexm.CreateIntentResponse,
-): string[] => (intent.sampleUtterances ?? []).map((u) => u.utterance);
+const utterancesOf = (intent: lexm.DescribeIntentResponse | lexm.CreateIntentResponse): string[] =>
+  (intent.sampleUtterances ?? []).map((u) => u.utterance);
 
-const toUtterances = (
-  utterances: string[] | undefined,
-): lexm.SampleUtterance[] | undefined =>
+const toUtterances = (utterances: string[] | undefined): lexm.SampleUtterance[] | undefined =>
   utterances?.map((utterance) => ({ utterance }));
 
-const attributesOf = (
-  intent: lexm.DescribeIntentResponse,
-): Intent["Attributes"] => ({
+const attributesOf = (intent: lexm.DescribeIntentResponse): Intent["Attributes"] => ({
   intentId: intent.intentId!,
   intentName: intent.intentName!,
   botId: intent.botId!,
@@ -189,11 +169,7 @@ export const IntentProvider = () =>
           const observed =
             output?.intentId !== undefined
               ? yield* describeIntent(botId, localeId, output.intentId)
-              : yield* findIntentByName(
-                  botId,
-                  localeId,
-                  yield* createIntentName(id, olds ?? {}),
-                );
+              : yield* findIntentByName(botId, localeId, yield* createIntentName(id, olds ?? {}));
           return observed === undefined ? undefined : attributesOf(observed);
         }),
 
@@ -208,9 +184,7 @@ export const IntentProvider = () =>
           const intentName = yield* createIntentName(id, news);
           const desiredUtterances = news.sampleUtterances ?? [];
           const desiredDialogCodeHook =
-            news.dialogCodeHook !== undefined
-              ? { enabled: news.dialogCodeHook }
-              : undefined;
+            news.dialogCodeHook !== undefined ? { enabled: news.dialogCodeHook } : undefined;
           const desiredFulfillmentCodeHook =
             news.fulfillmentCodeHook !== undefined
               ? { enabled: news.fulfillmentCodeHook }
@@ -219,18 +193,10 @@ export const IntentProvider = () =>
           // 1. OBSERVE — output.intentId is only a cache; fall back to name.
           let observed =
             output?.intentId !== undefined
-              ? yield* describeIntent(
-                  news.botId,
-                  news.localeId,
-                  output.intentId,
-                )
+              ? yield* describeIntent(news.botId, news.localeId, output.intentId)
               : undefined;
           if (observed === undefined) {
-            observed = yield* findIntentByName(
-              news.botId,
-              news.localeId,
-              intentName,
-            );
+            observed = yield* findIntentByName(news.botId, news.localeId, intentName);
           }
 
           // 2. ENSURE — create when missing.
@@ -248,11 +214,7 @@ export const IntentProvider = () =>
                 fulfillmentCodeHook: desiredFulfillmentCodeHook,
               }),
             );
-            observed = yield* describeIntent(
-              news.botId,
-              news.localeId,
-              created.intentId!,
-            );
+            observed = yield* describeIntent(news.botId, news.localeId, created.intentId!);
             if (observed === undefined) {
               return yield* Effect.fail(
                 new Error(`failed to read created Lex intent ${intentName}`),
@@ -262,14 +224,11 @@ export const IntentProvider = () =>
             // 3. SYNC — UpdateIntent replaces the declared aspects; skip the
             //    call when nothing drifted.
             observed.intentName !== intentName ||
-            (observed.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.description ?? undefined) !== (news.description ?? undefined) ||
             JSON.stringify([...utterancesOf(observed)].sort()) !==
               JSON.stringify([...desiredUtterances].sort()) ||
-            (observed.dialogCodeHook?.enabled ?? false) !==
-              (news.dialogCodeHook ?? false) ||
-            (observed.fulfillmentCodeHook?.enabled ?? false) !==
-              (news.fulfillmentCodeHook ?? false)
+            (observed.dialogCodeHook?.enabled ?? false) !== (news.dialogCodeHook ?? false) ||
+            (observed.fulfillmentCodeHook?.enabled ?? false) !== (news.fulfillmentCodeHook ?? false)
           ) {
             yield* retryWhileConflict(
               lexm.updateIntent({
@@ -285,11 +244,7 @@ export const IntentProvider = () =>
                 fulfillmentCodeHook: desiredFulfillmentCodeHook,
               }),
             );
-            observed = yield* describeIntent(
-              news.botId,
-              news.localeId,
-              observed.intentId!,
-            );
+            observed = yield* describeIntent(news.botId, news.localeId, observed.intentId!);
             if (observed === undefined) {
               return yield* Effect.fail(
                 new Error(`failed to read updated Lex intent ${intentName}`),
@@ -311,9 +266,7 @@ export const IntentProvider = () =>
               localeId: output.localeId,
               intentId: output.intentId,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

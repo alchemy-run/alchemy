@@ -35,7 +35,6 @@ export interface DescribePendingMaintenanceActions extends Binding.Service<
     >
   >
 > {}
-export const DescribePendingMaintenanceActions =
-  Binding.Service<DescribePendingMaintenanceActions>(
-    "AWS.Neptune.DescribePendingMaintenanceActions",
-  );
+export const DescribePendingMaintenanceActions = Binding.Service<DescribePendingMaintenanceActions>(
+  "AWS.Neptune.DescribePendingMaintenanceActions",
+);

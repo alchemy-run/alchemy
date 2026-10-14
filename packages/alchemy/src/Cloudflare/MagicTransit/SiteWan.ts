@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -91,7 +90,8 @@ export type MagicSiteWan = Resource<
  * automatically creates IPsec tunnels over each WAN.
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * `siteId` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
@@ -152,9 +152,7 @@ export const MagicSiteWanProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const siteId =
-        output?.siteId ??
-        (typeof olds?.siteId === "string" ? olds.siteId : undefined);
+      const siteId = output?.siteId ?? (typeof olds?.siteId === "string" ? olds.siteId : undefined);
       if (!siteId) return undefined;
 
       if (output?.wanId) {
@@ -177,9 +175,7 @@ export const MagicSiteWanProvider = () =>
       const name = yield* createWanName(id, news.name);
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
-      let observed = output?.wanId
-        ? yield* getWan(accountId, siteId, output.wanId)
-        : undefined;
+      let observed = output?.wanId ? yield* getWan(accountId, siteId, output.wanId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, name);
       }
@@ -201,9 +197,7 @@ export const MagicSiteWanProvider = () =>
           created.result.at(0) ??
           (yield* findByName(accountId, siteId, name));
         if (observed) return toAttributes(observed, siteId, accountId);
-        return yield* Effect.fail(
-          new Error(`Magic WAN site WAN ${name} not visible after create`),
-        );
+        return yield* Effect.fail(new Error(`Magic WAN site WAN ${name} not visible after create`));
       }
 
       // Sync — the update API is a PUT; send the full desired state, but
@@ -211,10 +205,8 @@ export const MagicSiteWanProvider = () =>
       const dirty =
         (observed.name ?? undefined) !== name ||
         (observed.physport ?? undefined) !== news.physport ||
-        (news.priority !== undefined &&
-          (observed.priority ?? undefined) !== news.priority) ||
-        (news.vlanTag !== undefined &&
-          (observed.vlanTag ?? undefined) !== news.vlanTag) ||
+        (news.priority !== undefined && (observed.priority ?? undefined) !== news.priority) ||
+        (news.vlanTag !== undefined && (observed.vlanTag ?? undefined) !== news.vlanTag) ||
         staticAddressingDirty(observed.staticAddressing, news.staticAddressing);
       if (dirty) {
         const updated = yield* magicTransit.updateSiteWan({
@@ -259,7 +251,7 @@ export const MagicSiteWanProvider = () =>
             (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
           ),
         ),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
           Effect.succeed([] as string[]),
         ),
       );
@@ -271,13 +263,11 @@ export const MagicSiteWanProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((wan) =>
-                  toAttributes(wan, siteId, accountId),
-                ),
+                (page.result ?? []).map((wan) => toAttributes(wan, siteId, accountId)),
               ),
             ),
             // Site vanished or became inaccessible mid-enumeration — skip it.
-            Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+            Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
               Effect.succeed([] as MagicSiteWanAttributes[]),
             ),
           ),

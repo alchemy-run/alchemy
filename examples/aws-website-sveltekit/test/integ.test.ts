@@ -1,6 +1,6 @@
+import { expect } from "bun:test";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -33,10 +33,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -45,7 +42,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full SvelteKit build AND creates a CloudFront
@@ -83,7 +79,7 @@ test(
     expect(html).toContain("SvelteKit on AWS");
     // The `GREETING` env value from alchemy.run.ts, read via `process.env`
     // in the server `load` — proves the Lambda rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from SvelteKit on AWS!");
   }),
   { timeout: 180_000 },
 );

@@ -32,10 +32,7 @@ export interface DeleteWorkspaceServiceAccountToken extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.DeleteWorkspaceServiceAccountTokenRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.DeleteWorkspaceServiceAccountTokenRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.DeleteWorkspaceServiceAccountTokenResponse,
       grafana.DeleteWorkspaceServiceAccountTokenError

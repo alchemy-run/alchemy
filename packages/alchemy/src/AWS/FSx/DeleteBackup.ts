@@ -32,6 +32,4 @@ export interface DeleteBackup extends Binding.Service<
     ) => Effect.Effect<fsx.DeleteBackupResponse, fsx.DeleteBackupError>
   >
 > {}
-export const DeleteBackup = Binding.Service<DeleteBackup>(
-  "AWS.FSx.DeleteBackup",
-);
+export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.FSx.DeleteBackup");

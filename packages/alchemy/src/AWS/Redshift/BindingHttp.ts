@@ -88,10 +88,7 @@ export const makeRedshiftClusterHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: resources
-                  ? Output.map(cluster.clusterArn, (arn) => [
-                      arn,
-                      ...resources(arn),
-                    ])
+                  ? Output.map(cluster.clusterArn, (arn) => [arn, ...resources(arn)])
                   : [Output.interpolate`${cluster.clusterArn}`],
               },
             ],

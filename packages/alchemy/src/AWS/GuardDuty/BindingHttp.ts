@@ -55,9 +55,7 @@ export const makeGuardDutyDetectorHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: options.resourceLevel
-                  ? [detector.detectorArn]
-                  : ["*"],
+                Resource: options.resourceLevel ? [detector.detectorArn] : ["*"],
               },
             ],
           });

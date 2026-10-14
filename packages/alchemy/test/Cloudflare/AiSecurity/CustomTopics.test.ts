@@ -1,23 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as aiSecurity from "@distilled.cloud/cloudflare/ai-security";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // AI Security for Apps (Firewall for AI) is entitlement-gated — on the
 // standard testing account every call fails with "not entitled to access
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -52,10 +46,7 @@ const getTopics = (zoneId: string) =>
 
 // Normalize the list to a known baseline so each run starts from the same
 // cloud state regardless of what a previous run left behind.
-const setBaseline = (
-  zoneId: string,
-  topics: { label: string; topic: string }[],
-) =>
+const setBaseline = (zoneId: string, topics: { label: string; topic: string }[]) =>
   aiSecurity.putCustomTopic({ zoneId, topics }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -82,6 +73,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:zone", "live"] },
 );
 
 // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -92,21 +84,24 @@ test.provider(
 // result is an empty array — the assertion is that `list()` resolves to an
 // array (proving the typed skip path) rather than throwing. Presence of the
 // standing test zone is asserted only on an entitled account (env-gated).
-test.provider("list enumerates the custom topics across all zones", (stack) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Cloudflare.AI.CustomTopics);
-    const all = yield* provider.list();
+test.provider(
+  "list enumerates the custom topics across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Cloudflare.AI.CustomTopics);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    if (entitledZoneId) {
-      expect(all.some((t) => t.zoneId === entitledZoneId)).toBe(true);
-    }
+      if (entitledZoneId) {
+        expect(all.some((t) => t.zoneId === entitledZoneId)).toBe(true);
+      }
 
-    // `stack` is unused (the singleton always exists on every entitled zone),
-    // but keep the destroy bookends so the harness state stays clean.
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      // `stack` is unused (the singleton always exists on every entitled zone),
+      // but keep the destroy bookends so the harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"] },
 );
 
 test.provider.skipIf(!entitledZoneId)(
@@ -124,10 +119,7 @@ test.provider.skipIf(!entitledZoneId)(
           return yield* Cloudflare.AI.CustomTopics("Topics", {
             zoneId,
             topics: [
-              {
-                label: "billing",
-                topic: "Questions about invoices and payments",
-              },
+              { label: "billing", topic: "Questions about invoices and payments" },
               { label: "abuse", topic: "Harassment or abusive language" },
             ],
           });
@@ -148,9 +140,7 @@ test.provider.skipIf(!entitledZoneId)(
         Effect.gen(function* () {
           return yield* Cloudflare.AI.CustomTopics("Topics", {
             zoneId,
-            topics: [
-              { label: "support", topic: "Questions about product support" },
-            ],
+            topics: [{ label: "support", topic: "Questions about product support" }],
           });
         }),
       );
@@ -167,5 +157,5 @@ test.provider.skipIf(!entitledZoneId)(
       const restored = yield* getTopics(zoneId);
       expect(restored.topics ?? []).toEqual([]);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"], timeout: 120_000 },
 );

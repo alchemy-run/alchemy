@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetServiceSettings}.
  */
-export interface GetServiceSettingsRequest
-  extends licensemanager.GetServiceSettingsRequest {}
+export interface GetServiceSettingsRequest extends licensemanager.GetServiceSettingsRequest {}
 
 /**
  * Runtime binding for `license-manager:GetServiceSettings` — read the

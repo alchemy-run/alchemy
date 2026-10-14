@@ -1,7 +1,7 @@
 import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Layer from "effect/Layer";
-import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 import { BatchAssociateClientDeviceWithCoreDevice } from "./BatchAssociateClientDeviceWithCoreDevice.ts";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 export const BatchAssociateClientDeviceWithCoreDeviceHttp = Layer.effect(
   BatchAssociateClientDeviceWithCoreDevice,

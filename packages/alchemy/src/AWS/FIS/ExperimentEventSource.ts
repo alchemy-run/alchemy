@@ -96,8 +96,7 @@ export const consumeExperimentEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.fis"],
       "detail-type": ["FIS Experiment State Change"],
-      ...(props.experimentTemplateIds !== undefined ||
-      props.statuses !== undefined
+      ...(props.experimentTemplateIds !== undefined || props.statuses !== undefined
         ? {
             detail: {
               ...(props.experimentTemplateIds !== undefined

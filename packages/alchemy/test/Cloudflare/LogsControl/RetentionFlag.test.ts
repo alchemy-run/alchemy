@@ -1,31 +1,25 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -70,9 +64,7 @@ test.provider.skipIf(entitled)(
       // The testing zone has no Logpull entitlement — both reads and
       // writes must fail with the typed authorization tag (Cloudflare
       // error code 10000).
-      const readError = yield* logs
-        .getControlRetention({ zoneId })
-        .pipe(Effect.flip);
+      const readError = yield* logs.getControlRetention({ zoneId }).pipe(Effect.flip);
       expect(readError._tag).toEqual("LogsControlNotAuthorized");
 
       const writeError = yield* logs
@@ -82,6 +74,14 @@ test.provider.skipIf(entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:logscontrol",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+  },
 );
 
 test.provider.skipIf(!entitled)(
@@ -95,10 +95,7 @@ test.provider.skipIf(!entitled)(
       yield* setBaseline(zoneId, false);
 
       const created = yield* stack.deploy(
-        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
-          zoneId,
-          flag: true,
-        }),
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", { zoneId, flag: true }),
       );
       expect(created.zoneId).toEqual(zoneId);
       expect(created.flag).toEqual(true);
@@ -111,10 +108,7 @@ test.provider.skipIf(!entitled)(
       // In-place update back to false — the captured initial value
       // survives the update.
       const updated = yield* stack.deploy(
-        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
-          zoneId,
-          flag: false,
-        }),
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", { zoneId, flag: false }),
       );
       expect(updated.flag).toEqual(false);
       expect(updated.initialFlag).toEqual(false);
@@ -124,10 +118,7 @@ test.provider.skipIf(!entitled)(
 
       // Flip it on again so destroy has something to restore.
       yield* stack.deploy(
-        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
-          zoneId,
-          flag: true,
-        }),
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", { zoneId, flag: true }),
       );
 
       yield* stack.destroy();
@@ -136,7 +127,15 @@ test.provider.skipIf(!entitled)(
       const restored = yield* getFlag(zoneId);
       expect(restored).toEqual(false);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:logscontrol",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -147,19 +146,20 @@ test.provider.skipIf(!entitled)(
 // array (typically empty) rather than throwing. This ungated case asserts that
 // the typed-skip path keeps `list()` total; the entitled case below asserts
 // the standing test zone is actually enumerated.
-test.provider("list enumerates the retention flag across all zones", (stack) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      Cloudflare.LogsControl.LogsRetentionFlag,
-    );
-    const all = yield* provider.list();
+test.provider(
+  "list enumerates the retention flag across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.LogsRetentionFlag);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
+      expect(Array.isArray(all)).toBe(true);
 
-    // `stack` is unused here (the singleton always exists on every zone),
-    // but keep the destroy bookend so the harness state stays clean.
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      // `stack` is unused here (the singleton always exists on every zone),
+      // but keep the destroy bookend so the harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:logscontrol", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -168,9 +168,7 @@ test.provider.skipIf(!entitled)(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.LogsRetentionFlag,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.LogsRetentionFlag);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);
@@ -178,5 +176,13 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:logscontrol",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

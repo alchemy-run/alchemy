@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "../env.ts";
 
-const readKey = (request: Request) =>
-  new URL(request.url).searchParams.get("key");
+const readKey = (request: Request) => new URL(request.url).searchParams.get("key");
 
 export const Route = createFileRoute("/api/r2")({
   server: {
@@ -25,10 +24,7 @@ export const Route = createFileRoute("/api/r2")({
       PUT: async ({ request }) => {
         const key = readKey(request);
         if (!key) {
-          return Response.json(
-            { error: "missing key", marker: env.DEV_MARKER },
-            { status: 400 },
-          );
+          return Response.json({ error: "missing key", marker: env.DEV_MARKER }, { status: 400 });
         }
 
         await env.BUCKET.put(key, await request.text(), {

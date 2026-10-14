@@ -1,15 +1,13 @@
 import * as pqe from "@distilled.cloud/cloudflare/origin-post-quantum-encryption";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TypeId =
-  "Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption" as const;
+const TypeId = "Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption" as const;
 type TypeId = typeof TypeId;
 
 /**
@@ -57,13 +55,7 @@ export type Attributes = {
   initialValue: Value;
 };
 
-export type OriginPostQuantumEncryption = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type OriginPostQuantumEncryption = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * Origin Post-Quantum Encryption for a Cloudflare zone
@@ -113,10 +105,9 @@ export type OriginPostQuantumEncryption = Resource<
  * @product Origin Post-Quantum Encryption
  * @category SSL/TLS & Certificates
  */
-export const OriginPostQuantumEncryption =
-  Resource<OriginPostQuantumEncryption>(TypeId, {
-    aliases: ["Cloudflare.OriginPostQuantumEncryption"],
-  });
+export const OriginPostQuantumEncryption = Resource<OriginPostQuantumEncryption>(TypeId, {
+  aliases: ["Cloudflare.OriginPostQuantumEncryption"],
+});
 
 /**
  * Returns true if the given value is an OriginPostQuantumEncryption resource.
@@ -140,16 +131,12 @@ export const OriginPostQuantumEncryptionProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, toValue(observed.value)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, toValue(observed.value))),
             // Zone gone out-of-band / not resolvable — skip it. (Transient
             // 403/429 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
-            Effect.catchTag("InvalidZoneIdentifier", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -160,13 +147,8 @@ export const OriginPostQuantumEncryptionProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -175,21 +157,16 @@ export const OriginPostQuantumEncryptionProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
-      const observed = yield* pqe
-        .getOriginPostQuantumEncryption({ zoneId })
-        .pipe(
-          // Zone deleted out-of-band — the setting is gone with it.
-          Effect.catchTag("InvalidZoneIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const observed = yield* pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
+        // Zone deleted out-of-band — the setting is gone with it.
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+      );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
       // default — there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : toValue(observed.value);
+      const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -205,8 +182,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : toValue(observed.value);
+      const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
 
       // 3. Sync — update only when the observed value differs.
       if (toValue(observed.value) === desired) {
@@ -224,11 +200,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* pqe
         .getOriginPostQuantumEncryption({ zoneId })
-        .pipe(
-          Effect.catchTag("InvalidZoneIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
@@ -250,9 +222,7 @@ const toValue = (value: string): Value =>
 
 const toAttributes = (
   zoneId: string,
-  setting:
-    | pqe.GetOriginPostQuantumEncryptionResponse
-    | pqe.PutOriginPostQuantumEncryptionResponse,
+  setting: pqe.GetOriginPostQuantumEncryptionResponse | pqe.PutOriginPostQuantumEncryptionResponse,
   initialValue: Value,
 ): Attributes => ({
   zoneId,

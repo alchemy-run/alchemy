@@ -111,9 +111,7 @@ export const InstanceProvider = () =>
                 ): instance is ssoAdmin.InstanceMetadata & {
                   InstanceArn: string;
                   IdentityStoreId: string;
-                } =>
-                  instance.InstanceArn != null &&
-                  instance.IdentityStoreId != null,
+                } => instance.InstanceArn != null && instance.IdentityStoreId != null,
               )
               .map((instance) => ({
                 ...toInstanceAttributes(instance),
@@ -180,9 +178,7 @@ export const InstanceProvider = () =>
           });
           if (!created) {
             return yield* Effect.fail(
-              new Error(
-                "failed to resolve Identity Center instance after create",
-              ),
+              new Error("failed to resolve Identity Center instance after create"),
             );
           }
 
@@ -220,7 +216,7 @@ const readInstance = Effect.fn(function* ({
 }: Pick<InstanceProps, "instanceArn" | "name">) {
   if (instanceArn) {
     const instance = yield* resolveInstance(instanceArn).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     return instance ? toInstanceAttributes(instance) : undefined;
   }
@@ -231,7 +227,5 @@ const readInstance = Effect.fn(function* ({
     (instances.length === 1 ? instances[0] : undefined) ??
     instances.find((instance) => instance.Status === "ACTIVE");
 
-  return match?.InstanceArn && match.IdentityStoreId
-    ? toInstanceAttributes(match)
-    : undefined;
+  return match?.InstanceArn && match.IdentityStoreId ? toInstanceAttributes(match) : undefined;
 });

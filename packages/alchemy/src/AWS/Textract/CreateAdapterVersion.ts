@@ -35,10 +35,7 @@ export interface CreateAdapterVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<textract.CreateAdapterVersionRequest, "AdapterId">,
-    ) => Effect.Effect<
-      textract.CreateAdapterVersionResponse,
-      textract.CreateAdapterVersionError
-    >
+    ) => Effect.Effect<textract.CreateAdapterVersionResponse, textract.CreateAdapterVersionError>
   >
 > {}
 export const CreateAdapterVersion = Binding.Service<CreateAdapterVersion>(

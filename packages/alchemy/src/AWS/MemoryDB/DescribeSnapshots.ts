@@ -29,10 +29,7 @@ export interface DescribeSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: memorydb.DescribeSnapshotsRequest,
-    ) => Effect.Effect<
-      memorydb.DescribeSnapshotsResponse,
-      memorydb.DescribeSnapshotsError
-    >
+    ) => Effect.Effect<memorydb.DescribeSnapshotsResponse, memorydb.DescribeSnapshotsError>
   >
 > {}
 export const DescribeSnapshots = Binding.Service<DescribeSnapshots>(

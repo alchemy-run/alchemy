@@ -1,5 +1,5 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -8,13 +8,9 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 
 export interface CertificateProps {
   /**
@@ -33,8 +29,12 @@ export interface CertificateProps {
   /**
    * Route 53 hosted zone used to auto-create DNS validation records.
    *
-   * When provided together with `validationMethod: "DNS"`, the certificate
-   * provider will upsert the validation records and wait for issuance.
+   * With `validationMethod: "DNS"` the certificate provider upserts the
+   * validation records into this zone and waits for issuance. When
+   * omitted, the most specific PUBLIC hosted zone in the account
+   * containing `domainName` is inferred; if none matches, validation is
+   * left to the caller (external DNS) and the certificate is returned
+   * pending.
    */
   hostedZoneId?: string;
   /**
@@ -162,14 +162,11 @@ export interface Certificate extends Resource<
  */
 const resolveEffectiveSans = (
   declared: string[] | undefined,
-  bindings:
-    | ReadonlyArray<CertificateBinding | ResourceBinding<CertificateBinding>>
-    | undefined,
+  bindings: ReadonlyArray<CertificateBinding | ResourceBinding<CertificateBinding>> | undefined,
 ): string[] | undefined => {
   const bound = (bindings ?? []).flatMap((binding) =>
     "data" in binding && binding.data !== undefined
-      ? ((binding as ResourceBinding<CertificateBinding>).data
-          .subjectAlternativeNames ?? [])
+      ? ((binding as ResourceBinding<CertificateBinding>).data.subjectAlternativeNames ?? [])
       : ((binding as CertificateBinding).subjectAlternativeNames ?? []),
   );
   if (bound.length === 0) {
@@ -240,33 +237,22 @@ export const CertificateProvider = () =>
     Certificate,
     Effect.gen(function* () {
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
-        return yield* acm
-          .describeCertificate({ CertificateArn: certificateArn })
-          .pipe(
-            Effect.map((response) => response.Certificate),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            withCertRegion(regionOfCertificateArn(certificateArn)),
-          );
+        return yield* acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+          Effect.map((response) => response.Certificate),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          withCertRegion(regionOfCertificateArn(certificateArn)),
+        );
       });
 
       const listCertificateTags = Effect.fn(function* (certificateArn: string) {
-        return yield* acm
-          .listTagsForCertificate({ CertificateArn: certificateArn })
-          .pipe(
-            Effect.map((response) => toTagRecord(response.Tags)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({}),
-            ),
-            withCertRegion(regionOfCertificateArn(certificateArn)),
-          );
+        return yield* acm.listTagsForCertificate({ CertificateArn: certificateArn }).pipe(
+          Effect.map((response) => toTagRecord(response.Tags)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
+          withCertRegion(regionOfCertificateArn(certificateArn)),
+        );
       });
 
-      const findManagedCertificate = Effect.fn(function* (
-        id: string,
-        props: CertificateProps,
-      ) {
+      const findManagedCertificate = Effect.fn(function* (id: string, props: CertificateProps) {
         // Describe candidates lazily as pages stream in and stop at the first
         // match, so pagination terminates early instead of draining every page.
         return yield* withCertRegion(props.region)(
@@ -277,28 +263,20 @@ export const CertificateProvider = () =>
               },
             } as any)
             .pipe(
-              Stream.filter(
-                (summary) => summary.DomainName === props.domainName,
-              ),
+              Stream.filter((summary) => summary.DomainName === props.domainName),
               Stream.mapEffect((summary) =>
                 Effect.gen(function* () {
                   if (!summary.CertificateArn) {
                     return undefined;
                   }
-                  const detail = yield* describeCertificate(
-                    summary.CertificateArn,
-                  );
+                  const detail = yield* describeCertificate(summary.CertificateArn);
                   if (!detail?.CertificateArn) {
                     return undefined;
                   }
                   if (
                     detail.DomainName !== props.domainName ||
-                    JSON.stringify(
-                      normalizeSanList(detail.SubjectAlternativeNames),
-                    ) !==
-                      JSON.stringify(
-                        normalizeSanList(props.subjectAlternativeNames),
-                      )
+                    JSON.stringify(normalizeSanList(detail.SubjectAlternativeNames)) !==
+                      JSON.stringify(normalizeSanList(props.subjectAlternativeNames))
                   ) {
                     return undefined;
                   }
@@ -306,15 +284,10 @@ export const CertificateProvider = () =>
                   // with a different export option can never converge to these
                   // props — it is the doomed half of a replacement, not a
                   // match.
-                  if (
-                    (props.export ?? "DISABLED") !==
-                    (detail.Options?.Export ?? "DISABLED")
-                  ) {
+                  if ((props.export ?? "DISABLED") !== (detail.Options?.Export ?? "DISABLED")) {
                     return undefined;
                   }
-                  const tags = yield* listCertificateTags(
-                    detail.CertificateArn,
-                  );
+                  const tags = yield* listCertificateTags(detail.CertificateArn);
                   return (yield* hasAlchemyTags(id, tags)) ? detail : undefined;
                 }),
               ),
@@ -325,9 +298,7 @@ export const CertificateProvider = () =>
         );
       });
 
-      const waitForValidationRecords = Effect.fn(function* (
-        certificateArn: string,
-      ) {
+      const waitForValidationRecords = Effect.fn(function* (certificateArn: string) {
         return yield* describeCertificate(certificateArn).pipe(
           Effect.flatMap((detail) => {
             const validations = detail?.DomainValidationOptions ?? [];
@@ -335,20 +306,14 @@ export const CertificateProvider = () =>
               validations.length === 0 ||
               validations.some((option) => option.ResourceRecord === undefined)
             ) {
-              return Effect.fail(
-                new Error("CertificateValidationRecordPending"),
-              );
+              return Effect.fail(new Error("CertificateValidationRecordPending"));
             }
             return Effect.succeed(detail!);
           }),
           Effect.retry({
             while: (error) =>
-              error instanceof Error &&
-              error.message === "CertificateValidationRecordPending",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+              error instanceof Error && error.message === "CertificateValidationRecordPending",
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -373,12 +338,8 @@ export const CertificateProvider = () =>
           }),
           Effect.retry({
             while: (error) =>
-              error instanceof Error &&
-              error.message === "CertificatePendingValidation",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+              error instanceof Error && error.message === "CertificatePendingValidation",
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -387,19 +348,23 @@ export const CertificateProvider = () =>
         hostedZoneId: string,
         certificate: acm.CertificateDetail,
       ) {
-        const changes = (certificate.DomainValidationOptions ?? [])
-          .flatMap((option) =>
-            option.ResourceRecord ? [option.ResourceRecord] : [],
-          )
-          .map((record) => ({
-            Action: "UPSERT" as const,
-            ResourceRecordSet: {
-              Name: record.Name,
-              Type: record.Type,
-              TTL: 60,
-              ResourceRecords: [{ Value: record.Value }],
-            },
-          }));
+        // A name and its wildcard (`example.com` + `*.example.com`) share one
+        // validation record. Route 53 rejects a batch that changes the same
+        // record twice, so keep one change per name and type.
+        const records = new Map(
+          (certificate.DomainValidationOptions ?? [])
+            .flatMap((option) => (option.ResourceRecord ? [option.ResourceRecord] : []))
+            .map((record) => [`${record.Name} ${record.Type}`, record] as const),
+        );
+        const changes = [...records.values()].map((record) => ({
+          Action: "UPSERT" as const,
+          ResourceRecordSet: {
+            Name: record.Name,
+            Type: record.Type,
+            TTL: 60,
+            ResourceRecords: [{ Value: record.Value }],
+          },
+        }));
 
         if (changes.length === 0) {
           return;
@@ -427,9 +392,7 @@ export const CertificateProvider = () =>
             const listPage = acm.listCertificates.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.CertificateSummaryList ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.CertificateSummaryList ?? []),
               ),
             );
             const summaries = [
@@ -446,20 +409,15 @@ export const CertificateProvider = () =>
                   if (!summary.CertificateArn) {
                     return undefined;
                   }
-                  const detail = yield* describeCertificate(
-                    summary.CertificateArn,
-                  );
+                  const detail = yield* describeCertificate(summary.CertificateArn);
                   if (!detail?.CertificateArn) {
                     return undefined;
                   }
-                  const tags = yield* listCertificateTags(
-                    detail.CertificateArn,
-                  );
+                  const tags = yield* listCertificateTags(detail.CertificateArn);
                   return toAttrs(
                     {
                       domainName: detail.DomainName ?? "",
-                      validationMethod:
-                        detail.DomainValidationOptions?.[0]?.ValidationMethod,
+                      validationMethod: detail.DomainValidationOptions?.[0]?.ValidationMethod,
                     },
                     detail,
                     tags,
@@ -467,38 +425,30 @@ export const CertificateProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is ReturnType<typeof toAttrs> => row !== undefined,
-            );
+            return rows.filter((row): row is ReturnType<typeof toAttrs> => row !== undefined);
           }),
-        diff: Effect.fn(function* ({
-          olds,
-          news: _news,
-          oldBindings,
-          newBindings: _newBindings,
-        }) {
+        diff: Effect.fn(function* ({ olds, news: _news, oldBindings, newBindings: _newBindings }) {
           if (!isResolved(_news) || !isResolved(_newBindings)) {
             return undefined;
           }
           const news = _news as typeof olds;
-          const newBindings =
-            _newBindings as ResourceBinding<CertificateBinding>[];
+          const newBindings = _newBindings as ResourceBinding<CertificateBinding>[];
           if (
             olds.domainName !== news.domainName ||
             // ACM certificates are immutable: the SAN set — declared props
             // plus SANs contributed through the binding contract — cannot
             // change in place, so any delta plans a replacement.
             !deepEqual(
-              normalizeSanList(
-                resolveEffectiveSans(olds.subjectAlternativeNames, oldBindings),
-              ),
-              normalizeSanList(
-                resolveEffectiveSans(news.subjectAlternativeNames, newBindings),
-              ),
+              normalizeSanList(resolveEffectiveSans(olds.subjectAlternativeNames, oldBindings)),
+              normalizeSanList(resolveEffectiveSans(news.subjectAlternativeNames, newBindings)),
             ) ||
             (olds.validationMethod ?? defaultValidationMethod) !==
               (news.validationMethod ?? defaultValidationMethod) ||
-            olds.hostedZoneId !== news.hostedZoneId ||
+            // An undefined side means "inferred" — only two explicit,
+            // differing zones are a replacement.
+            (olds.hostedZoneId !== undefined &&
+              news.hostedZoneId !== undefined &&
+              olds.hostedZoneId !== news.hostedZoneId) ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
             // Certificates cannot move regions — a region change replaces.
             (olds.region ?? ACM_REGION) !== (news.region ?? ACM_REGION) ||
@@ -530,11 +480,7 @@ export const CertificateProvider = () =>
           }
 
           const tags = yield* listCertificateTags(certificate.CertificateArn);
-          return toAttrs(
-            olds ?? { domainName: certificate.DomainName! },
-            certificate,
-            tags,
-          );
+          return toAttrs(olds ?? { domainName: certificate.DomainName! }, certificate, tags);
         }),
         reconcile: Effect.fn(function* ({
           id,
@@ -549,10 +495,7 @@ export const CertificateProvider = () =>
           // lookup, request, attrs — sees the effective SAN set.
           const news: typeof _news = {
             ..._news,
-            subjectAlternativeNames: resolveEffectiveSans(
-              _news.subjectAlternativeNames,
-              bindings,
-            ),
+            subjectAlternativeNames: resolveEffectiveSans(_news.subjectAlternativeNames, bindings),
           };
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -579,8 +522,7 @@ export const CertificateProvider = () =>
                 .requestCertificate({
                   DomainName: news.domainName,
                   SubjectAlternativeNames: news.subjectAlternativeNames,
-                  ValidationMethod:
-                    news.validationMethod ?? defaultValidationMethod,
+                  ValidationMethod: news.validationMethod ?? defaultValidationMethod,
                   KeyAlgorithm: news.keyAlgorithm,
                   Options:
                     news.certificateTransparencyLoggingPreference || news.export
@@ -590,9 +532,7 @@ export const CertificateProvider = () =>
                           Export: news.export,
                         }
                       : undefined,
-                  IdempotencyToken: instanceId
-                    .replaceAll(/[^a-zA-Z0-9]/g, "")
-                    .slice(0, 32),
+                  IdempotencyToken: instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 32),
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
@@ -601,37 +541,38 @@ export const CertificateProvider = () =>
                       ? describeCertificate(response.CertificateArn).pipe(
                           Effect.map((detail) => detail!),
                         )
-                      : Effect.fail(
-                          new Error(
-                            "requestCertificate returned no certificate ARN",
-                          ),
-                        ),
+                      : Effect.fail(new Error("requestCertificate returned no certificate ARN")),
                   ),
                 ),
             );
           }
 
           if (!certificate?.CertificateArn) {
-            return yield* Effect.fail(
-              new Error("Failed to obtain ACM certificate"),
-            );
+            return yield* Effect.fail(new Error("Failed to obtain ACM certificate"));
           }
 
           const certificateArn = certificate.CertificateArn;
           yield* session.note(certificateArn);
 
-          // Sync DNS validation. If the user wired a hostedZoneId, ensure
-          // validation records are upserted and the cert reaches `ISSUED`.
-          // For an already-issued cert this is mostly a fast-path: we only
-          // wait for validation records when the cert isn't already issued.
-          const shouldAutoValidate =
+          // Sync DNS validation: ensure validation records are upserted and
+          // the cert reaches `ISSUED`. The zone is the explicit
+          // `hostedZoneId` when given; otherwise the most specific public
+          // zone containing `domainName` is inferred. When neither yields a
+          // zone, validation is left to the caller (external DNS) and the
+          // certificate is returned pending — the pre-inference behavior.
+          // For an already-issued cert this is a fast-path: we only wait
+          // for validation records when the cert isn't already issued.
+          if (
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
-            news.hostedZoneId !== undefined;
-
-          if (shouldAutoValidate && certificate.Status !== "ISSUED") {
-            const withRecords = yield* waitForValidationRecords(certificateArn);
-            yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
-            certificate = yield* waitForIssued(certificateArn);
+            certificate.Status !== "ISSUED"
+          ) {
+            const validationZoneId =
+              news.hostedZoneId ?? (yield* findPublicHostedZoneId(news.domainName));
+            if (validationZoneId !== undefined) {
+              const withRecords = yield* waitForValidationRecords(certificateArn);
+              yield* upsertValidationRecords(validationZoneId, withRecords);
+              certificate = yield* waitForIssued(certificateArn);
+            }
           }
 
           // Sync options — only the CT logging preference is mutable in
@@ -699,12 +640,8 @@ export const CertificateProvider = () =>
                 // that out with a bounded wait instead of failing the delete.
                 Effect.retry({
                   while: (e): boolean =>
-                    e._tag === "ConflictException" ||
-                    e._tag === "ResourceInUseException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("10 seconds"),
-                    Schedule.recurs(30),
-                  ]),
+                    e._tag === "ConflictException" || e._tag === "ResourceInUseException",
+                  schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
                 }),
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               ),
@@ -728,12 +665,8 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
           : Effect.fail(new Error("Route53ChangePending")),
       ),
       Effect.retry({
-        while: (error) =>
-          error instanceof Error && error.message === "Route53ChangePending",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(60),
-        ]),
+        while: (error) => error instanceof Error && error.message === "Route53ChangePending",
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
       }),
     );
 });
@@ -763,14 +696,10 @@ const withCertRegion =
   (region: string | undefined) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
-      Effect.provideService(
-        AwsRegion,
-        Effect.succeed((region ?? ACM_REGION) as typeof ACM_REGION),
-      ),
+      Effect.provideService(AwsRegion, Effect.succeed((region ?? ACM_REGION) as typeof ACM_REGION)),
     );
 
-const normalizeHostedZoneId = (hostedZoneId: string) =>
-  hostedZoneId.replace(/^\/hostedzone\//, "");
+const normalizeHostedZoneId = (hostedZoneId: string) => hostedZoneId.replace(/^\/hostedzone\//, "");
 
 const normalizeSanList = (names: string[] | undefined) =>
   [...(names ?? [])].sort((a, b) => a.localeCompare(b));
@@ -797,9 +726,7 @@ const toAttrs = (
   domainValidationOptions: detail.DomainValidationOptions ?? [],
   validationMethod: props.validationMethod ?? defaultValidationMethod,
   keyAlgorithm: detail.KeyAlgorithm ?? props.keyAlgorithm,
-  hostedZoneId: props.hostedZoneId
-    ? normalizeHostedZoneId(props.hostedZoneId)
-    : undefined,
+  hostedZoneId: props.hostedZoneId ? normalizeHostedZoneId(props.hostedZoneId) : undefined,
   certificateTransparencyLoggingPreference:
     detail.Options?.CertificateTransparencyLoggingPreference,
   export: detail.Options?.Export,

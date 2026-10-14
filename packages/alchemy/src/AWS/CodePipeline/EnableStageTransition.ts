@@ -34,10 +34,7 @@ export interface EnableStageTransition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: EnableStageTransitionRequest,
-    ) => Effect.Effect<
-      SVC.EnableStageTransitionResponse,
-      SVC.EnableStageTransitionError
-    >
+    ) => Effect.Effect<SVC.EnableStageTransitionResponse, SVC.EnableStageTransitionError>
   >
 > {}
 export const EnableStageTransition = Binding.Service<EnableStageTransition>(

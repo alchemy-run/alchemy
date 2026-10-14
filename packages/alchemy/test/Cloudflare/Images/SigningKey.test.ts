@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as images from "@distilled.cloud/cloudflare/images";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Images signing-keys endpoints are gated behind a higher Images
 // entitlement than variants: on the testing account, `GET
@@ -26,25 +23,18 @@ const logLevel = Effect.provideService(
 const keysEntitled = !!process.env.CLOUDFLARE_TEST_IMAGES_KEYS;
 
 const listKeyNames = (accountId: string) =>
-  images
-    .listV1Keys({ accountId })
-    .pipe(Effect.map((r) => (r.keys ?? []).map((k) => k.name)));
+  images.listV1Keys({ accountId }).pipe(Effect.map((r) => (r.keys ?? []).map((k) => k.name)));
 
 // Poll the key list until the named key disappears — list reads are
 // eventually consistent after a DELETE.
 const expectGone = (accountId: string, name: string) =>
   listKeyNames(accountId).pipe(
     Effect.flatMap((names) =>
-      names.includes(name)
-        ? Effect.fail({ _tag: "KeyNotDeleted" } as const)
-        : Effect.void,
+      names.includes(name) ? Effect.fail({ _tag: "KeyNotDeleted" } as const) : Effect.void,
     ),
     Effect.retry({
       while: (e) => e._tag === "KeyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -52,24 +42,27 @@ const expectGone = (accountId: string, name: string) =>
 // `list()` swallows the `ImagesAccessNotEnabled` 5403 and returns `[]` on
 // unentitled accounts, so the result is a well-typed Attributes[] in either
 // case. On an entitled account it additionally contains the deployed key.
-test.provider("list enumerates the account's signing keys", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider(
+  "list enumerates the account's signing keys",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Images.SigningKey);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Images.SigningKey);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const key of all) {
-      expect(typeof key.keyName).toBe("string");
-      expect(key.accountId).toEqual(accountId);
-      expect(typeof Redacted.value(key.value)).toBe("string");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const key of all) {
+        expect(typeof key.keyName).toBe("string");
+        expect(key.accountId).toEqual(accountId);
+        expect(typeof Redacted.value(key.value)).toBe("string");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:images", "live"] },
 );
 
 test.provider.skipIf(keysEntitled)(
@@ -88,6 +81,7 @@ test.provider.skipIf(keysEntitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:images", "live"] },
 );
 
 // NOTE: Cloudflare caps signing keys at 2 per account (the account's
@@ -136,4 +130,5 @@ test.provider.skipIf(!keysEntitled)(
       // Destroy again — delete is idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:images", "live"] },
 );

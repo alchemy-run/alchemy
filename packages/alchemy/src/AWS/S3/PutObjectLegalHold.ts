@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface PutObjectLegalHoldRequest extends Omit<
-  S3.PutObjectLegalHoldRequest,
-  "Bucket"
-> {}
+export interface PutObjectLegalHoldRequest extends Omit<S3.PutObjectLegalHoldRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:PutObjectLegalHold`.
@@ -46,6 +42,4 @@ export interface PutObjectLegalHold extends Binding.Service<
     ) => Effect.Effect<S3.PutObjectLegalHoldOutput, S3.PutObjectLegalHoldError>
   >
 > {}
-export const PutObjectLegalHold = Binding.Service<PutObjectLegalHold>(
-  "AWS.S3.PutObjectLegalHold",
-);
+export const PutObjectLegalHold = Binding.Service<PutObjectLegalHold>("AWS.S3.PutObjectLegalHold");

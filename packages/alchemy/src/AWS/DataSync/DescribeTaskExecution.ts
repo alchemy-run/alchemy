@@ -35,10 +35,7 @@ export interface DescribeTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: datasync.DescribeTaskExecutionRequest,
-    ) => Effect.Effect<
-      datasync.DescribeTaskExecutionResponse,
-      datasync.DescribeTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.DescribeTaskExecutionResponse, datasync.DescribeTaskExecutionError>
   >
 > {}
 export const DescribeTaskExecution = Binding.Service<DescribeTaskExecution>(

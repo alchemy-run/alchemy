@@ -35,12 +35,7 @@ export interface InferICD10CM extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehendmedical.InferICD10CMRequest,
-    ) => Effect.Effect<
-      comprehendmedical.InferICD10CMResponse,
-      comprehendmedical.InferICD10CMError
-    >
+    ) => Effect.Effect<comprehendmedical.InferICD10CMResponse, comprehendmedical.InferICD10CMError>
   >
 > {}
-export const InferICD10CM = Binding.Service<InferICD10CM>(
-  "AWS.ComprehendMedical.InferICD10CM",
-);
+export const InferICD10CM = Binding.Service<InferICD10CM>("AWS.ComprehendMedical.InferICD10CM");

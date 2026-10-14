@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { EventDataStore } from "@/AWS/CloudTrail";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EventDataStore } from "@/AWS/CloudTrail";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,6 +26,7 @@ test.provider(
       );
       expect(error._tag).toBe("EventDataStoreNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:cloudtrail", "live"] },
 );
 
 // Ungated entitlement probe: CloudTrail Lake stopped accepting NEW
@@ -48,23 +49,18 @@ const deleteProbeStoreIfExists = Effect.gen(function* () {
     (s) => s.Name === PROBE_STORE_NAME && s.Status !== "PENDING_DELETION",
   );
   if (existing?.EventDataStoreArn !== undefined) {
-    yield* cloudtrail
-      .deleteEventDataStore({ EventDataStore: existing.EventDataStoreArn })
-      .pipe(
-        // A store still finishing creation can transiently conflict.
-        Effect.retry({
-          while: (e) => e._tag === "ConflictException",
-          schedule: Schedule.exponential("2 seconds"),
-          times: 8,
-        }),
-        Effect.catchTag(
-          [
-            "EventDataStoreNotFoundException",
-            "InactiveEventDataStoreException",
-          ],
-          () => Effect.void,
-        ),
-      );
+    yield* cloudtrail.deleteEventDataStore({ EventDataStore: existing.EventDataStoreArn }).pipe(
+      // A store still finishing creation can transiently conflict.
+      Effect.retry({
+        while: (e) => e._tag === "ConflictException",
+        schedule: Schedule.exponential("2 seconds"),
+        times: 8,
+      }),
+      Effect.catchTag(
+        ["EventDataStoreNotFoundException", "InactiveEventDataStoreException"],
+        () => Effect.void,
+      ),
+    );
   }
 });
 
@@ -101,6 +97,7 @@ test.provider(
       // a green run must imply zero leftovers.
       Effect.ensuring(deleteProbeStoreIfExists.pipe(Effect.orDie)),
     ),
+  { tags: ["provider:aws", "provider:aws:cloudtrail", "live"] },
 );
 
 const STORE_NAME = "alchemy-test-cloudtrail-eds";
@@ -137,16 +134,11 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       // 1. Create with the 7-day minimum retention.
       const { store } = yield* stack.deploy(
-        make({
-          retentionPeriod: "7 days",
-          tags: { fixture: "cloudtrail-eds" },
-        }),
+        make({ retentionPeriod: "7 days", tags: { fixture: "cloudtrail-eds" } }),
       );
       expect(store.name).toBe(STORE_NAME);
       expect(store.eventDataStoreArn).toContain(":eventdatastore/");
-      expect(["CREATED", "ENABLED", "STARTING_INGESTION"]).toContain(
-        store.status,
-      );
+      expect(["CREATED", "ENABLED", "STARTING_INGESTION"]).toContain(store.status);
 
       // Out-of-band verification via distilled.
       const observed = yield* cloudtrail.getEventDataStore({
@@ -156,14 +148,9 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       expect(observed.RetentionPeriod).toBe(7);
       expect(observed.TerminationProtectionEnabled).toBe(false);
       expect(observed.MultiRegionEnabled).toBe(false);
-      const tags = yield* cloudtrail.listTags({
-        ResourceIdList: [store.eventDataStoreArn],
-      });
+      const tags = yield* cloudtrail.listTags({ ResourceIdList: [store.eventDataStoreArn] });
       const tagRecord = Object.fromEntries(
-        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecord.fixture).toBe("cloudtrail-eds");
       expect(tagRecord["alchemy::id"]).toBe("Lake");
@@ -177,14 +164,9 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         EventDataStore: store.eventDataStoreArn,
       });
       expect(observedAfter.RetentionPeriod).toBe(14);
-      const tagsAfter = yield* cloudtrail.listTags({
-        ResourceIdList: [store.eventDataStoreArn],
-      });
+      const tagsAfter = yield* cloudtrail.listTags({ ResourceIdList: [store.eventDataStoreArn] });
       const tagRecordAfter = Object.fromEntries(
-        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecordAfter.team).toBe("audit");
       expect(tagRecordAfter.fixture).toBeUndefined();
@@ -192,19 +174,13 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       // 2b. Stop ingestion — the store's Status converges to
       // STOPPED_INGESTION; collected events stay queryable.
       const { store: stopped } = yield* stack.deploy(
-        make({
-          retentionPeriod: "14 days",
-          tags: { team: "audit" },
-          ingestionEnabled: false,
-        }),
+        make({ retentionPeriod: "14 days", tags: { team: "audit" }, ingestionEnabled: false }),
       );
       expect(stopped.eventDataStoreArn).toBe(store.eventDataStoreArn);
       const observedStopped = yield* cloudtrail.getEventDataStore({
         EventDataStore: store.eventDataStoreArn,
       });
-      expect(["STOPPING_INGESTION", "STOPPED_INGESTION"]).toContain(
-        observedStopped.Status,
-      );
+      expect(["STOPPING_INGESTION", "STOPPED_INGESTION"]).toContain(observedStopped.Status);
 
       // 3. Delete — schedules PENDING_DELETION (7-day wait, zero cost);
       // do NOT wait for the store to disappear.
@@ -213,11 +189,9 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         .getEventDataStore({ EventDataStore: store.eventDataStoreArn })
         .pipe(
           Effect.map((r) => r.Status ?? "UNKNOWN"),
-          Effect.catchTag("EventDataStoreNotFoundException", () =>
-            Effect.succeed("GONE" as const),
-          ),
+          Effect.catchTag("EventDataStoreNotFoundException", () => Effect.succeed("GONE" as const)),
         );
       expect(["PENDING_DELETION", "GONE"]).toContain(afterDelete);
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:cloudtrail", "live"], timeout: 180_000 },
 );

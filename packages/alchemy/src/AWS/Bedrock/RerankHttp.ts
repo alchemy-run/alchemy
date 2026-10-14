@@ -20,42 +20,33 @@ export const RerankHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           // Sort so the binding identity (SID + ARN list) is deterministic
           // regardless of argument order.
           const sorted = [...new Set([model, ...additionalModels])].sort();
-          yield* host.bind`Allow(${host}, AWS.Bedrock.Rerank(${sorted.join(",")}))`(
-            {
-              policyStatements: [
-                {
-                  // bedrock:Rerank does not support resource-level scoping.
-                  Effect: "Allow",
-                  Action: ["bedrock:Rerank"],
-                  Resource: ["*"],
-                },
-                {
-                  Effect: "Allow",
-                  Action: ["bedrock:InvokeModel"],
-                  Resource: [
-                    ...new Set(
-                      sorted.flatMap((id) =>
-                        bedrockModelArns(region, accountId, id),
-                      ),
-                    ),
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Bedrock.Rerank(${sorted.join(",")}))`({
+            policyStatements: [
+              {
+                // bedrock:Rerank does not support resource-level scoping.
+                Effect: "Allow",
+                Action: ["bedrock:Rerank"],
+                Resource: ["*"],
+              },
+              {
+                Effect: "Allow",
+                Action: ["bedrock:InvokeModel"],
+                Resource: [
+                  ...new Set(sorted.flatMap((id) => bedrockModelArns(region, accountId, id))),
+                ],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.Bedrock.Rerank(${model})`)(function* (
-        request: RerankRequest,
-      ) {
+      return Effect.fn(`AWS.Bedrock.Rerank(${model})`)(function* (request: RerankRequest) {
         return yield* rerank(request);
       });
     });

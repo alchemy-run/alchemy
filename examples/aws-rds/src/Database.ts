@@ -61,9 +61,7 @@ export const DatabaseAurora = Layer.effect(
                   user: connection.username,
                   password: connection.password,
                   // Example-only SSL posture for private Aurora connections.
-                  ssl: connection.ssl
-                    ? { rejectUnauthorized: false }
-                    : undefined,
+                  ssl: connection.ssl ? { rejectUnauthorized: false } : undefined,
                 });
 
                 await client.connect();

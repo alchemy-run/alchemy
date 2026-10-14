@@ -36,12 +36,7 @@ export interface SendApiAsset extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<dataexchange.SendApiAssetRequest, "DataSetId">,
-    ) => Effect.Effect<
-      dataexchange.SendApiAssetResponse,
-      dataexchange.SendApiAssetError
-    >
+    ) => Effect.Effect<dataexchange.SendApiAssetResponse, dataexchange.SendApiAssetError>
   >
 > {}
-export const SendApiAsset = Binding.Service<SendApiAsset>(
-  "AWS.DataExchange.SendApiAsset",
-);
+export const SendApiAsset = Binding.Service<SendApiAsset>("AWS.DataExchange.SendApiAsset");

@@ -29,8 +29,7 @@ export const WriteDatasetBinding = Layer.effect(
       }
 
       const raw = Effect.sync(
-        () =>
-          (env as Record<string, RuntimeAnalyticsEngineDataset>)[dataset.name]!,
+        () => (env as Record<string, RuntimeAnalyticsEngineDataset>)[dataset.name]!,
       );
 
       return {

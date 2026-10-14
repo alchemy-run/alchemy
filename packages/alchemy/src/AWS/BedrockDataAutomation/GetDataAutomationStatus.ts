@@ -31,10 +31,7 @@ export interface GetDataAutomationStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: bdar.GetDataAutomationStatusRequest,
-    ) => Effect.Effect<
-      bdar.GetDataAutomationStatusResponse,
-      bdar.GetDataAutomationStatusError
-    >
+    ) => Effect.Effect<bdar.GetDataAutomationStatusResponse, bdar.GetDataAutomationStatusError>
   >
 > {}
 export const GetDataAutomationStatus = Binding.Service<GetDataAutomationStatus>(

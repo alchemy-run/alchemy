@@ -1,7 +1,7 @@
 import * as location from "@distilled.cloud/aws/location";
 import * as Layer from "effect/Layer";
-import { makeLocationCollectionHttpBinding } from "./BindingHttp.ts";
 import { BatchEvaluateGeofences } from "./BatchEvaluateGeofences.ts";
+import { makeLocationCollectionHttpBinding } from "./BindingHttp.ts";
 
 export const BatchEvaluateGeofencesHttp = Layer.effect(
   BatchEvaluateGeofences,

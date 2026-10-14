@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Runtime } from "@/AWS/BedrockAgentCore";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Runtime } from "@/AWS/BedrockAgentCore";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,34 +16,24 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        control.getAgentRuntime({
-          agentRuntimeId: "alchemy_nonexistent_probe-0000000000",
-        }),
+        control.getAgentRuntime({ agentRuntimeId: "alchemy_nonexistent_probe-0000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:bedrockagentcore", "live"] },
 );
 
 const assertRuntimeGone = (agentRuntimeId: string) =>
   Effect.gen(function* () {
     const status = yield* control.getAgentRuntime({ agentRuntimeId }).pipe(
       Effect.map((r) => r.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`runtime still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`runtime still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]) }),
   );
 
 // The full lifecycle needs a deployable agent container image in ECR —
@@ -51,9 +41,7 @@ const assertRuntimeGone = (agentRuntimeId: string) =>
 // AWS_TEST_AGENTCORE=1 and provide the image via AWS_TEST_AGENTCORE_IMAGE
 // (an ECR image URI in the same account/region, e.g. built from the
 // AgentCore starter toolkit).
-test.provider.skipIf(
-  !process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AGENTCORE_IMAGE,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AGENTCORE_IMAGE)(
   "create container-backed agent runtime, verify, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -72,15 +60,11 @@ test.provider.skipIf(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
           });
           const runtime = yield* Runtime("TestAgent", {
             agentRuntimeArtifact: {
-              containerConfiguration: {
-                containerUri: process.env.AWS_TEST_AGENTCORE_IMAGE!,
-              },
+              containerConfiguration: { containerUri: process.env.AWS_TEST_AGENTCORE_IMAGE! },
             },
             roleArn: role.roleArn,
             tags: { fixture: "agentcore-runtime" },
@@ -95,13 +79,14 @@ test.provider.skipIf(
       expect(runtime.agentRuntimeVersion).toBeTruthy();
 
       // out-of-band verification via distilled
-      const observed = yield* control.getAgentRuntime({
-        agentRuntimeId: runtime.agentRuntimeId,
-      });
+      const observed = yield* control.getAgentRuntime({ agentRuntimeId: runtime.agentRuntimeId });
       expect(observed.status).toBe("READY");
 
       yield* stack.destroy();
       yield* assertRuntimeGone(runtime.agentRuntimeId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:bedrockagentcore", "provider:aws:iam", "live"],
+    timeout: 600_000,
+  },
 );

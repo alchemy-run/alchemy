@@ -14,12 +14,8 @@ const server = Bun.serve({
     if (pathname === "/__dev-env") {
       return Response.json({ marker: process.env.DEV_MARKER ?? null });
     }
-    const file = Bun.file(
-      `${process.cwd()}/src${pathname === "/" ? "/index.html" : pathname}`,
-    );
-    return (await file.exists())
-      ? new Response(file)
-      : new Response("not found", { status: 404 });
+    const file = Bun.file(`${process.cwd()}/src${pathname === "/" ? "/index.html" : pathname}`);
+    return (await file.exists()) ? new Response(file) : new Response("not found", { status: 404 });
   },
 });
 

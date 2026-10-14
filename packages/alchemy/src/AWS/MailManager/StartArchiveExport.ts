@@ -36,10 +36,7 @@ export interface StartArchiveExport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.StartArchiveExportRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.StartArchiveExportResponse,
-      mm.StartArchiveExportError
-    >
+    ) => Effect.Effect<mm.StartArchiveExportResponse, mm.StartArchiveExportError>
   >
 > {}
 export const StartArchiveExport = Binding.Service<StartArchiveExport>(

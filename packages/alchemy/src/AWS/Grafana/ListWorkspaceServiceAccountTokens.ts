@@ -34,17 +34,13 @@ export interface ListWorkspaceServiceAccountTokens extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.ListWorkspaceServiceAccountTokensRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.ListWorkspaceServiceAccountTokensRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.ListWorkspaceServiceAccountTokensResponse,
       grafana.ListWorkspaceServiceAccountTokensError
     >
   >
 > {}
-export const ListWorkspaceServiceAccountTokens =
-  Binding.Service<ListWorkspaceServiceAccountTokens>(
-    "AWS.Grafana.ListWorkspaceServiceAccountTokens",
-  );
+export const ListWorkspaceServiceAccountTokens = Binding.Service<ListWorkspaceServiceAccountTokens>(
+  "AWS.Grafana.ListWorkspaceServiceAccountTokens",
+);

@@ -1,29 +1,24 @@
-import * as AWS from "@/AWS";
-import { Thing } from "@/AWS/IoT";
-import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/aws/iot";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Thing } from "@/AWS/IoT";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertThingGone = (thingName: string) =>
   iot.describeThing({ thingName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`thing ${thingName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`thing ${thingName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
-describe.sequential("AWS.IoT.Thing", () => {
+describe.sequential("AWS.IoT.Thing", { tags: ["provider:aws", "provider:aws:iot", "live"] }, () => {
   test.provider(
     "creates a thing with attributes, updates attributes, and deletes it",
     (stack) =>

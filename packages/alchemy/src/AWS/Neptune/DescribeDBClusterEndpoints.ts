@@ -30,13 +30,9 @@ export interface DescribeDBClusterEndpoints extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.DescribeDBClusterEndpointsMessage,
-    ) => Effect.Effect<
-      neptune.DBClusterEndpointMessage,
-      neptune.DescribeDBClusterEndpointsError
-    >
+    ) => Effect.Effect<neptune.DBClusterEndpointMessage, neptune.DescribeDBClusterEndpointsError>
   >
 > {}
-export const DescribeDBClusterEndpoints =
-  Binding.Service<DescribeDBClusterEndpoints>(
-    "AWS.Neptune.DescribeDBClusterEndpoints",
-  );
+export const DescribeDBClusterEndpoints = Binding.Service<DescribeDBClusterEndpoints>(
+  "AWS.Neptune.DescribeDBClusterEndpoints",
+);

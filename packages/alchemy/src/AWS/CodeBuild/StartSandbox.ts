@@ -28,6 +28,4 @@ export interface StartSandbox extends Binding.Service<
     ) => Effect.Effect<SVC.StartSandboxOutput, SVC.StartSandboxError>
   >
 > {}
-export const StartSandbox = Binding.Service<StartSandbox>(
-  "AWS.CodeBuild.StartSandbox",
-);
+export const StartSandbox = Binding.Service<StartSandbox>("AWS.CodeBuild.StartSandbox");

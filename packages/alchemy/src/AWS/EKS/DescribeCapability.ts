@@ -31,12 +31,7 @@ export interface DescribeCapability extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<eks.DescribeCapabilityRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeCapabilityResponse,
-      eks.DescribeCapabilityError
-    >
+    ) => Effect.Effect<eks.DescribeCapabilityResponse, eks.DescribeCapabilityError>
   >
 > {}
-export const DescribeCapability = Binding.Service<DescribeCapability>(
-  "AWS.EKS.DescribeCapability",
-);
+export const DescribeCapability = Binding.Service<DescribeCapability>("AWS.EKS.DescribeCapability");

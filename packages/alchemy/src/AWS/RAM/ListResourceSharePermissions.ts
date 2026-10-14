@@ -36,7 +36,6 @@ export interface ListResourceSharePermissions extends Binding.Service<
     >
   >
 > {}
-export const ListResourceSharePermissions =
-  Binding.Service<ListResourceSharePermissions>(
-    "AWS.RAM.ListResourceSharePermissions",
-  );
+export const ListResourceSharePermissions = Binding.Service<ListResourceSharePermissions>(
+  "AWS.RAM.ListResourceSharePermissions",
+);

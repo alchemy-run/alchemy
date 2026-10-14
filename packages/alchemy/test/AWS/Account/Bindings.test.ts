@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AccountTestFunctionLive, { AccountTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "AccountBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -62,108 +54,102 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (response): boolean =>
-        (response as { tag?: string }).tag !== "AccessDeniedException",
+      until: (response): boolean => (response as { tag?: string }).tag !== "AccessDeniedException",
       times: 10,
     }),
   );
 
-describe.sequential("Account Bindings", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Account test setup: destroying previous resources",
-      );
-      yield* sharedStack.destroy();
+describe.sequential(
+  "Account Bindings",
+  { tags: ["provider:aws", "provider:aws:account", "provider:aws:lambda", "live"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* Effect.logInfo("Account test setup: destroying previous resources");
+        yield* sharedStack.destroy();
 
-      yield* Effect.logInfo("Account test setup: deploying fixture");
-      const attrs = yield* sharedStack.deploy(
-        Effect.gen(function* () {
-          return yield* AccountTestFunction;
-        }).pipe(Effect.provide(AccountTestFunctionLive)),
-      );
+        yield* Effect.logInfo("Account test setup: deploying fixture");
+        const attrs = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            return yield* AccountTestFunction;
+          }).pipe(Effect.provide(AccountTestFunctionLive)),
+        );
 
-      expect(attrs.functionUrl).toBeTruthy();
-      baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+        expect(attrs.functionUrl).toBeTruthy();
+        baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
-      const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Account test setup: probing readiness at ${readinessUrl}`,
-      );
-      yield* HttpClient.get(readinessUrl).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.tapError((error) =>
-          Effect.logWarning(
-            `Account test setup: fixture not ready yet (${String(error)})`,
+        const readinessUrl = `${baseUrl}/bindings`;
+        yield* Effect.logInfo(`Account test setup: probing readiness at ${readinessUrl}`);
+        yield* HttpClient.get(readinessUrl).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
+          Effect.tapError((error) =>
+            Effect.logWarning(`Account test setup: fixture not ready yet (${String(error)})`),
+          ),
+          Effect.retry({ schedule: readinessPolicy }),
+        );
+      }),
+      { timeout: 240_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+    describe("binding registration", () => {
+      test.provider("all 5 capabilities initialize in the runtime", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/bindings")) as { bound: string[] };
+          expect(response.bound).toEqual([
+            "getAccountInformation",
+            "getContactInformation",
+            "getAlternateContact",
+            "listRegions",
+            "getRegionOptStatus",
+          ]);
+        }),
       );
-    }),
-    { timeout: 240_000 },
-  );
+    });
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+    describe("GetAccountInformation", () => {
+      test.provider("reads the account's metadata", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/account-info")) as
+            | {
+                ok: true;
+                accountId: string | null;
+                accountState: string | null;
+                hasAccountName: boolean;
+              }
+            | { ok: false; tag: string };
+          expect(response.ok).toBe(true);
+          if (response.ok) {
+            expect(response.accountId).toMatch(/^\d{12}$/);
+            expect(response.accountState).toBe("ACTIVE");
+          }
+        }),
+      );
+    });
 
-  describe("binding registration", () => {
-    test.provider("all 5 capabilities initialize in the runtime", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toEqual([
-          "getAccountInformation",
-          "getContactInformation",
-          "getAlternateContact",
-          "listRegions",
-          "getRegionOptStatus",
-        ]);
-      }),
-    );
-  });
+    describe("GetContactInformation", () => {
+      test.provider("reads the account's primary contact", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/contact-info")) as
+            | { ok: true; hasFullName: boolean; hasCountryCode: boolean }
+            | { ok: false; tag: string };
+          expect(response.ok).toBe(true);
+          if (response.ok) {
+            // Every account has a primary contact with a name and country.
+            expect(response.hasFullName).toBe(true);
+            expect(response.hasCountryCode).toBe(true);
+          }
+        }),
+      );
+    });
 
-  describe("GetAccountInformation", () => {
-    test.provider("reads the account's metadata", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/account-info")) as
-          | {
-              ok: true;
-              accountId: string | null;
-              accountState: string | null;
-              hasAccountName: boolean;
-            }
-          | { ok: false; tag: string };
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-          expect(response.accountId).toMatch(/^\d{12}$/);
-          expect(response.accountState).toBe("ACTIVE");
-        }
-      }),
-    );
-  });
-
-  describe("GetContactInformation", () => {
-    test.provider("reads the account's primary contact", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/contact-info")) as
-          | { ok: true; hasFullName: boolean; hasCountryCode: boolean }
-          | { ok: false; tag: string };
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-          // Every account has a primary contact with a name and country.
-          expect(response.hasFullName).toBe(true);
-          expect(response.hasCountryCode).toBe(true);
-        }
-      }),
-    );
-  });
-
-  describe("GetAlternateContact", () => {
-    test.provider(
-      "reads the billing contact or surfaces the typed not-found tag",
-      (_stack) =>
+    describe("GetAlternateContact", () => {
+      test.provider("reads the billing contact or surfaces the typed not-found tag", (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/alternate-contact")) as
             | { ok: true; contactType: string | null }
@@ -178,40 +164,37 @@ describe.sequential("Account Bindings", () => {
             expect(response.tag).toBe("ResourceNotFoundException");
           }
         }),
-    );
-  });
+      );
+    });
 
-  describe("ListRegions", () => {
-    test.provider("lists the account's regions with opt statuses", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/regions")) as
-          | { ok: true; count: number; regionNames: string[] }
-          | { ok: false; tag: string };
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-          expect(response.count).toBeGreaterThanOrEqual(1);
-          expect(response.regionNames).toContain("us-east-1");
-        }
-      }),
-    );
-  });
+    describe("ListRegions", () => {
+      test.provider("lists the account's regions with opt statuses", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/regions")) as
+            | { ok: true; count: number; regionNames: string[] }
+            | { ok: false; tag: string };
+          expect(response.ok).toBe(true);
+          if (response.ok) {
+            expect(response.count).toBeGreaterThanOrEqual(1);
+            expect(response.regionNames).toContain("us-east-1");
+          }
+        }),
+      );
+    });
 
-  describe("GetRegionOptStatus", () => {
-    test.provider("reads us-east-1's opt status", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/region-opt-status")) as
-          | {
-              ok: true;
-              regionName: string | null;
-              regionOptStatus: string | null;
-            }
-          | { ok: false; tag: string };
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-          expect(response.regionName).toBe("us-east-1");
-          expect(response.regionOptStatus).toBe("ENABLED_BY_DEFAULT");
-        }
-      }),
-    );
-  });
-});
+    describe("GetRegionOptStatus", () => {
+      test.provider("reads us-east-1's opt status", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/region-opt-status")) as
+            | { ok: true; regionName: string | null; regionOptStatus: string | null }
+            | { ok: false; tag: string };
+          expect(response.ok).toBe(true);
+          if (response.ok) {
+            expect(response.regionName).toBe("us-east-1");
+            expect(response.regionOptStatus).toBe("ENABLED_BY_DEFAULT");
+          }
+        }),
+      );
+    });
+  },
+);

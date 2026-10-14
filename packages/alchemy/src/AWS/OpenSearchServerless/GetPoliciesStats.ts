@@ -29,10 +29,7 @@ export interface GetPoliciesStats extends Binding.Service<
   () => Effect.Effect<
     (
       request?: aoss.GetPoliciesStatsRequest,
-    ) => Effect.Effect<
-      aoss.GetPoliciesStatsResponse,
-      aoss.GetPoliciesStatsError
-    >
+    ) => Effect.Effect<aoss.GetPoliciesStatsResponse, aoss.GetPoliciesStatsError>
   >
 > {}
 export const GetPoliciesStats = Binding.Service<GetPoliciesStats>(

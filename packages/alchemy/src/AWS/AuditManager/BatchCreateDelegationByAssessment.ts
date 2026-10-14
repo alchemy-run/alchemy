@@ -45,7 +45,6 @@ export interface BatchCreateDelegationByAssessment extends Binding.Service<
   >
 > {}
 
-export const BatchCreateDelegationByAssessment =
-  Binding.Service<BatchCreateDelegationByAssessment>(
-    "AWS.AuditManager.BatchCreateDelegationByAssessment",
-  );
+export const BatchCreateDelegationByAssessment = Binding.Service<BatchCreateDelegationByAssessment>(
+  "AWS.AuditManager.BatchCreateDelegationByAssessment",
+);

@@ -1,18 +1,15 @@
-import * as AWS from "@/AWS";
-import { RouteTable, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { RouteTable, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
 import { assertRouteTableGone, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "list enumerates the deployed RouteTable",
@@ -35,9 +32,7 @@ test.provider(
       const provider = yield* Provider.findProvider(RouteTable);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.routeTableId === routeTable.routeTableId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.routeTableId === routeTable.routeTableId)).toBe(true);
 
       yield* stack.destroy();
 
@@ -50,5 +45,5 @@ test.provider(
   // the end-to-end run headroom. (Observed blowing 180s during a full-suite
   // run where concurrent EC2 suites saturated the account's request budget
   // and VPC quota; a timeout mid-destroy also leaks the VPC.)
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 300_000 },
 );

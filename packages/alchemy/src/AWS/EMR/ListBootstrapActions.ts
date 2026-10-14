@@ -23,10 +23,7 @@ export interface ListBootstrapActions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListBootstrapActionsInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.ListBootstrapActionsOutput,
-      SVC.ListBootstrapActionsError
-    >
+    ) => Effect.Effect<SVC.ListBootstrapActionsOutput, SVC.ListBootstrapActionsError>
   >
 > {}
 export const ListBootstrapActions = Binding.Service<ListBootstrapActions>(

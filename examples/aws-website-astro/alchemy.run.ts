@@ -16,10 +16,8 @@ export default Alchemy.Stack(
         include: ["src/**", "public/**", "package.json", "astro.config.ts"],
       },
       forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from Alchemy!",
-        },
+      env: {
+        GREETING: "Hello from Astro on AWS!",
       },
     });
 

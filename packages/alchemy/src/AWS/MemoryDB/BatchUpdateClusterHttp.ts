@@ -1,7 +1,7 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Layer from "effect/Layer";
-import { makeMemoryDBAccountHttpBinding } from "./BindingHttp.ts";
 import { BatchUpdateCluster } from "./BatchUpdateCluster.ts";
+import { makeMemoryDBAccountHttpBinding } from "./BindingHttp.ts";
 
 export const BatchUpdateClusterHttp = Layer.effect(
   BatchUpdateCluster,

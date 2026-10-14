@@ -35,12 +35,7 @@ export interface DetectSentiment extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectSentimentRequest,
-    ) => Effect.Effect<
-      comprehend.DetectSentimentResponse,
-      comprehend.DetectSentimentError
-    >
+    ) => Effect.Effect<comprehend.DetectSentimentResponse, comprehend.DetectSentimentError>
   >
 > {}
-export const DetectSentiment = Binding.Service<DetectSentiment>(
-  "AWS.Comprehend.DetectSentiment",
-);
+export const DetectSentiment = Binding.Service<DetectSentiment>("AWS.Comprehend.DetectSentiment");

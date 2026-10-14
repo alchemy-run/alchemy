@@ -2,8 +2,8 @@ import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
-import { StopRuntimeSession } from "./StopRuntimeSession.ts";
 import type { Runtime } from "./Runtime.ts";
+import { StopRuntimeSession } from "./StopRuntimeSession.ts";
 
 export const StopRuntimeSessionHttp = Layer.effect(
   StopRuntimeSession,

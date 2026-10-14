@@ -7,10 +7,7 @@ import type { TableBucket } from "./TableBucket.ts";
  * `ListTables` request with `tableBucketARN` injected from the bound
  * {@link TableBucket}.
  */
-export interface ListTablesRequest extends Omit<
-  s3tables.ListTablesRequest,
-  "tableBucketARN"
-> {}
+export interface ListTablesRequest extends Omit<s3tables.ListTablesRequest, "tableBucketARN"> {}
 
 /**
  * Runtime binding for the `ListTables` operation (IAM action
@@ -44,6 +41,4 @@ export interface ListTables extends Binding.Service<
     ) => Effect.Effect<s3tables.ListTablesResponse, s3tables.ListTablesError>
   >
 > {}
-export const ListTables = Binding.Service<ListTables>(
-  "AWS.S3Tables.ListTables",
-);
+export const ListTables = Binding.Service<ListTables>("AWS.S3Tables.ListTables");

@@ -27,10 +27,7 @@ export interface DescribeFeedback extends Binding.Service<
   () => Effect.Effect<
     (
       request?: devopsguru.DescribeFeedbackRequest,
-    ) => Effect.Effect<
-      devopsguru.DescribeFeedbackResponse,
-      devopsguru.DescribeFeedbackError
-    >
+    ) => Effect.Effect<devopsguru.DescribeFeedbackResponse, devopsguru.DescribeFeedbackError>
   >
 > {}
 export const DescribeFeedback = Binding.Service<DescribeFeedback>(

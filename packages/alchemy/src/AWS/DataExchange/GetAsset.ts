@@ -31,10 +31,7 @@ export interface GetAsset extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<dataexchange.GetAssetRequest, "DataSetId" | "RevisionId">,
-    ) => Effect.Effect<
-      dataexchange.GetAssetResponse,
-      dataexchange.GetAssetError
-    >
+    ) => Effect.Effect<dataexchange.GetAssetResponse, dataexchange.GetAssetError>
   >
 > {}
 export const GetAsset = Binding.Service<GetAsset>("AWS.DataExchange.GetAsset");

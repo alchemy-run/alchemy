@@ -73,9 +73,9 @@ export const StreamKey = Resource<StreamKey>("AWS.IVS.StreamKey");
  * Raised when the IVS API returns a stream key missing its ARN or channel
  * ARN.
  */
-export class IvsStreamKeyIncomplete extends Data.TaggedError(
-  "IvsStreamKeyIncomplete",
-)<{ message: string }> {}
+export class IvsStreamKeyIncomplete extends Data.TaggedError("IvsStreamKeyIncomplete")<{
+  message: string;
+}> {}
 
 export const StreamKeyProvider = () =>
   Provider.effect(
@@ -83,11 +83,9 @@ export const StreamKeyProvider = () =>
     Effect.gen(function* () {
       const toAttrs = Effect.fn(function* (streamKey: ivs.StreamKey) {
         if (!streamKey.arn || !streamKey.channelArn) {
-          return yield* Effect.fail(
-            new IvsStreamKeyIncomplete({
-              message: "IVS stream key is missing its ARN or channel ARN",
-            }),
-          );
+          return yield* new IvsStreamKeyIncomplete({
+            message: "IVS stream key is missing its ARN or channel ARN",
+          });
         }
         return {
           streamKeyArn: streamKey.arn,
@@ -99,9 +97,7 @@ export const StreamKeyProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getStreamKey({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.streamKey;
       });
@@ -114,9 +110,7 @@ export const StreamKeyProvider = () =>
       const findByChannel = Effect.fn(function* (channelArn: string) {
         const page = yield* ivs.listStreamKeys({ channelArn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         const arn = page?.streamKeys.find((s) => s.arn !== undefined)?.arn;
         return arn === undefined ? undefined : yield* getByArn(arn);
@@ -133,9 +127,28 @@ export const StreamKeyProvider = () =>
               : undefined;
           if (streamKey === undefined) return undefined;
           const attrs = yield* toAttrs(streamKey);
-          return (yield* hasAlchemyTags(id, toTagRecord(streamKey.tags)))
-            ? attrs
-            : Unowned(attrs);
+          const tags = toTagRecord(streamKey.tags);
+          if (yield* hasAlchemyTags(id, tags)) return attrs;
+          // CreateChannel provisions an untagged default key before the
+          // engine can resolve this resource's channelArn. It belongs to the
+          // channel lifecycle, so an owned channel may claim its default key.
+          // Keys carrying user or ownership tags still require explicit adoption.
+          if (
+            output === undefined &&
+            olds?.channelArn !== undefined &&
+            Object.keys(tags).length === 0
+          ) {
+            const response = yield* ivs.getChannel({ arn: olds.channelArn }).pipe(
+              retryWhileThrottled,
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            );
+            const channelTags = toTagRecord(response?.channel?.tags);
+            const channelId = channelTags["alchemy::id"];
+            if (channelId !== undefined && (yield* hasAlchemyTags(channelId, channelTags))) {
+              return attrs;
+            }
+          }
+          return Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -158,10 +171,7 @@ export const StreamKeyProvider = () =>
             : yield* findByChannel(news.channelArn);
           // A cached ARN can belong to a previous channel after a failed
           // replacement — only trust keys on the desired channel.
-          if (
-            observed !== undefined &&
-            observed.channelArn !== news.channelArn
-          ) {
+          if (observed !== undefined && observed.channelArn !== news.channelArn) {
             observed = undefined;
           }
 
@@ -171,10 +181,7 @@ export const StreamKeyProvider = () =>
           // below).
           if (observed === undefined) {
             observed = yield* ivs
-              .createStreamKey({
-                channelArn: news.channelArn,
-                tags: desiredTags,
-              })
+              .createStreamKey({ channelArn: news.channelArn, tags: desiredTags })
               .pipe(
                 retryWhileThrottled,
                 Effect.map((r) => r.streamKey),
@@ -185,11 +192,9 @@ export const StreamKeyProvider = () =>
           }
           const arn = observed?.arn;
           if (observed === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new IvsStreamKeyIncomplete({
-                message: `IVS channel '${news.channelArn}' has no stream key and one could not be created`,
-              }),
-            );
+            return yield* new IvsStreamKeyIncomplete({
+              message: `IVS channel '${news.channelArn}' has no stream key and one could not be created`,
+            });
           }
 
           // 3. Sync tags — the only mutable aspect. Diff against OBSERVED
@@ -200,11 +205,9 @@ export const StreamKeyProvider = () =>
           // value; the ListStreamKeys summary does not).
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsStreamKeyIncomplete({
-                message: `IVS stream key '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsStreamKeyIncomplete({
+              message: `IVS stream key '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

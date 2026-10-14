@@ -44,13 +44,8 @@ export interface PutRecordBatch extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutRecordBatchRequest,
-    ) => Effect.Effect<
-      Firehose.PutRecordBatchOutput,
-      Firehose.PutRecordBatchError
-    >
+    ) => Effect.Effect<Firehose.PutRecordBatchOutput, Firehose.PutRecordBatchError>
   >
 > {}
 
-export const PutRecordBatch = Binding.Service<PutRecordBatch>(
-  "AWS.Firehose.PutRecordBatch",
-);
+export const PutRecordBatch = Binding.Service<PutRecordBatch>("AWS.Firehose.PutRecordBatch");

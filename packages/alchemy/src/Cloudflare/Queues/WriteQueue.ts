@@ -52,17 +52,10 @@ export interface WriteQueue extends Binding.Service<
   (queue: Queue) => Effect.Effect<WriteQueueClient>
 > {}
 
-export const WriteQueue = Binding.Service<WriteQueue>(
-  "Cloudflare.Queues.WriteQueue",
-);
+export const WriteQueue = Binding.Service<WriteQueue>("Cloudflare.Queues.WriteQueue");
 
 export interface WriteQueueClient {
   raw: Effect.Effect<runtime.Queue<unknown>, never, RuntimeContext>;
-  send(
-    body: unknown,
-    options?: SendOptions,
-  ): Effect.Effect<void, SendError, RuntimeContext>;
-  sendBatch(
-    messages: ReadonlyArray<SendMessage>,
-  ): Effect.Effect<void, SendError, RuntimeContext>;
+  send(body: unknown, options?: SendOptions): Effect.Effect<void, SendError, RuntimeContext>;
+  sendBatch(messages: ReadonlyArray<SendMessage>): Effect.Effect<void, SendError, RuntimeContext>;
 }

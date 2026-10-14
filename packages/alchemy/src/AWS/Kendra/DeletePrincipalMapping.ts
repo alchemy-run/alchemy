@@ -38,10 +38,7 @@ export interface DeletePrincipalMapping extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeletePrincipalMappingRequest,
-    ) => Effect.Effect<
-      kendra.DeletePrincipalMappingResponse,
-      kendra.DeletePrincipalMappingError
-    >
+    ) => Effect.Effect<kendra.DeletePrincipalMappingResponse, kendra.DeletePrincipalMappingError>
   >
 > {}
 export const DeletePrincipalMapping = Binding.Service<DeletePrincipalMapping>(

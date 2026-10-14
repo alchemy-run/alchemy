@@ -44,15 +44,9 @@ class OrphanStillPresent extends Data.TaggedError("OrphanStillPresent")<{
 }> {}
 
 /** ~10 minute ceiling for slow asynchronous releases (RDS deletes, Lambda ENIs). */
-const slowRelease = Schedule.max([
-  Schedule.spaced("15 seconds"),
-  Schedule.recurs(40),
-]);
+const slowRelease = Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(40)]);
 /** ~2 minute ceiling for ordinary dependency-violation races. */
-const dependencyRelease = Schedule.max([
-  Schedule.spaced("10 seconds"),
-  Schedule.recurs(12),
-]);
+const dependencyRelease = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(12)]);
 
 const reapFunctions = Effect.gen(function* () {
   const pages = yield* lambda.listFunctions.pages({}).pipe(Stream.runCollect);
@@ -63,14 +57,11 @@ const reapFunctions = Effect.gen(function* () {
   yield* Effect.forEach(
     names,
     (FunctionName) =>
-      Effect.logInfo(
-        `RDSData reap: deleting Lambda function ${FunctionName}`,
-      ).pipe(
+      Effect.logInfo(`RDSData reap: deleting Lambda function ${FunctionName}`).pipe(
         Effect.andThen(lambda.deleteFunction({ FunctionName })),
         Effect.retry({
           while: (e) =>
-            e._tag === "ResourceConflictException" ||
-            e._tag === "TooManyRequestsException",
+            e._tag === "ResourceConflictException" || e._tag === "TooManyRequestsException",
           schedule: dependencyRelease,
         }),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -118,22 +109,16 @@ const reapRoles = Effect.gen(function* () {
           (PolicyArn) =>
             iam
               .detachRolePolicy({ RoleName, PolicyArn })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
           { discard: true },
         );
-        const inline = yield* iam.listRolePolicies
-          .pages({ RoleName })
-          .pipe(Stream.runCollect);
+        const inline = yield* iam.listRolePolicies.pages({ RoleName }).pipe(Stream.runCollect);
         yield* Effect.forEach(
           Array.from(inline).flatMap((page) => page.PolicyNames ?? []),
           (PolicyName) =>
             iam
               .deleteRolePolicy({ RoleName, PolicyName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
           { discard: true },
         );
         yield* iam.deleteRole({ RoleName }).pipe(
@@ -162,9 +147,7 @@ const countDbInstances = rds.describeDBInstances.pages({}).pipe(
 );
 
 const reapDbInstances = Effect.gen(function* () {
-  const pages = yield* rds.describeDBInstances
-    .pages({})
-    .pipe(Stream.runCollect);
+  const pages = yield* rds.describeDBInstances.pages({}).pipe(Stream.runCollect);
   const ids = Array.from(pages)
     .flatMap((page) => page.DBInstances ?? [])
     .map((instance) => instance.DBInstanceIdentifier)
@@ -193,9 +176,7 @@ const reapDbInstances = Effect.gen(function* () {
     yield* countDbInstances.pipe(
       Effect.repeat({ schedule: slowRelease, until: (n) => n === 0 }),
       Effect.flatMap((n) =>
-        n === 0
-          ? Effect.void
-          : Effect.fail(new OrphanStillPresent({ kind: "RDS DB instances" })),
+        n === 0 ? Effect.void : Effect.fail(new OrphanStillPresent({ kind: "RDS DB instances" })),
       ),
     );
   }
@@ -240,18 +221,14 @@ const reapDbClusters = Effect.gen(function* () {
     yield* countDbClusters.pipe(
       Effect.repeat({ schedule: slowRelease, until: (n) => n === 0 }),
       Effect.flatMap((n) =>
-        n === 0
-          ? Effect.void
-          : Effect.fail(new OrphanStillPresent({ kind: "RDS DB clusters" })),
+        n === 0 ? Effect.void : Effect.fail(new OrphanStillPresent({ kind: "RDS DB clusters" })),
       ),
     );
   }
 });
 
 const reapDbSubnetGroups = Effect.gen(function* () {
-  const pages = yield* rds.describeDBSubnetGroups
-    .pages({})
-    .pipe(Stream.runCollect);
+  const pages = yield* rds.describeDBSubnetGroups.pages({}).pipe(Stream.runCollect);
   const names = Array.from(pages)
     .flatMap((page) => page.DBSubnetGroups ?? [])
     .map((group) => group.DBSubnetGroupName)
@@ -316,23 +293,16 @@ const sweepNetworkInterfaces = Effect.fn(function* (vpcId: string) {
   yield* Effect.gen(function* () {
     const enis = yield* describe;
     yield* Effect.forEach(
-      enis.filter(
-        (eni) => eni.Status === "available" && eni.NetworkInterfaceId,
-      ),
+      enis.filter((eni) => eni.Status === "available" && eni.NetworkInterfaceId),
       (eni) =>
-        Effect.logInfo(
-          `RDSData reap: deleting ENI ${eni.NetworkInterfaceId}`,
-        ).pipe(
+        Effect.logInfo(`RDSData reap: deleting ENI ${eni.NetworkInterfaceId}`).pipe(
           Effect.andThen(
             ec2.deleteNetworkInterface({
               NetworkInterfaceId: eni.NetworkInterfaceId,
             }),
           ),
           Effect.catchTag(
-            [
-              "InvalidNetworkInterfaceID.NotFound",
-              "InvalidNetworkInterface.InUse",
-            ],
+            ["InvalidNetworkInterfaceID.NotFound", "InvalidNetworkInterface.InUse"],
             () => Effect.void,
           ),
         ),
@@ -344,9 +314,7 @@ const sweepNetworkInterfaces = Effect.fn(function* (vpcId: string) {
     Effect.flatMap((n) =>
       n === 0
         ? Effect.void
-        : Effect.fail(
-            new OrphanStillPresent({ kind: `network interfaces in ${vpcId}` }),
-          ),
+        : Effect.fail(new OrphanStillPresent({ kind: `network interfaces in ${vpcId}` })),
     ),
   );
 });
@@ -406,9 +374,7 @@ const reapVpc = Effect.fn(function* (vpcId: string) {
     .describeSubnets({ Filters: [{ Name: "vpc-id", Values: [vpcId] }] })
     .pipe(
       Effect.map((response) =>
-        (response.Subnets ?? []).flatMap((subnet) =>
-          subnet.SubnetId ? [subnet.SubnetId] : [],
-        ),
+        (response.Subnets ?? []).flatMap((subnet) => (subnet.SubnetId ? [subnet.SubnetId] : [])),
       ),
     );
   yield* Effect.forEach(

@@ -150,11 +150,7 @@ export interface Connect extends Binding.Service<
     cluster: DBCluster,
     options?: ConnectOptions,
   ) => Effect.Effect<
-    Effect.Effect<
-      MongoConnectionInfo,
-      secretsmanager.GetSecretValueError,
-      RuntimeContext
-    >
+    Effect.Effect<MongoConnectionInfo, secretsmanager.GetSecretValueError, RuntimeContext>
   >
 > {}
 export const Connect = Binding.Service<Connect>("AWS.DocDB.Connect");
@@ -174,8 +170,10 @@ export interface MongoConnectionUrlOptions {
 /**
  * Format a `mongodb://` connection URL with the DocumentDB-recommended
  * options (`replicaSet=rs0`, `readPreference=secondaryPreferred`,
- * `retryWrites=false`). Username and password are percent-encoded; the
- * result is `Redacted` because it embeds the password.
+ * `retryWrites=false`, and `authMechanism=SCRAM-SHA-1` when credentials are
+ * present — DocumentDB does not support SCRAM-SHA-256). Username and
+ * password are percent-encoded; the result is `Redacted` because it embeds
+ * the password.
  */
 export const formatMongoConnectionUrl = (
   options: MongoConnectionUrlOptions,
@@ -194,13 +192,15 @@ export const formatMongoConnectionUrl = (
       : "";
   const port = options.port !== undefined ? `:${options.port}` : "";
   const database =
-    options.database !== undefined
-      ? `/${encodeURIComponent(options.database)}`
-      : "/";
+    options.database !== undefined ? `/${encodeURIComponent(options.database)}` : "/";
   const query = new URLSearchParams({
     replicaSet: "rs0",
     readPreference: "secondaryPreferred",
     retryWrites: "false",
+    // DocumentDB only implements SCRAM-SHA-1. Without an explicit mechanism
+    // current `mongodb` drivers negotiate SCRAM-SHA-256 and the server
+    // rejects the handshake with "Unsupported mechanism [ -301 ]".
+    ...(options.username !== undefined ? { authMechanism: "SCRAM-SHA-1" } : {}),
     ...options.params,
   });
   if (options.tls === true) {
@@ -212,7 +212,5 @@ export const formatMongoConnectionUrl = (
       query.set("tlsAllowInvalidCertificates", "true");
     }
   }
-  return Redacted.make(
-    `mongodb://${auth}${options.host}${port}${database}?${query.toString()}`,
-  );
+  return Redacted.make(`mongodb://${auth}${options.host}${port}${database}?${query.toString()}`);
 };

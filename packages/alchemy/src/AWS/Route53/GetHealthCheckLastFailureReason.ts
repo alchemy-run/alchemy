@@ -36,7 +36,6 @@ export interface GetHealthCheckLastFailureReason extends Binding.Service<
     >
   >
 > {}
-export const GetHealthCheckLastFailureReason =
-  Binding.Service<GetHealthCheckLastFailureReason>(
-    "AWS.Route53.GetHealthCheckLastFailureReason",
-  );
+export const GetHealthCheckLastFailureReason = Binding.Service<GetHealthCheckLastFailureReason>(
+  "AWS.Route53.GetHealthCheckLastFailureReason",
+);

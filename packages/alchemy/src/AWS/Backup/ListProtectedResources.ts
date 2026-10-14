@@ -25,10 +25,7 @@ export interface ListProtectedResources extends Binding.Service<
   () => Effect.Effect<
     (
       request?: backup.ListProtectedResourcesInput,
-    ) => Effect.Effect<
-      backup.ListProtectedResourcesOutput,
-      backup.ListProtectedResourcesError
-    >
+    ) => Effect.Effect<backup.ListProtectedResourcesOutput, backup.ListProtectedResourcesError>
   >
 > {}
 export const ListProtectedResources = Binding.Service<ListProtectedResources>(

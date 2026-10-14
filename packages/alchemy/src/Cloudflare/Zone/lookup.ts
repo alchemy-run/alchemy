@@ -1,11 +1,8 @@
-import {
-  Credentials,
-  formatHeaders,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Stream from "effect/Stream";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 /**
  * Reference to an existing Cloudflare Zone. Accepts:
@@ -18,10 +15,8 @@ export type Reference = string | { zoneId: string; name?: string };
 
 export const isId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
 
-export const matchesZoneHostname = (
-  zoneName: string,
-  hostname: string,
-): boolean => hostname === zoneName || hostname.endsWith(`.${zoneName}`);
+export const matchesZoneHostname = (zoneName: string, hostname: string): boolean =>
+  hostname === zoneName || hostname.endsWith(`.${zoneName}`);
 
 export const resolveZoneId = ({
   accountId,
@@ -41,9 +36,7 @@ export const resolveZoneId = ({
       const match = yield* findZoneByName({ accountId, name: candidate });
       if (match) return match.id;
     }
-    return yield* Effect.fail(
-      new Error(`Cloudflare zone not found for ${lookup}`),
-    );
+    return yield* Effect.fail(new Error(`Cloudflare zone not found for ${lookup}`));
   });
 
 type ZoneListItem = {
@@ -52,50 +45,35 @@ type ZoneListItem = {
   account: { id?: string | null };
 };
 
-type ZoneListResponse = {
-  success: boolean;
-  errors?: { message?: string }[];
-  result?: ZoneListItem[];
-};
-
 export const findZoneByName = ({
   accountId,
   name,
 }: {
   accountId: string;
   name: string;
-}): Effect.Effect<ZoneListItem | undefined, Error, Credentials> =>
+}): Effect.Effect<
+  ZoneListItem | undefined,
+  zones.ListZonesError,
+  Credentials | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
-    const credentialsEffect = yield* Credentials;
-    const credentials = yield* credentialsEffect;
-    const url = new URL(`${credentials.apiBaseUrl}/zones`);
-    url.searchParams.set("account.id", accountId);
-    url.searchParams.set("name", name);
-    url.searchParams.set("per_page", "1");
-
-    const json = yield* Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, {
-          headers: formatHeaders(credentials),
-        });
-        return (await response.json()) as ZoneListResponse;
-      },
-      catch: (cause) => new Error(`Failed to list Cloudflare zones`, { cause }),
+    // Distilled `listZones` rides `Retry.makeDefault` (5xx / throttling).
+    // The previous raw `fetch` failed the first time Cloudflare answered
+    // `{ success: false, errors: [{ message: "unhandled server error" }] }`.
+    const page = yield* zones.listZones({
+      account: { id: accountId },
+      name,
+      perPage: 1,
     });
-
-    if (!json.success) {
-      return yield* Effect.fail(
-        new Error(
-          json.errors?.map((error) => error.message).join(", ") ??
-            `Failed to list Cloudflare zones`,
-        ),
-      );
-    }
-
-    return json.result?.find(
-      (candidate) =>
-        candidate.name === name && candidate.account.id === accountId,
+    const match = (page.result ?? []).find(
+      (candidate) => candidate.name === name && candidate.account.id === accountId,
     );
+    if (match === undefined) return undefined;
+    return {
+      id: match.id,
+      name: match.name,
+      account: { id: match.account.id },
+    };
   });
 
 /**

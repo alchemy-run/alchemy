@@ -66,11 +66,7 @@ export const AlertManagerDefinitionProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeAlertManagerDefinition({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.alertManagerDefinition;
       });
 
@@ -85,10 +81,7 @@ export const AlertManagerDefinitionProvider = () =>
         return yield* amp.describeAlertManagerDefinition({ workspaceId }).pipe(
           Effect.map((r) => r.alertManagerDefinition),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             until: (d) => d.status.statusCode === "ACTIVE",
           }),
         );
@@ -130,9 +123,7 @@ export const AlertManagerDefinitionProvider = () =>
             });
           } else {
             const currentDefinition =
-              existing.data !== undefined
-                ? yield* decodeDefinition(existing.data)
-                : undefined;
+              existing.data !== undefined ? yield* decodeDefinition(existing.data) : undefined;
             if (currentDefinition !== news!.definition) {
               yield* amp.putAlertManagerDefinition({
                 workspaceId,
@@ -149,18 +140,13 @@ export const AlertManagerDefinitionProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* amp
-            .deleteAlertManagerDefinition({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* amp.deleteAlertManagerDefinition({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent workspace.

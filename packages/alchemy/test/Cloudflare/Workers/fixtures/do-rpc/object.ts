@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
 
 const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
@@ -13,18 +13,15 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
       return {
+        identity: () => Effect.sync(() => state.id.toString()),
         put: (key: string, value: string) => kv.put(key, value),
         get: (key: string) => kv.get(key),
-        // The Cloudflare colo this instance is running in, as reported by a
-        // subrequest it makes itself (a subrequest is served by the
-        // datacenter the caller runs in, so the trace names *this* DO's
-        // colo). Used to observe where `locationHint` placed the instance.
+        // Egress colo is diagnostic, not a placement guarantee.
         colo: () =>
           Effect.promise(async () => {
-            const response = await fetch(
-              "https://cloudflare.com/cdn-cgi/trace",
-            );
+            const response = await fetch("https://cloudflare.com/cdn-cgi/trace");
             const trace = await response.text();
             return trace.match(/^colo=(.*)$/m)?.[1] ?? "unknown";
           }),

@@ -188,11 +188,7 @@ export const FileSystemProvider = () =>
       const observe = (fileSystemId: string) =>
         s3files
           .getFileSystem({ fileSystemId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const observedTags = (fileSystemId: string) =>
         s3files.listTagsForResource.items({ resourceId: fileSystemId }).pipe(
@@ -203,9 +199,7 @@ export const FileSystemProvider = () =>
           ),
         );
 
-      const toAttributes = Effect.fn(function* (
-        fs: s3files.GetFileSystemResponse,
-      ) {
+      const toAttributes = Effect.fn(function* (fs: s3files.GetFileSystemResponse) {
         if (
           fs.fileSystemId === undefined ||
           fs.fileSystemArn === undefined ||
@@ -213,12 +207,10 @@ export const FileSystemProvider = () =>
           fs.roleArn === undefined ||
           fs.status === undefined
         ) {
-          return yield* Effect.fail(
-            new S3FilesNotConverged({
-              resource: fs.fileSystemId ?? "unknown file system",
-              status: fs.status,
-            }),
-          );
+          return yield* new S3FilesNotConverged({
+            resource: fs.fileSystemId ?? "unknown file system",
+            status: fs.status,
+          });
         }
         return {
           fileSystemId: fs.fileSystemId,
@@ -232,10 +224,7 @@ export const FileSystemProvider = () =>
 
       // State-loss / conflict fallback: find the file system carrying this
       // logical id's Alchemy tags (optionally narrowed to a bucket).
-      const findByAlchemyTags = Effect.fn(function* (
-        id: string,
-        bucket: string | undefined,
-      ) {
+      const findByAlchemyTags = Effect.fn(function* (id: string, bucket: string | undefined) {
         const fileSystems = yield* s3files.listFileSystems
           .items(bucket !== undefined ? { bucket } : {})
           .pipe(
@@ -251,10 +240,7 @@ export const FileSystemProvider = () =>
         return undefined;
       });
 
-      const syncTags = Effect.fn(function* (
-        fileSystemId: string,
-        desired: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (fileSystemId: string, desired: Record<string, string>) {
         const current = yield* observedTags(fileSystemId);
         const { upsert, removed } = diffTags(current, desired);
         if (upsert.length > 0) {
@@ -275,16 +261,11 @@ export const FileSystemProvider = () =>
         fileSystemId: string,
         desired: PolicyDocument | undefined,
       ) {
-        const current = yield* s3files
-          .getFileSystemPolicy({ fileSystemId })
-          .pipe(
-            Effect.map((r) => r.policy),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        const desiredJson =
-          desired !== undefined ? JSON.stringify(desired) : undefined;
+        const current = yield* s3files.getFileSystemPolicy({ fileSystemId }).pipe(
+          Effect.map((r) => r.policy),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+        const desiredJson = desired !== undefined ? JSON.stringify(desired) : undefined;
         if (desiredJson !== undefined) {
           if (normalizePolicy(current) !== normalizePolicy(desiredJson)) {
             yield* s3files.putFileSystemPolicy({
@@ -295,9 +276,7 @@ export const FileSystemProvider = () =>
         } else if (current !== undefined) {
           yield* s3files
             .deleteFileSystemPolicy({ fileSystemId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }
       });
 
@@ -364,23 +343,17 @@ export const FileSystemProvider = () =>
                 clientToken,
                 tags: toTagList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             live =
               created?.fileSystemId !== undefined
                 ? yield* observe(created.fileSystemId)
                 : yield* findByAlchemyTags(id, news.bucket);
           }
           if (live?.fileSystemId === undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: `file system for bucket ${news.bucket}`,
-                status: live?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: `file system for bucket ${news.bucket}`,
+              status: live?.status,
+            });
           }
           const fileSystemId = live.fileSystemId;
 
@@ -390,12 +363,10 @@ export const FileSystemProvider = () =>
             (fs) => fs === undefined || fs.status !== "creating",
           );
           if (settled === undefined || settled.status !== "available") {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: fileSystemId,
-                status: settled?.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: fileSystemId,
+              status: settled?.status,
+            });
           }
 
           // 3. SYNC — tags against observed cloud tags; policy against the
@@ -417,9 +388,7 @@ export const FileSystemProvider = () =>
                 fileSystemId: output.fileSystemId,
                 forceDelete: olds.forceDestroy,
               }),
-            ).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           // Wait until the file system is fully gone: the source bucket
           // rejects DeleteBucket with BucketHasS3FileSystemAttached while
@@ -430,12 +399,10 @@ export const FileSystemProvider = () =>
             (fs) => fs === undefined,
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new S3FilesNotConverged({
-                resource: output.fileSystemId,
-                status: remaining.status,
-              }),
-            );
+            return yield* new S3FilesNotConverged({
+              resource: output.fileSystemId,
+              status: remaining.status,
+            });
           }
         }),
       });

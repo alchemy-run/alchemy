@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface UntagResourceRequest extends Omit<
-  sns.UntagResourceRequest,
-  "ResourceArn"
-> {}
+export interface UntagResourceRequest extends Omit<sns.UntagResourceRequest, "ResourceArn"> {}
 
 /**
  * Runtime binding for `sns:UntagResource`.
@@ -39,6 +36,4 @@ export interface UntagResource extends Binding.Service<
     ) => Effect.Effect<sns.UntagResourceResponse, sns.UntagResourceError>
   >
 > {}
-export const UntagResource = Binding.Service<UntagResource>(
-  "AWS.SNS.UntagResource",
-);
+export const UntagResource = Binding.Service<UntagResource>("AWS.SNS.UntagResource");

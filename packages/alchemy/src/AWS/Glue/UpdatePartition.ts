@@ -47,6 +47,4 @@ export interface UpdatePartition extends Binding.Service<
   >
 > {}
 
-export const UpdatePartition = Binding.Service<UpdatePartition>(
-  "AWS.Glue.UpdatePartition",
-);
+export const UpdatePartition = Binding.Service<UpdatePartition>("AWS.Glue.UpdatePartition");

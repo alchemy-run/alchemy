@@ -108,9 +108,7 @@ export const consumePipelineEvents = <StreamReq = never, Req = never>(
     props.id ?? "CodePipelineEvents",
     {
       source: ["aws.codepipeline"],
-      "detail-type": (props.kinds ?? (["execution"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["execution"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(props.pipelineNames !== undefined
         ? { detail: { pipeline: [...props.pipelineNames] } }
         : {}),

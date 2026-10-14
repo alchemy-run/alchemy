@@ -37,10 +37,7 @@ export interface InitiateLayerUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: InitiateLayerUploadRequest,
-    ) => Effect.Effect<
-      ecrpublic.InitiateLayerUploadResponse,
-      ecrpublic.InitiateLayerUploadError
-    >
+    ) => Effect.Effect<ecrpublic.InitiateLayerUploadResponse, ecrpublic.InitiateLayerUploadError>
   >
 > {}
 

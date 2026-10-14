@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index";
-import * as Effect from "effect/Effect";
 import AsyncSecretWorker from "./async-worker.ts";
 import EffectSecretWorker from "./effect-worker.ts";
 
@@ -15,7 +15,7 @@ import EffectSecretWorker from "./effect-worker.ts";
  *
  * Extracted into its own stack file so it can be deployed by the suite AND
  * inspected directly, e.g.
- * `alchemy tail --stage test ./test/Cloudflare/SecretsStore/fixtures/stack.ts`.
+ * `alchemy logs --tail --stage test --config ./test/Cloudflare/SecretsStore/fixtures/stack.ts`.
  */
 export default Alchemy.Stack(
   "SecretsStoreBindingStack",

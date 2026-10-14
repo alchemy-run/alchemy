@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface StartJobRunRequest extends Omit<
-  glue.StartJobRunRequest,
-  "JobName"
-> {}
+export interface StartJobRunRequest extends Omit<glue.StartJobRunRequest, "JobName"> {}
 
 /**
  * Starts a run of a Glue job definition.
@@ -43,9 +40,7 @@ export interface StartJobRun extends Binding.Service<
   (
     job: Job,
   ) => Effect.Effect<
-    (
-      request?: StartJobRunRequest,
-    ) => Effect.Effect<glue.StartJobRunResponse, glue.StartJobRunError>
+    (request?: StartJobRunRequest) => Effect.Effect<glue.StartJobRunResponse, glue.StartJobRunError>
   >
 > {}
 

@@ -51,7 +51,6 @@ export interface ListWhatsAppTemplateLibrary extends Binding.Service<
     >
   >
 > {}
-export const ListWhatsAppTemplateLibrary =
-  Binding.Service<ListWhatsAppTemplateLibrary>(
-    "AWS.SocialMessaging.ListWhatsAppTemplateLibrary",
-  );
+export const ListWhatsAppTemplateLibrary = Binding.Service<ListWhatsAppTemplateLibrary>(
+  "AWS.SocialMessaging.ListWhatsAppTemplateLibrary",
+);

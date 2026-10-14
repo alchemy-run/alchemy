@@ -52,7 +52,6 @@ export interface UpdateWhatsAppFlowAssets extends Binding.Service<
     >
   >
 > {}
-export const UpdateWhatsAppFlowAssets =
-  Binding.Service<UpdateWhatsAppFlowAssets>(
-    "AWS.SocialMessaging.UpdateWhatsAppFlowAssets",
-  );
+export const UpdateWhatsAppFlowAssets = Binding.Service<UpdateWhatsAppFlowAssets>(
+  "AWS.SocialMessaging.UpdateWhatsAppFlowAssets",
+);

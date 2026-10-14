@@ -24,9 +24,7 @@ export interface GetRun extends Binding.Service<
   GetRun,
   "AWS.Omics.GetRun",
   () => Effect.Effect<
-    (
-      request?: GetRunRequest,
-    ) => Effect.Effect<omics.GetRunResponse, omics.GetRunError>
+    (request?: GetRunRequest) => Effect.Effect<omics.GetRunResponse, omics.GetRunError>
   >
 > {}
 

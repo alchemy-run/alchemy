@@ -28,10 +28,7 @@ export interface GetDeploymentTarget extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.GetDeploymentTargetInput,
-    ) => Effect.Effect<
-      SVC.GetDeploymentTargetOutput,
-      SVC.GetDeploymentTargetError
-    >
+    ) => Effect.Effect<SVC.GetDeploymentTargetOutput, SVC.GetDeploymentTargetError>
   >
 > {}
 export const GetDeploymentTarget = Binding.Service<GetDeploymentTarget>(

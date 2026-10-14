@@ -8,11 +8,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
-import type { RestApi } from "./RestApi.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
+import type { RestApi } from "./RestApi.ts";
 
 /**
  * Per-method override settings for a stage. Mirrors the API's
@@ -20,10 +19,7 @@ import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
  * {@link Duration.Input} (`cacheTtl`) instead of the raw wire field
  * `cacheTtlInSeconds`.
  */
-export interface StageMethodSetting extends Omit<
-  ag.MethodSetting,
-  "cacheTtlInSeconds"
-> {
+export interface StageMethodSetting extends Omit<ag.MethodSetting, "cacheTtlInSeconds"> {
   /**
    * Time-to-live for cached responses (e.g. `"5 minutes"` or
    * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
@@ -192,13 +188,10 @@ export const Stage = StageImpl;
 
 const toTagRecord = (tags: ag.Stage["tags"]) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (e): e is [string, string] => e[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((e): e is [string, string] => e[1] !== undefined),
   );
 
-const encodeJsonPointerSegment = (s: string) =>
-  s.replace(/~/g, "~0").replace(/\//g, "~1");
+const encodeJsonPointerSegment = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 const snapshotStage = (s: ag.Stage, restApiId: string, stageName: string) => ({
   restApiId,
@@ -244,10 +237,8 @@ const methodSettingFieldToPath: Record<keyof ag.MethodSetting, string> = {
   cachingEnabled: "caching/enabled",
   cacheTtlInSeconds: "caching/ttlInSeconds",
   cacheDataEncrypted: "caching/dataEncrypted",
-  requireAuthorizationForCacheControl:
-    "caching/requireAuthorizationForCacheControl",
-  unauthorizedCacheControlHeaderStrategy:
-    "caching/unauthorizedCacheControlHeaderStrategy",
+  requireAuthorizationForCacheControl: "caching/requireAuthorizationForCacheControl",
+  unauthorizedCacheControlHeaderStrategy: "caching/unauthorizedCacheControlHeaderStrategy",
 };
 
 function methodSettingScalarPatch(
@@ -328,10 +319,7 @@ const buildMethodSettingPatches = (
   prev: { [key: string]: ag.MethodSetting | undefined } | undefined,
   next: { [key: string]: ag.MethodSetting | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const key of keys) {
     const p = prev?.[key];
@@ -367,10 +355,7 @@ const buildVariablePatches = (
   prev: { [key: string]: string | undefined } | undefined,
   next: { [key: string]: string | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const k of keys) {
     const pv = prev?.[k];
@@ -392,10 +377,7 @@ const buildAccessLogPatches = (
 ): ag.PatchOperation[] => {
   const patches: ag.PatchOperation[] = [];
   if (prev?.destinationArn !== next?.destinationArn) {
-    if (
-      next?.destinationArn === undefined &&
-      prev?.destinationArn !== undefined
-    ) {
+    if (next?.destinationArn === undefined && prev?.destinationArn !== undefined) {
       patches.push({ op: "remove", path: "/accessLogSettings/destinationArn" });
     } else if (next?.destinationArn !== undefined) {
       patches.push({
@@ -423,10 +405,7 @@ const buildCanaryOverridePatches = (
   prev: { [key: string]: string | undefined } | undefined,
   next: { [key: string]: string | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const k of keys) {
     const pv = prev?.[k];
@@ -455,10 +434,7 @@ const buildCanaryPatches = (
 ): ag.PatchOperation[] => {
   const patches: ag.PatchOperation[] = [];
   if (prev?.percentTraffic !== next?.percentTraffic) {
-    if (
-      next?.percentTraffic === undefined &&
-      prev?.percentTraffic !== undefined
-    ) {
+    if (next?.percentTraffic === undefined && prev?.percentTraffic !== undefined) {
       patches.push({ op: "remove", path: "/canarySettings/percentTraffic" });
     } else if (next?.percentTraffic !== undefined) {
       patches.push({
@@ -491,10 +467,7 @@ const buildCanaryPatches = (
     }
   }
   patches.push(
-    ...buildCanaryOverridePatches(
-      prev?.stageVariableOverrides,
-      next?.stageVariableOverrides,
-    ),
+    ...buildCanaryOverridePatches(prev?.stageVariableOverrides, next?.stageVariableOverrides),
   );
   return patches;
 };
@@ -567,18 +540,11 @@ const buildStagePatches = (
   }
   patches.push(...buildVariablePatches(prev.variables, news.variables));
   patches.push(
-    ...buildMethodSettingPatches(
-      prev.methodSettings,
-      toWireMethodSettings(news.methodSettings),
-    ),
+    ...buildMethodSettingPatches(prev.methodSettings, toWireMethodSettings(news.methodSettings)),
   );
-  patches.push(
-    ...buildAccessLogPatches(prev.accessLogSettings, news.accessLogSettings),
-  );
+  patches.push(...buildAccessLogPatches(prev.accessLogSettings, news.accessLogSettings));
   if (!deepEqual(news.canarySettings, prev.canarySettings)) {
-    patches.push(
-      ...buildCanaryPatches(prev.canarySettings, news.canarySettings),
-    );
+    patches.push(...buildCanaryPatches(prev.canarySettings, news.canarySettings));
   }
   return patches;
 };
@@ -592,10 +558,7 @@ export const StageProvider = () =>
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as Input.ResolveProps<StageProps>;
-          if (
-            news.restApiId !== olds.restApiId ||
-            news.stageName !== olds.stageName
-          ) {
+          if (news.restApiId !== olds.restApiId || news.stageName !== olds.stageName) {
             return { action: "replace" } as const;
           }
         }),
@@ -606,11 +569,7 @@ export const StageProvider = () =>
               restApiId: output.restApiId,
               stageName: output.stageName,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
@@ -625,9 +584,7 @@ export const StageProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((api) => api.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((api) => api.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -637,17 +594,12 @@ export const StageProvider = () =>
                 ag.getStages({ restApiId }).pipe(
                   Effect.map((res) =>
                     (res.item ?? [])
-                      .filter(
-                        (s): s is ag.Stage & { stageName: string } =>
-                          s.stageName != null,
-                      )
+                      .filter((s): s is ag.Stage & { stageName: string } => s.stageName != null)
                       .map((s) => snapshotStage(s, restApiId, s.stageName)),
                   ),
                   // The parent api may vanish between enumeration and the
                   // per-api list (race); treat as no stages.
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -669,11 +621,7 @@ export const StageProvider = () =>
           // mutable settings come from the cloud read on every reconcile.
           let observed = yield* ag
             .getStage({ restApiId, stageName })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the stage if missing. `createStage` only sets
           // a subset of the configurable surface; the rest is applied via
@@ -706,11 +654,7 @@ export const StageProvider = () =>
           // already handles every mutable aspect (deploymentId, description,
           // cache, variables, methodSettings, accessLog, canary, tracing,
           // webAcl).
-          const observedSnapshot = snapshotStage(
-            observed,
-            restApiId,
-            stageName,
-          );
+          const observedSnapshot = snapshotStage(observed, restApiId, stageName);
           const patches = buildStagePatches(observedSnapshot, news);
           if (patches.length > 0) {
             yield* retryOnApiStatusUpdating(

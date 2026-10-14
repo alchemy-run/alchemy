@@ -35,10 +35,7 @@ export interface ListEntityEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request: appsignals.ListEntityEventsInput,
-    ) => Effect.Effect<
-      appsignals.ListEntityEventsOutput,
-      appsignals.ListEntityEventsError
-    >
+    ) => Effect.Effect<appsignals.ListEntityEventsOutput, appsignals.ListEntityEventsError>
   >
 > {}
 

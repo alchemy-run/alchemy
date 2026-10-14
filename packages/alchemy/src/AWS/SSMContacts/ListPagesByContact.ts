@@ -28,10 +28,7 @@ export interface ListPagesByContact extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<ssm.ListPagesByContactRequest, "ContactId">,
-    ) => Effect.Effect<
-      ssm.ListPagesByContactResult,
-      ssm.ListPagesByContactError
-    >
+    ) => Effect.Effect<ssm.ListPagesByContactResult, ssm.ListPagesByContactError>
   >
 > {}
 export const ListPagesByContact = Binding.Service<ListPagesByContact>(

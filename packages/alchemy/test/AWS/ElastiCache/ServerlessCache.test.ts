@@ -1,17 +1,19 @@
-import * as AWS from "@/AWS";
-import { connectEnvPrefix } from "@/AWS/ElastiCache";
-import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import ElastiCacheTestFunctionLive, {
-  ElastiCacheTestFunction,
-  FixtureCache,
-} from "./handler.ts";
+import * as AWS from "@/AWS";
+import { connectEnvPrefix } from "@/AWS/ElastiCache";
+import * as Test from "@/Test/Alchemy";
+import { FixtureCache } from "./fixture-cache.ts";
+import ElastiCacheTestFunctionLive, { ElastiCacheTestFunction } from "./handler.ts";
+import ElastiCacheSnapshotFunctionLive, {
+  ElastiCacheSnapshotFunction,
+} from "./snapshot-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,13 +30,16 @@ test.provider(
       );
       expect(error._tag).toBe("ServerlessCacheNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:elasticache", "live"] },
 );
 
 const SNAPSHOT_NAME = "alchemy-elasticache-fixture-snap";
 
 // A snapshot still `creating` rejects deletion with
 // InvalidServerlessCacheSnapshotStateFault — retry (bounded) while it
-// settles. Already gone is success.
+// settles. Already gone is success. An on-demand snapshot of even an empty
+// serverless cache can stay `creating` for 5+ minutes, so the budget is
+// ~10 min; the test destroys the (billed) cache BEFORE waiting on this.
 const deleteSnapshot = (name: string) =>
   ElastiCache.deleteServerlessCacheSnapshot({
     ServerlessCacheSnapshotName: name,
@@ -42,20 +47,16 @@ const deleteSnapshot = (name: string) =>
     Effect.asVoid,
     Effect.catchTag("ServerlessCacheSnapshotNotFoundFault", () => Effect.void),
     Effect.retry({
-      while: (e): boolean =>
-        e._tag === "InvalidServerlessCacheSnapshotStateFault",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      while: (e): boolean => e._tag === "InvalidServerlessCacheSnapshotStateFault",
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
     }),
   );
 
 // Serverless caches take ~1-3 minutes to provision and a similar time to
 // delete, and are metered (with a monthly floor) while they exist. The full
-// lifecycle is therefore gated behind AWS_TEST_SLOW=1 and runs as a single
+// lifecycle is therefore skipped under `--fast` and runs as a single
 // sequential test that always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create serverless cache, bind Connect env, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
@@ -64,12 +65,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* deleteSnapshot(SNAPSHOT_NAME);
 
-      const { cache, fn } = yield* stack.deploy(
+      const { cache, fn, snapshotFn } = yield* stack.deploy(
         Effect.gen(function* () {
           const { cache } = yield* FixtureCache;
           const fn = yield* ElastiCacheTestFunction;
-          return { cache, fn };
-        }).pipe(Effect.provide(ElastiCacheTestFunctionLive)),
+          const snapshotFn = yield* ElastiCacheSnapshotFunction;
+          return { cache, fn, snapshotFn };
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(ElastiCacheTestFunctionLive, ElastiCacheSnapshotFunctionLive),
+          ),
+        ),
       );
 
       expect(cache.serverlessCacheName).toBeDefined();
@@ -98,9 +104,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Distilled decodes Lambda env values as sensitive (Redacted) strings.
       const envValue = (key: string) => {
         const value = env[key];
-        return value === undefined || typeof value === "string"
-          ? value
-          : Redacted.value(value);
+        return value === undefined || typeof value === "string" ? value : Redacted.value(value);
       };
       expect(envValue(`${prefix}_HOST`)).toBe(cache.endpointAddress);
       expect(envValue(`${prefix}_PORT`)).toBe(String(cache.endpointPort));
@@ -111,24 +115,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // the VPC-attached cold start (ENI provisioning), so budget a generous
       // bounded retry (3s x 60 ≈ 180s).
       const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
-      const getJson = (path: string, times: number) =>
-        HttpClient.get(`${baseUrl}${path}`).pipe(
+      const getJson = (path: string, times: number, base = baseUrl) =>
+        HttpClient.get(`${base}${path}`).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((body) =>
-                    Effect.fail(
-                      new Error(`${path} returned ${res.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`${path} returned ${res.status}: ${body}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(times),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]),
           }),
         );
       const response = yield* getJson("/connection", 60);
@@ -143,31 +142,45 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect((roundtrip as { value: string }).value).toBe("hello-valkey");
 
       // Cache-scoped CreateServerlessCacheSnapshot binding: take an
-      // on-demand snapshot from inside the deployed function, verify it
-      // out-of-band, then delete it (snapshots bill per GB-month).
-      const snapshot = (yield* getJson(
-        `/snapshot?name=${SNAPSHOT_NAME}`,
-        10,
-      )) as { name: string; status: string };
+      // on-demand snapshot from the (non-VPC) control-plane function, verify
+      // it out-of-band, then delete it (snapshots bill per GB-month).
+      const snapshotBaseUrl = snapshotFn.functionUrl!.replace(/\/+$/, "");
+      const snapshot = (yield* getJson(`/snapshot?name=${SNAPSHOT_NAME}`, 10, snapshotBaseUrl)) as {
+        name: string;
+        status: string;
+      };
       expect(snapshot.name).toBe(SNAPSHOT_NAME);
       expect(["creating", "available", "exists"]).toContain(snapshot.status);
-      const describedSnapshots =
-        yield* ElastiCache.describeServerlessCacheSnapshots({
-          ServerlessCacheSnapshotName: SNAPSHOT_NAME,
-        });
-      expect(
-        describedSnapshots.ServerlessCacheSnapshots?.[0]
-          ?.ServerlessCacheSnapshotName,
-      ).toBe(SNAPSHOT_NAME);
-      yield* deleteSnapshot(SNAPSHOT_NAME);
+      const describedSnapshots = yield* ElastiCache.describeServerlessCacheSnapshots({
+        ServerlessCacheSnapshotName: SNAPSHOT_NAME,
+      });
+      expect(describedSnapshots.ServerlessCacheSnapshots?.[0]?.ServerlessCacheSnapshotName).toBe(
+        SNAPSHOT_NAME,
+      );
 
       // Destroy immediately — serverless caches bill while they exist —
-      // and verify deletion out-of-band with a typed wait.
+      // and verify deletion out-of-band with a typed wait. The snapshot is
+      // deleted afterwards (see the `ensuring` below) since it can take
+      // minutes to leave `creating`.
       yield* stack.destroy();
       yield* assertCacheDeleted(cache.serverlessCacheName);
-    }),
-  // create (~2 min) + lambda deploy (~1 min) + delete initiation, one test.
-  { timeout: 900_000 },
+    }).pipe(
+      // The snapshot is created out-of-band of the stack — clean it up on
+      // every exit path so a failed run never leaves it billing.
+      Effect.ensuring(deleteSnapshot(SNAPSHOT_NAME).pipe(Effect.orDie)),
+    ),
+  // create (~2-4 min) + lambda deploy (~1-3 min, VPC ENIs) + delete
+  // initiation + snapshot settle-and-delete (up to ~10 min), one test.
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:elasticache",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 1_500_000,
+  },
 );
 
 // Deletion is verified as INITIATED (status `deleting`, which is
@@ -181,22 +194,15 @@ const assertCacheDeleted = (name: string) =>
       ServerlessCacheName: name,
     }).pipe(
       Effect.map((r) => r.ServerlessCaches?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ServerlessCacheNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
       return yield* Effect.fail(
-        new Error(
-          `Serverless cache '${name}' still exists (status: ${status})`,
-        ),
+        new Error(`Serverless cache '${name}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

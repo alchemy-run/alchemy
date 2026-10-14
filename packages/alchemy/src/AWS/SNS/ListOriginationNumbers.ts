@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListOriginationNumbersRequest
-  extends sns.ListOriginationNumbersRequest {}
+export interface ListOriginationNumbersRequest extends sns.ListOriginationNumbersRequest {}
 
 /**
  * Runtime binding for `sns:ListOriginationNumbers`.
@@ -26,10 +25,7 @@ export interface ListOriginationNumbers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListOriginationNumbersRequest,
-    ) => Effect.Effect<
-      sns.ListOriginationNumbersResult,
-      sns.ListOriginationNumbersError
-    >
+    ) => Effect.Effect<sns.ListOriginationNumbersResult, sns.ListOriginationNumbersError>
   >
 > {}
 

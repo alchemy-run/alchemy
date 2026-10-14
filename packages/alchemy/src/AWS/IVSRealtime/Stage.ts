@@ -125,9 +125,9 @@ export const Stage = Resource<Stage>("AWS.IVSRealtime.Stage");
  * Raised when the IVS Real-Time API returns a stage missing its ARN or
  * name.
  */
-export class IvsRealtimeStageIncomplete extends Data.TaggedError(
-  "IvsRealtimeStageIncomplete",
-)<{ message: string }> {}
+export class IvsRealtimeStageIncomplete extends Data.TaggedError("IvsRealtimeStageIncomplete")<{
+  message: string;
+}> {}
 
 /**
  * Convert the recording configuration prop shape (Duration-typed reconnect
@@ -141,9 +141,7 @@ const toWireRecordingConfig = (
     : {
         storageConfigurationArn: config.storageConfigurationArn,
         mediaTypes: config.mediaTypes,
-        recordingReconnectWindowSeconds: toWireSeconds(
-          config.recordingReconnectWindow,
-        ),
+        recordingReconnectWindowSeconds: toWireSeconds(config.recordingReconnectWindow),
         recordParticipantReplicas: config.recordParticipantReplicas,
       };
 
@@ -165,8 +163,7 @@ const recordingConfigDrifted = (
   }
   if (
     desired.recordingReconnectWindowSeconds !== undefined &&
-    desired.recordingReconnectWindowSeconds !==
-      observed.recordingReconnectWindowSeconds
+    desired.recordingReconnectWindowSeconds !== observed.recordingReconnectWindowSeconds
   ) {
     return true;
   }
@@ -190,11 +187,9 @@ export const StageProvider = () =>
 
       const toAttrs = Effect.fn(function* (stage: ivsrealtime.Stage) {
         if (!stage.name) {
-          return yield* Effect.fail(
-            new IvsRealtimeStageIncomplete({
-              message: "IVS Real-Time stage is missing its name",
-            }),
-          );
+          return yield* new IvsRealtimeStageIncomplete({
+            message: "IVS Real-Time stage is missing its name",
+          });
         }
         return {
           stageName: stage.name,
@@ -209,9 +204,7 @@ export const StageProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivsrealtime.getStage({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
         return response?.stage;
       });
@@ -223,9 +216,7 @@ export const StageProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const summaries = yield* ivsrealtime.listStages.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.stages),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.stages)),
           retryWhileThrottled,
         );
         const match = summaries.find((s) => s.name === name);
@@ -241,9 +232,7 @@ export const StageProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (stage === undefined) return undefined;
           const attrs = yield* toAttrs(stage);
-          return (yield* hasAlchemyTags(id, toTagRecord(stage.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(stage.tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -271,11 +260,9 @@ export const StageProvider = () =>
             observed = created.stage;
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new IvsRealtimeStageIncomplete({
-                message: "IVS Real-Time CreateStage returned no stage",
-              }),
-            );
+            return yield* new IvsRealtimeStageIncomplete({
+              message: "IVS Real-Time CreateStage returned no stage",
+            });
           }
           const arn = observed.arn;
 
@@ -284,10 +271,7 @@ export const StageProvider = () =>
           const patch: Partial<ivsrealtime.UpdateStageRequest> = {};
           if (observed.name !== name) patch.name = name;
           if (
-            recordingConfigDrifted(
-              desiredRecording,
-              observed.autoParticipantRecordingConfiguration,
-            )
+            recordingConfigDrifted(desiredRecording, observed.autoParticipantRecordingConfiguration)
           ) {
             patch.autoParticipantRecordingConfiguration = desiredRecording;
           }
@@ -303,11 +287,9 @@ export const StageProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByArn(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsRealtimeStageIncomplete({
-                message: `IVS Real-Time stage '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsRealtimeStageIncomplete({
+              message: `IVS Real-Time stage '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);
@@ -326,17 +308,13 @@ export const StageProvider = () =>
         list: () =>
           ivsrealtime.listStages.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.stages),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.stages)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>
                   getByArn(summary.arn).pipe(
                     Effect.flatMap((stage) =>
-                      stage === undefined
-                        ? Effect.succeed(undefined)
-                        : toAttrs(stage),
+                      stage === undefined ? Effect.succeed(undefined) : toAttrs(stage),
                     ),
                   ),
                 { concurrency: 5 },

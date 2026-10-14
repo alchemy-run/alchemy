@@ -61,6 +61,7 @@ export type View = Resource<
  * ```
  *
  * @resource
+ * @product Dashboard
  */
 export const View = Resource<View>("Axiom.View");
 
@@ -115,9 +116,7 @@ export const ViewProvider = () =>
           return { ...result, id: viewId };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

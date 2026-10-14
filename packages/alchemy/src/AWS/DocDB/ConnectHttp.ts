@@ -5,13 +5,13 @@ import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { DBCluster } from "./DBCluster.ts";
 import {
   Connect,
   connectEnvPrefix,
   type ConnectOptions,
   formatMongoConnectionUrl,
 } from "./Connect.ts";
+import type { DBCluster } from "./DBCluster.ts";
 
 export const ConnectHttp = Layer.effect(
   Connect,
@@ -34,8 +34,7 @@ export const ConnectHttp = Layer.effect(
           // DocumentDB is VPC-only — request the host's VPC attachment
           // declaratively through the `vpc` binding channel.
           const vpc =
-            options?.subnetIds !== undefined ||
-            options?.securityGroupIds !== undefined
+            options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
               ? {
                   vpc: {
                     subnetIds: options?.subnetIds ?? [],
@@ -64,10 +63,7 @@ export const ConnectHttp = Layer.effect(
             policyStatements: [
               {
                 Effect: "Allow",
-                Action: [
-                  "secretsmanager:GetSecretValue",
-                  "secretsmanager:DescribeSecret",
-                ],
+                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
                 Resource: [secretResource],
               },
             ],
@@ -106,10 +102,7 @@ export const ConnectHttp = Layer.effect(
 
         const resolvedPort = options?.port ?? port ?? 27017;
         const tls = options?.tls ?? true;
-        const password =
-          secret.password !== undefined
-            ? Redacted.make(secret.password)
-            : undefined;
+        const password = secret.password !== undefined ? Redacted.make(secret.password) : undefined;
 
         return {
           host,

@@ -22,12 +22,7 @@ import type { Pipe } from "./Pipe.ts";
  * deploy-time half grants `actions` on the bound pipe's ARN, and the runtime
  * half injects the pipe's name as the request's `Name` field.
  */
-export const makePipesHttpBinding = <
-  I extends { Name: string },
-  A,
-  E,
-  R,
->(options: {
+export const makePipesHttpBinding = <I extends { Name: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Pipes.StartPipe`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the pipe. */
@@ -54,9 +49,7 @@ export const makePipesHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${pipe.LogicalId})`)(function* (
-        request?: Omit<I, "Name">,
-      ) {
+      return Effect.fn(`${options.tag}(${pipe.LogicalId})`)(function* (request?: Omit<I, "Name">) {
         return yield* op({
           ...request,
           Name: yield* PipeName,

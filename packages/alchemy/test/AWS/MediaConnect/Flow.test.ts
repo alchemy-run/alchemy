@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { Flow } from "@/AWS/MediaConnect";
-import * as Test from "@/Test/Alchemy";
 import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { Flow } from "@/AWS/MediaConnect";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,6 +24,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:mediaconnect", "live"] },
 );
 
 // Deletion is initiated by the provider and verified as fully gone here;
@@ -32,22 +33,13 @@ const assertFlowGone = (flowArn: string) =>
   Effect.gen(function* () {
     const status = yield* mediaconnect.describeFlow({ FlowArn: flowArn }).pipe(
       Effect.map((r) => r.Flow?.Status ?? "gone"),
-      Effect.catchTag("NotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone") {
-      return yield* Effect.fail(
-        new Error(`flow '${flowArn}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`flow '${flowArn}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // MediaConnect flows bill hourly while ACTIVE and provisioning is async, so
@@ -85,9 +77,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDIACONNECT)(
       expect(flow.tags.fixture).toBe("mediaconnect-flow");
 
       // Out-of-band verification via distilled: created but NOT started.
-      const described = yield* mediaconnect.describeFlow({
-        FlowArn: flow.flowArn,
-      });
+      const described = yield* mediaconnect.describeFlow({ FlowArn: flow.flowArn });
       expect(described.Flow?.Status).toBe("STANDBY");
       expect(described.Flow?.Source?.WhitelistCidr).toBe("10.24.34.0/23");
 
@@ -103,12 +93,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDIACONNECT)(
               IngestPort: 5000,
             },
             outputs: [
-              {
-                Name: "affiliate-east",
-                Protocol: "rtp",
-                Destination: "198.51.100.11",
-                Port: 5010,
-              },
+              { Name: "affiliate-east", Protocol: "rtp", Destination: "198.51.100.11", Port: 5010 },
             ],
             tags: { fixture: "mediaconnect-flow", stage: "updated" },
           });
@@ -125,13 +110,9 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDIACONNECT)(
       expect(updated.outputs[0]?.port).toBe(5010);
       expect(updated.tags.stage).toBe("updated");
 
-      const redescribed = yield* mediaconnect.describeFlow({
-        FlowArn: flow.flowArn,
-      });
+      const redescribed = yield* mediaconnect.describeFlow({ FlowArn: flow.flowArn });
       expect(redescribed.Flow?.Source?.WhitelistCidr).toBe("10.24.32.0/20");
-      expect(redescribed.Flow?.Outputs?.map((o) => o.Name)).toContain(
-        "affiliate-east",
-      );
+      expect(redescribed.Flow?.Outputs?.map((o) => o.Name)).toContain("affiliate-east");
 
       // Step 3: drop the output again — the reconciler removes extras.
       const { flow: pruned } = yield* stack.deploy(
@@ -157,5 +138,5 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDIACONNECT)(
       yield* assertFlowGone(flow.flowArn);
     }),
   // create + 2 in-place updates + delete-until-gone.
-  { timeout: 900_000 },
+  { tags: ["provider:aws", "provider:aws:mediaconnect", "live"], timeout: 900_000 },
 );

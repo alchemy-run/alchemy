@@ -8,7 +8,8 @@ import type { Postgres } from "./Postgres.ts";
 /**
  * Bind a {@link Postgres} cluster to a Fly {@link Service} and obtain
  * the Effect-native connection strings for `Drizzle.Postgres` /
- * `SQL.Postgres`.
+ * `SQL.Postgres`. Alchemy transports the cluster's connection URIs
+ * automatically; callers do not configure connection-string env vars.
  *
  * `ConnectPostgres` is the Context tag, the type, and the callable —
  * `yield* Fly.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
@@ -26,6 +27,7 @@ import type { Postgres } from "./Postgres.ts";
  * ```
  *
  * @binding
+ * @product Postgres
  */
 export interface ConnectPostgres extends Binding.Service<
   ConnectPostgres,
@@ -33,9 +35,7 @@ export interface ConnectPostgres extends Binding.Service<
   (postgres: Postgres) => Effect.Effect<ConnectPostgresClient>
 > {}
 
-export const ConnectPostgres = Binding.Service<ConnectPostgres>(
-  "Fly.ConnectPostgres",
-);
+export const ConnectPostgres = Binding.Service<ConnectPostgres>("Fly.ConnectPostgres");
 
 export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
   const id = postgres.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
@@ -45,9 +45,7 @@ export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
   };
 };
 
-export class PostgresUrlMissing extends Data.TaggedError(
-  "Fly.PostgresUrlMissing",
-)<{
+export class PostgresUrlMissing extends Data.TaggedError("Fly.PostgresUrlMissing")<{
   name: string;
 }> {}
 
@@ -56,11 +54,7 @@ export interface ConnectPostgresClient {
    * Pooled PgBouncer connection string. Pass this to
    * {@link Drizzle.Postgres} or `SQL.Postgres`.
    */
-  connectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    PostgresUrlMissing,
-    RuntimeContext
-  >;
+  connectionString: Effect.Effect<Redacted.Redacted<string>, PostgresUrlMissing, RuntimeContext>;
   /**
    * Direct (non-PgBouncer) connection string. Use this for session-scoped
    * features (advisory locks, `LISTEN/NOTIFY`) when you are not going

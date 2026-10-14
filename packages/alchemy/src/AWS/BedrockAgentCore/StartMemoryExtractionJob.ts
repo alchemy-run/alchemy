@@ -48,7 +48,6 @@ export interface StartMemoryExtractionJob extends Binding.Service<
     >
   >
 > {}
-export const StartMemoryExtractionJob =
-  Binding.Service<StartMemoryExtractionJob>(
-    "AWS.BedrockAgentCore.StartMemoryExtractionJob",
-  );
+export const StartMemoryExtractionJob = Binding.Service<StartMemoryExtractionJob>(
+  "AWS.BedrockAgentCore.StartMemoryExtractionJob",
+);

@@ -25,10 +25,7 @@ export interface DescribeCodeCoverages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.DescribeCodeCoveragesInput,
-    ) => Effect.Effect<
-      SVC.DescribeCodeCoveragesOutput,
-      SVC.DescribeCodeCoveragesError
-    >
+    ) => Effect.Effect<SVC.DescribeCodeCoveragesOutput, SVC.DescribeCodeCoveragesError>
   >
 > {}
 export const DescribeCodeCoverages = Binding.Service<DescribeCodeCoverages>(

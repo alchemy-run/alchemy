@@ -38,8 +38,7 @@ import * as Result from "effect/Result";
  * ENI-{functionName}`) still identifies it. Match both, like Terraform does.
  */
 const isReapableEni = (eni: ec2.NetworkInterface): boolean =>
-  eni.InterfaceType === "lambda" ||
-  (eni.Description?.startsWith("AWS Lambda VPC ENI") ?? false);
+  eni.InterfaceType === "lambda" || (eni.Description?.startsWith("AWS Lambda VPC ENI") ?? false);
 
 export interface LingeringEniScope {
   /** ENI filter naming the resource being deleted or detached. */
@@ -61,7 +60,7 @@ const reapLingeringEnis = Effect.fn(function* (
     .describeNetworkInterfaces({
       Filters: [{ Name: scope.name, Values: [scope.value] }],
     })
-    .pipe(Effect.catch(() => Effect.succeed({ NetworkInterfaces: [] })));
+    .pipe(Effect.orElseSucceed(() => ({ NetworkInterfaces: [] })));
 
   const lingering = (described.NetworkInterfaces ?? []).filter(isReapableEni);
 
@@ -85,12 +84,10 @@ const reapLingeringEnis = Effect.fn(function* (
         Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () =>
           Effect.succeed("deleted" as const),
         ),
-        Effect.catch(() => Effect.succeed("pending" as const)),
+        Effect.orElseSucceed(() => "pending" as const),
       );
     if (outcome === "deleted") {
-      yield* session.note(
-        `Deleted detached Lambda ENI ${eni.NetworkInterfaceId}`,
-      );
+      yield* session.note(`Deleted detached Lambda ENI ${eni.NetworkInterfaceId}`);
       reaped += 1;
     } else {
       pending += 1;
@@ -140,10 +137,7 @@ export const retryWhileLingeringEnis = <A, E extends { _tag: string }, R>(
         return yield* Effect.fail(error);
       }
 
-      const { pendingReapable, reaped } = yield* reapLingeringEnis(
-        options.scope,
-        options.session,
-      );
+      const { pendingReapable, reaped } = yield* reapLingeringEnis(options.scope, options.session);
       if (reaped > 0) {
         // An ENI just left — the next attempt has a real chance; skip the
         // backoff sleep and try immediately.

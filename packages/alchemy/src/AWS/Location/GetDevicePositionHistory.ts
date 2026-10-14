@@ -44,7 +44,6 @@ export interface GetDevicePositionHistory extends Binding.Service<
     >
   >
 > {}
-export const GetDevicePositionHistory =
-  Binding.Service<GetDevicePositionHistory>(
-    "AWS.Location.GetDevicePositionHistory",
-  );
+export const GetDevicePositionHistory = Binding.Service<GetDevicePositionHistory>(
+  "AWS.Location.GetDevicePositionHistory",
+);

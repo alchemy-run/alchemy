@@ -37,9 +37,7 @@ export interface SendBounce extends Binding.Service<
   SendBounce,
   "AWS.SES.SendBounce",
   () => Effect.Effect<
-    (
-      request: ses.SendBounceRequest,
-    ) => Effect.Effect<ses.SendBounceResponse, ses.SendBounceError>
+    (request: ses.SendBounceRequest) => Effect.Effect<ses.SendBounceResponse, ses.SendBounceError>
   >
 > {}
 export const SendBounce = Binding.Service<SendBounce>("AWS.SES.SendBounce");

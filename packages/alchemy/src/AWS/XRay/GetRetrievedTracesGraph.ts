@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetRetrievedTracesGraphRequest
-  extends xray.GetRetrievedTracesGraphRequest {}
+export interface GetRetrievedTracesGraphRequest extends xray.GetRetrievedTracesGraphRequest {}
 
 /**
  * Retrieve the service graph of the traces fetched by a Transaction
@@ -34,10 +33,7 @@ export interface GetRetrievedTracesGraph extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetRetrievedTracesGraphRequest,
-    ) => Effect.Effect<
-      xray.GetRetrievedTracesGraphResult,
-      xray.GetRetrievedTracesGraphError
-    >
+    ) => Effect.Effect<xray.GetRetrievedTracesGraphResult, xray.GetRetrievedTracesGraphError>
   >
 > {}
 export const GetRetrievedTracesGraph = Binding.Service<GetRetrievedTracesGraph>(

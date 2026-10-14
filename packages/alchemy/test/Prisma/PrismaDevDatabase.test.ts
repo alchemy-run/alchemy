@@ -1,7 +1,3 @@
-import {
-  closePrismaDevDatabase,
-  ensurePrismaDevDatabase,
-} from "@/Prisma/PrismaDevDatabase";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -9,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import { Client } from "pg";
+import { closePrismaDevDatabase, ensurePrismaDevDatabase } from "@/Prisma/PrismaDevDatabase";
 
 const toError = (message: string) => (cause: unknown) =>
   cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
@@ -33,25 +30,29 @@ const queryAnswer = Effect.fn(function* (connectionString: string) {
   );
 });
 
-describe("Prisma dev database", () => {
-  it.effect("rejects non-positive migration timeouts", () =>
-    Effect.gen(function* () {
-      const result = yield* ensurePrismaDevDatabase("dev:invalid-timeout", {
-        migrateTimeoutSeconds: 0,
-      }).pipe(Effect.result);
+describe(
+  "Prisma dev database",
+  { tags: ["provider:prisma", "provider:prisma:database", "local"] },
+  () => {
+    it.effect(
+      "rejects non-positive migration timeouts",
+      () =>
+        Effect.gen(function* () {
+          const result = yield* ensurePrismaDevDatabase("dev:invalid-timeout", {
+            migrateTimeoutSeconds: 0,
+          }).pipe(Effect.result);
 
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "migrateTimeoutSeconds must be a positive finite number",
-        );
-      }
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(String(result.failure)).toContain(
+              "migrateTimeoutSeconds must be a positive finite number",
+            );
+          }
+        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      { tags: ["unit"] },
+    );
 
-  it.effect(
-    "starts @prisma/dev and returns usable direct and pooled URLs",
-    () => {
+    it.effect("starts @prisma/dev and returns usable direct and pooled URLs", () => {
       const basePort = 58000 + (process.pid % 1000);
       const databaseId = `dev:database:test-${process.pid}`;
 
@@ -75,9 +76,7 @@ describe("Prisma dev database", () => {
         const answer = yield* queryAnswer(direct);
         expect(answer).toBe(42);
 
-        expect(
-          yield* ensurePrismaDevDatabase(databaseId, false),
-        ).toBeUndefined();
+        expect(yield* ensurePrismaDevDatabase(databaseId, false)).toBeUndefined();
         const afterDisable = yield* queryAnswer(direct).pipe(Effect.result);
         expect(Result.isFailure(afterDisable)).toBe(true);
       }).pipe(
@@ -85,12 +84,9 @@ describe("Prisma dev database", () => {
         Effect.scoped,
         Effect.provide(NodeServices.layer),
       );
-    },
-  );
+    });
 
-  it.effect(
-    "redacts migration failures and terminates commands at the timeout",
-    () => {
+    it.effect("redacts migration failures and terminates commands at the timeout", () => {
       const basePort = 59000 + (process.pid % 500);
       const databaseId = `dev:migration-test-${process.pid}`;
       const node = JSON.stringify(process.execPath);
@@ -156,6 +152,6 @@ describe("Prisma dev database", () => {
         Effect.scoped,
         Effect.provide(NodeServices.layer),
       );
-    },
-  );
-});
+    });
+  },
+);

@@ -28,38 +28,28 @@ export const reapLeakedKeys = (stackNames?: ReadonlyArray<string>) =>
       Effect.map((chunk) => Array.from(chunk)),
     );
     for (const key of keys) {
-      if (
-        key.KeyState === "DELETE_PENDING" ||
-        key.KeyState === "DELETE_COMPLETE"
-      ) {
+      if (key.KeyState === "DELETE_PENDING" || key.KeyState === "DELETE_COMPLETE") {
         continue; // already handled — the service purges it after the window
       }
-      const tags: Record<string, string> =
-        yield* paymentcryptography.listTagsForResource
-          .items({ ResourceArn: key.KeyArn })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Object.fromEntries(
-                Array.from(chunk).map((t) => [t.Key, t.Value ?? ""]),
-              ),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({}),
-            ),
-          );
+      const tags: Record<string, string> = yield* paymentcryptography.listTagsForResource
+        .items({ ResourceArn: key.KeyArn })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value ?? ""])),
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
+        );
       const stack = tags["alchemy::stack"];
       const owned =
         tags["alchemy::stage"] === "test" &&
         stack !== undefined &&
         (stackNames === undefined || stackNames.includes(stack));
       if (!owned) continue;
-      yield* paymentcryptography
-        .deleteKey({ KeyIdentifier: key.KeyArn, DeleteKeyInDays: 3 })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          // Raced into DELETE_PENDING between observe and delete — done.
-          Effect.catchTag("ConflictException", () => Effect.void),
-        );
+      yield* paymentcryptography.deleteKey({ KeyIdentifier: key.KeyArn, DeleteKeyInDays: 3 }).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        // Raced into DELETE_PENDING between observe and delete — done.
+        Effect.catchTag("ConflictException", () => Effect.void),
+      );
     }
   }).pipe(Effect.orDie);

@@ -8,10 +8,7 @@ import type { BotAlias } from "./BotAlias.ts";
  * `botAliasId` removed. `sessionState` is the new state of the conversation
  * (active intent, slots, dialog action, session attributes).
  */
-export interface PutSessionRequest extends Omit<
-  lexr.PutSessionRequest,
-  "botId" | "botAliasId"
-> {}
+export interface PutSessionRequest extends Omit<lexr.PutSessionRequest, "botId" | "botAliasId"> {}
 
 /**
  * Runtime binding for `lex:PutSession` — create or overwrite the session
@@ -44,9 +41,7 @@ export interface PutSession extends Binding.Service<
   (
     alias: BotAlias,
   ) => Effect.Effect<
-    (
-      request: PutSessionRequest,
-    ) => Effect.Effect<lexr.PutSessionResponse, lexr.PutSessionError>
+    (request: PutSessionRequest) => Effect.Effect<lexr.PutSessionResponse, lexr.PutSessionError>
   >
 > {}
 

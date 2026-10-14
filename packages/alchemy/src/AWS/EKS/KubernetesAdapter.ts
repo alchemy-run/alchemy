@@ -21,16 +21,16 @@
  * `Kubernetes.*` providers via the connection's `auth.kind`.
  */
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as eks from "@distilled.cloud/aws/eks";
-import { AwsClient } from "aws4fetch";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
+import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -42,8 +42,8 @@ import {
 import type { Connection } from "../../Kubernetes/Connection.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import {
   attachPolicyStatements,
@@ -130,34 +130,18 @@ type EksAdapterDeps =
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
   const credentials = yield* yield* Credentials;
 
-  const client = new AwsClient({
+  const presigned = yield* SigV4.sign({
+    method: "GET",
+    url: `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
+    headers: { "x-k8s-aws-id": clusterName },
     accessKeyId: Redacted.value(credentials.accessKeyId),
-    secretAccessKey: Redacted.value(credentials.secretAccessKey),
-    sessionToken: credentials.sessionToken
-      ? Redacted.value(credentials.sessionToken)
-      : undefined,
+    secretAccessKey: credentials.secretAccessKey,
+    sessionToken: credentials.sessionToken,
     service: "sts",
     region,
+    signQuery: true,
+    allHeaders: true,
   });
-
-  const presigned = yield* Effect.tryPromise(() =>
-    client.sign(
-      new Request(
-        `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
-        {
-          headers: {
-            "x-k8s-aws-id": clusterName,
-          },
-        },
-      ),
-      {
-        aws: {
-          signQuery: true,
-          allHeaders: true,
-        },
-      },
-    ),
-  );
 
   return `k8s-aws-v1.${Buffer.from(presigned.url).toString("base64url")}`;
 });
@@ -209,29 +193,20 @@ export const eksConnectionOf = (options: {
 const narrowEksAuth = (connection: Connection) =>
   connection.auth.kind === "aws-eks"
     ? Effect.succeed(connection.auth)
-    : Effect.die(
-        new Error(
-          `aws-eks adapter received auth kind '${connection.auth.kind}'`,
-        ),
-      );
+    : Effect.die(new Error(`aws-eks adapter received auth kind '${connection.auth.kind}'`));
 
 /**
  * Provide a per-connection region override so a cluster in another region
  * than the ambient one describes correctly.
  */
-const withRegion = (region: string | undefined) => {
-  return <A, E, R>(self: Effect.Effect<A, E, R>) =>
+const withRegion =
+  (region: string | undefined) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
     region === undefined
       ? self
-      : Effect.provideService(
-          self,
-          Region,
-          Effect.succeed(region as RegionName),
-        );
-};
+      : Effect.provideService(self, Region, Effect.succeed(region as RegionName));
 
-const createRoleName = (id: string) =>
-  createPhysicalName({ id: `${id}-pod-role`, maxLength: 64 });
+const createRoleName = (id: string) => createPhysicalName({ id: `${id}-pod-role`, maxLength: 64 });
 
 const createPolicyName = (id: string) =>
   createPhysicalName({ id: `${id}-pod-policy`, maxLength: 128 });
@@ -256,6 +231,7 @@ export const makeEksServerBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
@@ -263,7 +239,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
@@ -300,19 +276,23 @@ const program = tag.pipe(
     ),
   ),
   Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
+    layer.pipe(Layer.provideMerge(Layer.mergeAll(
+      Layer.effect(
+        Stack,
+        Effect.all([
+          Config.String("ALCHEMY_STACK_NAME"),
+          Config.String("ALCHEMY_STAGE")
+        ]).pipe(
+          Effect.map(([name, stage]) => ({
+            name,
+            stage,
+            bindings: {},
+            resources: {}
+          }))
+        )
+      ),
+      // Module-scope declarations shared with the Stack may read the stage.
+      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
     )),
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
@@ -348,6 +328,7 @@ export const makeEksJobBootstrap =
     `
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
@@ -355,7 +336,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
@@ -385,19 +366,23 @@ const program = tag.pipe(
     ),
   ),
   Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
+    layer.pipe(Layer.provideMerge(Layer.mergeAll(
+      Layer.effect(
+        Stack,
+        Effect.all([
+          Config.String("ALCHEMY_STACK_NAME"),
+          Config.String("ALCHEMY_STAGE")
+        ]).pipe(
+          Effect.map(([name, stage]) => ({
+            name,
+            stage,
+            bindings: {},
+            resources: {}
+          }))
+        )
+      ),
+      // Module-scope declarations shared with the Stack may read the stage.
+      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
     )),
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
@@ -436,56 +421,53 @@ export const EksKubernetesAdapter = () =>
       const context = yield* Effect.context<EksAdapterDeps>();
 
       // Discharge the layer-captured AWS services; per-resource engine
-      // services (InstanceId/Stack/Stage) stay ambient — they are provided
+      // services (ResourceContext/Stack/Stage) stay ambient — they are provided
       // by the invoking lifecycle operation, never captured here.
       const withAws =
         (region: string | undefined) =>
         <A, E, R>(self: Effect.Effect<A, E, R>) =>
           Effect.provideContext(withRegion(region)(self), context);
 
-      /** Describe the cluster; NotFound / DELETING → ClusterNotFoundError. */
+      /**
+       * Describe the cluster. NotFound is gone. DELETING is gone only when
+       * the API endpoint is gone. A live endpoint still needs Service
+       * deletion so a load balancer finalizer can release the NLB. A missing
+       * CA with that endpoint is not "gone": connect fails and destroy retries.
+       */
       const describeLiveCluster = Effect.fn(function* (auth: {
         clusterName: string;
         region?: string | undefined;
       }) {
-        const described = yield* eks
-          .describeCluster({ name: auth.clusterName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            withAws(auth.region),
-          );
+        const described = yield* eks.describeCluster({ name: auth.clusterName }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          withAws(auth.region),
+        );
         const cluster = described?.cluster;
-        if (!cluster || cluster.status === "DELETING") {
-          return yield* Effect.fail(
-            new ClusterNotFoundError({
-              message: `EKS cluster '${auth.clusterName}' no longer exists`,
-            }),
-          );
+        const apiGone = cluster?.status === "DELETING" && !cluster.endpoint;
+        if (!cluster || apiGone) {
+          return yield* new ClusterNotFoundError({
+            message: `EKS cluster '${auth.clusterName}' no longer exists`,
+          });
         }
         return cluster;
       });
 
       const connect = Effect.fn(function* (connection: Connection) {
         const auth = yield* narrowEksAuth(connection);
-        let endpoint = connection.endpoint;
-        let certificateAuthorityData = connection.certificateAuthorityData;
+        // Always describe. A persisted endpoint does not prove the cluster
+        // still exists, and delete uses ClusterNotFoundError to skip
+        // in-cluster objects and still remove the pod role and repository.
+        // Describe also picks up an endpoint rotation.
+        const cluster = yield* describeLiveCluster(auth);
+        const endpoint = cluster.endpoint;
+        const certificateAuthorityData = cluster.certificateAuthority?.data;
         if (!endpoint || !certificateAuthorityData) {
-          // Re-describe for a fresh endpoint + CA (persisted attributes
-          // may predate them, and EKS can rotate the endpoint DNS on
-          // recreate-with-same-name).
-          const cluster = yield* describeLiveCluster(auth);
-          endpoint = cluster.endpoint;
-          certificateAuthorityData = cluster.certificateAuthority?.data;
-          if (!endpoint || !certificateAuthorityData) {
-            return yield* Effect.fail(
-              new Error(
-                `EKS cluster '${auth.clusterName}' has no endpoint or ` +
-                  "certificate authority data yet (still creating?)",
-              ),
-            );
-          }
+          return yield* Effect.fail(
+            new Error(
+              `EKS cluster '${auth.clusterName}' has no endpoint or ` +
+                "certificate authority data yet (still creating?)",
+            ),
+          );
         }
         return yield* makeEksTransport({
           clusterName: auth.clusterName,
@@ -495,9 +477,7 @@ export const EksKubernetesAdapter = () =>
         }).pipe(withAws(auth.region));
       });
 
-      const identityReconcile = Effect.fn(function* (
-        options: WorkloadIdentityReconcileOptions,
-      ) {
+      const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
         const auth = yield* narrowEksAuth(options.connection);
         return yield* Effect.gen(function* () {
           const state = options.state;
@@ -555,9 +535,7 @@ export const EksKubernetesAdapter = () =>
       }) {
         const state = options.state;
         const auth =
-          options.connection !== undefined
-            ? yield* narrowEksAuth(options.connection)
-            : undefined;
+          options.connection !== undefined ? yield* narrowEksAuth(options.connection) : undefined;
         yield* Effect.gen(function* () {
           // The association is cluster-scoped: skip it when the cluster is
           // gone or DELETING (it dies with the cluster; EKS also rejects
@@ -565,17 +543,13 @@ export const EksKubernetesAdapter = () =>
           // invalid state` mid-teardown).
           if (auth !== undefined && typeof state?.associationId === "string") {
             const cluster = yield* describeLiveCluster(auth).pipe(
-              Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             );
             if (cluster) {
               yield* deleteAssociation({
                 clusterName: auth.clusterName,
                 associationId: state.associationId,
-              }).pipe(
-                Effect.catchTag("InvalidRequestException", () => Effect.void),
-              );
+              }).pipe(Effect.catchTag("InvalidRequestException", () => Effect.void));
             }
           }
           if (typeof state?.roleName === "string") {
@@ -584,20 +558,17 @@ export const EksKubernetesAdapter = () =>
         }).pipe(withAws(auth?.region));
       });
 
-      const registryResolve = Effect.fn(function* (
-        options: ImageRegistryResolveOptions,
-      ) {
+      const registryResolve = Effect.fn(function* (options: ImageRegistryResolveOptions) {
         const state = options.state;
         const repositoryName =
           typeof state?.repositoryName === "string"
             ? state.repositoryName
             : // Physical-name generation reads the resource's ambient
-              // InstanceId/Stack/Stage — do not shadow them with the
+              // ResourceContext/Stack/Stage — do not shadow them with the
               // layer-captured context.
               yield* createRepositoryName(options.id);
         const repositoryUri =
-          typeof state?.repositoryUri === "string" &&
-          state.repositoryName === repositoryName
+          typeof state?.repositoryUri === "string" && state.repositoryName === repositoryName
             ? state.repositoryUri
             : undefined;
         const resolved = yield* imageSource
@@ -658,9 +629,7 @@ export const EksKubernetesAdapter = () =>
           );
       });
 
-      const loadBalancerDefaults = Effect.fn(function* (options: {
-        connection: Connection;
-      }) {
+      const loadBalancerDefaults = Effect.fn(function* (options: { connection: Connection }) {
         const auth = yield* narrowEksAuth(options.connection);
         // EKS Auto Mode's built-in load balancer controller only
         // reconciles `LoadBalancer` Services whose `spec.loadBalancerClass`
@@ -670,18 +639,14 @@ export const EksKubernetesAdapter = () =>
         // default to an internet-facing NLB so the returned `url` is
         // actually reachable.
         const cluster = yield* describeLiveCluster(auth).pipe(
-          Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
         );
         return {
-          loadBalancerClass: cluster?.kubernetesNetworkConfig
-            ?.elasticLoadBalancing?.enabled
+          loadBalancerClass: cluster?.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled
             ? "eks.amazonaws.com/nlb"
             : undefined,
           annotations: {
-            "service.beta.kubernetes.io/aws-load-balancer-scheme":
-              "internet-facing",
+            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
           },
         };
       });

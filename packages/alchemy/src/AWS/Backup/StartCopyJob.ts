@@ -56,6 +56,4 @@ export interface StartCopyJob extends Binding.Service<
     ) => Effect.Effect<backup.StartCopyJobOutput, backup.StartCopyJobError>
   >
 > {}
-export const StartCopyJob = Binding.Service<StartCopyJob>(
-  "AWS.Backup.StartCopyJob",
-);
+export const StartCopyJob = Binding.Service<StartCopyJob>("AWS.Backup.StartCopyJob");

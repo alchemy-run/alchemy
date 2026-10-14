@@ -2,8 +2,7 @@ import type * as TSW from "@distilled.cloud/aws/timestream-write";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeBatchLoadTaskRequest
-  extends TSW.DescribeBatchLoadTaskRequest {}
+export interface DescribeBatchLoadTaskRequest extends TSW.DescribeBatchLoadTaskRequest {}
 
 /**
  * Runtime binding for `timestream-write:DescribeBatchLoadTask` — poll a bulk

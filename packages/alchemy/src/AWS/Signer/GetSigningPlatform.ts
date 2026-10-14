@@ -31,10 +31,7 @@ export interface GetSigningPlatform extends Binding.Service<
   () => Effect.Effect<
     (
       request: signer.GetSigningPlatformRequest,
-    ) => Effect.Effect<
-      signer.GetSigningPlatformResponse,
-      signer.GetSigningPlatformError
-    >
+    ) => Effect.Effect<signer.GetSigningPlatformResponse, signer.GetSigningPlatformError>
   >
 > {}
 export const GetSigningPlatform = Binding.Service<GetSigningPlatform>(

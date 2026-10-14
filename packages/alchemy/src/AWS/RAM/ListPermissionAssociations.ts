@@ -30,13 +30,9 @@ export interface ListPermissionAssociations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ram.ListPermissionAssociationsRequest,
-    ) => Effect.Effect<
-      ram.ListPermissionAssociationsResponse,
-      ram.ListPermissionAssociationsError
-    >
+    ) => Effect.Effect<ram.ListPermissionAssociationsResponse, ram.ListPermissionAssociationsError>
   >
 > {}
-export const ListPermissionAssociations =
-  Binding.Service<ListPermissionAssociations>(
-    "AWS.RAM.ListPermissionAssociations",
-  );
+export const ListPermissionAssociations = Binding.Service<ListPermissionAssociations>(
+  "AWS.RAM.ListPermissionAssociations",
+);

@@ -39,6 +39,4 @@ export interface UpdateJobStatus extends Binding.Service<
     >
   >
 > {}
-export const UpdateJobStatus = Binding.Service<UpdateJobStatus>(
-  "AWS.S3Control.UpdateJobStatus",
-);
+export const UpdateJobStatus = Binding.Service<UpdateJobStatus>("AWS.S3Control.UpdateJobStatus");

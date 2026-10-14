@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as transcribe from "@distilled.cloud/aws/transcribe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // proves the SDK's typed error mapping and that the binding's callable is wired
 // against the real batch API, at zero cost (no S3 media, no job). The full
 // start→poll lifecycle needs an S3 audio input and multi-minute async
-// processing; it is gated behind AWS_TEST_SLOW=1.
+// processing; it is skipped under `--fast`.
 //
 // NOTE: AWS Transcribe reports a missing job as `BadRequestException` ("The
 // requested job couldn't be found."), NOT `NotFoundException` — a documented
@@ -33,5 +33,8 @@ test.provider(
         expect(result.failure._tag).toBe("BadRequestException");
       }
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:transcribe", "live"],
+    timeout: 60_000,
+  },
 );

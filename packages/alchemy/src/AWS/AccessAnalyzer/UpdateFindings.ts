@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Analyzer } from "./Analyzer.ts";
 
 /** `UpdateFindings` request with `analyzerArn` injected from the bound {@link Analyzer}. */
-export interface UpdateFindingsRequest extends Omit<
-  aa.UpdateFindingsRequest,
-  "analyzerArn"
-> {}
+export interface UpdateFindingsRequest extends Omit<aa.UpdateFindingsRequest, "analyzerArn"> {}
 
 /**
  * Runtime binding for `access-analyzer:UpdateFindings`.
@@ -36,6 +33,4 @@ export interface UpdateFindings extends Binding.Service<
   >
 > {}
 
-export const UpdateFindings = Binding.Service<UpdateFindings>(
-  "AWS.AccessAnalyzer.UpdateFindings",
-);
+export const UpdateFindings = Binding.Service<UpdateFindings>("AWS.AccessAnalyzer.UpdateFindings");

@@ -36,7 +36,6 @@ export interface StopTargetedSentimentDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StopTargetedSentimentDetectionJob =
-  Binding.Service<StopTargetedSentimentDetectionJob>(
-    "AWS.Comprehend.StopTargetedSentimentDetectionJob",
-  );
+export const StopTargetedSentimentDetectionJob = Binding.Service<StopTargetedSentimentDetectionJob>(
+  "AWS.Comprehend.StopTargetedSentimentDetectionJob",
+);

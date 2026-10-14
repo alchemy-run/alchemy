@@ -73,29 +73,22 @@ export interface AccessPointPolicy extends Resource<
  *
  * @resource
  */
-export const AccessPointPolicy = Resource<AccessPointPolicy>(
-  "AWS.S3Control.AccessPointPolicy",
-);
+export const AccessPointPolicy = Resource<AccessPointPolicy>("AWS.S3Control.AccessPointPolicy");
 
 export const AccessPointPolicyProvider = () =>
   Provider.effect(
     AccessPointPolicy,
     Effect.gen(function* () {
       const observePolicy = (accountId: string, name: string) =>
-        s3control
-          .getAccessPointPolicy({ AccountId: accountId, Name: name })
-          .pipe(
-            Effect.map((r) => r.Policy),
-            Effect.catchTag(
-              ["NoSuchAccessPointPolicy", "NoSuchAccessPoint"],
-              () => Effect.succeed(undefined),
-            ),
-          );
+        s3control.getAccessPointPolicy({ AccountId: accountId, Name: name }).pipe(
+          Effect.map((r) => r.Policy),
+          Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
       const desiredPolicy = (props: AccessPointPolicyProps) =>
-        typeof props.policy === "string"
-          ? props.policy
-          : stringifyPolicyDocument(props.policy);
+        typeof props.policy === "string" ? props.policy : stringifyPolicyDocument(props.policy);
 
       return AccessPointPolicy.Provider.of({
         stables: ["accessPointName"],
@@ -113,10 +106,7 @@ export const AccessPointPolicyProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds !== undefined &&
-            olds.accessPointName !== news.accessPointName
-          ) {
+          if (olds !== undefined && olds.accessPointName !== news.accessPointName) {
             return { action: "replace" } as const;
           }
           // fall through: engine default update path (policy content)
@@ -134,8 +124,7 @@ export const AccessPointPolicyProvider = () =>
           const desired = desiredPolicy(news);
           if (
             observed === undefined ||
-            normalizePolicyDocument(observed) !==
-              normalizePolicyDocument(desired)
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(desired)
           ) {
             yield* s3control.putAccessPointPolicy({
               AccountId: accountId,
@@ -157,10 +146,7 @@ export const AccessPointPolicyProvider = () =>
             .pipe(
               // Idempotent delete — a policy (or its whole access point)
               // that is already gone is success.
-              Effect.catchTag(
-                ["NoSuchAccessPointPolicy", "NoSuchAccessPoint"],
-                () => Effect.void,
-              ),
+              Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () => Effect.void),
             );
         }),
       });

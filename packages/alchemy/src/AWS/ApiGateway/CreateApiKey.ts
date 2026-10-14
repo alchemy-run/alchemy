@@ -37,11 +37,7 @@ export interface CreateApiKey extends Binding.Service<
   CreateApiKey,
   "AWS.ApiGateway.CreateApiKey",
   () => Effect.Effect<
-    (
-      request?: CreateApiKeyRequest,
-    ) => Effect.Effect<ag.ApiKey, ag.CreateApiKeyError>
+    (request?: CreateApiKeyRequest) => Effect.Effect<ag.ApiKey, ag.CreateApiKeyError>
   >
 > {}
-export const CreateApiKey = Binding.Service<CreateApiKey>(
-  "AWS.ApiGateway.CreateApiKey",
-);
+export const CreateApiKey = Binding.Service<CreateApiKey>("AWS.ApiGateway.CreateApiKey");

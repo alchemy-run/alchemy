@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetMetricWidgetImageRequest
-  extends cloudwatch.GetMetricWidgetImageInput {}
+export interface GetMetricWidgetImageRequest extends cloudwatch.GetMetricWidgetImageInput {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricWidgetImage` — render a metric
@@ -37,10 +36,7 @@ export interface GetMetricWidgetImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricWidgetImageRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricWidgetImageOutput,
-      cloudwatch.GetMetricWidgetImageError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricWidgetImageOutput, cloudwatch.GetMetricWidgetImageError>
   >
 > {}
 

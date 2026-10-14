@@ -32,10 +32,7 @@ export interface ListTagsForResource extends Binding.Service<
   (
     report: ReportDefinition,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      cur.ListTagsForResourceResponse,
-      cur.ListTagsForResourceError
-    >
+    () => Effect.Effect<cur.ListTagsForResourceResponse, cur.ListTagsForResourceError>
   >
 > {}
 

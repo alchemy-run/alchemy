@@ -1,3 +1,5 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 /**
  * `AWS.DynamoDB.Table` under `alchemy dev`: the dualized provider deploys
  * the table into the floci emulator, including Contributor Insights
@@ -8,13 +10,7 @@
  */
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import {
-  dockerAvailable,
-  rawAwsJson,
-  regionOfArn,
-} from "../Local/fixtures/raw.ts";
+import { dockerAvailable, rawAwsJson, regionOfArn } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -55,5 +51,8 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(after.status).toBe(400);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dynamodb", "local"],
+    timeout: 180_000,
+  },
 );

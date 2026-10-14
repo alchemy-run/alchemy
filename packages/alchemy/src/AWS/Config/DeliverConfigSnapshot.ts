@@ -30,10 +30,7 @@ export interface DeliverConfigSnapshot extends Binding.Service<
   (
     channel: DeliveryChannel,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      config.DeliverConfigSnapshotResponse,
-      config.DeliverConfigSnapshotError
-    >
+    () => Effect.Effect<config.DeliverConfigSnapshotResponse, config.DeliverConfigSnapshotError>
   >
 > {}
 

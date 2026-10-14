@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
-export interface DeleteScheduleRequest extends Omit<
-  scheduler.DeleteScheduleInput,
-  "GroupName"
-> {}
+export interface DeleteScheduleRequest extends Omit<scheduler.DeleteScheduleInput, "GroupName"> {}
 
 /**
  * Runtime binding for `scheduler:DeleteSchedule`.
@@ -42,12 +39,7 @@ export interface DeleteSchedule extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteScheduleRequest,
-    ) => Effect.Effect<
-      scheduler.DeleteScheduleOutput,
-      scheduler.DeleteScheduleError
-    >
+    ) => Effect.Effect<scheduler.DeleteScheduleOutput, scheduler.DeleteScheduleError>
   >
 > {}
-export const DeleteSchedule = Binding.Service<DeleteSchedule>(
-  "AWS.Scheduler.DeleteSchedule",
-);
+export const DeleteSchedule = Binding.Service<DeleteSchedule>("AWS.Scheduler.DeleteSchedule");

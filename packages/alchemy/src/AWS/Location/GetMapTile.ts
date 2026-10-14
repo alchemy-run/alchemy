@@ -7,10 +7,7 @@ import type { Map as LocationMap } from "./Map.ts";
  * `GetMapTile` request with `MapName` injected from the bound
  * resource.
  */
-export interface GetMapTileRequest extends Omit<
-  location.GetMapTileRequest,
-  "MapName"
-> {}
+export interface GetMapTileRequest extends Omit<location.GetMapTileRequest, "MapName"> {}
 
 /**
  * Retrieves a single map tile (vector or raster) addressed by zoom/x/y.
@@ -41,6 +38,4 @@ export interface GetMapTile extends Binding.Service<
     ) => Effect.Effect<location.GetMapTileResponse, location.GetMapTileError>
   >
 > {}
-export const GetMapTile = Binding.Service<GetMapTile>(
-  "AWS.Location.GetMapTile",
-);
+export const GetMapTile = Binding.Service<GetMapTile>("AWS.Location.GetMapTile");

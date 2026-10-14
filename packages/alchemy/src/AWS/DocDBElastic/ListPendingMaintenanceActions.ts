@@ -35,7 +35,6 @@ export interface ListPendingMaintenanceActions extends Binding.Service<
     >
   >
 > {}
-export const ListPendingMaintenanceActions =
-  Binding.Service<ListPendingMaintenanceActions>(
-    "AWS.DocDBElastic.ListPendingMaintenanceActions",
-  );
+export const ListPendingMaintenanceActions = Binding.Service<ListPendingMaintenanceActions>(
+  "AWS.DocDBElastic.ListPendingMaintenanceActions",
+);

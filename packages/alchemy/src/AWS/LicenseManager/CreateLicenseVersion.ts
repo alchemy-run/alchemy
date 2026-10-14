@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CreateLicenseVersion}.
  */
-export interface CreateLicenseVersionRequest
-  extends licensemanager.CreateLicenseVersionRequest {}
+export interface CreateLicenseVersionRequest extends licensemanager.CreateLicenseVersionRequest {}
 
 /**
  * Runtime binding for `license-manager:CreateLicenseVersion` — publish a new

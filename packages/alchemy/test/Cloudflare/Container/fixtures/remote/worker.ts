@@ -1,8 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { RemoteContainerObject } from "./object.ts";
+
+// Report failures in the response body, so a test that times out waiting
+// for the container shows why instead of a bare 500.
+const reportFailure = Effect.catchCause((cause: Cause.Cause<unknown>) =>
+  Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+);
 
 export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteContainerWorker>()(
   "RemoteContainerWorker",
@@ -22,6 +29,12 @@ export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteConta
           return HttpServerResponse.text(text);
         }
 
+        if (url.pathname.startsWith("/passthrough")) {
+          // Forward the raw incoming request through the DO's fetch handler
+          // to the container port (see the fixture object's `fetch`).
+          return yield* objects.getByName("default").fetch(request);
+        }
+
         return HttpServerResponse.text("ok");
       }).pipe(
         Effect.catchTag("HttpClientError", (err) =>
@@ -33,6 +46,7 @@ export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteConta
                 }),
           ),
         ),
+        reportFailure,
       ),
     };
   }),

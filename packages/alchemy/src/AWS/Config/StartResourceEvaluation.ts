@@ -38,10 +38,7 @@ export interface StartResourceEvaluation extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.StartResourceEvaluationRequest,
-    ) => Effect.Effect<
-      config.StartResourceEvaluationResponse,
-      config.StartResourceEvaluationError
-    >
+    ) => Effect.Effect<config.StartResourceEvaluationResponse, config.StartResourceEvaluationError>
   >
 > {}
 

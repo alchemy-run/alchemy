@@ -1,7 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { Region } from "@distilled.cloud/aws/Region";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
-
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { Platform } from "../../Platform.ts";
@@ -11,10 +10,7 @@ import type * as Server from "../../Server/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  makeMicrovmRuntimeContext,
-  MicrovmImageTypeId,
-} from "./MicrovmRuntimeContext.ts";
+import { makeMicrovmRuntimeContext, MicrovmImageTypeId } from "./MicrovmRuntimeContext.ts";
 
 /**
  * The IAM permissions a build role needs: read the code artifact from the
@@ -29,11 +25,7 @@ const buildRolePolicyStatements: PolicyStatement[] = [
   },
   {
     Effect: "Allow",
-    Action: [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ],
+    Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
     Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
   },
 ];
@@ -88,12 +80,10 @@ export interface MicrovmImageProps {
   external?: string[];
 
   /**
-   * Bundler configuration for {@link main} (effectful mode): rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for {@link main} (effectful mode). Unused
+   * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
+   * marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
 
@@ -204,8 +194,12 @@ export interface MicrovmImage extends Resource<
     createdAt?: string;
     /** When the image was last updated (ISO 8601). */
     updatedAt?: string;
-    /** The resolved code artifact and its build identity hash. */
-    codeArtifact?: { uri?: string; hash?: string };
+    /**
+     * The resolved code artifact and its build identity hash. `contentHash`
+     * covers only the bundled program / packaged context (no props), so a
+     * content-only edit is detectable at plan time before the props resolve.
+     */
+    codeArtifact?: { uri?: string; hash?: string; contentHash?: string };
   },
   {
     env?: Record<string, any>;
@@ -253,7 +247,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * - A **build role** (`buildRole`) Lambda assumes to read the code artifact and
  *   write build logs. Pass a {@link Role} instance and the required permissions
  *   are granted automatically — see the example below.
- * - A **bootstrapped Assets bucket** (`alchemy aws bootstrap`) for effectful /
+ * - A **bootstrapped Assets bucket** (`alchemy provider aws bootstrap`) for effectful /
  *   external modes, which upload the artifact to S3.
  * - The account must be **onboarded to the Lambda MicroVM preview**.
  *
@@ -403,16 +397,13 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the MicroVM program doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -422,18 +413,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -602,8 +582,7 @@ export const MicrovmImage: Platform<
   // binding so the user doesn't have to author the inline policy.
   onCreate: (_resource, props: MicrovmImageProps) =>
     props.buildRole && typeof props.buildRole !== "string"
-      ? props.buildRole
-          .bind`Allow(${_resource}, AWS.Lambda.MicrovmImage.build)`({
+      ? props.buildRole.bind`Allow(${_resource}, AWS.Lambda.MicrovmImage.build)`({
           // Grant the build permissions...
           policyStatements: buildRolePolicyStatements,
           // ...and the trust statement, so a build role passed as a bare

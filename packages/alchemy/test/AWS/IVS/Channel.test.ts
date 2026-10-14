@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Channel } from "@/AWS/IVS";
-import * as Test from "@/Test/Alchemy";
 import * as ivs from "@distilled.cloud/aws/ivs";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Channel } from "@/AWS/IVS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,16 +24,14 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:ivs", "live"], timeout: 60_000 },
 );
 
 const assertChannelGone = (arn: string) =>
   Effect.gen(function* () {
     const channel = yield* ivs.getChannel({ arn }).pipe(
       Effect.map((r) => r.channel),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (channel !== undefined) {
       return yield* Effect.fail(new Error(`channel '${arn}' still exists`));
@@ -104,5 +102,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertChannelGone(created.channelArn);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ivs", "live"], timeout: 240_000 },
 );

@@ -1,6 +1,7 @@
 import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { diffTags } from "../../Tags.ts";
 
 /**
@@ -23,7 +24,7 @@ export const toTagRecord = (
 export const readIvsChatTags = Effect.fn(function* (arn: string) {
   const response = yield* ivschat
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   return toTagRecord(response?.tags);
 });
 
@@ -46,9 +47,7 @@ export const syncIvsChatTags = Effect.fn(function* (
       .pipe(retryWhileThrottled);
   }
   if (removed.length > 0) {
-    yield* ivschat
-      .untagResource({ resourceArn: arn, tagKeys: removed })
-      .pipe(retryWhileThrottled);
+    yield* ivschat.untagResource({ resourceArn: arn, tagKeys: removed }).pipe(retryWhileThrottled);
   }
 });
 
@@ -79,8 +78,7 @@ export const retryWhileHandlerPermissionPropagating = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      e instanceof ivschat.ValidationException &&
-      e.message.includes("invalid lambda permission"),
+      Schema.is(ivschat.ValidationException)(e) && e.message.includes("invalid lambda permission"),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -94,8 +92,5 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
   });

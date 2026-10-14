@@ -5,7 +5,7 @@ import type { Collection } from "./Collection.ts";
 
 /**
  * Runtime binding for the `DeleteIndex` operation scoped to one collection
- * (IAM action `aoss:APIAccessAll` on the collection ARN).
+ * (IAM actions `aoss:DeleteIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
  * Deletes an index from the bound {@link Collection} — the teardown half of
  * the runtime multi-tenant pattern built with {@link CreateIndex}. Deleting
@@ -36,6 +36,4 @@ export interface DeleteIndex extends Binding.Service<
     ) => Effect.Effect<aoss.DeleteIndexResponse, aoss.DeleteIndexError>
   >
 > {}
-export const DeleteIndex = Binding.Service<DeleteIndex>(
-  "AWS.OpenSearchServerless.DeleteIndex",
-);
+export const DeleteIndex = Binding.Service<DeleteIndex>("AWS.OpenSearchServerless.DeleteIndex");

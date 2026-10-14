@@ -34,12 +34,7 @@ export interface SearchFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.SearchFacesRequest,
-    ) => Effect.Effect<
-      rekognition.SearchFacesResponse,
-      rekognition.SearchFacesError
-    >
+    ) => Effect.Effect<rekognition.SearchFacesResponse, rekognition.SearchFacesError>
   >
 > {}
-export const SearchFaces = Binding.Service<SearchFaces>(
-  "AWS.Rekognition.SearchFaces",
-);
+export const SearchFaces = Binding.Service<SearchFaces>("AWS.Rekognition.SearchFaces");

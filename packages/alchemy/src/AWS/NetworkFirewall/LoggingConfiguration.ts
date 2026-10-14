@@ -86,9 +86,7 @@ export const LoggingConfigurationProvider = () =>
         const response = yield* nfw.describeLoggingConfiguration({
           FirewallArn: firewallArn,
         });
-        return [
-          ...(response.LoggingConfiguration?.LogDestinationConfigs ?? []),
-        ];
+        return [...(response.LoggingConfiguration?.LogDestinationConfigs ?? [])];
       });
 
       const applyConfigs = Effect.fn(function* (
@@ -113,7 +111,7 @@ export const LoggingConfigurationProvider = () =>
         const desiredByType = new Map(desired.map((d) => [d.LogType, d]));
 
         // Remove log types no longer desired.
-        for (const config of [...current]) {
+        for (const config of current) {
           if (!desiredByType.has(config.LogType)) {
             current = current.filter((c) => c.LogType !== config.LogType);
             yield* applyConfigs(firewallArn, current);
@@ -123,9 +121,7 @@ export const LoggingConfigurationProvider = () =>
         for (const config of desired) {
           const existing = current.find((c) => c.LogType === config.LogType);
           if (existing !== undefined && !deepEqual(existing, config)) {
-            current = current.map((c) =>
-              c.LogType === config.LogType ? config : c,
-            );
+            current = current.map((c) => (c.LogType === config.LogType ? config : c));
             yield* applyConfigs(firewallArn, current);
           }
         }
@@ -150,13 +146,8 @@ export const LoggingConfigurationProvider = () =>
           if (firewallArn === undefined) return undefined;
           const response = yield* nfw
             .describeLoggingConfiguration({ FirewallArn: firewallArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          const configs =
-            response?.LoggingConfiguration?.LogDestinationConfigs ?? [];
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          const configs = response?.LoggingConfiguration?.LogDestinationConfigs ?? [];
           if (configs.length === 0) return undefined;
           return { firewallArn };
         }),

@@ -45,12 +45,7 @@ export interface CopyImageSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CopyImageSetRequest,
-    ) => Effect.Effect<
-      medicalimaging.CopyImageSetResponse,
-      medicalimaging.CopyImageSetError
-    >
+    ) => Effect.Effect<medicalimaging.CopyImageSetResponse, medicalimaging.CopyImageSetError>
   >
 > {}
-export const CopyImageSet = Binding.Service<CopyImageSet>(
-  "AWS.MedicalImaging.CopyImageSet",
-);
+export const CopyImageSet = Binding.Service<CopyImageSet>("AWS.MedicalImaging.CopyImageSet");

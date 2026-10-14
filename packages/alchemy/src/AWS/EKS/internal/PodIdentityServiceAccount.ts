@@ -10,21 +10,13 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../../../Input.ts";
 import * as Namespace from "../../../Namespace.ts";
 import type { PolicyDocument } from "../../IAM/Policy.ts";
-import {
-  Role,
-  type RoleArn,
-  type Role as RoleResource,
-} from "../../IAM/Role.ts";
+import { Role, type RoleArn, type Role as RoleResource } from "../../IAM/Role.ts";
 import type { Cluster } from "../Cluster.ts";
 import {
   PodIdentityAssociation,
   type PodIdentityAssociation as PodIdentityAssociationResource,
 } from "../PodIdentityAssociation.ts";
-import {
-  clusterServiceAccount,
-  namespaceNameOf,
-  type ClusterObjectRef,
-} from "./ClusterObject.ts";
+import { clusterServiceAccount, namespaceNameOf, type ClusterObjectRef } from "./ClusterObject.ts";
 
 export interface PodIdentityServiceAccountProps {
   /** Target EKS cluster. */
@@ -68,10 +60,7 @@ export interface PodIdentityServiceAccountResources {
   roleArn: Input<string> | RoleArn;
 }
 
-export const PodIdentityServiceAccount = (
-  id: string,
-  props: PodIdentityServiceAccountProps,
-) =>
+export const PodIdentityServiceAccount = (id: string, props: PodIdentityServiceAccountProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
@@ -94,8 +83,7 @@ export const PodIdentityServiceAccount = (
               ],
             },
             description:
-              props.description ??
-              `Pod identity role for service account ${serviceAccountName}.`,
+              props.description ?? `Pod identity role for service account ${serviceAccountName}.`,
             managedPolicyArns: props.managedPolicyArns,
             inlinePolicies: props.inlinePolicies,
             tags: props.tags,
@@ -109,19 +97,16 @@ export const PodIdentityServiceAccount = (
         annotations: props.annotations,
       });
 
-      const podIdentityAssociation = yield* PodIdentityAssociation(
-        "PodIdentityAssociation",
-        {
-          clusterName: props.cluster.clusterName,
-          namespace: namespaceNameOf(props.namespace),
-          serviceAccount: serviceAccount.name,
-          roleArn: props.roleArn ?? role!.roleArn,
-          disableSessionTags: props.disableSessionTags,
-          targetRoleArn: props.targetRoleArn,
-          policy: props.policy,
-          tags: props.tags,
-        },
-      );
+      const podIdentityAssociation = yield* PodIdentityAssociation("PodIdentityAssociation", {
+        clusterName: props.cluster.clusterName,
+        namespace: namespaceNameOf(props.namespace),
+        serviceAccount: serviceAccount.name,
+        roleArn: props.roleArn ?? role!.roleArn,
+        disableSessionTags: props.disableSessionTags,
+        targetRoleArn: props.targetRoleArn,
+        policy: props.policy,
+        tags: props.tags,
+      });
 
       return {
         serviceAccount,

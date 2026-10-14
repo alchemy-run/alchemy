@@ -36,10 +36,7 @@ export interface GetDownloadUrlForLayer extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDownloadUrlForLayerRequest,
-    ) => Effect.Effect<
-      ecr.GetDownloadUrlForLayerResponse,
-      ecr.GetDownloadUrlForLayerError
-    >
+    ) => Effect.Effect<ecr.GetDownloadUrlForLayerResponse, ecr.GetDownloadUrlForLayerError>
   >
 > {}
 

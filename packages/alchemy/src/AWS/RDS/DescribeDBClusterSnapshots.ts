@@ -29,13 +29,9 @@ export interface DescribeDBClusterSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rds.DescribeDBClusterSnapshotsMessage,
-    ) => Effect.Effect<
-      rds.DBClusterSnapshotMessage,
-      rds.DescribeDBClusterSnapshotsError
-    >
+    ) => Effect.Effect<rds.DBClusterSnapshotMessage, rds.DescribeDBClusterSnapshotsError>
   >
 > {}
-export const DescribeDBClusterSnapshots =
-  Binding.Service<DescribeDBClusterSnapshots>(
-    "AWS.RDS.DescribeDBClusterSnapshots",
-  );
+export const DescribeDBClusterSnapshots = Binding.Service<DescribeDBClusterSnapshots>(
+  "AWS.RDS.DescribeDBClusterSnapshots",
+);

@@ -1,27 +1,21 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/assets-routing",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-routing");
 const main = pathe.resolve(fixtureDir, "worker.ts");
 const assetsDir = pathe.resolve(fixtureDir, "assets");
 
@@ -41,10 +35,7 @@ const getTextReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -104,9 +95,7 @@ test.provider(
       // `/api/hello.txt` matches both an asset and the `/api/*` glob: the
       // worker must answer. If the array were dropped (treated as false),
       // the asset would serve instead.
-      const globsApi = yield* getTextReady(
-        `${deployed.globs.url}/api/hello.txt`,
-      );
+      const globsApi = yield* getTextReady(`${deployed.globs.url}/api/hello.txt`);
       expect(globsApi).toBe("assets-routing-worker:/api/hello.txt");
 
       // A path neither layer claims still falls through to the worker.
@@ -116,17 +105,16 @@ test.provider(
       // ── omitted (assets-first default) ────────────────────────────────
       // The same both-layers path now serves the asset: the worker is only
       // invoked for requests with no matching asset — deployed behavior.
-      const defaultApi = yield* getTextReady(
-        `${deployed.defaults.url}/api/hello.txt`,
-      );
+      const defaultApi = yield* getTextReady(`${deployed.defaults.url}/api/hello.txt`);
       expect(defaultApi).toContain("alchemy-assets-routing-api-asset");
 
-      const defaultMiss = yield* getTextReady(
-        `${deployed.defaults.url}/nothing`,
-      );
+      const defaultMiss = yield* getTextReady(`${deployed.defaults.url}/nothing`);
       expect(defaultMiss).toBe("assets-routing-worker:/nothing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
 );

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { dispatchByMode } from "../LocalGateway.ts";
@@ -11,7 +11,7 @@ import { makeProxyBucketHelpers } from "./LocalR2Gateway.ts";
 /**
  * Shared scaffolding for the R2 `*Local` binding layers.
  *
- * Resolves the account + captures the ambient current-credentials context at
+ * Captures the lazy account resolver and ambient credentials context at
  * layer construction, then returns the deferred binding callable. The
  * callable reads the bucket name/jurisdiction as deferred accessors
  * (resolved at apply time) and builds the client per resolved name:
@@ -33,13 +33,13 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
   makeNativeClient: (helpers: ReturnType<typeof makeHelpers>) => Client;
 }) =>
   Effect.gen(function* () {
-    // Account + credentials are ambient during stack-eval (the stack's
+    // Capture the account resolver without authenticating. Only the HTTP
+    // branch evaluates it; native local clients need no cloud credentials.
+    // Credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so each op can be run with the
     // current credentials.
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const environment = yield* CloudflareEnvironment;
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services and the Cloudflare
     // environment, all present during stack-eval but not statically
@@ -48,7 +48,7 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
 
     const auth: R2Auth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-      accountId: Effect.succeed(accountId),
+      accountId: Effect.map(environment, (env) => env.accountId),
     };
 
     return Effect.fn(function* (bucket: Bucket) {

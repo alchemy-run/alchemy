@@ -42,9 +42,7 @@ export interface VerifyMac extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: VerifyMacRequest,
-    ) => Effect.Effect<kms.VerifyMacResponse, kms.VerifyMacError>
+    (request: VerifyMacRequest) => Effect.Effect<kms.VerifyMacResponse, kms.VerifyMacError>
   >
 > {}
 

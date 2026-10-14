@@ -38,12 +38,7 @@ export interface StartFaceSearch extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.StartFaceSearchRequest,
-    ) => Effect.Effect<
-      rekognition.StartFaceSearchResponse,
-      rekognition.StartFaceSearchError
-    >
+    ) => Effect.Effect<rekognition.StartFaceSearchResponse, rekognition.StartFaceSearchError>
   >
 > {}
-export const StartFaceSearch = Binding.Service<StartFaceSearch>(
-  "AWS.Rekognition.StartFaceSearch",
-);
+export const StartFaceSearch = Binding.Service<StartFaceSearch>("AWS.Rekognition.StartFaceSearch");

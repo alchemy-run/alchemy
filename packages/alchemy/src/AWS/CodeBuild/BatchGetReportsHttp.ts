@@ -1,7 +1,7 @@
 import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Layer from "effect/Layer";
-import { makeCodeBuildReportGroupHttpBinding } from "./BindingHttp.ts";
 import { BatchGetReports } from "./BatchGetReports.ts";
+import { makeCodeBuildReportGroupHttpBinding } from "./BindingHttp.ts";
 
 export const BatchGetReportsHttp = Layer.effect(
   BatchGetReports,

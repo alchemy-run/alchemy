@@ -30,10 +30,7 @@ export interface GetExperimentTemplate extends Binding.Service<
   (
     template: ExperimentTemplate,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      fis.GetExperimentTemplateResponse,
-      fis.GetExperimentTemplateError
-    >
+    () => Effect.Effect<fis.GetExperimentTemplateResponse, fis.GetExperimentTemplateError>
   >
 > {}
 export const GetExperimentTemplate = Binding.Service<GetExperimentTemplate>(

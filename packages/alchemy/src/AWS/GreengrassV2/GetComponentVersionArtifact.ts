@@ -38,7 +38,6 @@ export interface GetComponentVersionArtifact extends Binding.Service<
     >
   >
 > {}
-export const GetComponentVersionArtifact =
-  Binding.Service<GetComponentVersionArtifact>(
-    "AWS.GreengrassV2.GetComponentVersionArtifact",
-  );
+export const GetComponentVersionArtifact = Binding.Service<GetComponentVersionArtifact>(
+  "AWS.GreengrassV2.GetComponentVersionArtifact",
+);

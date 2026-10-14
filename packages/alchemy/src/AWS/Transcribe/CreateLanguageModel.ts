@@ -58,10 +58,7 @@ export interface CreateLanguageModel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateLanguageModelRequest,
-    ) => Effect.Effect<
-      transcribe.CreateLanguageModelResponse,
-      transcribe.CreateLanguageModelError
-    >
+    ) => Effect.Effect<transcribe.CreateLanguageModelResponse, transcribe.CreateLanguageModelError>
   >
 > {}
 export const CreateLanguageModel = Binding.Service<CreateLanguageModel>(

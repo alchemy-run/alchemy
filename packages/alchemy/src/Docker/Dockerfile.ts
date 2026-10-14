@@ -77,8 +77,5 @@ export const inline = (
   template: TemplateStringsArray,
   ...args: Array<Input<string>>
 ): InlineDockerfile => ({
-  content:
-    args.length === 0
-      ? template.raw.join("")
-      : Output.interpolate(template, ...args),
+  content: args.length === 0 ? template.raw.join("") : Output.interpolate(template, ...args),
 });

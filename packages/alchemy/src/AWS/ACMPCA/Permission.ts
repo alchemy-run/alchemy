@@ -98,12 +98,8 @@ export const PermissionProvider = () =>
           .items({ CertificateAuthorityArn: certificateAuthorityArn })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).find((p) => p.Principal === principal),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.map((chunk) => Array.from(chunk).find((p) => p.Principal === principal)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -117,44 +113,37 @@ export const PermissionProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk)
-                  .filter(
-                    (ca) => ca.Arn !== undefined && ca.Status !== "DELETED",
-                  )
+                  .filter((ca) => ca.Arn !== undefined && ca.Status !== "DELETED")
                   .map((ca) => ca.Arn!),
               ),
             );
             const perCa = yield* Effect.forEach(
               cas,
               (arn) =>
-                acmpca.listPermissions
-                  .items({ CertificateAuthorityArn: arn })
-                  .pipe(
-                    Stream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk)
-                        .filter((p) => p.Principal !== undefined)
-                        .map((p) => ({
-                          certificateAuthorityArn: arn,
-                          principal: p.Principal!,
-                        })),
-                    ),
-                    // CA removed (or state-blocked) between enumeration and
-                    // listPermissions — it has no listable permissions.
-                    Effect.catchTag(
-                      ["ResourceNotFoundException", "InvalidStateException"],
-                      () => Effect.succeed([] as Permission["Attributes"][]),
-                    ),
+                acmpca.listPermissions.items({ CertificateAuthorityArn: arn }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk)
+                      .filter((p) => p.Principal !== undefined)
+                      .map((p) => ({
+                        certificateAuthorityArn: arn,
+                        principal: p.Principal!,
+                      })),
                   ),
+                  // CA removed (or state-blocked) between enumeration and
+                  // listPermissions — it has no listable permissions.
+                  Effect.catchTag(["ResourceNotFoundException", "InvalidStateException"], () =>
+                    Effect.succeed([] as Permission["Attributes"][]),
+                  ),
+                ),
               { concurrency: 5 },
             );
             return perCa.flat();
           }),
         read: Effect.fn(function* ({ olds, output }) {
-          const arn =
-            output?.certificateAuthorityArn ?? olds?.certificateAuthorityArn;
+          const arn = output?.certificateAuthorityArn ?? olds?.certificateAuthorityArn;
           if (arn === undefined) return undefined;
-          const principal =
-            output?.principal ?? olds?.principal ?? DEFAULT_PRINCIPAL;
+          const principal = output?.principal ?? olds?.principal ?? DEFAULT_PRINCIPAL;
           const found = yield* findPermission(arn, principal);
           if (found === undefined) return undefined;
           return { certificateAuthorityArn: arn, principal };
@@ -163,8 +152,7 @@ export const PermissionProvider = () =>
           if (!isResolved(news)) return;
           if (
             news.certificateAuthorityArn !== olds.certificateAuthorityArn ||
-            (news.principal ?? DEFAULT_PRINCIPAL) !==
-              (olds.principal ?? DEFAULT_PRINCIPAL) ||
+            (news.principal ?? DEFAULT_PRINCIPAL) !== (olds.principal ?? DEFAULT_PRINCIPAL) ||
             news.sourceAccount !== olds.sourceAccount
           ) {
             return { action: "replace" } as const;
@@ -177,16 +165,12 @@ export const PermissionProvider = () =>
 
           // OBSERVE — the permission has no update API, so converge by
           // comparing the observed action set and recreating on drift.
-          const existing = yield* findPermission(
-            news.certificateAuthorityArn,
-            principal,
-          );
+          const existing = yield* findPermission(news.certificateAuthorityArn, principal);
 
           const converged =
             existing !== undefined &&
             sortedActions(existing.Actions) === sortedActions(actions) &&
-            (news.sourceAccount === undefined ||
-              existing.SourceAccount === news.sourceAccount);
+            (news.sourceAccount === undefined || existing.SourceAccount === news.sourceAccount);
 
           if (!converged) {
             if (existing !== undefined) {
@@ -196,12 +180,7 @@ export const PermissionProvider = () =>
                   Principal: principal,
                   SourceAccount: news.sourceAccount,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             }
             yield* acmpca
               .createPermission({
@@ -213,16 +192,11 @@ export const PermissionProvider = () =>
               .pipe(
                 // A concurrent reconciler won the create race — the
                 // permission exists; treat as converged.
-                Effect.catchTag(
-                  "PermissionAlreadyExistsException",
-                  () => Effect.void,
-                ),
+                Effect.catchTag("PermissionAlreadyExistsException", () => Effect.void),
               );
           }
 
-          yield* session.note(
-            `Permission for ${principal} on ${news.certificateAuthorityArn}`,
-          );
+          yield* session.note(`Permission for ${principal} on ${news.certificateAuthorityArn}`);
           return {
             certificateAuthorityArn: news.certificateAuthorityArn,
             principal,

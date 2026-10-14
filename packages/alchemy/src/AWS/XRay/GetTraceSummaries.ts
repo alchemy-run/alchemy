@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetTraceSummariesRequest
-  extends xray.GetTraceSummariesRequest {}
+export interface GetTraceSummariesRequest extends xray.GetTraceSummariesRequest {}
 
 /**
  * Retrieve IDs and annotations for traces available in a time frame,
@@ -56,12 +55,7 @@ export interface GetTraceSummaries extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetTraceSummariesRequest,
-    ) => Effect.Effect<
-      xray.GetTraceSummariesResult,
-      xray.GetTraceSummariesError
-    >
+    ) => Effect.Effect<xray.GetTraceSummariesResult, xray.GetTraceSummariesError>
   >
 > {}
-export const GetTraceSummaries = Binding.Service<GetTraceSummaries>(
-  "AWS.XRay.GetTraceSummaries",
-);
+export const GetTraceSummaries = Binding.Service<GetTraceSummaries>("AWS.XRay.GetTraceSummaries");

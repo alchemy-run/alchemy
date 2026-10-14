@@ -28,13 +28,6 @@ export interface RebootCluster extends Binding.Service<
   "AWS.Redshift.RebootCluster",
   (
     cluster: Cluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      redshift.RebootClusterResult,
-      redshift.RebootClusterError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<redshift.RebootClusterResult, redshift.RebootClusterError>>
 > {}
-export const RebootCluster = Binding.Service<RebootCluster>(
-  "AWS.Redshift.RebootCluster",
-);
+export const RebootCluster = Binding.Service<RebootCluster>("AWS.Redshift.RebootCluster");

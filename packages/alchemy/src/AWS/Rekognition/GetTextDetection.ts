@@ -32,10 +32,7 @@ export interface GetTextDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetTextDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.GetTextDetectionResponse,
-      rekognition.GetTextDetectionError
-    >
+    ) => Effect.Effect<rekognition.GetTextDetectionResponse, rekognition.GetTextDetectionError>
   >
 > {}
 export const GetTextDetection = Binding.Service<GetTextDetection>(

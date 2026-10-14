@@ -63,7 +63,6 @@ export interface StartDominantLanguageDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StartDominantLanguageDetectionJob =
-  Binding.Service<StartDominantLanguageDetectionJob>(
-    "AWS.Comprehend.StartDominantLanguageDetectionJob",
-  );
+export const StartDominantLanguageDetectionJob = Binding.Service<StartDominantLanguageDetectionJob>(
+  "AWS.Comprehend.StartDominantLanguageDetectionJob",
+);

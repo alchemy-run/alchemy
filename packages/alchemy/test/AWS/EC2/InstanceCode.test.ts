@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { amazonLinux2023, Instance, Subnet, Vpc } from "@/AWS/EC2";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as AWS from "@/AWS";
+import { amazonLinux2023, Instance, Subnet, Vpc } from "@/AWS/EC2";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -69,5 +69,5 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* assertInstanceTerminated(instance.instanceId);
       yield* assertVpcGone(vpc.vpcId);
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 600_000 },
 );

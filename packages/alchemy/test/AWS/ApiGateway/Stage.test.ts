@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,19 +29,14 @@ test.provider.skipIf(!!process.env.FAST)(
               authorizationType: "NONE",
               integration: { type: "MOCK" },
             });
-            const deployment = yield* AWS.ApiGateway.Deployment("AgStageDep", {
-              restApi: api,
-            });
+            const deployment = yield* AWS.ApiGateway.Deployment("AgStageDep", { restApi: api });
             const stage = yield* AWS.ApiGateway.Stage("AgStageDev", {
               restApi: api,
               stageName: "dev",
               deploymentId: deployment.deploymentId,
               variables,
               methodSettings: {
-                "*/*": {
-                  throttlingBurstLimit: burst,
-                  throttlingRateLimit: burst * 10,
-                },
+                "*/*": { throttlingBurstLimit: burst, throttlingRateLimit: burst * 10 },
               },
             });
             return { api, stage };
@@ -53,27 +48,21 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* deployStage({ K: "2" }, 20);
 
-      const remote = yield* ag.getStage({
-        restApiId: api.restApiId,
-        stageName: "dev",
-      });
+      const remote = yield* ag.getStage({ restApiId: api.restApiId, stageName: "dev" });
       expect(remote.variables?.K).toEqual("2");
       expect(remote.methodSettings?.["*/*"]?.throttlingBurstLimit).toEqual(20);
       expect(remote.methodSettings?.["*/*"]?.throttlingRateLimit).toEqual(200);
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.StageResource,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.StageResource);
       const all = yield* provider.list();
       expect(
         all.some(
-          (item) =>
-            item.restApiId === stage.restApiId &&
-            item.stageName === stage.stageName,
+          (item) => item.restApiId === stage.restApiId && item.stageName === stage.stageName,
         ),
       ).toBe(true);
 
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );

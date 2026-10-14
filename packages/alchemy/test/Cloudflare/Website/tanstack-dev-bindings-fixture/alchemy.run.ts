@@ -13,13 +13,7 @@ export const Website = Cloudflare.Website.Vite("TanStackDevBindingsFixture", {
     DEV_MARKER: "manual-dev",
   },
   memo: {
-    include: [
-      "src/**",
-      "package.json",
-      "tsconfig.json",
-      "vite.config.ts",
-      "alchemy.run.ts",
-    ],
+    include: ["src/**", "package.json", "tsconfig.json", "vite.config.ts", "alchemy.run.ts"],
   },
 });
 

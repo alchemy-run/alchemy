@@ -48,9 +48,7 @@ export interface GetAmi extends Binding.Service<
   "AWS.EC2.GetAmi",
   (
     options: FindImageOptions,
-  ) => Effect.Effect<
-    () => Effect.Effect<ec2.Image | undefined, ec2.DescribeImagesError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<ec2.Image | undefined, ec2.DescribeImagesError>>
 > {}
 
 export const GetAmi = Binding.Service<GetAmi>("AWS.EC2.GetAmi");

@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Activity } from "./Activity.ts";
 
-export interface GetActivityTaskRequest extends Omit<
-  sfn.GetActivityTaskInput,
-  "activityArn"
-> {}
+export interface GetActivityTaskRequest extends Omit<sfn.GetActivityTaskInput, "activityArn"> {}
 
 /**
  * Runtime binding for `states:GetActivityTask` — the activity worker's

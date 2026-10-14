@@ -32,13 +32,8 @@ export interface StartExperiment extends Binding.Service<
     template: ExperimentTemplate,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        fis.StartExperimentRequest,
-        "experimentTemplateId" | "clientToken"
-      >,
+      request?: Omit<fis.StartExperimentRequest, "experimentTemplateId" | "clientToken">,
     ) => Effect.Effect<fis.StartExperimentResponse, fis.StartExperimentError>
   >
 > {}
-export const StartExperiment = Binding.Service<StartExperiment>(
-  "AWS.FIS.StartExperiment",
-);
+export const StartExperiment = Binding.Service<StartExperiment>("AWS.FIS.StartExperiment");

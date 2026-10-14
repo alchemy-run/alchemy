@@ -27,10 +27,7 @@ export interface GetIamPortalLoginUrl extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      datazone.GetIamPortalLoginUrlOutput,
-      datazone.GetIamPortalLoginUrlError
-    >
+    () => Effect.Effect<datazone.GetIamPortalLoginUrlOutput, datazone.GetIamPortalLoginUrlError>
   >
 > {}
 export const GetIamPortalLoginUrl = Binding.Service<GetIamPortalLoginUrl>(

@@ -1,17 +1,19 @@
+import { Retry } from "@distilled.cloud/prisma";
+import {
+  type GetDatabaseResponse,
+  getDatabase,
+  createConnectionRotate,
+} from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import {
-  extractConnectionSecrets,
-  isNotFound,
-  type PrismaManagementClient,
-} from "../Client.ts";
+import { extractConnectionSecrets } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
-import type { Database, PrismaSecretConnection } from "../Types.ts";
+import type { PrismaSecretConnection } from "../Types.ts";
+import type { ObservedDatabase } from "./Observed.ts";
 
-export const hasCanonicalConnectionSecrets = (
-  secrets: PrismaSecretConnection,
-) =>
+export const hasCanonicalConnectionSecrets = (secrets: PrismaSecretConnection) =>
   secrets.directConnectionString !== undefined ||
   secrets.pooledConnectionString !== undefined ||
   secrets.accelerateConnectionString !== undefined;
@@ -36,10 +38,10 @@ export const deriveConnectionAttrs = (secrets: {
     secrets.directConnectionString ??
     secrets.accelerateConnectionString,
   origin: secrets.directConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.directConnectionString))
+    ? secrets.directConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
   pooledOrigin: secrets.pooledConnectionString
-    ? parsePostgresOrigin(Redacted.value(secrets.pooledConnectionString))
+    ? secrets.pooledConnectionString.pipe(Redacted.value, parsePostgresOrigin)
     : undefined,
 });
 
@@ -47,10 +49,8 @@ export const mergeConnectionSecrets = (
   preferred: PrismaSecretConnection,
   fallback: PrismaSecretConnection,
 ): PrismaSecretConnection => ({
-  directConnectionString:
-    preferred.directConnectionString ?? fallback.directConnectionString,
-  pooledConnectionString:
-    preferred.pooledConnectionString ?? fallback.pooledConnectionString,
+  directConnectionString: preferred.directConnectionString ?? fallback.directConnectionString,
+  pooledConnectionString: preferred.pooledConnectionString ?? fallback.pooledConnectionString,
   accelerateConnectionString:
     preferred.accelerateConnectionString ?? fallback.accelerateConnectionString,
   host: preferred.host ?? fallback.host,
@@ -58,23 +58,23 @@ export const mergeConnectionSecrets = (
   password: preferred.password ?? fallback.password,
 });
 
-class DatabaseCredentialsNotReady extends Error {}
+class DatabaseCredentialsNotReady extends Data.TaggedError("DatabaseCredentialsNotReady")<{
+  readonly message: string;
+}> {}
 
 const databaseCredentialsSchedule = Schedule.max([
   Schedule.exponential("250 millis"),
   Schedule.recurs(6),
 ]);
 
-const waitForRotatableDatabase = (
-  client: PrismaManagementClient,
-  database: Database,
-) =>
-  client.getDatabase(database.id).pipe(
-    Effect.catchIf(isNotFound, () =>
+const waitForRotatableDatabase = (database: ObservedDatabase) =>
+  getDatabase({ databaseId: database.id }).pipe(
+    Effect.map((response) => response.data),
+    Effect.catchTag("NotFound", () =>
       Effect.fail(
-        new DatabaseCredentialsNotReady(
-          `Prisma database '${database.name}' (${database.id}) is not visible yet while waiting to recover its credentials.`,
-        ),
+        new DatabaseCredentialsNotReady({
+          message: `Prisma database '${database.name}' (${database.id}) is not visible yet while waiting to recover its credentials.`,
+        }),
       ),
     ),
     Effect.flatMap((observed) =>
@@ -87,9 +87,9 @@ const waitForRotatableDatabase = (
         : observed.status === "ready" && observed.defaultConnectionId !== null
           ? Effect.succeed(observed)
           : Effect.fail(
-              new DatabaseCredentialsNotReady(
-                `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
-              ),
+              new DatabaseCredentialsNotReady({
+                message: `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
+              }),
             ),
     ),
     Effect.retry({
@@ -103,9 +103,8 @@ const waitForRotatableDatabase = (
  * persistence. Prisma's ordinary database reads omit those values, so rotate
  * the observed default connection once when no canonical URL is available.
  */
-export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
-  client: PrismaManagementClient,
-  initialDatabase: Database,
+export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends ObservedDatabase>(
+  initialDatabase: D,
   known: PrismaSecretConnection,
 ) {
   if (initialDatabase.status === "failure") {
@@ -115,27 +114,22 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
       ),
     );
   }
-  let database = initialDatabase;
+  let database: D | GetDatabaseResponse["data"] = initialDatabase;
   const observedConnection =
-    database.connections.find(
-      (connection) => connection.id === database.defaultConnectionId,
-    ) ?? database.connections[0];
-  const available = mergeConnectionSecrets(
-    extractConnectionSecrets(observedConnection),
-    known,
-  );
+    database.connections.find((connection) => connection.id === database.defaultConnectionId) ??
+    database.connections[0];
+  const available = mergeConnectionSecrets(extractConnectionSecrets(observedConnection), known);
   if (hasCanonicalConnectionSecrets(available)) {
     return { database, secrets: available };
   }
 
   if (database.status !== "ready" || database.defaultConnectionId === null) {
-    database = yield* waitForRotatableDatabase(client, database);
+    database = yield* waitForRotatableDatabase(database);
   }
 
   const refreshedConnection =
-    database.connections.find(
-      (connection) => connection.id === database.defaultConnectionId,
-    ) ?? database.connections[0];
+    database.connections.find((connection) => connection.id === database.defaultConnectionId) ??
+    database.connections[0];
   const refreshed = mergeConnectionSecrets(
     extractConnectionSecrets(refreshedConnection),
     available,
@@ -146,13 +140,16 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
 
   const connectionId = database.defaultConnectionId;
   if (connectionId === null) {
-    return yield* Effect.fail(
-      new DatabaseCredentialsNotReady(
-        `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
-      ),
-    );
+    return yield* new DatabaseCredentialsNotReady({
+      message: `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
+    });
   }
-  const rotated = yield* client.rotateConnection(connectionId);
+  const rotated = yield* createConnectionRotate({ id: connectionId }).pipe(
+    // Rotation mints new credentials; a replay would revoke the ones we
+    // just persisted, so opt out of the retry policy.
+    Retry.none,
+    Effect.map((response) => response.data),
+  );
   if (rotated.id !== connectionId || rotated.database.id !== database.id) {
     return yield* Effect.fail(
       new Error(
@@ -160,10 +157,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* (
       ),
     );
   }
-  const recovered = mergeConnectionSecrets(
-    extractConnectionSecrets(rotated),
-    refreshed,
-  );
+  const recovered = mergeConnectionSecrets(extractConnectionSecrets(rotated), refreshed);
   if (!hasCanonicalConnectionSecrets(recovered)) {
     return yield* Effect.fail(
       new Error(

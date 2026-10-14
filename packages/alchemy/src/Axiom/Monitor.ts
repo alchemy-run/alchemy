@@ -80,6 +80,7 @@ export type Monitor = Resource<
  * ```
  *
  * @resource
+ * @product Monitor
  */
 export const Monitor = Resource<Monitor>("Axiom.Monitor");
 
@@ -134,9 +135,7 @@ export const MonitorProvider = () =>
           return yield* update({ ...news, id: observed.id });
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

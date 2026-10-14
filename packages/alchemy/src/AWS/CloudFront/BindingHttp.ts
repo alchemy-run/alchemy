@@ -74,12 +74,7 @@ export const makeDistributionScopedHttpBinding = <
  * the operation is resolved with the Region pinned to {@link KVS_REGION},
  * exactly like the resource providers in `common.ts`.
  */
-export const makeKeyValueStoreScopedHttpBinding = <
-  I extends { KvsARN: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.CloudFront.GetKey`. */
   tag: string;
   /** The distilled operation; `KvsARN` is injected from the resource. */

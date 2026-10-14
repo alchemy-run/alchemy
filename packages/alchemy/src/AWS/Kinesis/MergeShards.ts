@@ -44,6 +44,4 @@ export interface MergeShards extends Binding.Service<
   >
 > {}
 
-export const MergeShards = Binding.Service<MergeShards>(
-  "AWS.Kinesis.MergeShards",
-);
+export const MergeShards = Binding.Service<MergeShards>("AWS.Kinesis.MergeShards");

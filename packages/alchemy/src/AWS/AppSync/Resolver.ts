@@ -131,9 +131,7 @@ export interface AppSyncResolver extends Resource<
  *
  * @resource
  */
-export const ResolverResource = Resource<AppSyncResolver>(
-  "AWS.AppSync.Resolver",
-);
+export const ResolverResource = Resource<AppSyncResolver>("AWS.AppSync.Resolver");
 
 export interface ResolverInputProps extends Omit<
   {
@@ -182,11 +180,7 @@ export const ResolverProvider = () =>
   Provider.effect(
     ResolverResource,
     Effect.gen(function* () {
-      const getResolverSafe = (
-        apiId: string,
-        typeName: string,
-        fieldName: string,
-      ) =>
+      const getResolverSafe = (apiId: string, typeName: string, fieldName: string) =>
         appsync.getResolver({ apiId, typeName, fieldName }).pipe(
           Effect.map((response) => response.resolver),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
@@ -257,11 +251,7 @@ export const ResolverProvider = () =>
           const apiId = output?.apiId ?? olds?.apiId;
           const typeName = output?.typeName ?? olds?.typeName;
           const fieldName = output?.fieldName ?? olds?.fieldName;
-          if (
-            apiId === undefined ||
-            typeName === undefined ||
-            fieldName === undefined
-          ) {
+          if (apiId === undefined || typeName === undefined || fieldName === undefined) {
             return undefined;
           }
           const resolver = yield* getResolverSafe(apiId, typeName, fieldName);

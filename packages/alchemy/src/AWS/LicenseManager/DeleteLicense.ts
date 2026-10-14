@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteLicense}.
  */
-export interface DeleteLicenseRequest
-  extends licensemanager.DeleteLicenseRequest {}
+export interface DeleteLicenseRequest extends licensemanager.DeleteLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:DeleteLicense` — delete a
@@ -37,12 +36,7 @@ export interface DeleteLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.DeleteLicenseResponse,
-      licensemanager.DeleteLicenseError
-    >
+    ) => Effect.Effect<licensemanager.DeleteLicenseResponse, licensemanager.DeleteLicenseError>
   >
 > {}
-export const DeleteLicense = Binding.Service<DeleteLicense>(
-  "AWS.LicenseManager.DeleteLicense",
-);
+export const DeleteLicense = Binding.Service<DeleteLicense>("AWS.LicenseManager.DeleteLicense");

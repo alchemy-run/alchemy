@@ -24,13 +24,9 @@ export interface ListReportsForReportGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListReportsForReportGroupInput, "reportGroupArn">,
-    ) => Effect.Effect<
-      SVC.ListReportsForReportGroupOutput,
-      SVC.ListReportsForReportGroupError
-    >
+    ) => Effect.Effect<SVC.ListReportsForReportGroupOutput, SVC.ListReportsForReportGroupError>
   >
 > {}
-export const ListReportsForReportGroup =
-  Binding.Service<ListReportsForReportGroup>(
-    "AWS.CodeBuild.ListReportsForReportGroup",
-  );
+export const ListReportsForReportGroup = Binding.Service<ListReportsForReportGroup>(
+  "AWS.CodeBuild.ListReportsForReportGroup",
+);

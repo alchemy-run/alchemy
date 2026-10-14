@@ -7,10 +7,7 @@ import type { Export } from "./Export.ts";
  * Request for {@link ListExecutions} — the bound export's ARN is injected
  * automatically.
  */
-export interface ListExecutionsRequest extends Omit<
-  bcm.ListExecutionsRequest,
-  "ExportArn"
-> {}
+export interface ListExecutionsRequest extends Omit<bcm.ListExecutionsRequest, "ExportArn"> {}
 
 /**
  * Runtime binding for `bcm-data-exports:ListExecutions`.
@@ -48,6 +45,4 @@ export interface ListExecutions extends Binding.Service<
   >
 > {}
 
-export const ListExecutions = Binding.Service<ListExecutions>(
-  "AWS.BCMDataExports.ListExecutions",
-);
+export const ListExecutions = Binding.Service<ListExecutions>("AWS.BCMDataExports.ListExecutions");

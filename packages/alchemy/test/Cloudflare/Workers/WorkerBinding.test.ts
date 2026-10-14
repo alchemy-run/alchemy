@@ -1,20 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -25,10 +24,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // timeout in a single wait after ~7 misses, even though the edge would
 // have propagated moments later.
 const coldStartRetry = Effect.retry({
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("3 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
   times: 30,
 });
 
@@ -42,7 +38,10 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello from BindingTargetWorker");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -51,13 +50,37 @@ test(
     const { asyncCallerUrl } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${asyncCallerUrl}/?name=alice`)
-      .pipe(coldStartRetry);
+    const res = yield* client.get(`${asyncCallerUrl}/?name=alice`).pipe(coldStartRetry);
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello alice");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "async caller can await a toRpcAsync view and call through it",
+  Effect.gen(function* () {
+    const { asyncCallerUrl } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    // Warm the binding on the plain route so cold starts don't mask the
+    // result; the `/rpc-async` call itself is not retried, so a view that
+    // is mistaken for a thenable surfaces as the fixture's timeout 500.
+    yield* HttpClient.filterStatusOk(client)
+      .get(`${asyncCallerUrl}/?name=warmup`)
+      .pipe(coldStartRetry);
+
+    const res = yield* client.get(`${asyncCallerUrl}/rpc-async?name=carol`);
+    expect(yield* res.text).toBe("hello carol");
+    expect(res.status).toBe(200);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -66,11 +89,67 @@ test(
     const { effectCallerUrl } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${effectCallerUrl}/?name=bob`)
-      .pipe(coldStartRetry);
+    const res = yield* client.get(`${effectCallerUrl}/?name=bob`).pipe(coldStartRetry);
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello bob");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "effect worker calls its own RPC method via bindWorker(Self)",
+  Effect.gen(function* () {
+    const { selfWorkerUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${selfWorkerUrl}/?name=carol`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("hello carol from self");
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "an effect worker's self binding is not deployed as a service binding",
+  () =>
+    Effect.gen(function* () {
+      const { selfWorkerName } = yield* stack;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // `bindWorker(Self)` resolves through workerd's `ctx.exports.default`
+      // loopback, so the upload carries no service binding naming the
+      // Worker's own script.
+      const settings = yield* workers.getScriptScriptAndVersionSetting({
+        accountId,
+        scriptName: selfWorkerName,
+      });
+      const selfServiceBindings = (settings.bindings ?? []).filter(
+        (binding) => binding.type === "service" && binding.service === selfWorkerName,
+      );
+      expect(selfServiceBindings).toEqual([]);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "async worker re-enters its default export through Workers.Self",
+  Effect.gen(function* () {
+    const { asyncCallerUrl } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${asyncCallerUrl}/self?name=dave`).pipe(coldStartRetry);
+    expect(yield* res.text).toBe("via self: inner dave");
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

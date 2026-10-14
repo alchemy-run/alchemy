@@ -1,9 +1,9 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Result from "effect/Result";
+import * as Bundle from "@/Bundle/Bundle";
 import {
   isolatedProject,
   materializeIsolatedProject,
@@ -33,6 +33,7 @@ const BOOTSTRAP_MODULES = [
   "Fly",
   "Hetzner",
   "Prisma",
+  "Railway",
 ] as const;
 
 layer(NodeServices.layer)("generated entry bootstraps", (it) => {
@@ -49,10 +50,7 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
       `alchemy/Runtime/Bootstrap/${name} bundles from an isolated project`,
       () =>
         Effect.gen(function* () {
-          const project = isolatedProject(
-            `bootstrap-${name.toLowerCase()}`,
-            import.meta.filename,
-          );
+          const project = isolatedProject(`bootstrap-${name.toLowerCase()}`, import.meta.filename);
           yield* materializeIsolatedProject(project);
           const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
           // The exact production condition sets: bun modules resolve
@@ -88,16 +86,14 @@ export default bootstrap;
             expect(bareImports(result)).toEqual([]);
             expect(
               result.files.some(
-                (file) =>
-                  typeof file.content === "string" &&
-                  file.content.includes("bootstrap"),
+                (file) => typeof file.content === "string" && file.content.includes("bootstrap"),
               ),
             ).toBe(true);
           } finally {
             yield* removeIsolatedProject(project);
           }
         }),
-      { timeout: 120_000 },
+      { tags: ["unit", "local"], timeout: 120_000 },
     );
   }
 
@@ -105,82 +101,80 @@ export default bootstrap;
   // cause spelled out — never a warning that leaves the import external and
   // the deployed process dead at boot. (Doubles as the negative control for
   // the harness: without the `alchemy` link the project resolves nothing.)
-  it.effect("an unresolvable import in a generated entry fails the build", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const project = isolatedProject(
-        "bootstrap-control",
-        import.meta.filename,
-      );
-      yield* materializeIsolatedProject(project);
-      yield* fs.remove(`${project.dir}/node_modules`, { recursive: true });
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      try {
-        const result = yield* Effect.result(
-          Bundle.build(
-            {
-              cwd: project.dir,
-              input: project.main,
-              platform: "node",
-              plugins: [
-                virtualEntryPlugin(
-                  () => `
+  it.effect(
+    "an unresolvable import in a generated entry fails the build",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const project = isolatedProject("bootstrap-control", import.meta.filename);
+        yield* materializeIsolatedProject(project);
+        yield* fs.remove(`${project.dir}/node_modules`, { recursive: true });
+        const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+        try {
+          const result = yield* Effect.result(
+            Bundle.build(
+              {
+                cwd: project.dir,
+                input: project.main,
+                platform: "node",
+                plugins: [
+                  virtualEntryPlugin(
+                    () => `
 import * as bootstrap from "alchemy/Runtime/Bootstrap/Ecs";
 export default bootstrap;
 `,
-                ),
-              ],
-            },
-            { format: "esm" },
-          ),
-        );
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(result.failure.message).toContain(
-            'imports "alchemy/Runtime/Bootstrap/Ecs", which cannot be resolved',
+                  ),
+                ],
+              },
+              { format: "esm" },
+            ),
           );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure.message).toContain(
+              'imports "alchemy/Runtime/Bootstrap/Ecs", which cannot be resolved',
+            );
+          }
+        } finally {
+          yield* removeIsolatedProject(project);
         }
-      } finally {
-        yield* removeIsolatedProject(project);
-      }
-    }),
+      }),
+    { tags: ["unit", "local"] },
   );
 
   // Deliberate externals (runtime-provided modules such as `bun:*`,
   // `cloudflare:workers`) resolve to `{ external: true }`, not to nothing, so
   // the guard leaves them alone.
-  it.effect("a declared external in a generated entry is not an error", () =>
-    Effect.gen(function* () {
-      const project = isolatedProject(
-        "bootstrap-external",
-        import.meta.filename,
-      );
-      yield* materializeIsolatedProject(project);
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      try {
-        const result = yield* Bundle.build(
-          {
-            cwd: project.dir,
-            input: project.main,
-            platform: "node",
-            external: ["bun:sqlite"],
-            plugins: [
-              virtualEntryPlugin(
-                () => `
+  it.effect(
+    "a declared external in a generated entry is not an error",
+    () =>
+      Effect.gen(function* () {
+        const project = isolatedProject("bootstrap-external", import.meta.filename);
+        yield* materializeIsolatedProject(project);
+        const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+        try {
+          const result = yield* Bundle.build(
+            {
+              cwd: project.dir,
+              input: project.main,
+              platform: "node",
+              external: ["bun:sqlite"],
+              plugins: [
+                virtualEntryPlugin(
+                  () => `
 import { Database } from "bun:sqlite";
 export default Database;
 `,
-              ),
-            ],
-          },
-          { format: "esm" },
-        );
-        expect(bareImports(result)).toEqual([
-          'import { Database } from "bun:sqlite";',
-        ]);
-      } finally {
-        yield* removeIsolatedProject(project);
-      }
-    }),
+                ),
+              ],
+            },
+            { format: "esm" },
+          );
+          expect(bareImports(result)).toEqual(['import { Database } from "bun:sqlite";']);
+        } finally {
+          yield* removeIsolatedProject(project);
+        }
+      }),
+    { tags: ["unit", "local"] },
   );
 });

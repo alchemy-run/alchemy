@@ -29,12 +29,7 @@ export interface ListFindings extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListFindingsRequest,
-    ) => Effect.Effect<
-      inspector2.ListFindingsResponse,
-      inspector2.ListFindingsError
-    >
+    ) => Effect.Effect<inspector2.ListFindingsResponse, inspector2.ListFindingsError>
   >
 > {}
-export const ListFindings = Binding.Service<ListFindings>(
-  "AWS.Inspector2.ListFindings",
-);
+export const ListFindings = Binding.Service<ListFindings>("AWS.Inspector2.ListFindings");

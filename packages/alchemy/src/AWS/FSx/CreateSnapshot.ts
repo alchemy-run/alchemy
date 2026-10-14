@@ -35,6 +35,4 @@ export interface CreateSnapshot extends Binding.Service<
     ) => Effect.Effect<fsx.CreateSnapshotResponse, fsx.CreateSnapshotError>
   >
 > {}
-export const CreateSnapshot = Binding.Service<CreateSnapshot>(
-  "AWS.FSx.CreateSnapshot",
-);
+export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.FSx.CreateSnapshot");

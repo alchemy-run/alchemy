@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type EndpointStatus = sagemaker.EndpointStatus;
@@ -99,10 +94,7 @@ export interface Endpoint extends Resource<
  */
 export const Endpoint = Resource<Endpoint>("AWS.SageMaker.Endpoint");
 
-const createEndpointName = (
-  id: string,
-  props: { endpointName?: string | undefined },
-) =>
+const createEndpointName = (id: string, props: { endpointName?: string | undefined }) =>
   props.endpointName
     ? Effect.succeed(props.endpointName)
     : createPhysicalName({ id, maxLength: 63 });
@@ -110,9 +102,7 @@ const createEndpointName = (
 const fetchEndpointTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -139,9 +129,7 @@ class EndpointNotReady extends Data.TaggedError("EndpointNotReady")<{
  * `Failed` status (e.g. the container image could not be pulled or the model
  * server failed its health checks).
  */
-export class EndpointProvisioningFailed extends Data.TaggedError(
-  "EndpointProvisioningFailed",
-)<{
+export class EndpointProvisioningFailed extends Data.TaggedError("EndpointProvisioningFailed")<{
   readonly endpointName: string;
   readonly message: string | undefined;
 }> {}
@@ -156,10 +144,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "EndpointNotReady",
     // Endpoint provisioning takes ~3-10 min; poll every 15s up to ~20 min.
-    schedule: Schedule.max([
-      Schedule.spaced("15 seconds"),
-      Schedule.recurs(80),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(80)]),
   });
 
 const waitForEndpoint = (name: string, target: "InService" | "Gone") =>
@@ -168,28 +153,22 @@ const waitForEndpoint = (name: string, target: "InService" | "Gone") =>
       const described = yield* describeEndpointOrUndefined(name);
       if (target === "Gone") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new EndpointNotReady({
-            endpointName: name,
-            status: described.EndpointStatus,
-          }),
-        );
+        return yield* new EndpointNotReady({
+          endpointName: name,
+          status: described.EndpointStatus,
+        });
       }
       if (described?.EndpointStatus === "InService") return;
       if (described?.EndpointStatus === "Failed") {
-        return yield* Effect.fail(
-          new EndpointProvisioningFailed({
-            endpointName: name,
-            message: described.FailureReason,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new EndpointNotReady({
+        return yield* new EndpointProvisioningFailed({
           endpointName: name,
-          status: described?.EndpointStatus,
-        }),
-      );
+          message: described.FailureReason,
+        });
+      }
+      return yield* new EndpointNotReady({
+        endpointName: name,
+        status: described?.EndpointStatus,
+      });
     }),
   );
 
@@ -203,9 +182,7 @@ export const EndpointProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* sagemaker.listEndpoints.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Endpoints ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Endpoints ?? [])),
             );
             return summaries.flatMap((s) =>
               s.EndpointName !== undefined && s.EndpointArn !== undefined
@@ -220,8 +197,7 @@ export const EndpointProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.endpointName ?? (yield* createEndpointName(id, olds ?? {}));
+          const name = output?.endpointName ?? (yield* createEndpointName(id, olds ?? {}));
           const described = yield* describeEndpointOrUndefined(name);
           if (!described || described.EndpointStatus === "Deleting") {
             return undefined;
@@ -232,9 +208,7 @@ export const EndpointProvider = () =>
             endpointStatus: described.EndpointStatus,
           };
           const tags = yield* fetchEndpointTags(described.EndpointArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -248,12 +222,9 @@ export const EndpointProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker Endpoint requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker Endpoint requires props"));
           }
-          const name =
-            output?.endpointName ?? (yield* createEndpointName(id, news));
+          const name = output?.endpointName ?? (yield* createEndpointName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -285,9 +256,7 @@ export const EndpointProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("EndpointAlreadyExists", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("EndpointAlreadyExists", () => Effect.void));
             yield* session.note(`Creating endpoint ${name}...`);
           } else if (
             described.EndpointConfigName !== news.endpointConfigName &&
@@ -309,9 +278,7 @@ export const EndpointProvider = () =>
           yield* waitForEndpoint(name, "InService");
           const final = yield* describeEndpointOrUndefined(name);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled endpoint ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled endpoint ${name}`));
           }
 
           // Sync tags — diff against OBSERVED cloud tags.

@@ -5,7 +5,7 @@ sidebar:
   order: 9
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const devDeps = "@alchemy.run/frontend-frameworks @opennextjs/aws";
 
@@ -32,20 +32,7 @@ resource loads the package's `/nextjs/aws` export from your project
 at deploy time. They are only used at build time, so dev dependencies
 are enough:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add -d ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers dev={devDeps} />
 
 ## Configure OpenNext
 
@@ -111,18 +98,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Nextjs("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from Alchemy!",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from Alchemy!",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -176,9 +160,9 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Nextjs("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.

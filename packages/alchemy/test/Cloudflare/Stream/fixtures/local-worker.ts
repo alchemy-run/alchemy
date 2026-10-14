@@ -28,9 +28,7 @@ export default {
         return Response.json(video);
       }
       if (url.pathname === "/details") {
-        const video = await env.STREAM.video(
-          url.searchParams.get("id")!,
-        ).details();
+        const video = await env.STREAM.video(url.searchParams.get("id")!).details();
         return Response.json(video);
       }
       if (url.pathname === "/list") {

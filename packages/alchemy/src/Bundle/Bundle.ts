@@ -1,15 +1,17 @@
+import assert from "node:assert";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import assert from "node:assert";
 import type * as rolldown from "rolldown";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
+import { encodeFqn } from "../FQN.ts";
+import { ResourceContext } from "../ResourceContext.ts";
+import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import {
-  bundleAnalyzerPlugin,
-  type BundleAnalyzerPluginOptions,
-} from "./BundleAnalyzerPlugin.ts";
+import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 
@@ -28,16 +30,8 @@ import { rawPlugin } from "./RawPlugin.ts";
  * So: never put `import` or `require` in these lists. Only the runtime
  * condition and the kind-agnostic ones; rolldown supplies the kind.
  */
-export const BUN_CONDITION_NAMES: readonly string[] = [
-  "bun",
-  "module",
-  "default",
-];
-export const NODE_CONDITION_NAMES: readonly string[] = [
-  "node",
-  "module",
-  "default",
-];
+export const BUN_CONDITION_NAMES: readonly string[] = ["bun", "module", "default"];
+export const NODE_CONDITION_NAMES: readonly string[] = ["node", "module", "default"];
 
 /**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
@@ -69,7 +63,8 @@ export interface BundleExtraOptions {
   /**
    * Configures the {@link bundleAnalyzerPlugin} which emits a bundle analysis
    * report alongside the bundle output, describing chunks, modules, and the
-   * import graph reachable from each entry point.
+   * import graph reachable from each entry point. The report is written next
+   * to the bundle (see {@link BundleConfig.output}).
    *
    * - `undefined` / `false` (default): plugin is disabled.
    * - `true`: plugin is enabled with default options.
@@ -86,11 +81,9 @@ export interface BundleExtraOptions {
  * rolldown input/output overrides plus the {@link BundleExtraOptions}
  * (pure-annotation packages via `pure`, bundle analyzer).
  *
- * Top-level calls in `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
- * and `@distilled.cloud/*` are annotated as pure by default so unused
- * code from those packages is tree-shaken out of the bundle; list
- * additional packages via `pure.packages`, or disable annotation with
- * `pure: false`.
+ * Unused code is tree-shaken. `effect`, alchemy, and `@distilled.cloud`
+ * are marked pure so unused parts prune more aggressively. List extra
+ * packages with `pure.packages`, or disable with `pure: false`.
  */
 export interface BundleConfig extends BundleExtraOptions {
   /**
@@ -99,6 +92,11 @@ export interface BundleConfig extends BundleExtraOptions {
   readonly input?: Partial<rolldown.InputOptions>;
   /**
    * Rolldown output options overrides.
+   *
+   * The bundle is written to `.alchemy/bundles/<stack>-<stage>-<resource>`,
+   * which is cleared before every build, so you can inspect exactly what
+   * ships. Set `dir` or `file` to write it somewhere else; Alchemy never
+   * clears a directory you choose.
    */
   readonly output?: Partial<rolldown.OutputOptions>;
 }
@@ -121,13 +119,10 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Schema.TaggedError<BundleError>()(
-  "BundleError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect({ includeStack: true })),
-  },
-) {}
+export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect({ includeStack: true })),
+}) {}
 
 export type BundleWatchEvent =
   | BundleWatchEvent.Start
@@ -177,12 +172,11 @@ const ALCHEMY_DEFINE: Record<string, string> = {
  * bundle (`migrations.js` does `import m0000 from './0000_x.sql'`) work
  * without a wrangler-style rules config or a codegen step.
  */
-const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
-  {
-    ".sql": "text",
-    ".txt": "text",
-    ".html": "text",
-  };
+const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = {
+  ".sql": "text",
+  ".txt": "text",
+  ".html": "text",
+};
 
 /**
  * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
@@ -190,9 +184,7 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
  */
-const withAlchemyDefine = (
-  inputOptions: rolldown.InputOptions,
-): rolldown.InputOptions => ({
+const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
   transform: {
     ...inputOptions.transform,
@@ -213,12 +205,68 @@ const withAlchemyDefine = (
  * removed from every bundle (define alone only folds the condition; removal
  * needs DCE). Callers that opt into full minification (e.g. Workers) keep it.
  */
-const withDceDefault = (
-  outputOptions?: rolldown.OutputOptions,
-): rolldown.OutputOptions => ({
+const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.OutputOptions => ({
   ...outputOptions,
   minify: outputOptions?.minify ?? "dce-only",
 });
+
+/** Whether the caller chose where the bundle is written (`dir` or `file`). */
+export const hasOutputLocation = (outputOptions?: Partial<rolldown.OutputOptions>): boolean =>
+  outputOptions?.dir !== undefined || outputOptions?.file !== undefined;
+
+/**
+ * The directory a resource's bundle is written to when its `output` sets
+ * neither `dir` nor `file`: `.alchemy/bundles/<stack>-<stage>-<fqn>`, one flat
+ * level under `bundles/` (namespace separators in the FQN become `__`). Every
+ * resource gets its own directory, so concurrent stages never share one and
+ * the directory can be cleared before each build.
+ */
+export const outputDirectory = (resource: {
+  readonly stack: string;
+  readonly stage: string;
+  readonly fqn: string;
+}) =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const dotAlchemy = yield* dotAlchemyDirectory;
+    // A relative `.alchemy` (standalone callers) stays relative, so rolldown
+    // resolves it against the bundle `cwd` like any other output `dir`.
+    return path.join(
+      dotAlchemy,
+      "bundles",
+      `${resource.stack}-${resource.stage}-${encodeFqn(resource.fqn)}`,
+    );
+  });
+
+/**
+ * Resolve where a bundle is written:
+ *
+ * - `dir` or `file` set by the caller: rolldown writes there, as configured.
+ * - Otherwise, inside a resource lifecycle operation (the engine provides
+ *   {@link ResourceContext} and the stack): the resource's
+ *   {@link outputDirectory}, cleared before each build so stale hashed
+ *   chunks never pile up.
+ * - Otherwise: the bundle stays in memory. Rolldown's default `dir` (`dist`,
+ *   resolved against `cwd`) would leave an unused copy in the user's package.
+ *
+ * Callers always consume the bundle from memory; the copy on disk is for
+ * inspecting what ships, the bundle analyzer report, and `writeBundle` hooks.
+ */
+const resolveOutputOptions = (outputOptions?: rolldown.OutputOptions) =>
+  Effect.gen(function* () {
+    const options = withDceDefault(outputOptions);
+    if (hasOutputLocation(options)) return options;
+    const resource = yield* Effect.serviceOption(ResourceContext);
+    const stack = yield* Effect.serviceOption(StackContext);
+    const path = yield* Effect.serviceOption(Path.Path);
+    if (Option.isNone(resource) || Option.isNone(stack) || Option.isNone(path)) return options;
+    const dir = yield* outputDirectory({
+      stack: stack.value.name,
+      stage: stack.value.stage,
+      fqn: resource.value.fqn,
+    }).pipe(Effect.provideService(Path.Path, path.value));
+    return { ...options, dir, cleanDir: true } satisfies rolldown.OutputOptions;
+  });
 
 /**
  * Build a bundle using rolldown from the given input options and output options.
@@ -231,25 +279,30 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  Effect.tryPromise({
-    try: async () => {
-      const rolldown = await loadRolldown();
-      const bundle = await rolldown.rolldown({
-        ...withAlchemyDefine(inputOptions),
-        plugins: [inputOptions.plugins, await builtInPlugins(extra)],
-        optimization: inputOptions.optimization ?? {
-          inlineConst: {
-            mode: "smart",
-            pass: 3,
-          },
+  resolveOutputOptions(outputOptions).pipe(
+    Effect.flatMap((options) =>
+      Effect.tryPromise({
+        try: async () => {
+          const rolldown = await loadRolldown();
+          const bundle = await rolldown.rolldown({
+            ...withAlchemyDefine(inputOptions),
+            plugins: [inputOptions.plugins, await builtInPlugins(extra)],
+            optimization: inputOptions.optimization ?? {
+              inlineConst: {
+                mode: "smart",
+                pass: 3,
+              },
+            },
+          });
+          const result = hasOutputLocation(options)
+            ? await bundle.write(options)
+            : await bundle.generate(options);
+          await bundle.close();
+          return result.output;
         },
-      });
-      const result = await bundle.write(withDceDefault(outputOptions));
-      await bundle.close();
-      return result.output;
-    },
-    catch: bundleErrorFromUnknown,
-  }).pipe(
+        catch: bundleErrorFromUnknown,
+      }),
+    ),
     Effect.flatMap(Effect.forEach(bundleFileFromOutputChunk)),
     Effect.flatMap(bundleOutputFromFiles),
   );
@@ -265,86 +318,95 @@ export const watch = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Stream.Stream<BundleWatchEvent> =>
-  Stream.callback<
-    | BundleWatchEvent.Start
-    | BundleWatchEvent.Error
-    | {
-        readonly _tag: "Success";
-        readonly output: rolldown.OutputBundle;
-      }
-  >((queue) =>
-    Effect.acquireRelease(
-      Effect.promise(async () => {
-        const rolldown = await loadRolldown();
-        const watcher = rolldown.watch({
-          ...withAlchemyDefine(inputOptions),
-          plugins: [
-            inputOptions.plugins,
-            await builtInPlugins(extra),
-            // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
-            {
-              name: "alchemy:watch-bundle",
-              watchChange() {
-                Queue.offerUnsafe(queue, {
-                  _tag: "Start",
-                });
-              },
-              generateBundle(_outputOptions, bundle) {
-                Queue.offerUnsafe(queue, {
-                  _tag: "Success",
-                  output: bundle,
-                });
-              },
-            },
-          ],
-          watch: {
-            // Watching the full module graph of an Effect worker (all of
-            // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
-            // of OS watch handles *per worker*; with several Effect workers
-            // this exhausts the process fd table and the next `posix_spawn`
-            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
-            // resolve to their real source paths (outside `node_modules`), so
-            // they stay watched and local HMR is unaffected.
-            exclude: ["**/node_modules/**"],
-          },
-          output: withDceDefault(outputOptions),
-        });
-        watcher.on("event", (event) => {
-          if (event.code === "ERROR") {
-            Queue.offerUnsafe(queue, {
-              _tag: "Error",
-              error: bundleErrorFromUnknown(event.error),
-            });
-          } else if (event.code === "BUNDLE_END") {
-            // This must be called to avoid resource leaks.
-            event.result.close().catch(() => {});
-          }
-        });
-        return watcher;
-      }),
-      (watcher) => Effect.promise(() => watcher.close()),
-    ),
-  ).pipe(
-    Stream.mapEffect((event) =>
-      Effect.gen(function* () {
-        if (event._tag !== "Success") {
-          return event;
-        }
-        return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
-          Effect.map((output): BundleWatchEvent.Success => ({
-            _tag: "Success",
-            output,
-          })),
-          Effect.catch((error) =>
-            Effect.succeed<BundleWatchEvent.Error>({
-              _tag: "Error",
-              error: bundleErrorFromUnknown(error),
-            }),
-          ),
-        );
-      }),
-    ),
+  Stream.unwrap(
+    Effect.map(resolveOutputOptions(outputOptions), watchResolved(inputOptions, extra)),
   );
+
+const watchResolved =
+  (inputOptions: rolldown.InputOptions, extra: BundleExtraOptions | undefined) =>
+  (outputOptions: rolldown.OutputOptions): Stream.Stream<BundleWatchEvent> =>
+    Stream.callback<
+      | BundleWatchEvent.Start
+      | BundleWatchEvent.Error
+      | {
+          readonly _tag: "Success";
+          readonly output: rolldown.OutputBundle;
+        }
+    >((queue) =>
+      Effect.acquireRelease(
+        Effect.promise(async () => {
+          const rolldown = await loadRolldown();
+          const watcher = rolldown.watch({
+            ...withAlchemyDefine(inputOptions),
+            plugins: [
+              inputOptions.plugins,
+              await builtInPlugins(extra),
+              // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
+              {
+                name: "alchemy:watch-bundle",
+                watchChange() {
+                  Queue.offerUnsafe(queue, {
+                    _tag: "Start",
+                  });
+                },
+                generateBundle(_outputOptions, bundle) {
+                  Queue.offerUnsafe(queue, {
+                    _tag: "Success",
+                    output: bundle,
+                  });
+                },
+              },
+            ],
+            watch: {
+              // Watching the full module graph of an Effect worker (all of
+              // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
+              // of OS watch handles *per worker*; with several Effect workers
+              // this exhausts the process fd table and the next `posix_spawn`
+              // (workerd / docker) fails with `spawn EBADF`. Workspace packages
+              // resolve to their real source paths (outside `node_modules`), so
+              // they stay watched and local HMR is unaffected.
+              exclude: ["**/node_modules/**"],
+              // `generateBundle` still fires, so the output is captured either way.
+              skipWrite: !hasOutputLocation(outputOptions),
+            },
+            output: outputOptions,
+          });
+          watcher.on("event", (event) => {
+            if (event.code === "ERROR") {
+              Queue.offerUnsafe(queue, {
+                _tag: "Error",
+                error: bundleErrorFromUnknown(event.error),
+              });
+            } else if (event.code === "BUNDLE_END") {
+              // This must be called to avoid resource leaks.
+              event.result.close().catch(() => {});
+            }
+          });
+          return watcher;
+        }),
+        (watcher) => Effect.promise(() => watcher.close()),
+      ),
+    ).pipe(
+      Stream.mapEffect((event) =>
+        Effect.gen(function* () {
+          if (event._tag !== "Success") {
+            return event;
+          }
+          return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
+            Effect.map((output): BundleWatchEvent.Success => ({
+              _tag: "Success",
+              output,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed<BundleWatchEvent.Error>({
+                _tag: "Error",
+                error: bundleErrorFromUnknown(error),
+              }),
+            ),
+          );
+        }),
+      ),
+    );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
@@ -360,9 +422,7 @@ const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
 
-  const normalizeInput = (
-    input: rolldown.InputOption,
-  ): Record<string, string> => {
+  const normalizeInput = (input: rolldown.InputOption): Record<string, string> => {
     if (typeof input === "string") {
       return { [path.parse(input).name || "index"]: input };
     } else if (Array.isArray(input)) {
@@ -444,16 +504,13 @@ export function bundleOutputFromRolldownOutputBundle(
   // These are sanity checks - with rolldown, the first file is always an entry chunk.
   if (!files[0] || files[0].type !== "chunk" || !files[0].isEntry) {
     return Effect.fail(
-      new BundleError({
+      BundleError.make({
         message: "Invalid bundle output",
       }),
     );
   }
   return Effect.forEach(
-    files as [
-      rolldown.OutputChunk,
-      ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
-    ],
+    files as [rolldown.OutputChunk, ...(rolldown.OutputChunk | rolldown.OutputAsset)[]],
     bundleFileFromOutputChunk,
   ).pipe(Effect.flatMap(bundleOutputFromFiles));
 }
@@ -466,14 +523,10 @@ export function bundleOutputFromRolldownOutputBundle(
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
  * `@alchemy.run/cloudflare-runtime/rolldown`.
  */
-async function builtInPlugins(
-  extra?: BundleExtraOptions,
-): Promise<rolldown.RolldownPluginOption> {
+async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? await bundleAnalyzerPlugin(
-          extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
-        )
+      ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
@@ -482,7 +535,7 @@ async function builtInPlugins(
 
 export function bundleErrorFromUnknown(error: unknown): BundleError {
   const message = error instanceof Error ? error.message : String(error);
-  return new BundleError({
+  return BundleError.make({
     message,
     cause: error,
   });

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link PutNotificationChannel}.
  */
-export interface PutNotificationChannelRequest
-  extends fms.PutNotificationChannelRequest {}
+export interface PutNotificationChannelRequest extends fms.PutNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:PutNotificationChannel`.
@@ -34,10 +33,7 @@ export interface PutNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.PutNotificationChannelResponse,
-      fms.PutNotificationChannelError
-    >
+    ) => Effect.Effect<fms.PutNotificationChannelResponse, fms.PutNotificationChannelError>
   >
 > {}
 

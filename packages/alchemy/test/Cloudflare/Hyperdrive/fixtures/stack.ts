@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Neon from "@/Neon/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Neon from "@/Neon/index.ts";
 import HyperdriveEffectWorker from "./effect-worker.ts";
 
 /**
@@ -17,10 +17,9 @@ export const AsyncWorker = Cloudflare.Worker("HyperdriveAsyncWorker", {
   env: {
     HD: Effect.gen(function* () {
       const project = yield* Neon.Project("HyperdriveBindingProject");
-      return yield* Cloudflare.Hyperdrive.Connection(
-        "HyperdriveBindingConnection",
-        { origin: project.origin },
-      );
+      return yield* Cloudflare.Hyperdrive.Connection("HyperdriveBindingConnection", {
+        origin: project.origin,
+      });
     }),
   },
 });
@@ -34,7 +33,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
  * can also be inspected directly, e.g.
  *
  * ```sh
- * alchemy tail --stage test ./test/Cloudflare/Hyperdrive/fixtures/stack.ts
+ * alchemy logs --tail --stage test --config ./test/Cloudflare/Hyperdrive/fixtures/stack.ts
  * ```
  */
 export default Alchemy.Stack(

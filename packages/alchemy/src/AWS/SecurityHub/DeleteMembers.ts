@@ -27,12 +27,7 @@ export interface DeleteMembers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.DeleteMembersRequest,
-    ) => Effect.Effect<
-      securityhub.DeleteMembersResponse,
-      securityhub.DeleteMembersError
-    >
+    ) => Effect.Effect<securityhub.DeleteMembersResponse, securityhub.DeleteMembersError>
   >
 > {}
-export const DeleteMembers = Binding.Service<DeleteMembers>(
-  "AWS.SecurityHub.DeleteMembers",
-);
+export const DeleteMembers = Binding.Service<DeleteMembers>("AWS.SecurityHub.DeleteMembers");

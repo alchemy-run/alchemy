@@ -161,14 +161,9 @@ export interface ComputeEnvironment extends Resource<
  *
  * @resource
  */
-export const ComputeEnvironment = Resource<ComputeEnvironment>(
-  "AWS.Batch.ComputeEnvironment",
-);
+export const ComputeEnvironment = Resource<ComputeEnvironment>("AWS.Batch.ComputeEnvironment");
 
-const toAttributes = (
-  ce: batch.ComputeEnvironmentDetail,
-  tags: Record<string, string>,
-) => ({
+const toAttributes = (ce: batch.ComputeEnvironmentDetail, tags: Record<string, string>) => ({
   computeEnvironmentName: ce.computeEnvironmentName!,
   computeEnvironmentArn: ce.computeEnvironmentArn as ComputeEnvironmentArn,
   ecsClusterArn: ce.ecsClusterArn,
@@ -185,9 +180,7 @@ const toAttributes = (
 
 const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } }) =>
   Object.fromEntries(
-    Object.entries(ce.tags ?? {}).filter(
-      (e): e is [string, string] => typeof e[1] === "string",
-    ),
+    Object.entries(ce.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );
 
 /**
@@ -200,9 +193,7 @@ const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } }) =>
  * (tens of minutes), so waiting on the same CE cannot recover in deploy
  * time — the recovery is to delete the freshly-created CE and re-create.
  */
-const isAuthPropagationInvalid = (
-  ce: batch.ComputeEnvironmentDetail | undefined,
-): boolean =>
+const isAuthPropagationInvalid = (ce: batch.ComputeEnvironmentDetail | undefined): boolean =>
   ce?.status === "INVALID" &&
   ce.statusReason !== undefined &&
   ce.statusReason.includes("CLIENT_ERROR") &&
@@ -222,12 +213,9 @@ const resolveDefaultNetwork = Effect.gen(function* () {
     (vpc) => vpc.State === undefined || vpc.State === "available",
   )?.VpcId;
   if (!vpcId) {
-    return yield* Effect.fail(
-      new NoDefaultVpcError({
-        message:
-          "No default VPC found — pass `subnets` and `securityGroupIds` explicitly",
-      }),
-    );
+    return yield* new NoDefaultVpcError({
+      message: "No default VPC found — pass `subnets` and `securityGroupIds` explicitly",
+    });
   }
   const subnets = yield* ec2.describeSubnets
     .items({
@@ -245,21 +233,15 @@ const resolveDefaultNetwork = Effect.gen(function* () {
   });
   const network = {
     subnets: subnets.flatMap((s) =>
-      s.SubnetId && (s.State === undefined || s.State === "available")
-        ? [s.SubnetId]
-        : [],
+      s.SubnetId && (s.State === undefined || s.State === "available") ? [s.SubnetId] : [],
     ),
-    securityGroupIds: (groups.SecurityGroups ?? []).flatMap((g) =>
-      g.GroupId ? [g.GroupId] : [],
-    ),
+    securityGroupIds: (groups.SecurityGroups ?? []).flatMap((g) => (g.GroupId ? [g.GroupId] : [])),
   };
   if (network.subnets.length === 0 || network.securityGroupIds.length === 0) {
-    return yield* Effect.fail(
-      new NoDefaultVpcError({
-        message:
-          "Default VPC networking is not ready — pass `subnets` and `securityGroupIds` explicitly",
-      }),
-    );
+    return yield* new NoDefaultVpcError({
+      message:
+        "Default VPC networking is not ready — pass `subnets` and `securityGroupIds` explicitly",
+    });
   }
   return network;
 }).pipe(
@@ -287,9 +269,8 @@ export const ComputeEnvironmentProvider = () =>
           .pipe(
             Effect.map(
               (res) =>
-                res.computeEnvironments?.find(
-                  (ce) => ce.status !== "DELETED",
-                ) ?? res.computeEnvironments?.[0],
+                res.computeEnvironments?.find((ce) => ce.status !== "DELETED") ??
+                res.computeEnvironments?.[0],
             ),
           );
 
@@ -299,9 +280,7 @@ export const ComputeEnvironmentProvider = () =>
           describeOne(name),
           (ce) =>
             ce === undefined ||
-            (ce.status !== "CREATING" &&
-              ce.status !== "UPDATING" &&
-              ce.status !== "DELETING"),
+            (ce.status !== "CREATING" && ce.status !== "UPDATING" && ce.status !== "DELETING"),
         );
 
       const awaitDisabled = (name: string) =>
@@ -311,15 +290,10 @@ export const ComputeEnvironmentProvider = () =>
             ce === undefined ||
             ce.status === "DELETED" ||
             ce.status === "DELETING" ||
-            (ce.state === "DISABLED" &&
-              ce.status !== "CREATING" &&
-              ce.status !== "UPDATING"),
+            (ce.state === "DISABLED" && ce.status !== "CREATING" && ce.status !== "UPDATING"),
         );
 
-      const invalid = (
-        name: string,
-        ce: batch.ComputeEnvironmentDetail | undefined,
-      ) => {
+      const invalid = (name: string, ce: batch.ComputeEnvironmentDetail | undefined) => {
         const status = ce?.status ?? "MISSING";
         const statusReason = ce?.statusReason;
         return new ComputeEnvironmentInvalidError({
@@ -336,9 +310,7 @@ export const ComputeEnvironmentProvider = () =>
        * Batch cannot tear a CE down without assuming this role — a dangling
        * role is the canonical cause of undeletable, forever-INVALID CEs.
        */
-      const restoreServiceRoleIfMissing = Effect.fn(function* (
-        serviceRoleArn: string | undefined,
-      ) {
+      const restoreServiceRoleIfMissing = Effect.fn(function* (serviceRoleArn: string | undefined) {
         if (!serviceRoleArn || serviceRoleArn.includes("/aws-service-role/")) {
           return undefined;
         }
@@ -382,8 +354,7 @@ export const ComputeEnvironmentProvider = () =>
         yield* iam
           .detachRolePolicy({
             RoleName: roleName,
-            PolicyArn:
-              "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam
@@ -399,9 +370,7 @@ export const ComputeEnvironmentProvider = () =>
        */
       const deleteRelatedJobQueues = (computeEnvironment: string) =>
         Effect.gen(function* () {
-          const pages = yield* batch.describeJobQueues
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* batch.describeJobQueues.pages({}).pipe(Stream.runCollect);
           const queues = Array.from(pages)
             .flatMap((page) => page.jobQueues ?? [])
             .filter(
@@ -426,9 +395,7 @@ export const ComputeEnvironmentProvider = () =>
                   .describeJobQueues({ jobQueues: [queueName] })
                   .pipe(
                     Effect.map((response) =>
-                      response.jobQueues?.find(
-                        (candidate) => candidate.status !== "DELETED",
-                      ),
+                      response.jobQueues?.find((candidate) => candidate.status !== "DELETED"),
                     ),
                   );
                 let observed = yield* describeQueue;
@@ -443,9 +410,7 @@ export const ComputeEnvironmentProvider = () =>
                       state: "DISABLED",
                     }),
                     (error) => error._tag === "JobQueueBeingModified",
-                  ).pipe(
-                    Effect.catchTag("JobQueueNotFound", () => Effect.void),
-                  );
+                  ).pipe(Effect.catchTag("JobQueueNotFound", () => Effect.void));
                 }
                 observed = yield* pollBatch(
                   describeQueue,
@@ -454,22 +419,18 @@ export const ComputeEnvironmentProvider = () =>
                     candidate.status === "DELETED" ||
                     candidate.status === "DELETING" ||
                     (candidate.state === "DISABLED" &&
-                      (candidate.status === "VALID" ||
-                        candidate.status === "INVALID")),
+                      (candidate.status === "VALID" || candidate.status === "INVALID")),
                 );
                 if (!observed || observed.status === "DELETED") return;
                 if (observed.status !== "DELETING") {
                   yield* retryBatch(
                     batch.deleteJobQueue({ jobQueue: queueName }),
                     (error) => error._tag === "JobQueueBeingModified",
-                  ).pipe(
-                    Effect.catchTag("JobQueueNotFound", () => Effect.void),
-                  );
+                  ).pipe(Effect.catchTag("JobQueueNotFound", () => Effect.void));
                 }
                 yield* pollBatch(
                   describeQueue,
-                  (candidate) =>
-                    candidate === undefined || candidate.status === "DELETED",
+                  (candidate) => candidate === undefined || candidate.status === "DELETED",
                 );
               }),
             { concurrency: 4, discard: true },
@@ -480,24 +441,18 @@ export const ComputeEnvironmentProvider = () =>
         stables: ["computeEnvironmentName", "computeEnvironmentArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if ((olds?.type ?? "FARGATE") !== (news?.type ?? "FARGATE")) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.managementType ?? "MANAGED") !==
-            (news?.managementType ?? "MANAGED")
-          ) {
+          if ((olds?.managementType ?? "MANAGED") !== (news?.managementType ?? "MANAGED")) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.computeEnvironmentName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.computeEnvironmentName ?? (yield* toName(id, olds ?? {}));
           const ce = yield* describeOne(name);
           if (!ce?.computeEnvironmentArn || ce.status === "DELETED") {
             return undefined;
@@ -519,8 +474,7 @@ export const ComputeEnvironmentProvider = () =>
           }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.computeEnvironmentName ?? (yield* toName(id, news));
+          const name = output?.computeEnvironmentName ?? (yield* toName(id, news));
           const arn =
             `arn:aws:batch:${region}:${accountId}:compute-environment/${name}` as ComputeEnvironmentArn;
           const internalTags = yield* createInternalTags(id);
@@ -534,32 +488,25 @@ export const ComputeEnvironmentProvider = () =>
           // cleanup can recreate the default VPC between reconciliations, so
           // resolve the desired network on every pass and repair stale IDs.
           const fallbackNetwork =
-            desiredManagementType === "MANAGED" &&
-            (!news.subnets || !news.securityGroupIds)
+            desiredManagementType === "MANAGED" && (!news.subnets || !news.securityGroupIds)
               ? yield* resolveDefaultNetwork
               : undefined;
           let desiredNetwork =
             desiredManagementType === "MANAGED"
               ? {
                   subnets: news.subnets ?? fallbackNetwork!.subnets,
-                  securityGroupIds:
-                    news.securityGroupIds ?? fallbackNetwork!.securityGroupIds,
+                  securityGroupIds: news.securityGroupIds ?? fallbackNetwork!.securityGroupIds,
                 }
               : undefined;
           const sameSet = (a: readonly string[], b: readonly string[]) =>
-            a.length === b.length &&
-            [...a].sort().join(",") === [...b].sort().join(",");
+            a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
           const matchesDesired = (candidate: batch.ComputeEnvironmentDetail) =>
             (candidate.type ?? "MANAGED") === desiredManagementType &&
             (candidate.state ?? "ENABLED") === desiredState &&
             (desiredManagementType === "UNMANAGED"
               ? (candidate.unmanagedvCpus ?? 0) === desiredUnmanagedvCpus
-              : (candidate.computeResources?.maxvCpus ?? 0) ===
-                  desiredMaxvCpus &&
-                sameSet(
-                  candidate.computeResources?.subnets ?? [],
-                  desiredNetwork!.subnets,
-                ) &&
+              : (candidate.computeResources?.maxvCpus ?? 0) === desiredMaxvCpus &&
+                sameSet(candidate.computeResources?.subnets ?? [], desiredNetwork!.subnets) &&
                 sameSet(
                   candidate.computeResources?.securityGroupIds ?? [],
                   desiredNetwork!.securityGroupIds,
@@ -580,7 +527,7 @@ export const ComputeEnvironmentProvider = () =>
                 return settled;
               }
               if (!settled || settled.status === "DELETED" || attempt === 7) {
-                return yield* Effect.fail(invalid(name, settled));
+                return yield* invalid(name, settled);
               }
 
               if (
@@ -590,8 +537,7 @@ export const ComputeEnvironmentProvider = () =>
                 const refreshed = yield* resolveDefaultNetwork;
                 desiredNetwork = {
                   subnets: news.subnets ?? refreshed.subnets,
-                  securityGroupIds:
-                    news.securityGroupIds ?? refreshed.securityGroupIds,
+                  securityGroupIds: news.securityGroupIds ?? refreshed.securityGroupIds,
                 };
               }
               const repairNetwork = [
@@ -617,9 +563,7 @@ export const ComputeEnvironmentProvider = () =>
                   computeEnvironment: name,
                   state: desiredState,
                   unmanagedvCpus:
-                    desiredManagementType === "UNMANAGED"
-                      ? desiredUnmanagedvCpus
-                      : undefined,
+                    desiredManagementType === "UNMANAGED" ? desiredUnmanagedvCpus : undefined,
                   computeResources:
                     desiredManagementType === "MANAGED"
                       ? {
@@ -636,7 +580,7 @@ export const ComputeEnvironmentProvider = () =>
               // transition becomes visible.
               yield* Effect.sleep("3 seconds");
             }
-            return yield* Effect.fail(invalid(name, undefined));
+            return yield* invalid(name, undefined);
           });
 
           // Observe — cloud state is authoritative.
@@ -645,15 +589,13 @@ export const ComputeEnvironmentProvider = () =>
 
           // Ensure — create if missing, then wait until the environment
           // settles to VALID (Fargate CEs settle in seconds).
-          const create = Effect.gen(function* () {
-            yield* batch.createComputeEnvironment({
+          const create = Effect.asVoid(
+            batch.createComputeEnvironment({
               computeEnvironmentName: name,
               type: desiredManagementType,
               state: desiredState,
               unmanagedvCpus:
-                desiredManagementType === "UNMANAGED"
-                  ? desiredUnmanagedvCpus
-                  : undefined,
+                desiredManagementType === "UNMANAGED" ? desiredUnmanagedvCpus : undefined,
               computeResources:
                 desiredManagementType === "MANAGED"
                   ? {
@@ -665,8 +607,8 @@ export const ComputeEnvironmentProvider = () =>
                   : undefined,
               serviceRole: news.serviceRole,
               tags: desiredTags,
-            });
-          });
+            }),
+          );
 
           /**
            * Tear down a CE we created in *this* reconcile that settled
@@ -684,9 +626,7 @@ export const ComputeEnvironmentProvider = () =>
                 state: "DISABLED",
               }),
               (e) => e._tag === "ComputeEnvironmentBeingModified",
-            ).pipe(
-              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void));
             const disabled = yield* awaitDisabled(name);
             if (!disabled || disabled.status === "DELETED") return;
             const requestDelete = retryBatch(
@@ -694,9 +634,7 @@ export const ComputeEnvironmentProvider = () =>
               (e) =>
                 e._tag === "ComputeEnvironmentInUse" ||
                 e._tag === "ComputeEnvironmentBeingModified",
-            ).pipe(
-              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void));
             if (disabled.status !== "DELETING") {
               yield* requestDelete;
               // Describe can briefly return the pre-delete record before the
@@ -705,10 +643,7 @@ export const ComputeEnvironmentProvider = () =>
             }
             const awaitGone = pollBatch(
               describeOne(name),
-              (c) =>
-                c === undefined ||
-                c.status === "DELETED" ||
-                c.status === "INVALID",
+              (c) => c === undefined || c.status === "DELETED" || c.status === "INVALID",
             );
             let final = yield* awaitGone;
             if (final && final.status === "INVALID") {
@@ -719,7 +654,7 @@ export const ComputeEnvironmentProvider = () =>
               final = yield* awaitGone;
             }
             if (final && final.status !== "DELETED") {
-              return yield* Effect.fail(invalid(name, final));
+              return yield* invalid(name, final);
             }
           });
 
@@ -736,11 +671,7 @@ export const ComputeEnvironmentProvider = () =>
           const createAndSettle = Effect.gen(function* () {
             yield* create;
             let settled = yield* awaitSettled(name);
-            for (
-              let attempt = 0;
-              attempt < 2 && isAuthPropagationInvalid(settled);
-              attempt++
-            ) {
+            for (let attempt = 0; attempt < 2 && isAuthPropagationInvalid(settled); attempt++) {
               yield* reapInvalidCreate();
               // Small grace beyond the deletion window before re-validating.
               yield* Effect.sleep("5 seconds");
@@ -769,9 +700,7 @@ export const ComputeEnvironmentProvider = () =>
           }
 
           if (!ce?.computeEnvironmentArn) {
-            return yield* Effect.die(
-              new Error(`ComputeEnvironment ${name} did not settle`),
-            );
+            return yield* Effect.die(new Error(`ComputeEnvironment ${name} did not settle`));
           }
 
           // Sync — diff observed against desired, apply only the delta.
@@ -793,12 +722,7 @@ export const ComputeEnvironmentProvider = () =>
             if ((ce.computeResources?.maxvCpus ?? 0) !== desiredMaxvCpus) {
               resources.maxvCpus = desiredMaxvCpus;
             }
-            if (
-              !sameSet(
-                ce.computeResources?.subnets ?? [],
-                desiredNetwork!.subnets,
-              )
-            ) {
+            if (!sameSet(ce.computeResources?.subnets ?? [], desiredNetwork!.subnets)) {
               resources.subnets = desiredNetwork!.subnets;
             }
             if (
@@ -852,19 +776,14 @@ export const ComputeEnvironmentProvider = () =>
           }
 
           // Must be DISABLED before deletion.
-          if (
-            existing.status !== "DELETING" &&
-            (existing.state ?? "ENABLED") !== "DISABLED"
-          ) {
+          if (existing.status !== "DELETING" && (existing.state ?? "ENABLED") !== "DISABLED") {
             yield* retryBatch(
               batch.updateComputeEnvironment({
                 computeEnvironment: name,
                 state: "DISABLED",
               }),
               (e) => e._tag === "ComputeEnvironmentBeingModified",
-            ).pipe(
-              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void));
           }
           const disabled = yield* awaitDisabled(name);
           if (!disabled || disabled.status === "DELETED") return;
@@ -876,9 +795,7 @@ export const ComputeEnvironmentProvider = () =>
           // same-name role (same ARN — role ARNs carry no unique id) so teardown
           // can proceed, and drop it again once the CE is gone. Service-linked
           // roles are never restored (they're account infrastructure).
-          const restoredRole = yield* restoreServiceRoleIfMissing(
-            disabled.serviceRole,
-          );
+          const restoredRole = yield* restoreServiceRoleIfMissing(disabled.serviceRole);
 
           // deleteComputeEnvironment is idempotent (succeeds when missing) but
           // rejects while a JobQueue association is still tearing down — retry
@@ -886,12 +803,9 @@ export const ComputeEnvironmentProvider = () =>
           const requestDelete = retryBatch(
             batch.deleteComputeEnvironment({ computeEnvironment: name }),
             (e) =>
-              e._tag === "ComputeEnvironmentInUse" ||
-              e._tag === "ComputeEnvironmentBeingModified",
+              e._tag === "ComputeEnvironmentInUse" || e._tag === "ComputeEnvironmentBeingModified",
             24,
-          ).pipe(
-            Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void));
           if (disabled.status !== "DELETING") {
             yield* requestDelete;
             // Describe can briefly return the pre-delete record (e.g. a stale
@@ -905,10 +819,7 @@ export const ComputeEnvironmentProvider = () =>
           // self-recovers, so re-issue the delete once and wait again.
           const awaitGone = pollBatch(
             describeOne(name),
-            (ce) =>
-              ce === undefined ||
-              ce.status === "DELETED" ||
-              ce.status === "INVALID",
+            (ce) => ce === undefined || ce.status === "DELETED" || ce.status === "INVALID",
           );
           let final = yield* awaitGone;
           if (final && final.status === "INVALID") {
@@ -921,10 +832,7 @@ export const ComputeEnvironmentProvider = () =>
             final = yield* awaitGone;
           }
 
-          if (
-            restoredRole !== undefined &&
-            (final === undefined || final.status === "DELETED")
-          ) {
+          if (restoredRole !== undefined && (final === undefined || final.status === "DELETED")) {
             yield* dropRestoredServiceRole(restoredRole);
           }
 
@@ -932,7 +840,7 @@ export const ComputeEnvironmentProvider = () =>
           // would then delete the CE's dependencies (service role, subnets)
           // while teardown is still consuming them, wedging the CE for good.
           if (final && final.status !== "DELETED") {
-            return yield* Effect.fail(invalid(name, final));
+            return yield* invalid(name, final);
           }
         }),
       };

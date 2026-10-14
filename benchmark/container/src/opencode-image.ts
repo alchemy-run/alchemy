@@ -19,8 +19,7 @@ export class OpencodeMicrovm extends AWS.Lambda.MicrovmImage<OpencodeMicrovm>()(
 export default OpencodeMicrovm.make(
   MicrovmBuildRole.pipe(
     Effect.map((buildRole) => ({
-      context: new URL("../contexts/microvm-opencode/", import.meta.url)
-        .pathname,
+      context: new URL("../contexts/microvm-opencode/", import.meta.url).pathname,
       buildRole,
       // opencode is heavier than the hello-world servers; give it 1 GiB
       // (matching the Cloudflare variant's tier as closely as the two

@@ -33,7 +33,6 @@ export interface GetPendingMaintenanceAction extends Binding.Service<
     >
   >
 > {}
-export const GetPendingMaintenanceAction =
-  Binding.Service<GetPendingMaintenanceAction>(
-    "AWS.DocDBElastic.GetPendingMaintenanceAction",
-  );
+export const GetPendingMaintenanceAction = Binding.Service<GetPendingMaintenanceAction>(
+  "AWS.DocDBElastic.GetPendingMaintenanceAction",
+);

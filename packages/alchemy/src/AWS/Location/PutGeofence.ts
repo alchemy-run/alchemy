@@ -7,10 +7,7 @@ import type { GeofenceCollection } from "./GeofenceCollection.ts";
  * `PutGeofence` request with `CollectionName` injected from the bound
  * resource.
  */
-export interface PutGeofenceRequest extends Omit<
-  location.PutGeofenceRequest,
-  "CollectionName"
-> {}
+export interface PutGeofenceRequest extends Omit<location.PutGeofenceRequest, "CollectionName"> {}
 
 /**
  * Stores (creates or replaces) a single geofence geometry in the collection.
@@ -43,6 +40,4 @@ export interface PutGeofence extends Binding.Service<
     ) => Effect.Effect<location.PutGeofenceResponse, location.PutGeofenceError>
   >
 > {}
-export const PutGeofence = Binding.Service<PutGeofence>(
-  "AWS.Location.PutGeofence",
-);
+export const PutGeofence = Binding.Service<PutGeofence>("AWS.Location.PutGeofence");

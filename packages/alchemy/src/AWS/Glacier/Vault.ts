@@ -156,17 +156,17 @@ export const Vault = Resource<Vault>("AWS.Glacier.Vault");
  * lock that is already in the `Locked` state. A locked vault lock policy is
  * immutable — it can never be changed or removed.
  */
-export class GlacierVaultLockImmutable extends Data.TaggedError(
-  "GlacierVaultLockImmutable",
-)<{ message: string }> {}
+export class GlacierVaultLockImmutable extends Data.TaggedError("GlacierVaultLockImmutable")<{
+  message: string;
+}> {}
 
 /**
  * Raised when DescribeVault returns a vault record missing its ARN or
  * creation date — never expected from the live API.
  */
-export class GlacierVaultIncomplete extends Data.TaggedError(
-  "GlacierVaultIncomplete",
-)<{ message: string }> {}
+export class GlacierVaultIncomplete extends Data.TaggedError("GlacierVaultIncomplete")<{
+  message: string;
+}> {}
 
 // Explicitly-typed pipeable retry helper. Inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration
@@ -180,14 +180,8 @@ const retryWhileVaultNotFound = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(10)]),
   });
 
-const toPolicyString = (
-  policy: string | Record<string, any> | undefined,
-): string | undefined =>
-  policy === undefined
-    ? undefined
-    : typeof policy === "string"
-      ? policy
-      : JSON.stringify(policy);
+const toPolicyString = (policy: string | Record<string, any> | undefined): string | undefined =>
+  policy === undefined ? undefined : typeof policy === "string" ? policy : JSON.stringify(policy);
 
 // Structural comparison for policy documents: AWS may re-serialize the
 // stored policy, so compare parsed shapes rather than raw strings. Falls
@@ -195,18 +189,13 @@ const toPolicyString = (
 const samePolicy = (left: string, right: string): boolean => {
   if (left === right) return true;
   try {
-    return (
-      JSON.stringify(JSON.parse(left)) === JSON.stringify(JSON.parse(right))
-    );
+    return JSON.stringify(JSON.parse(left)) === JSON.stringify(JSON.parse(right));
   } catch {
     return false;
   }
 };
 
-const sameStringSet = (
-  left: readonly string[],
-  right: readonly string[],
-): boolean => {
+const sameStringSet = (left: readonly string[], right: readonly string[]): boolean => {
   if (left.length !== right.length) return false;
   const sortedLeft = [...left].sort();
   const sortedRight = [...right].sort();
@@ -217,28 +206,19 @@ export const VaultProvider = () =>
   Provider.effect(
     Vault,
     Effect.gen(function* () {
-      const createVaultName = Effect.fn(function* (
-        id: string,
-        props: VaultProps,
-      ) {
-        return (
-          props.vaultName ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createVaultName = Effect.fn(function* (id: string, props: VaultProps) {
+        return props.vaultName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const describeVault = (vaultName: string) =>
         glacier
           .describeVault({ accountId: ACCOUNT, vaultName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const readVaultTags = (vaultName: string) =>
         glacier.listTagsForVault({ accountId: ACCOUNT, vaultName }).pipe(
           Effect.map((r) => (r.Tags ?? {}) as Record<string, string>),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.orElseSucceed(() => ({}) as Record<string, string>),
         );
 
       return Vault.Provider.of({
@@ -270,8 +250,7 @@ export const VaultProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const vaultName =
-            output?.vaultName ?? (yield* createVaultName(id, olds ?? {}));
+          const vaultName = output?.vaultName ?? (yield* createVaultName(id, olds ?? {}));
           const found = yield* describeVault(vaultName);
           if (found?.VaultARN === undefined) return undefined;
           const attrs = {
@@ -295,8 +274,7 @@ export const VaultProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news ?? {};
-          const vaultName =
-            output?.vaultName ?? (yield* createVaultName(id, props));
+          const vaultName = output?.vaultName ?? (yield* createVaultName(id, props));
           const internalTags = yield* createInternalTags(id);
 
           // 1. OBSERVE — cloud state is authoritative; output is only a
@@ -313,11 +291,9 @@ export const VaultProvider = () =>
               .pipe(retryWhileVaultNotFound);
           }
           if (live.VaultARN === undefined || live.CreationDate === undefined) {
-            return yield* Effect.fail(
-              new GlacierVaultIncomplete({
-                message: `DescribeVault for '${vaultName}' returned no VaultARN/CreationDate`,
-              }),
-            );
+            return yield* new GlacierVaultIncomplete({
+              message: `DescribeVault for '${vaultName}' returned no VaultARN/CreationDate`,
+            });
           }
 
           // 3a. SYNC notification configuration — observed vs desired.
@@ -325,20 +301,14 @@ export const VaultProvider = () =>
             .getVaultNotifications({ accountId: ACCOUNT, vaultName })
             .pipe(
               Effect.map((r) => r.vaultNotificationConfig),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           const desiredNotifications = props.notificationConfig;
           if (desiredNotifications !== undefined) {
             const inSync =
               observedNotifications !== undefined &&
-              observedNotifications.SNSTopic ===
-                desiredNotifications.snsTopic &&
-              sameStringSet(
-                observedNotifications.Events ?? [],
-                desiredNotifications.events,
-              );
+              observedNotifications.SNSTopic === desiredNotifications.snsTopic &&
+              sameStringSet(observedNotifications.Events ?? [], desiredNotifications.events);
             if (!inSync) {
               yield* glacier.setVaultNotifications({
                 accountId: ACCOUNT,
@@ -352,9 +322,7 @@ export const VaultProvider = () =>
           } else if (observedNotifications !== undefined) {
             yield* glacier
               .deleteVaultNotifications({ accountId: ACCOUNT, vaultName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           // 3b. SYNC access policy — observed vs desired.
@@ -362,16 +330,11 @@ export const VaultProvider = () =>
             .getVaultAccessPolicy({ accountId: ACCOUNT, vaultName })
             .pipe(
               Effect.map((r) => r.policy?.Policy),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           const desiredPolicy = toPolicyString(props.accessPolicy);
           if (desiredPolicy !== undefined) {
-            if (
-              observedPolicy === undefined ||
-              !samePolicy(observedPolicy, desiredPolicy)
-            ) {
+            if (observedPolicy === undefined || !samePolicy(observedPolicy, desiredPolicy)) {
               yield* glacier.setVaultAccessPolicy({
                 accountId: ACCOUNT,
                 vaultName,
@@ -381,9 +344,7 @@ export const VaultProvider = () =>
           } else if (observedPolicy !== undefined) {
             yield* glacier
               .deleteVaultAccessPolicy({ accountId: ACCOUNT, vaultName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           // 3c. SYNC vault lock — observed vs desired. An `InProgress` lock
@@ -392,11 +353,7 @@ export const VaultProvider = () =>
           //     typed failure rather than silently ignored.
           const observedLock = yield* glacier
             .getVaultLock({ accountId: ACCOUNT, vaultName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const desiredLock = toPolicyString(props.lockPolicy);
           if (desiredLock !== undefined) {
             if (observedLock === undefined) {
@@ -410,21 +367,14 @@ export const VaultProvider = () =>
               !samePolicy(observedLock.Policy, desiredLock)
             ) {
               if (observedLock.State === "Locked") {
-                return yield* Effect.fail(
-                  new GlacierVaultLockImmutable({
-                    message: `Vault '${vaultName}' lock is in the Locked state; its lock policy can never be changed.`,
-                  }),
-                );
+                return yield* new GlacierVaultLockImmutable({
+                  message: `Vault '${vaultName}' lock is in the Locked state; its lock policy can never be changed.`,
+                });
               }
               // InProgress with a different policy: abort and re-initiate.
               yield* glacier
                 .abortVaultLock({ accountId: ACCOUNT, vaultName })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               yield* glacier.initiateVaultLock({
                 accountId: ACCOUNT,
                 vaultName,
@@ -433,17 +383,13 @@ export const VaultProvider = () =>
             }
           } else if (observedLock !== undefined) {
             if (observedLock.State === "Locked") {
-              return yield* Effect.fail(
-                new GlacierVaultLockImmutable({
-                  message: `Vault '${vaultName}' lock is in the Locked state; it can never be removed.`,
-                }),
-              );
+              return yield* new GlacierVaultLockImmutable({
+                message: `Vault '${vaultName}' lock is in the Locked state; it can never be removed.`,
+              });
             }
             yield* glacier
               .abortVaultLock({ accountId: ACCOUNT, vaultName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
           // 3d. SYNC tags — diff against OBSERVED cloud tags so adoption
@@ -487,26 +433,18 @@ export const VaultProvider = () =>
               accountId: ACCOUNT,
               vaultName: output.vaultName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (lock !== undefined && lock.State !== "Locked") {
             yield* glacier
               .abortVaultLock({
                 accountId: ACCOUNT,
                 vaultName: output.vaultName,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           yield* glacier
             .deleteVault({ accountId: ACCOUNT, vaultName: output.vaultName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

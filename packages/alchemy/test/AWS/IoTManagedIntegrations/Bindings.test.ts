@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Region } from "@/AWS/Region.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { Region } from "@/AWS/Region.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import IoTMITestFunctionLive, { IoTMITestFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -29,44 +29,29 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 // full Lambda fixture is gated on a supported-region profile.
 // ---------------------------------------------------------------------------
 
-describe("IoTManagedIntegrations binding operations (typed probes)", () => {
-  test.provider(
-    "getManagedThingState on a nonexistent thing fails with a typed tag",
-    () =>
+describe(
+  "IoTManagedIntegrations binding operations (typed probes)",
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
+  () => {
+    test.provider("getManagedThingState on a nonexistent thing fails with a typed tag", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          pin(
-            mi.getManagedThingState({
-              ManagedThingId: "alchemynonexistentthingprobe",
-            }),
-          ),
+          pin(mi.getManagedThingState({ ManagedThingId: "alchemynonexistentthingprobe" })),
         );
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          error._tag,
-        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
       }),
-  );
+    );
 
-  test.provider(
-    "getDeviceDiscovery on a nonexistent discovery fails with a typed tag",
-    () =>
+    test.provider("getDeviceDiscovery on a nonexistent discovery fails with a typed tag", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          pin(
-            mi.getDeviceDiscovery({
-              Identifier: "alchemynonexistentdiscoveryprobe",
-            }),
-          ),
+          pin(mi.getDeviceDiscovery({ Identifier: "alchemynonexistentdiscoveryprobe" })),
         );
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          error._tag,
-        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
       }),
-  );
+    );
 
-  test.provider(
-    "sendConnectorEvent to a nonexistent connector fails with a typed tag",
-    () =>
+    test.provider("sendConnectorEvent to a nonexistent connector fails with a typed tag", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
           pin(
@@ -76,24 +61,19 @@ describe("IoTManagedIntegrations binding operations (typed probes)", () => {
             }),
           ),
         );
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          error._tag,
-        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
       }),
-  );
+    );
 
-  test.provider(
-    "listSchemaVersions reads the public capability schema catalog",
-    () =>
+    test.provider("listSchemaVersions reads the public capability schema catalog", () =>
       Effect.gen(function* () {
-        const result = yield* pin(
-          mi.listSchemaVersions({ Type: "capability", MaxResults: 3 }),
-        );
+        const result = yield* pin(mi.listSchemaVersions({ Type: "capability", MaxResults: 3 }));
         expect(result.Items).toBeDefined();
         expect(result.Items!.length).toBeGreaterThan(0);
       }),
-  );
-});
+    );
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Full runtime fixture: a Lambda bound to all 14 runtime bindings against a
@@ -123,16 +103,11 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -158,9 +133,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
         expect(metadata.errorTag).toBeUndefined();
         expect(metadata.managedThingId).toBeTruthy();
 
-        const capabilities = (yield* getJson("/capabilities")) as {
-          errorTag?: string;
-        };
+        const capabilities = (yield* getJson("/capabilities")) as { errorTag?: string };
         expect(capabilities.errorTag).toBeUndefined();
 
         // The remaining routes exercise ops that cannot fully succeed
@@ -185,5 +158,8 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
         }
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "provider:aws:lambda", "live"],
+    timeout: 600_000,
+  },
 );

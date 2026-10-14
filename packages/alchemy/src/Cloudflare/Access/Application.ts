@@ -1,23 +1,20 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { arrayEquals } from "../../Util/equal.ts";
+import { arrayEquals, subsetDiffers } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizePolicyRules,
   type PolicyDecision,
-  type PolicyExcludeRule,
   type PolicyExcludeRuleInput,
-  type PolicyRequireRule,
   type PolicyRequireRuleInput,
-  type PolicyRule,
   type PolicyRuleInput,
 } from "./Policy.ts";
 
@@ -101,6 +98,22 @@ export interface OAuthConfiguration {
 }
 
 /**
+ * The `applicationId` declared on an {@link Application} does not exist in
+ * the account. Alchemy never creates an application in its place, so the
+ * declared id (and its `aud`) is never silently swapped for a new one.
+ */
+export class DeclaredApplicationNotFound extends Data.TaggedError("DeclaredApplicationNotFound")<{
+  applicationId: string;
+  message: string;
+}> {}
+
+/** SAML or OIDC configuration of a `saas` application. */
+export type SaasApp = zeroTrust.AccessApplicationsCreateRequestSaasApp;
+
+/** CORS settings Access applies to requests to a self-hosted application. */
+export type CorsHeaders = zeroTrust.AccessApplicationsCreateRequestCorsHeaders;
+
+/**
  * An Access policy defined inline on (and owned by) an application: created
  * with the application, updated in place, and deleted with it. Uses the same
  * rule model as the reusable `Cloudflare.Access.Policy` resource.
@@ -138,6 +151,14 @@ export interface InlineApplicationPolicy {
 
 export interface ApplicationProps {
   /**
+   * Cloudflare id of an existing application to manage. The first deploy
+   * takes that application over — keeping its `aud` — instead of creating a
+   * new one. The application must exist — a missing id fails the deploy
+   * with `DeclaredApplicationNotFound` instead of creating one. Changing
+   * the id replaces the resource.
+   */
+  applicationId?: string;
+  /**
    * The Access application type.
    *
    * Cloudflare requires a single global `warp` application per account; the
@@ -156,6 +177,9 @@ export interface ApplicationProps {
    * Primary hostname and path secured by Access. Required for `self_hosted`
    * apps; ignored on the request for `warp` (Cloudflare auto-fills it with
    * `${authDomain}/warp`) and `saas` (Cloudflare uses the OIDC issuer).
+   *
+   * Changing it without declaring `destinations` resets the application's
+   * hostnames to this domain.
    */
   domain?: string;
   /**
@@ -183,6 +207,48 @@ export interface ApplicationProps {
    * through OAuth and may register redirect URIs dynamically.
    */
   oauthConfiguration?: OAuthConfiguration;
+  /**
+   * SAML or OIDC settings of a `saas` application. Merged over the live
+   * configuration, so values Cloudflare generates (`clientId`, `publicKey`,
+   * `ssoEndpoint`, `idpEntityId`) are kept.
+   */
+  saasApp?: SaasApp;
+  /**
+   * CORS settings for requests to the application. Cannot be combined with
+   * `optionsPreflightBypass`.
+   */
+  corsHeaders?: CorsHeaders;
+  /**
+   * Let `OPTIONS` preflight requests bypass Access and reach the origin.
+   * Cannot be combined with `corsHeaders`.
+   */
+  optionsPreflightBypass?: boolean;
+  /**
+   * `SameSite` attribute of the Access session cookie.
+   */
+  sameSiteCookieAttribute?: "strict" | "lax" | "none";
+  /**
+   * Set `HttpOnly` on the Access session cookie.
+   */
+  httpOnlyCookieAttribute?: boolean;
+  /**
+   * Enable the binding cookie, which protects against stolen authorization
+   * tokens and CSRF.
+   */
+  enableBindingCookie?: boolean;
+  /**
+   * Scope the Access JWT cookie to the application path instead of the
+   * hostname.
+   */
+  pathCookieAttribute?: boolean;
+  /**
+   * Preemptively set the Access session cookie on each concrete hostname
+   * of a multi-hostname self-hosted application during login. Set to false
+   * to issue cookies as each hostname is visited. Omit to preserve the live
+   * setting on updates or use Cloudflare's default for a new application.
+   * Wildcard hostnames cannot receive preemptive cookies.
+   */
+  eagerRedirectCookieSetting?: boolean;
   /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
@@ -229,6 +295,9 @@ export interface ApplicationProps {
    *
    * Cloudflare treats inline and reusable policies as mutually exclusive on
    * one application — mixing the two forms fails validation.
+   *
+   * If omitted, the application's live policies are left as they are. Pass
+   * `[]` to detach them.
    *
    * @example
    * ```ts
@@ -280,6 +349,12 @@ export interface ApplicationAttributes {
   destinations: ReadonlyArray<ApplicationDestination> | undefined;
   /** Resolved managed OAuth configuration. */
   oauthConfiguration: OAuthConfiguration | undefined;
+  /**
+   * Resolved SaaS configuration, including the values Cloudflare generates
+   * (`clientId`, `publicKey`, `ssoEndpoint`, `idpEntityId`). The OIDC client
+   * secret is not stored.
+   */
+  saasApp: SaasApp | undefined;
   /** Application type. */
   type: ApplicationType;
   /** Display name (resolved). */
@@ -322,8 +397,7 @@ export type Application = Resource<
  * type including `warp`, which Cloudflare requires for device enrolment via
  * the WARP client.
  *
- * Access policies are authored as standalone {@link Policy} resources
- * and referenced here by id — there is no inline-policy support.
+ * Settings left unset are not managed: updates keep their live values.
  * ### Creating an Application
  * **Example:** Self-hosted application gated by a reusable Access policy
  * ```typescript
@@ -358,6 +432,56 @@ export type Application = Resource<
  *       allowAnyOnLoopback: true,
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Adopting an existing application
+ * **Example:** Take over an application by its Cloudflare id
+ * ```typescript
+ * // Keeps the application's id and `aud`, so JWT validation keeps working.
+ * const app = yield* Cloudflare.Access.Application("Grafana", {
+ *   applicationId: "4f8e3c1a-5b2d-4e6f-9a7b-1c2d3e4f5a6b",
+ *   type: "self_hosted",
+ *   domain: "grafana.example.com",
+ *   sameSiteCookieAttribute: "lax",
+ *   httpOnlyCookieAttribute: true,
+ *   corsHeaders: {
+ *     allowedOrigins: ["https://app.example.com"],
+ *     allowedMethods: ["GET", "POST"],
+ *     allowCredentials: true,
+ *   },
+ * });
+ * ```
+ *
+ * ### SaaS applications
+ * **Example:** SAML application
+ * ```typescript
+ * const looker = yield* Cloudflare.Access.Application("Looker", {
+ *   type: "saas",
+ *   name: "Looker",
+ *   saasApp: {
+ *     authType: "saml",
+ *     spEntityId: "https://example.looker.com",
+ *     consumerServiceUrl: "https://example.looker.com/saml/acs",
+ *     nameIdFormat: "email",
+ *   },
+ *   policies: [allowTeam],
+ * });
+ * // Configure the SaaS side with looker.saasApp.ssoEndpoint / publicKey.
+ * ```
+ *
+ * **Example:** OIDC application
+ * ```typescript
+ * const coder = yield* Cloudflare.Access.Application("Coder", {
+ *   type: "saas",
+ *   name: "Coder",
+ *   saasApp: {
+ *     authType: "oidc",
+ *     redirectUris: ["https://coder.example.com/api/v2/users/oidc/callback"],
+ *     grantTypes: ["authorization_code"],
+ *     scopes: ["openid", "email", "profile"],
+ *   },
+ *   policies: [allowTeam],
  * });
  * ```
  *
@@ -447,9 +571,7 @@ export type Application = Resource<
  * @product Access
  * @category Cloudflare One (Zero Trust)
  */
-export const Application = Resource<Application>(
-  "Cloudflare.Access.Application",
-);
+export const Application = Resource<Application>("Cloudflare.Access.Application");
 
 // Ride out the two transient failure modes Cloudflare's Access endpoints
 // exhibit under load:
@@ -471,13 +593,9 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (e) =>
-        e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
+      while: (e) => e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("1 second", 1.5),
-          Schedule.spaced("5 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("1 second", 1.5), Schedule.spaced("5 seconds")]),
         Schedule.recurs(12),
       ]),
     }),
@@ -487,13 +605,19 @@ export const ApplicationProvider = () =>
   Provider.succeed(Application, {
     stables: ["applicationId", "aud", "type", "accountId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
       if ((olds as ApplicationProps).type !== undefined) {
-        if (
-          (olds as ApplicationProps).type !== (news as ApplicationProps).type
-        ) {
+        if ((olds as ApplicationProps).type !== (news as ApplicationProps).type) {
           return { action: "replace" } as const;
         }
+      }
+      const declaredId = (news as ApplicationProps).applicationId;
+      if (
+        typeof declaredId === "string" &&
+        output !== undefined &&
+        declaredId !== output.applicationId
+      ) {
+        return { action: "replace" } as const;
       }
     }),
 
@@ -507,46 +631,26 @@ export const ApplicationProvider = () =>
       // domain with a fresh `aud`, silently breaking existing JWT
       // validation. Warp apps are excluded from the fallback: they are a
       // per-account singleton that `reconcile` already recovers.
+      const knownId = output?.applicationId ?? olds?.applicationId;
       let observed: ObservedApp | undefined;
-      if (output?.applicationId) {
-        observed = yield* observeById(accountId, output.applicationId);
+      if (knownId) {
+        observed = yield* observeById(accountId, knownId);
       } else if (olds?.type !== "warp" && typeof olds?.domain === "string") {
         observed = yield* findByDomain(accountId, olds.domain);
       } else {
         return undefined;
       }
-      if (!observed?.id || !observed.aud || !observed.type) {
+      if (!isComplete(observed)) {
         return undefined;
       }
-      const domain =
-        observed.domain ??
-        output?.domain ??
-        olds?.domain ??
-        // Worker-destination apps (`worker`/`all_workers`/...) have no
-        // hostname; Cloudflare omits `domain` for them entirely.
-        (observed.destinations !== undefined ? "" : undefined);
-      const name = observed.name ?? output?.name;
-      if (domain === undefined || name === undefined) {
-        return undefined;
-      }
-      const attrs = {
-        applicationId: observed.id,
-        aud: observed.aud,
-        domain,
-        destinations: observed.destinations ?? output?.destinations,
-        // Live cloud state is authoritative. In particular, do not resurrect
-        // a persisted configuration when Cloudflare explicitly returns null.
-        oauthConfiguration: observed.oauthConfiguration,
-        type: observed.type,
-        name,
-        accountId: output?.accountId ?? accountId,
-        createdAt: observed.createdAt ?? output?.createdAt,
-        updatedAt: observed.updatedAt ?? output?.updatedAt,
-      } satisfies ApplicationAttributes;
+      const attrs = toAttributes(observed, output?.accountId ?? accountId, {
+        ...output,
+        domain: output?.domain ?? olds?.domain,
+      });
       // Recovered by id → positively ours. Recovered by domain scan →
       // existence is certain but ownership is not (Access applications
       // carry no alchemy marker), so gate takeover behind `--adopt`.
-      return output?.applicationId ? attrs : Unowned(attrs);
+      return knownId ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
@@ -557,12 +661,8 @@ export const ApplicationProvider = () =>
       const resolvedPolicies = resolvePolicies(news.policies);
       if (
         resolvedPolicies !== undefined &&
-        resolvedPolicies.some(
-          (p) => typeof p !== "string" && isInlinePolicy(p),
-        ) &&
-        resolvedPolicies.some(
-          (p) => typeof p === "string" || !isInlinePolicy(p),
-        )
+        resolvedPolicies.some((p) => typeof p !== "string" && isInlinePolicy(p)) &&
+        resolvedPolicies.some((p) => typeof p === "string" || !isInlinePolicy(p))
       ) {
         return yield* Effect.fail(
           new Error(
@@ -572,12 +672,7 @@ export const ApplicationProvider = () =>
           ),
         );
       }
-      const body = buildMutableBody(
-        news,
-        resolvedName,
-        resolvedIdps,
-        resolvedPolicies,
-      );
+      const body = buildMutableBody(news, resolvedName, resolvedIdps, resolvedPolicies);
       // Destinations contributed through the binding contract (e.g. Workers
       // enrolling via their `access` prop) extend the declared ones. The
       // engine dedupes and sid-sorts bindings, so the merged order is
@@ -586,16 +681,22 @@ export const ApplicationProvider = () =>
         (b) => (b.data.destinations ?? []) as ApplicationDestination[],
       );
       if (boundDestinations.length > 0) {
-        body.destinations = [
-          ...(body.destinations ?? []),
-          ...boundDestinations,
-        ];
+        body.destinations = [...(body.destinations ?? []), ...boundDestinations];
       }
 
       // 1. Observe
+      const knownId = output?.applicationId ?? news.applicationId;
       let observed: ObservedApp | undefined;
-      if (output?.applicationId) {
-        observed = yield* observeById(accountId, output.applicationId);
+      if (knownId) {
+        observed = yield* observeById(accountId, knownId);
+      }
+      if (!observed && news.applicationId !== undefined) {
+        return yield* Effect.fail(
+          new DeclaredApplicationNotFound({
+            applicationId: news.applicationId,
+            message: `Cloudflare Access application ${news.applicationId} does not exist`,
+          }),
+        );
       }
       if (!observed && news.type === "warp") {
         // Warp is a singleton per account — reuse any existing app.
@@ -611,21 +712,15 @@ export const ApplicationProvider = () =>
             type: news.type,
             name: resolvedName,
             sessionDuration: body.sessionDuration,
-            allowedIdps:
-              body.allowedIdps === undefined
-                ? undefined
-                : Array.from(body.allowedIdps),
+            allowedIdps: body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
             policies: toRequestPolicies(body.policies),
             destinations:
-              body.destinations === undefined
-                ? undefined
-                : Array.from(body.destinations),
-            oauthConfiguration: toRequestOAuthConfiguration(
-              body.oauthConfiguration,
-            ),
+              body.destinations === undefined ? undefined : Array.from(body.destinations),
+            oauthConfiguration: toRequestOAuthConfiguration(body.oauthConfiguration),
+            ...settingsOf(body),
           })
           .pipe(
             // A referenced policy may be propagating, or the call may be
@@ -639,54 +734,54 @@ export const ApplicationProvider = () =>
                   const existing = yield* findWarpApp(accountId);
                   if (existing) return existing;
                 }
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );
         observed = narrowApp(created as Parameters<typeof narrowApp>[0]);
       }
 
-      // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
-      // full desired body whenever any mutable field differs.
+      // 3. Sync — Cloudflare's update endpoint is PUT-style: anything missing
+      // from the body is reset. Start from the live application so settings
+      // this resource does not manage survive, then apply the desired body.
       if (!observed.id) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare did not return an application id for Access application",
-          ),
+          new Error("Cloudflare did not return an application id for Access application"),
         );
       }
       if (!bodyEqualsObserved(body, observed)) {
+        // Without desired destinations, keep every live hostname unless the
+        // primary domain changes (Cloudflare then resets to the new domain).
+        const destinations =
+          body.destinations ??
+          (body.domain === undefined || body.domain === observed.domain
+            ? observed.destinations
+            : undefined);
         const updated = yield* zeroTrust
           .updateAccessApplicationForAccount({
+            ...preservedSettings(observed),
             accountId,
             appId: observed.id,
             domain: body.domain ?? observed.domain,
             type: news.type,
             name: resolvedName,
-            sessionDuration: body.sessionDuration,
-            allowedIdps:
-              body.allowedIdps === undefined
-                ? undefined
-                : Array.from(body.allowedIdps),
-            autoRedirectToIdentity: body.autoRedirectToIdentity,
-            appLauncherVisible: body.appLauncherVisible,
-            tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            policies: toRequestPolicies(
-              attachObservedPolicyIds(body.policies, observed.policies),
-            ),
-            destinations:
-              body.destinations === undefined
-                ? undefined
-                : Array.from(body.destinations),
-            // Preserve a live managed OAuth configuration when the caller
-            // does not manage it but another mutable field triggers this
-            // PUT-style update.
-            oauthConfiguration: toRequestOAuthConfiguration(
-              mergeOAuthConfiguration(
-                observed.oauthConfiguration,
-                body.oauthConfiguration,
+            ...definedOnly({
+              sessionDuration: body.sessionDuration,
+              allowedIdps:
+                body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
+              autoRedirectToIdentity: body.autoRedirectToIdentity,
+              appLauncherVisible: body.appLauncherVisible,
+              tags: body.tags === undefined ? undefined : Array.from(body.tags),
+              policies: toRequestPolicies(
+                attachObservedPolicyIds(body.policies, observed.policies),
               ),
-            ),
+              destinations: destinations === undefined ? undefined : Array.from(destinations),
+              // Merge a partial managed OAuth configuration over the live one.
+              oauthConfiguration: toRequestOAuthConfiguration(
+                mergeOAuthConfiguration(observed.oauthConfiguration, body.oauthConfiguration),
+              ),
+            }),
+            ...mergeSettings(observed, settingsOf(body)),
           })
           // A just-added policy reference may still be propagating, or the
           // call may be throttled (403) — ride out both.
@@ -695,28 +790,18 @@ export const ApplicationProvider = () =>
       }
 
       // 4. Return
-      if (!observed.id || !observed.aud || !observed.type) {
+      if (!isComplete(observed)) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare returned an Access application without id/aud/type",
-          ),
+          new Error("Cloudflare returned an Access application without id/aud/type"),
         );
       }
-      return {
-        applicationId: observed.id,
-        aud: observed.aud,
-        domain: observed.domain ?? body.domain ?? "",
-        destinations: observed.destinations ?? body.destinations,
-        // Keep the provider output cloud-authoritative. If Cloudflare rejects
-        // or clears the desired configuration, do not mask that drift with
-        // the request body.
-        oauthConfiguration: observed.oauthConfiguration,
-        type: observed.type,
-        name: observed.name ?? resolvedName,
-        accountId,
-        createdAt: observed.createdAt,
-        updatedAt: observed.updatedAt,
-      } satisfies ApplicationAttributes;
+      // Keep the provider output cloud-authoritative: if Cloudflare rejects
+      // or clears a desired setting, do not mask that drift with the body.
+      return toAttributes(observed, accountId, {
+        domain: body.domain,
+        destinations: body.destinations,
+        name: resolvedName,
+      });
     }),
 
     // Account-scoped collection (pattern (b)): enumerate every Access
@@ -725,39 +810,23 @@ export const ApplicationProvider = () =>
     // the mandatory id/aud/type triplet are skipped (typed per-item drop).
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessApplicationsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          // The list hydrates each app's `policies`; Cloudflare rejects the
-          // whole enumeration with the typed `AccessReferenceNotFound` (400
-          // "policy ... not found") while a sibling app references a policy
-          // that is still propagating or mid-deletion, and 403s the call when
-          // throttling. Ride out both.
-          retryTransientAccessError,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).flatMap((raw) => {
-                const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
-                if (!app.id || !app.aud || !app.type) return [];
-                return [
-                  {
-                    applicationId: app.id,
-                    aud: app.aud,
-                    domain: app.domain ?? "",
-                    destinations: app.destinations,
-                    oauthConfiguration: app.oauthConfiguration,
-                    type: app.type,
-                    name: app.name ?? "",
-                    accountId,
-                    createdAt: app.createdAt,
-                    updatedAt: app.updatedAt,
-                  } satisfies ApplicationAttributes,
-                ];
-              }),
-            ),
+      return yield* zeroTrust.listAccessApplicationsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        // The list hydrates each app's `policies`; Cloudflare rejects the
+        // whole enumeration with the typed `AccessReferenceNotFound` (400
+        // "policy ... not found") while a sibling app references a policy
+        // that is still propagating or mid-deletion, and 403s the call when
+        // throttling. Ride out both.
+        retryTransientAccessError,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((raw) => {
+              const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
+              return isComplete(app) ? [toAttributes(app, accountId)] : [];
+            }),
           ),
-        );
+        ),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -797,14 +866,10 @@ const findWarpApp = (accountId: string) =>
     // throttling — same transient windows `list` rides out.
     retryTransientAccessError,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (a) => (a as { type?: string | null }).type === "warp",
-      ),
+      Array.from(chunk).find((a) => (a as { type?: string | null }).type === "warp"),
     ),
     Effect.map((found) =>
-      found === undefined
-        ? undefined
-        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
     ),
   );
 
@@ -821,30 +886,22 @@ const findByDomain = (accountId: string, domain: string) =>
     // Cloudflare's `application_already_exists` Conflict.
     retryTransientAccessError,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (a) => (a as { domain?: string | null }).domain === domain,
-      ),
+      Array.from(chunk).find((a) => (a as { domain?: string | null }).domain === domain),
     ),
     Effect.map((found) =>
-      found === undefined
-        ? undefined
-        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
     ),
   );
 
 const observeById = (accountId: string, appId: string) =>
   Effect.gen(function* () {
-    const r = yield* zeroTrust
-      .getAccessApplicationForAccount({ accountId, appId })
-      .pipe(
-        // A missing application is typed (404 → AccessApplicationNotFound):
-        // observe falls through to recreate. Transient 403 back-pressure is
-        // retried; anything else is a real failure and propagates.
-        retryTransientAccessError,
-        Effect.catchTag("AccessApplicationNotFound", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+    const r = yield* zeroTrust.getAccessApplicationForAccount({ accountId, appId }).pipe(
+      // A missing application is typed (404 → AccessApplicationNotFound):
+      // observe falls through to recreate. Transient 403 back-pressure is
+      // retried; anything else is a real failure and propagates.
+      retryTransientAccessError,
+      Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(undefined)),
+    );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);
   });
@@ -874,6 +931,8 @@ interface ObservedPolicy {
 }
 
 interface ObservedApp {
+  /** The decoded response, for carrying unmanaged settings through updates. */
+  readonly raw: Readonly<Record<string, unknown>>;
   readonly id?: string;
   readonly aud?: string;
   readonly name?: string;
@@ -881,6 +940,7 @@ interface ObservedApp {
   readonly domain?: string;
   readonly destinations?: ReadonlyArray<ApplicationDestination>;
   readonly oauthConfiguration?: OAuthConfiguration;
+  readonly saasApp?: SaasApp;
   readonly allowedIdps?: ReadonlyArray<string>;
   readonly autoRedirectToIdentity?: boolean;
   readonly appLauncherVisible?: boolean;
@@ -891,8 +951,34 @@ interface ObservedApp {
   readonly updatedAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const isComplete = (
+  app: ObservedApp | undefined,
+): app is ObservedApp & { id: string; aud: string; type: ApplicationType } =>
+  !!app?.id && !!app.aud && !!app.type;
+
+const toAttributes = (
+  app: ObservedApp & { id: string; aud: string; type: ApplicationType },
+  accountId: string,
+  fallback?: Partial<ApplicationAttributes>,
+): ApplicationAttributes => ({
+  applicationId: app.id,
+  aud: app.aud,
+  // SaaS and Worker-destination apps have no hostname; Cloudflare omits
+  // `domain` for them entirely.
+  domain: app.domain ?? fallback?.domain ?? "",
+  destinations: app.destinations ?? fallback?.destinations,
+  // Live cloud state is authoritative. In particular, do not resurrect
+  // a persisted configuration when Cloudflare explicitly returns null.
+  oauthConfiguration: app.oauthConfiguration,
+  saasApp: app.saasApp,
+  type: app.type,
+  name: app.name ?? fallback?.name ?? "",
+  accountId,
+  createdAt: app.createdAt ?? fallback?.createdAt,
+  updatedAt: app.updatedAt ?? fallback?.updatedAt,
+});
+
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const undefArr = <T>(
   v: ReadonlyArray<T | null> | null | undefined,
@@ -932,15 +1018,11 @@ const narrowOAuthConfiguration = (
             ? undefined
             : {
                 enabled: undef(raw.dynamicClientRegistration.enabled),
-                allowedUris: undefArr(
-                  raw.dynamicClientRegistration.allowedUris,
-                ) as string[] | undefined,
-                allowAnyOnLocalhost: undef(
-                  raw.dynamicClientRegistration.allowAnyOnLocalhost,
-                ),
-                allowAnyOnLoopback: undef(
-                  raw.dynamicClientRegistration.allowAnyOnLoopback,
-                ),
+                allowedUris: undefArr(raw.dynamicClientRegistration.allowedUris) as
+                  | string[]
+                  | undefined,
+                allowAnyOnLocalhost: undef(raw.dynamicClientRegistration.allowAnyOnLocalhost),
+                allowAnyOnLoopback: undef(raw.dynamicClientRegistration.allowAnyOnLoopback),
               },
       };
 
@@ -952,6 +1034,7 @@ const narrowApp = (raw: {
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   oauthConfiguration?: RawOAuthConfiguration | null;
+  saasApp?: object | null;
   allowedIdps?: ReadonlyArray<string> | null;
   autoRedirectToIdentity?: boolean | null;
   appLauncherVisible?: boolean | null;
@@ -961,6 +1044,7 @@ const narrowApp = (raw: {
   createdAt?: string | null;
   updatedAt?: string | null;
 }): ObservedApp => ({
+  raw,
   id: undef(raw.id),
   aud: undef(raw.aud),
   name: undef(raw.name),
@@ -971,15 +1055,16 @@ const narrowApp = (raw: {
       ? undefined
       : (raw.destinations as ReadonlyArray<ApplicationDestination>),
   oauthConfiguration: narrowOAuthConfiguration(raw.oauthConfiguration),
+  saasApp:
+    raw.saasApp == null
+      ? undefined
+      : (withoutNulls(omit(raw.saasApp, ["clientSecret", "createdAt", "updatedAt"])) as SaasApp),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
   appLauncherVisible: undef(raw.appLauncherVisible),
   sessionDuration: undef(raw.sessionDuration),
   tags: undefArr(raw.tags ?? undefined),
-  policies:
-    raw.policies == null
-      ? undefined
-      : (raw.policies as ReadonlyArray<ObservedPolicy>),
+  policies: raw.policies == null ? undefined : (raw.policies as ReadonlyArray<ObservedPolicy>),
   createdAt: undef(raw.createdAt),
   updatedAt: undef(raw.updatedAt),
 });
@@ -1032,7 +1117,80 @@ type ResolvedPolicy =
 type RequestPolicy =
   zeroTrust.AccessApplicationsCreateForAccountRequestPoliciesSelfHostedApplicationItem;
 
-interface AppMutableBody {
+// Settings sent verbatim when set and diffed against the live application.
+const SETTINGS = [
+  "saasApp",
+  "corsHeaders",
+  "optionsPreflightBypass",
+  "sameSiteCookieAttribute",
+  "httpOnlyCookieAttribute",
+  "enableBindingCookie",
+  "pathCookieAttribute",
+  "eagerRedirectCookieSetting",
+] as const satisfies ReadonlyArray<keyof ApplicationProps>;
+
+type Settings = Pick<ApplicationProps, (typeof SETTINGS)[number]>;
+
+const settingsOf = (props: Settings): Settings =>
+  Object.fromEntries(
+    SETTINGS.flatMap((key) => (props[key] === undefined ? [] : [[key, props[key]]])),
+  );
+
+// Object settings merge over the live value: Cloudflare-generated SaaS
+// values (`clientId`, `publicKey`, ...) must be sent back to be kept.
+const mergeSettings = (observed: ObservedApp, desired: Settings): Settings =>
+  Object.fromEntries(
+    Object.entries(desired).map(([key, value]) => {
+      const live = key === "saasApp" ? observed.saasApp : withoutNulls(observed.raw[key]);
+      return [key, isRecord(value) && isRecord(live) ? { ...live, ...value } : value];
+    }),
+  );
+
+// Everything a PUT would otherwise reset, taken from the live application.
+// Identity, policies, destinations and OAuth are reconciled explicitly; SCIM
+// config is left out because Cloudflare does not echo its credentials.
+const preservedSettings = (observed: ObservedApp) => ({
+  ...(withoutNulls(
+    omit(observed.raw, [
+      "id",
+      "aud",
+      "type",
+      "name",
+      "domain",
+      "createdAt",
+      "updatedAt",
+      "policies",
+      "destinations",
+      "selfHostedDomains",
+      "oauthConfiguration",
+      "scimConfig",
+      "saasApp",
+    ]),
+  ) as Omit<zeroTrust.UpdateAccessApplicationForAccountRequest, "accountId" | "appId">),
+  ...(observed.saasApp === undefined ? {} : { saasApp: observed.saasApp }),
+});
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const omit = (value: object, keys: ReadonlyArray<string>) =>
+  Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
+
+const definedOnly = <T extends object>(value: T): Partial<T> =>
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.filter((v) => v != null).map(withoutNulls)
+    : isRecord(value)
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, v]) => v != null)
+            .map(([k, v]) => [k, withoutNulls(v)]),
+        )
+      : value;
+
+interface AppMutableBody extends Settings {
   domain?: string;
   destinations?: ReadonlyArray<ApplicationDestination>;
   oauthConfiguration?: OAuthConfiguration;
@@ -1046,8 +1204,7 @@ interface AppMutableBody {
   policies?: ReadonlyArray<ResolvedPolicy>;
 }
 
-const policyIdOf = (p: ResolvedPolicy): string | undefined =>
-  typeof p === "string" ? p : p.id;
+const policyIdOf = (p: ResolvedPolicy): string | undefined => (typeof p === "string" ? p : p.id);
 
 const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
   if (typeof p === "string") return p;
@@ -1057,15 +1214,9 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
       // application-owned policy in place (attachObservedPolicyIds).
       id: p.id,
       decision: p.decision,
-      include: normalizePolicyRules(
-        p.include,
-      ) as zeroTrust.InlineAccessPolicy["include"],
-      exclude: normalizePolicyRules(
-        p.exclude,
-      ) as zeroTrust.InlineAccessPolicy["exclude"],
-      require: normalizePolicyRules(
-        p.require,
-      ) as zeroTrust.InlineAccessPolicy["require"],
+      include: normalizePolicyRules(p.include) as zeroTrust.InlineAccessPolicy["include"],
+      exclude: normalizePolicyRules(p.exclude) as zeroTrust.InlineAccessPolicy["exclude"],
+      require: normalizePolicyRules(p.require) as zeroTrust.InlineAccessPolicy["require"],
       name: p.name,
       precedence: p.precedence,
       sessionDuration: p.sessionDuration,
@@ -1076,9 +1227,7 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
           : p.approvalGroups.map((g) => ({
               approvalsNeeded: g.approvalsNeeded,
               emailAddresses:
-                g.emailAddresses === undefined
-                  ? undefined
-                  : Array.from(g.emailAddresses),
+                g.emailAddresses === undefined ? undefined : Array.from(g.emailAddresses),
               emailListUuid: g.emailListUuid,
             })),
       isolationRequired: p.isolationRequired,
@@ -1116,9 +1265,7 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
         : rich.approvalGroups.map((g) => ({
             approvalsNeeded: g.approvalsNeeded,
             emailAddresses:
-              g.emailAddresses === undefined
-                ? undefined
-                : Array.from(g.emailAddresses),
+              g.emailAddresses === undefined ? undefined : Array.from(g.emailAddresses),
             emailListUuid: g.emailListUuid,
           })),
   };
@@ -1141,10 +1288,8 @@ const mergeOAuthConfiguration = (
         ? observed?.grant
         : {
             accessTokenLifetime:
-              desired.grant.accessTokenLifetime ??
-              observed?.grant?.accessTokenLifetime,
-            sessionDuration:
-              desired.grant.sessionDuration ?? observed?.grant?.sessionDuration,
+              desired.grant.accessTokenLifetime ?? observed?.grant?.accessTokenLifetime,
+            sessionDuration: desired.grant.sessionDuration ?? observed?.grant?.sessionDuration,
           },
     dynamicClientRegistration:
       desired.dynamicClientRegistration === undefined
@@ -1195,8 +1340,8 @@ const resolvePolicies = (
       // before the reconciler ran. A whole `Access.Policy` resource resolves
       // to its Attributes; normalize it to the bare policy id so everything
       // downstream (diffing, request building) sees one shape.
-      (policies as ReadonlyArray<ResolvedPolicy | { policyId: string }>).map(
-        (p) => (typeof p !== "string" && "policyId" in p ? p.policyId : p),
+      (policies as ReadonlyArray<ResolvedPolicy | { policyId: string }>).map((p) =>
+        typeof p !== "string" && "policyId" in p ? p.policyId : p,
       );
 
 const buildMutableBody = (
@@ -1206,6 +1351,7 @@ const buildMutableBody = (
   resolvedPolicies: ReadonlyArray<ResolvedPolicy> | undefined,
 ): AppMutableBody => {
   const body: AppMutableBody = {
+    ...settingsOf(news),
     type: news.type,
     name: resolvedName,
   };
@@ -1244,8 +1390,7 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const jsonEq = <T>(x: T, y: T): boolean =>
-  JSON.stringify(x) === JSON.stringify(y);
+const jsonEq = <T>(x: T, y: T): boolean => JSON.stringify(x) === JSON.stringify(y);
 
 const oauthConfigurationEquals = (
   desired: OAuthConfiguration | undefined,
@@ -1259,9 +1404,7 @@ const oauthConfigurationEquals = (
 
   const desiredGrant = desired.grant;
   if (desiredGrant?.accessTokenLifetime !== undefined) {
-    if (
-      desiredGrant.accessTokenLifetime !== observed.grant?.accessTokenLifetime
-    ) {
+    if (desiredGrant.accessTokenLifetime !== observed.grant?.accessTokenLifetime) {
       return false;
     }
   }
@@ -1281,15 +1424,13 @@ const oauthConfigurationEquals = (
   }
   if (
     desiredRegistration?.allowAnyOnLocalhost !== undefined &&
-    desiredRegistration.allowAnyOnLocalhost !==
-      observedRegistration?.allowAnyOnLocalhost
+    desiredRegistration.allowAnyOnLocalhost !== observedRegistration?.allowAnyOnLocalhost
   ) {
     return false;
   }
   if (
     desiredRegistration?.allowAnyOnLoopback !== undefined &&
-    desiredRegistration.allowAnyOnLoopback !==
-      observedRegistration?.allowAnyOnLoopback
+    desiredRegistration.allowAnyOnLoopback !== observedRegistration?.allowAnyOnLoopback
   ) {
     return false;
   }
@@ -1310,12 +1451,10 @@ const policiesEq = (
   desired: ReadonlyArray<ResolvedPolicy> | undefined,
   observed: ReadonlyArray<ObservedPolicy> | undefined,
 ): boolean => {
-  if (desired === undefined && observed === undefined) return true;
-  if (desired === undefined || observed === undefined) {
-    // An explicit empty `[]` should be honoured; nothing observed and
-    // nothing desired collapses to "in sync".
-    return (desired ?? []).length === 0 && (observed ?? []).length === 0;
-  }
+  // Omitted `policies` leaves the live links unmanaged; an explicit `[]`
+  // detaches them.
+  if (desired === undefined) return true;
+  if (observed === undefined) return desired.length === 0;
   if (desired.length !== observed.length) return false;
   for (let i = 0; i < desired.length; i++) {
     const d = desired[i];
@@ -1335,17 +1474,11 @@ const policiesEq = (
         return false;
       }
       const exclude = normalizePolicyRules(d.exclude);
-      if (
-        exclude !== undefined &&
-        !jsonEq(exclude, (o.exclude ?? []) as typeof exclude)
-      ) {
+      if (exclude !== undefined && !jsonEq(exclude, (o.exclude ?? []) as typeof exclude)) {
         return false;
       }
       const require = normalizePolicyRules(d.require);
-      if (
-        require !== undefined &&
-        !jsonEq(require, (o.require ?? []) as typeof require)
-      ) {
+      if (require !== undefined && !jsonEq(require, (o.require ?? []) as typeof require)) {
         return false;
       }
       if (d.name !== undefined && d.name !== o.name) return false;
@@ -1356,10 +1489,7 @@ const policiesEq = (
       ) {
         return false;
       }
-      if (
-        d.sessionDuration !== undefined &&
-        d.sessionDuration !== o.sessionDuration
-      ) {
+      if (d.sessionDuration !== undefined && d.sessionDuration !== o.sessionDuration) {
         return false;
       }
       if (
@@ -1376,8 +1506,7 @@ const policiesEq = (
       }
       if (
         d.purposeJustificationRequired !== undefined &&
-        d.purposeJustificationRequired !==
-          (o.purposeJustificationRequired ?? false)
+        d.purposeJustificationRequired !== (o.purposeJustificationRequired ?? false)
       ) {
         return false;
       }
@@ -1427,10 +1556,7 @@ const attachObservedPolicyIds = (
           : p;
       });
 
-const bodyEqualsObserved = (
-  desired: AppMutableBody,
-  observed: ObservedApp,
-): boolean => {
+const bodyEqualsObserved = (desired: AppMutableBody, observed: ObservedApp): boolean => {
   if (desired.name !== undefined && desired.name !== observed.name) {
     return false;
   }
@@ -1444,17 +1570,11 @@ const bodyEqualsObserved = (
   // explicitly set them.
   if (
     desired.destinations !== undefined &&
-    JSON.stringify(desired.destinations) !==
-      JSON.stringify(observed.destinations ?? [])
+    JSON.stringify(desired.destinations) !== JSON.stringify(observed.destinations ?? [])
   ) {
     return false;
   }
-  if (
-    !oauthConfigurationEquals(
-      desired.oauthConfiguration,
-      observed.oauthConfiguration,
-    )
-  ) {
+  if (!oauthConfigurationEquals(desired.oauthConfiguration, observed.oauthConfiguration)) {
     return false;
   }
   if (
@@ -1481,14 +1601,13 @@ const bodyEqualsObserved = (
   ) {
     return false;
   }
-  if (
-    desired.tags !== undefined &&
-    !arrayEquals(desired.tags, observed.tags, jsonEq)
-  ) {
+  if (desired.tags !== undefined && !arrayEquals(desired.tags, observed.tags, jsonEq)) {
     return false;
   }
   if (!policiesEq(desired.policies, observed.policies)) {
     return false;
   }
-  return true;
+  return SETTINGS.every(
+    (key) => !subsetDiffers(desired[key], key === "saasApp" ? observed.saasApp : observed.raw[key]),
+  );
 };

@@ -28,12 +28,7 @@ export interface StartCluster extends Binding.Service<
   (
     cluster: Cluster,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      docdbelastic.StartClusterOutput,
-      docdbelastic.StartClusterError
-    >
+    () => Effect.Effect<docdbelastic.StartClusterOutput, docdbelastic.StartClusterError>
   >
 > {}
-export const StartCluster = Binding.Service<StartCluster>(
-  "AWS.DocDBElastic.StartCluster",
-);
+export const StartCluster = Binding.Service<StartCluster>("AWS.DocDBElastic.StartCluster");

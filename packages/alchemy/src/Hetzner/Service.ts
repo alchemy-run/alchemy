@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -10,16 +10,17 @@ import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
-import type { Server } from "./Server.ts";
-import { SshError, sshClientForServer } from "./Ssh.ts";
 import {
   collectBindingState,
   createHetznerHostedSupport,
   createHetznerHostRuntimeContext,
+  type HetznerBuildOptions,
   type HetznerHostRuntimeContext,
 } from "./hosted.ts";
+import type { ServiceBinding } from "./MountVolume.ts";
+import type { Providers } from "./Providers.ts";
+import type { Server } from "./Server.ts";
+import { sshClientForServer } from "./Ssh.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -58,9 +59,20 @@ export interface ServiceProps extends PlatformProps {
   env?: Record<string, any>;
   /**
    * Bundler configuration for `main`: rolldown `input`/`output` overrides
-   * plus pure-annotation options (`pure`).
+   * plus pure-annotation options (`pure`) and `install` for packages that
+   * must ship as real `node_modules` (see {@link HetznerBuildOptions}).
    */
-  build?: Bundle.BundleConfig;
+  build?: HetznerBuildOptions;
+  /**
+   * Extra host directories packed into the unit archive next to the
+   * bundled entry (e.g. a website `clientDirectory` at `dist/`). Hashed
+   * into `code.hash` so asset changes update the unit. Destination is
+   * relative to the unit root (`/opt/<unit>/`).
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    destination: string;
+  }>;
 }
 
 export type Service = Resource<
@@ -136,26 +148,23 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ```
  *
  * @resource
+ * @product Service
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Hetzner.Service", {
-  createRuntimeContext: createHetznerHostRuntimeContext("Hetzner.Service"),
-  // `{ server: Box }` at module scope is an Effect. Yield it here so the
-  // Server is registered and `news.server` is resolved attributes at
-  // reconcile (same DX as `yield* Server(...)` inside Effect.gen).
-  transformProps: (_id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const server = Effect.isEffect(props.server)
-        ? yield* props.server as Effect.Effect<Server, never, Providers>
-        : props.server;
-      return { ...props, server };
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Hetzner.Service", {
+    createRuntimeContext: createHetznerHostRuntimeContext("Hetzner.Service"),
+    // `{ server: Box }` at module scope is an Effect. Yield it here so the
+    // Server is registered and `news.server` is resolved attributes at
+    // reconcile (same DX as `yield* Server(...)` inside Effect.gen).
+    transformProps: (_id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const server = Effect.isEffect(props.server)
+          ? yield* props.server as Effect.Effect<Server, never, Providers>
+          : props.server;
+        return { ...props, server };
+      }),
+  });
 
 export class ServiceError extends Data.TaggedError("Hetzner.ServiceError")<{
   message: string;
@@ -177,18 +186,14 @@ const ipv4Of = (value: unknown): string | undefined => {
   return typeof rec.ipv4 === "string" ? rec.ipv4 : undefined;
 };
 
-const unwrapKey = (
-  value: Redacted.Redacted<string> | string | undefined,
-): string | undefined => {
+const unwrapKey = (value: Redacted.Redacted<string> | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
   return typeof value === "string" ? value : Redacted.value(value);
 };
 
 const privateKeyOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
-  return unwrapKey(
-    (value as { privateKey?: Redacted.Redacted<string> | string }).privateKey,
-  );
+  return unwrapKey((value as { privateKey?: Redacted.Redacted<string> | string }).privateKey);
 };
 
 const createUnitName = (id: string, existing?: string) =>
@@ -230,11 +235,7 @@ export const ServiceProvider = () =>
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!isResolved(news)) return undefined;
           const nextServer = serverIdOf(news.server);
-          if (
-            output !== undefined &&
-            nextServer !== undefined &&
-            output.serverId !== nextServer
-          ) {
+          if (output !== undefined && nextServer !== undefined && output.serverId !== nextServer) {
             return { action: "replace" } as const;
           }
           if (output !== undefined && news.main) {
@@ -248,10 +249,9 @@ export const ServiceProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           if (output === undefined) return undefined;
           const serverId =
-            output.serverId ??
-            (olds !== undefined ? serverIdOf(olds.server) : undefined);
+            output.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
           if (serverId === undefined) return undefined;
-          const live = yield* Services.servers.getServer({ id: serverId }).pipe(
+          const live = yield* Hetzner.servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
@@ -288,13 +288,13 @@ export const ServiceProvider = () =>
             ...news.env,
           };
 
-          const { archive, hash } = yield* hosted.bundleProgram(id, news);
+          const { archive, hash, entryRel } = yield* hosted.bundleProgram(id, news);
 
           const ssh = yield* openSession(news);
           yield* Effect.ensuring(
             Effect.gen(function* () {
               yield* hosted.waitForSsh(ssh);
-              // Attach (automount ok) then mkdir+mount+fstab. The same
+              // Attach (no automount) then mkdir+mount+fstab. The same
               // (volume, server, path) from two Services is one attach
               // and one mount — both steps are independently idempotent.
               yield* hosted.attachAndMount({
@@ -307,6 +307,7 @@ export const ServiceProvider = () =>
                 unitName,
                 archive,
                 env,
+                entryRel,
               });
             }),
             ssh.close,
@@ -323,15 +324,10 @@ export const ServiceProvider = () =>
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           const ssh = yield* openSession(olds).pipe(
-            Effect.catchTag("Hetzner.SshError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Hetzner.SshError", () => Effect.succeed(undefined)),
           );
           if (ssh === undefined) return;
-          yield* Effect.ensuring(
-            hosted.removeUnit({ ssh, unitName: output.unitName }),
-            ssh.close,
-          );
+          yield* Effect.ensuring(hosted.removeUnit({ ssh, unitName: output.unitName }), ssh.close);
         }),
       });
     }),

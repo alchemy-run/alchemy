@@ -1,7 +1,6 @@
 import * as certificateAuthorities from "@distilled.cloud/cloudflare/certificate-authorities";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -115,9 +114,7 @@ export const HostnameAssociation = Resource<HostnameAssociation>(TypeId);
 /**
  * Returns true if the given value is a HostnameAssociation resource.
  */
-export const isHostnameAssociation = (
-  value: unknown,
-): value is HostnameAssociation =>
+export const isHostnameAssociation = (value: unknown): value is HostnameAssociation =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameAssociationProvider = () =>
@@ -136,46 +133,33 @@ export const HostnameAssociationProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          certificateAuthorities
-            .getHostnameAssociation({ zoneId: zone.id })
-            .pipe(
-              Effect.map(
-                (observed): HostnameAssociationAttributes | undefined => {
-                  const hostnames = [...(observed.hostnames ?? [])];
-                  // An empty list is the singleton's "unconfigured"
-                  // state — nothing exists to enumerate (matches `read`).
-                  if (hostnames.length === 0) return undefined;
-                  return {
-                    zoneId: zone.id,
-                    mtlsCertificateId: undefined,
-                    hostnames,
-                  };
-                },
-              ),
-              // Zones without the mTLS entitlement reject the route
-              // (Forbidden) or aren't routable (InvalidRoute); skip them.
-              Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          certificateAuthorities.getHostnameAssociation({ zoneId: zone.id }).pipe(
+            Effect.map((observed): HostnameAssociationAttributes | undefined => {
+              const hostnames = [...(observed.hostnames ?? [])];
+              // An empty list is the singleton's "unconfigured"
+              // state — nothing exists to enumerate (matches `read`).
+              if (hostnames.length === 0) return undefined;
+              return {
+                zoneId: zone.id,
+                mtlsCertificateId: undefined,
+                hostnames,
+              };
+            }),
+            // Zones without the mTLS entitlement reject the route
+            // (Forbidden) or aren't routable (InvalidRoute); skip them.
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.succeed(undefined)),
+          ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is HostnameAssociationAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is HostnameAssociationAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as HostnameAssociationProps;
       const n = news as HostnameAssociationProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       // mtlsCertificateId keys the association — `undefined` (Managed CA)
@@ -195,19 +179,14 @@ export const HostnameAssociationProvider = () =>
       // Both sides keyed by a certificate: compare only once the new side is
       // a concrete string (an unresolved Input may still resolve to the same
       // id, so we leave that case to the engine's default update).
-      if (
-        typeof n.mtlsCertificateId === "string" &&
-        oldCertId !== n.mtlsCertificateId
-      ) {
+      if (typeof n.mtlsCertificateId === "string" && oldCertId !== n.mtlsCertificateId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const mtlsCertificateId =
         output !== undefined
@@ -277,10 +256,7 @@ export const HostnameAssociationProvider = () =>
   });
 
 /** Order-insensitive equality of two hostname lists (exact duplicates kept). */
-const hostnameSetEquals = (
-  a: ReadonlyArray<string>,
-  b: ReadonlyArray<string>,
-): boolean => {
+const hostnameSetEquals = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean => {
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();

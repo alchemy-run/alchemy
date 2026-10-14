@@ -19,12 +19,11 @@ export default Alchemy.Stack(
           "package.json",
           "next.config.mjs",
           "postcss.config.mjs",
-          "open-next.config.ts",
           "tsconfig.json",
         ],
       },
       env: {
-        GREETING: "Hello from Alchemy!",
+        GREETING: "Hello from Next.js on Cloudflare!",
       },
     });
 

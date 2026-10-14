@@ -1,3 +1,15 @@
+import { fileURLToPath } from "node:url";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as S3 from "@distilled.cloud/aws/s3";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import * as SSM from "@distilled.cloud/aws/ssm";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 /**
  * Actions under `alchemy dev`: the common shapes a deploy-time binding client
  * takes, each proven to land on the floci emulator rather than the real
@@ -32,38 +44,22 @@ import * as AWS from "@/AWS";
 import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import * as S3 from "@distilled.cloud/aws/s3";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import * as SSM from "@distilled.cloud/aws/ssm";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import { fileURLToPath } from "node:url";
+import { liveContext } from "./fixtures/live.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const echoHandlerPath = fileURLToPath(
-  new URL("./fixtures/actions/echo.mjs", import.meta.url),
-);
+const echoHandlerPath = fileURLToPath(new URL("./fixtures/actions/echo.mjs", import.meta.url));
 
 /** The emulator runs task containers on THIS machine. */
 const hostRuntimePlatform = {
-  cpuArchitecture:
-    process.arch === "arm64" ? ("ARM64" as const) : ("X86_64" as const),
+  cpuArchitecture: process.arch === "arm64" ? ("ARM64" as const) : ("X86_64" as const),
   operatingSystemFamily: "LINUX" as const,
 };
 
 /** Collect a streaming SDK body into its decoded text. */
 const readBody = (body: Stream.Stream<Uint8Array, Error>) =>
   Stream.runCollect(body).pipe(
-    Effect.map((chunks) =>
-      new TextDecoder().decode(Buffer.concat([...chunks])),
-    ),
+    Effect.map((chunks) => new TextDecoder().decode(Buffer.concat([...chunks]))),
   );
 
 test.provider(
@@ -147,17 +143,22 @@ test.provider(
       }).pipe(Effect.provide(flociServices()));
       expect(received.Messages?.[0]?.Body).toBe("uploads/hello.txt");
 
-      // …and the bucket never existed on the real cloud (the test body's
-      // ambient SDK is the live `testing` environment).
+      // …and the bucket never existed on the real cloud. The ambient
+      // environment in a dev run is the emulator, so the real cloud is
+      // reached EXPLICITLY via the live environment chain.
       const live = yield* S3.headBucket({ Bucket: outputs.bucketName }).pipe(
         Effect.map(() => "found" as const),
         Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+        Effect.provide(liveContext),
       );
       expect(live).toBe("not-found");
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dynamodb", "provider:aws:s3", "provider:aws:sqs", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider(
@@ -180,8 +181,7 @@ test.provider(
               return Effect.fn(function* () {
                 const current = yield* getParameter({ WithDecryption: true });
                 const raw = current.Parameter?.Value;
-                const value =
-                  typeof raw === "string" ? raw : Redacted.value(raw!);
+                const value = typeof raw === "string" ? raw : Redacted.value(raw!);
                 return { derived: `${value}:derived` };
               });
             }).pipe(Effect.provide(AWS.SSM.GetParameterHttp)),
@@ -203,13 +203,11 @@ test.provider(
         Name: outputs.target.parameterName,
       }).pipe(Effect.provide(flociServices()));
       const value = stored.Parameter?.Value;
-      expect(typeof value === "string" ? value : Redacted.value(value!)).toBe(
-        "region-a:derived",
-      );
+      expect(typeof value === "string" ? value : Redacted.value(value!)).toBe("region-a:derived");
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:ssm", "local"], timeout: 300_000 },
 );
 
 test.provider(
@@ -237,9 +235,10 @@ test.provider(
                 const response = yield* invoke({
                   Payload: new TextEncoder().encode(JSON.stringify(input)),
                 });
-                const result = JSON.parse(
-                  yield* readBody(response.Payload!),
-                ) as { echoed: { message: string }; from: string };
+                const result = JSON.parse(yield* readBody(response.Payload!)) as {
+                  echoed: { message: string };
+                  from: string;
+                };
                 return { statusCode: response.StatusCode, result };
               });
             }).pipe(Effect.provide(AWS.Lambda.InvokeFunctionHttp)),
@@ -259,7 +258,7 @@ test.provider(
       yield* stack.destroy();
     }),
   // First invoke pulls the Lambda runtime image on a cold machine.
-  { timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 600_000 },
 );
 
 test.provider(
@@ -308,7 +307,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:ecs", "local"], timeout: 300_000 },
 );
 
 test.provider(
@@ -321,9 +320,7 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             // Pinned live: its clients belong to the real cloud…
-            const cluster = yield* AWS.ECS.Cluster("MixedCluster").pipe(
-              Alchemy.remote(),
-            );
+            const cluster = yield* AWS.ECS.Cluster("MixedCluster").pipe(Alchemy.remote());
             // …while the task is emulated. One API call cannot span both.
             const task = yield* AWS.ECS.Task("MixedTask", {
               image: "busybox:stable",
@@ -355,5 +352,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:ecs", "live"], timeout: 300_000 },
 );

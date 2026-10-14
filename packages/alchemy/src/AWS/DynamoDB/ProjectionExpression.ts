@@ -9,11 +9,7 @@ import type {
   Word,
 } from "./Expr.ts";
 
-export type ParseProjectionExpression<Text extends string> = Parse<
-  Text,
-  [],
-  undefined
->;
+export type ParseProjectionExpression<Text extends string> = Parse<Text, [], undefined>;
 
 type AsExpr<T> = Extract<T, Expr>;
 
@@ -52,14 +48,9 @@ type Parse<
 type Concat<
   Expressions extends Expr[],
   CurrentExpr extends Expr | undefined,
-> = undefined extends CurrentExpr
-  ? Expressions
-  : [...Expressions, Extract<CurrentExpr, Expr>];
+> = undefined extends CurrentExpr ? Expressions : [...Expressions, Extract<CurrentExpr, Expr>];
 
-type Append<
-  Exp extends Expr | undefined,
-  char extends string,
-> = Exp extends undefined
+type Append<Exp extends Expr | undefined, char extends string> = Exp extends undefined
   ? Identifier<char>
   : Exp extends Identifier<infer Name>
     ? Identifier<`${Name}${char}`>
@@ -76,9 +67,7 @@ type Append<
               : never;
 
 export type ApplyProjection<T, Expr extends string> = Flatten<
-  UnionToIntersection<
-    ApplyProjectionExpr<T, ParseProjectionExpression<Expr>[number]>
-  >
+  UnionToIntersection<ApplyProjectionExpr<T, ParseProjectionExpression<Expr>[number]>>
 >;
 
 type ApplyProjectionExpr<T, Exp extends Expr> = T extends undefined
@@ -107,9 +96,7 @@ type ApplyProjectionExpr<T, Exp extends Expr> = T extends undefined
             : never
           : never;
 
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-  k: infer I,
-) => void
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void
   ? I
   : never;
 
@@ -121,10 +108,7 @@ type Flatten<T> = T extends object
       }
   : T;
 
-type FlattenArray<
-  T extends { [i in number]: any },
-  i extends number = 0,
-> = i extends keyof T
+type FlattenArray<T extends { [i in number]: any }, i extends number = 0> = i extends keyof T
   ? [T[i], ...FlattenArray<T, Inc<i>>]
   : number extends i
     ? []

@@ -54,10 +54,7 @@ export interface UpdateEventLabel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateEventLabelRequest,
-    ) => Effect.Effect<
-      frauddetector.UpdateEventLabelResult,
-      frauddetector.UpdateEventLabelError
-    >
+    ) => Effect.Effect<frauddetector.UpdateEventLabelResult, frauddetector.UpdateEventLabelError>
   >
 > {}
 export const UpdateEventLabel = Binding.Service<UpdateEventLabel>(

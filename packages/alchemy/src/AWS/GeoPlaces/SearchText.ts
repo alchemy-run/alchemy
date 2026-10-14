@@ -40,6 +40,4 @@ export interface SearchText extends Binding.Service<
     ) => Effect.Effect<geoPlaces.SearchTextResponse, geoPlaces.SearchTextError>
   >
 > {}
-export const SearchText = Binding.Service<SearchText>(
-  "AWS.GeoPlaces.SearchText",
-);
+export const SearchText = Binding.Service<SearchText>("AWS.GeoPlaces.SearchText");

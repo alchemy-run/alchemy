@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { MethodResource } from "@/AWS/ApiGateway/Method.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { MethodResource } from "@/AWS/ApiGateway/Method.ts";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -43,6 +43,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
 // Canonical `list()` test: deploy a RestApi + Method (parents included), then
@@ -87,4 +88,5 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );

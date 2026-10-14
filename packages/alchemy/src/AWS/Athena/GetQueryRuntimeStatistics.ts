@@ -38,7 +38,6 @@ export interface GetQueryRuntimeStatistics extends Binding.Service<
   >
 > {}
 
-export const GetQueryRuntimeStatistics =
-  Binding.Service<GetQueryRuntimeStatistics>(
-    "AWS.Athena.GetQueryRuntimeStatistics",
-  );
+export const GetQueryRuntimeStatistics = Binding.Service<GetQueryRuntimeStatistics>(
+  "AWS.Athena.GetQueryRuntimeStatistics",
+);

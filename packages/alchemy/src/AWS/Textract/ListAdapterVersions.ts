@@ -28,10 +28,7 @@ export interface ListAdapterVersions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<textract.ListAdapterVersionsRequest, "AdapterId">,
-    ) => Effect.Effect<
-      textract.ListAdapterVersionsResponse,
-      textract.ListAdapterVersionsError
-    >
+    ) => Effect.Effect<textract.ListAdapterVersionsResponse, textract.ListAdapterVersionsError>
   >
 > {}
 export const ListAdapterVersions = Binding.Service<ListAdapterVersions>(

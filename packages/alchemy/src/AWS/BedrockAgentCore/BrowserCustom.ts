@@ -103,18 +103,13 @@ export interface BrowserCustom extends Resource<
  *
  * @resource
  */
-export const BrowserCustom = Resource<BrowserCustom>(
-  "AWS.BedrockAgentCore.BrowserCustom",
-);
+export const BrowserCustom = Resource<BrowserCustom>("AWS.BedrockAgentCore.BrowserCustom");
 
 export const BrowserCustomProvider = () =>
   Provider.effect(
     BrowserCustom,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<BrowserCustomProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<BrowserCustomProps, "name">) {
         return props.name ?? (yield* createAgentCoreName(id));
       });
 
@@ -123,33 +118,18 @@ export const BrowserCustomProvider = () =>
       const getLiveOrUndefined = Effect.fn(function* (browserId: string) {
         const found = yield* control
           .getBrowser({ browserId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return found === undefined ||
-          found.status === "DELETED" ||
-          found.status === "DELETING"
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        return found === undefined || found.status === "DELETED" || found.status === "DELETING"
           ? undefined
           : found;
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* control.listBrowsers
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* control.listBrowsers.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.browserSummaries ?? [])
-          .find(
-            (s) =>
-              s.name === name &&
-              s.status !== "DELETED" &&
-              s.status !== "DELETING",
-          );
-        return summary === undefined
-          ? undefined
-          : yield* getLiveOrUndefined(summary.browserId);
+          .find((s) => s.name === name && s.status !== "DELETED" && s.status !== "DELETING");
+        return summary === undefined ? undefined : yield* getLiveOrUndefined(summary.browserId);
       });
 
       const toAttributes = (browser: control.GetBrowserResponse) => ({
@@ -164,9 +144,7 @@ export const BrowserCustomProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* control.listBrowsers
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* control.listBrowsers.pages({}).pipe(Stream.runCollect);
             const summaries = Array.from(pages)
               .flatMap((page) => page.browserSummaries ?? [])
               .filter((s) => s.status !== "DELETED" && s.status !== "DELETING");
@@ -181,9 +159,7 @@ export const BrowserCustomProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const browser = output?.browserId
             ? yield* getLiveOrUndefined(output.browserId)
-            : yield* findByName(
-                yield* createName(id, olds ?? ({} as BrowserCustomProps)),
-              );
+            : yield* findByName(yield* createName(id, olds ?? ({} as BrowserCustomProps)));
           if (browser === undefined) return undefined;
           const attrs = toAttributes(browser);
           const tags = yield* readAgentCoreTags(browser.browserArn);
@@ -199,16 +175,10 @@ export const BrowserCustomProvider = () =>
           const newName = yield* createName(id, newProps);
           if (
             oldName !== newName ||
-            (oldProps.description ?? undefined) !==
-              (newProps.description ?? undefined) ||
-            (oldProps.executionRoleArn ?? undefined) !==
-              (newProps.executionRoleArn ?? undefined) ||
-            JSON.stringify(
-              oldProps.networkConfiguration ?? { networkMode: "PUBLIC" },
-            ) !==
-              JSON.stringify(
-                newProps.networkConfiguration ?? { networkMode: "PUBLIC" },
-              ) ||
+            (oldProps.description ?? undefined) !== (newProps.description ?? undefined) ||
+            (oldProps.executionRoleArn ?? undefined) !== (newProps.executionRoleArn ?? undefined) ||
+            JSON.stringify(oldProps.networkConfiguration ?? { networkMode: "PUBLIC" }) !==
+              JSON.stringify(newProps.networkConfiguration ?? { networkMode: "PUBLIC" }) ||
             JSON.stringify(oldProps.recording ?? null) !==
               JSON.stringify(newProps.recording ?? null)
           ) {
@@ -223,9 +193,7 @@ export const BrowserCustomProvider = () =>
           const desiredTags = { ...props.tags, ...internalTags };
 
           // 1. OBSERVE
-          let browser = output?.browserId
-            ? yield* getLiveOrUndefined(output.browserId)
-            : undefined;
+          let browser = output?.browserId ? yield* getLiveOrUndefined(output.browserId) : undefined;
           if (browser === undefined) {
             browser = yield* findByName(name);
           }
@@ -246,9 +214,7 @@ export const BrowserCustomProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
             browser =
               created === undefined
@@ -277,19 +243,14 @@ export const BrowserCustomProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteBrowser({ browserId: output.browserId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           yield* control.getBrowser({ browserId: output.browserId }).pipe(
             Effect.map((b) => b.status as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("DELETED" as string),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("DELETED" as string)),
             Effect.repeat({
               schedule: Schedule.fixed("3 seconds"),
-              until: (status) =>
-                status === "DELETED" || status === "DELETE_FAILED",
+              until: (status) => status === "DELETED" || status === "DELETE_FAILED",
               times: 20,
             }),
           );

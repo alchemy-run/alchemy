@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { View } from "./View.ts";
 
-export interface ListResourcesRequest extends Omit<
-  RE2.ListResourcesInput,
-  "ViewArn"
-> {}
+export interface ListResourcesRequest extends Omit<RE2.ListResourcesInput, "ViewArn"> {}
 
 /**
  * Runtime binding for `resource-explorer-2:ListResources`.
@@ -46,6 +43,4 @@ export interface ListResources extends Binding.Service<
     ) => Effect.Effect<RE2.ListResourcesOutput, RE2.ListResourcesError>
   >
 > {}
-export const ListResources = Binding.Service<ListResources>(
-  "AWS.ResourceExplorer.ListResources",
-);
+export const ListResources = Binding.Service<ListResources>("AWS.ResourceExplorer.ListResources");

@@ -21,11 +21,7 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
  * - **`yield*`-able inside an Effect-native Worker** — its iterator attaches the
  *   binding to the surrounding Worker and resolves to the runtime client.
  */
-export interface Binding<
-  Kind extends string = string,
-  Client = unknown,
-  Service = unknown,
-> {
+export interface Binding<Kind extends string = string, Client = unknown, Service = unknown> {
   readonly kind: Kind;
   /** Binding name; the object key when declared on `env`. */
   readonly name: string;
@@ -58,11 +54,7 @@ export interface Binding<
   pipe(): BindingEffect<this>;
   pipe<A>(ab: (self: BindingEffect<this>) => A): A;
   pipe<A, B>(ab: (self: BindingEffect<this>) => A, bc: (a: A) => B): B;
-  pipe<A, B, C>(
-    ab: (self: BindingEffect<this>) => A,
-    bc: (a: A) => B,
-    cd: (b: B) => C,
-  ): C;
+  pipe<A, B, C>(ab: (self: BindingEffect<this>) => A, bc: (a: A) => B, cd: (b: B) => C): C;
 }
 
 /**
@@ -78,9 +70,7 @@ export interface Binding<
  * `"~alchemy/Binding"` brand lets `InferEnv` map it to the native runtime
  * type.
  */
-export interface BindingEffect<
-  B extends Binding<any, any, any>,
-> extends Effect.Effect<
+export interface BindingEffect<B extends Binding<any, any, any>> extends Effect.Effect<
   B extends Binding<any, infer Client, any> ? Client : never,
   never,
   B extends Binding<any, any, infer Service> ? Service : never
@@ -116,11 +106,7 @@ export type AnyBindingEffect = BindingEffect<Binding<any, any, any>>;
  * });
  * ```
  */
-export interface Service<
-  Self,
-  Id extends string,
-  Client,
-> extends CoreBinding.Service<
+export interface Service<Self, Id extends string, Client> extends CoreBinding.Service<
   Self,
   Id,
   (binding: Binding<Id, Client, Self>) => Effect.Effect<Client>
@@ -150,13 +136,9 @@ export const Service = <
    */
   readonly parse?: (...args: any[]) => { name?: string } & Payload;
   /** Build the wire binding spec from the resolved binding value. */
-  readonly toWorkerBinding: (
-    binding: { readonly name: string } & Payload,
-  ) => WorkerBinding;
+  readonly toWorkerBinding: (binding: { readonly name: string } & Payload) => WorkerBinding;
 }): Self => {
-  const tag = CoreBinding.Service<Self & { kind: "Service"; key: string }>(
-    config.id as never,
-  );
+  const tag = CoreBinding.Service<Self & { kind: "Service"; key: string }>(config.id as never);
   const bind = tag as unknown as (binding: unknown) => Effect.Effect<unknown>;
 
   const make = (data: Record<PropertyKey, unknown>) => {
@@ -178,9 +160,7 @@ export const Service = <
           : make({ ...data, devRemote: policy || undefined });
       const impl = yield* Effect.serviceOption(tag as never);
       return Option.isSome(impl)
-        ? yield* (impl.value as (b: unknown) => Effect.Effect<unknown>)(
-            decorated,
-          )
+        ? yield* (impl.value as (b: unknown) => Effect.Effect<unknown>)(decorated)
         : decorated;
     });
     self.pipe = (...fns: Array<(value: unknown) => unknown>) =>
@@ -209,7 +189,5 @@ export const isBinding = (value: unknown): value is Binding =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  typeof (value as { toWorkerBinding?: unknown }).toWorkerBinding ===
-    "function" &&
-  typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
-    "function";
+  typeof (value as { toWorkerBinding?: unknown }).toWorkerBinding === "function" &&
+  typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function";

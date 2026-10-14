@@ -1,16 +1,13 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
-import {
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
-import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/index.ts";
-import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
+import { Resource } from "../../Resource.ts";
+import type { ProcessServices } from "../../Server/Process.ts";
+import type { Providers } from "../Providers.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -57,8 +54,7 @@ export namespace ContainerApplication {
   export type Affinities = {
     colocation?: "datacenter";
   };
-  export type Configuration =
-    Containers.CreateContainerApplicationRequest["configuration"];
+  export type Configuration = Containers.CreateContainerApplicationRequest["configuration"];
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -104,11 +100,12 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Scheduling policy used by Cloudflare's containers control plane.
    * @default "default"
    */
-  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  schedulingPolicy?: "default" | "regional";
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
-   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * {@link memoryMib}/{@link disk} is set. (`"dev"` is wrangler's deprecated
+   * alias for `"lite"`.)
    * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
@@ -132,6 +129,12 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Memory allocation override for each deployment.
    */
   memory?: string;
+  /**
+   * Memory allocation override for each deployment, in MiB.
+   * Custom sizing requires at least 1 {@link vcpu} and 3072 MiB of memory
+   * per vCPU for the first 4 vCPUs.
+   */
+  memoryMib?: number;
   /**
    * Disk allocation override for each deployment.
    */
@@ -185,6 +188,68 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * @default "registry.cloudflare.com"
    */
   registryId?: string;
+  /**
+   * Image publication configuration. Builds are cached by default in a
+   * repository named after the application's physical name. Generated names
+   * include the stage and resource instance, so updates within that stage can
+   * reuse images. Replacement or destroy/recreate can select a new repository.
+   * Set `repository` to share finished images and build layers across stages.
+   *
+   * @example
+   * ```typescript
+   * // Default: cached in this application's generated repository.
+   * const app = yield* Cloudflare.Container("Web", { context: "./web" }).Application;
+   * // Repository: registry.cloudflare.com/<account-id>/<app.applicationName>
+   * ```
+   */
+  publish?: {
+    /**
+     * Destination repository name within the current Cloudflare account's
+     * container registry, for example `"web"`. This is not a source image,
+     * registry hostname, account ID, tag, or fully qualified image reference.
+     * Alchemy lowercases the name and adds the registry host and account ID:
+     * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
+     * The container application's name is independent of this repository name.
+     * Omitting `publish` uses the application's physical name instead and still
+     * enables caching. Generated names are scoped to the stage and resource
+     * instance; an explicit repository allows cross-stage reuse.
+     *
+     * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
+     * tag and an inline layer-cache tag, then deploys an immutable manifest
+     * digest. The build hash and manifest digest are different identifiers.
+     * Builds targeting this repository import reusable layers from its shared
+     * `:buildcache` tag, even when their full input hashes differ. The tag points
+     * to the latest exported inline cache, not an aggregate of all historical
+     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
+     *
+     * Applications and stages in the same account can share `"web"`. Matching
+     * build inputs reuse the published image; changed inputs produce another
+     * hash tag in the same repository. Finished-image cache reuse applies to
+     * builds, not to re-publishing remote images. Pin base images and downloaded
+     * dependencies: changes outside the build context cannot invalidate its
+     * content hash.
+     *
+     * External remote images are re-published into this repository without
+     * building them. Images already in the target registry keep their existing
+     * repository; setting this option does not copy them into another one.
+     *
+     * @example
+     * ```typescript
+     * const app = yield* Cloudflare.Container("WebProduction", {
+     *   context: "./web",
+     *   publish: { repository: "web" },
+     * }).Application;
+     *
+     * // Published build:
+     * // registry.cloudflare.com/<account-id>/web:<build-hash>
+     * // Shared build-layer cache:
+     * // registry.cloudflare.com/<account-id>/web:buildcache
+     * // Deployed image (app.configuration.image):
+     * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+     * ```
+     */
+    repository: string;
+  };
   /**
    * Environment variables passed to the container runtime.
    */
@@ -262,11 +327,10 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    */
   autoInstallExternals?: boolean;
   /**
-   * Bundler configuration for {@link main}: rolldown `input`/`output`
-   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
-   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
-   * pure by default so unused code from those packages is tree-shaken; list
-   * additional packages via `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for {@link main}. Unused code is tree-shaken.
+   * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
+   * parts prune more aggressively. List extra packages with
+   * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
 }
@@ -312,25 +376,102 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
   image: string;
 }
 
+/** SSH access to a container application's instances. */
+export interface ContainerSshConfiguration {
+  /** Whether instances accept SSH connections. */
+  enabled: boolean;
+  /** Port the SSH server listens on inside each instance. */
+  port?: number;
+}
+
 /**
- * Container application props — the image comes from exactly one of three
- * sources, declared flat on the props: `main` (bundled Effect program,
- * composing with `image` / inline `dockerfile` as its environment),
- * `context`/`dockerfile` (user Dockerfile), or `image` (pre-built remote
- * image).
+ * Application-wide settings of a Durable Object class's container application.
+ * Every Container bound to the class may declare them; declarations must agree.
+ */
+export interface DurableObjectApplicationSettings {
+  /**
+   * SSH access to every instance of the application. Removing a previously
+   * declared value disables SSH.
+   */
+  ssh?: ContainerSshConfiguration;
+  /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
+  /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
+  observability?: Containers.ContainerApplicationObservability;
+}
+
+/**
+ * One image a Durable Object starts with `ctx.container.start()`.
+ *
+ * Cloudflare allows one container application per Durable Object class. Every
+ * `durable_object` Container bound to the class adds its image to that
+ * application, under the Container's id. Bind several Containers to start
+ * different images from the same class, one at a time. One Container may be
+ * bound to several classes.
+ *
+ * An Effect-native Durable Object binds a Container with `yield*`. An async
+ * Worker attaches it to a class with
+ * `Cloudflare.DurableObject(className, { containers })`.
+ *
+ * The policy is immutable: migrating an existing fleet application requires a
+ * new application and Durable Object namespace.
+ */
+export interface DurableObjectContainerProps
+  extends DurableObjectApplicationSettings, PlatformProps {
+  /** Select images and instance sizes in `ctx.container.start()`. */
+  schedulingPolicy: "durable_object";
+  /**
+   * Registry image to copy into Cloudflare's managed registry, e.g.
+   * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
+   * Omit every image source to contribute no image: `start()` then uses the
+   * managed `cloudflare/debian-trixie` image unless given another.
+   */
+  image?: string;
+  /**
+   * Docker build context. Setting `context` or `dockerfile` builds the image;
+   * `context` defaults to the current directory.
+   */
+  context?: string;
+  /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
+  dockerfile?: string | InlineDockerfile;
+  /** Image publication and build-cache configuration. */
+  publish?: ContainerApplicationPropsBase["publish"];
+  /**
+   * Maximum wait for Cloudflare to prepare the published image, including API calls.
+   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
+   * Cancellation stops waiting; another deployment reuses the published registry image.
+   * Use an immutable source digest or change the image reference to refresh the image.
+   * @default "30 minutes"
+   */
+  imagePreparationTimeout?: Duration.Input;
+}
+
+/**
+ * Fleet-scheduled applications select a deployment image through `main`
+ * (bundled Effect program), `context`/`dockerfile`, or a pre-built `image`.
+ * A Durable Object-managed Container publishes one image that its Durable
+ * Object selects at runtime.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
   | ExternalContainerProps
-  | RemoteContainerProps;
+  | RemoteContainerProps
+  | DurableObjectContainerProps;
 
 /**
- * INTERNAL — the loose provider-side view across the three variants: every
+ * INTERNAL — the loose provider-side view across the variants: every
  * variant-specific field optional at its widest type. Each union member is
  * assignable to this shape, so provider/bundle code annotates helper params
  * with it instead of narrowing the union at every property access.
  */
-export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
+export interface AnyContainerApplicationProps extends Omit<
+  ContainerApplicationPropsBase,
+  "schedulingPolicy"
+> {
+  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  ssh?: ContainerSshConfiguration;
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
+  imagePreparationTimeout?: Duration.Input;
   main?: string;
   image?: string;
   context?: string;
@@ -342,10 +483,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   build?: Bundle.BundleConfig;
 }
 
-export type ContainerServices =
-  | ContainerApplication
-  | PlatformServices
-  | Server.ProcessServices;
+export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 
@@ -481,16 +619,13 @@ export type ContainerShape = Main<ContainerServices>;
  * bundled program is still layered on top.
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the container program doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -500,18 +635,7 @@ export type ContainerShape = Main<ContainerServices>;
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -679,11 +803,15 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   {
     /**
      * Cloudflare-assigned unique identifier of the container application.
+     * Empty for a Durable Object-managed Container: the application belongs
+     * to the Durable Object class that binds it.
      */
     applicationId: string;
     /**
      * The resolved application name (either the provided `name` or the
      * deterministic physical name derived from the stack, stage, and logical ID).
+     * For a Durable Object-managed Container, the name of its default image
+     * repository.
      */
     applicationName: string;
     /**
@@ -695,13 +823,14 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     schedulingPolicy: ContainerApplication.SchedulingPolicy;
     /**
-     * The current desired number of instances.
+     * The current desired number of instances. Unset for Durable Object-managed applications.
      */
-    instances: number;
+    instances: number | undefined;
     /**
      * The maximum number of instances the application may scale to.
+     * Unset for Durable Object-managed applications.
      */
-    maxInstances: number;
+    maxInstances: number | undefined;
     /**
      * Resource constraints applied to the application, if any.
      */
@@ -713,8 +842,18 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     /**
      * The resolved deployment configuration (image, networking, secrets, ports,
      * checks, etc.) currently applied to the application.
+     * Durable Object-managed applications configure each instance at start().
      */
-    configuration: ContainerApplication.Configuration;
+    configuration: Partial<ContainerApplication.Configuration> &
+      Containers.DurableObjectContainerConfiguration;
+    /** Application-wide logging declared by a Durable Object-managed Container. */
+    observability?: Containers.ContainerApplicationObservability;
+    /**
+     * The prepared, digest-pinned image of a Durable Object-managed Container,
+     * or its local image key in `alchemy dev`. Unset when the Container
+     * declares no image source.
+     */
+    image?: string;
     /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.
@@ -730,8 +869,9 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     createdAt: string;
     /**
      * The application's configuration version, incremented on each update.
+     * Unset for Durable Object-managed applications.
      */
-    version: number;
+    version: number | undefined;
     /**
      * Internal hashes of the built image and desired application
      * configuration, used to skip unchanged builds and updates.

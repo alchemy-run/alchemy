@@ -150,9 +150,7 @@ export interface ImageRecipe extends Resource<
  *
  * @resource
  */
-export const ImageRecipe = Resource<ImageRecipe>(
-  "AWS.ImageBuilder.ImageRecipe",
-);
+export const ImageRecipe = Resource<ImageRecipe>("AWS.ImageBuilder.ImageRecipe");
 
 export const ImageRecipeProvider = () =>
   Provider.effect(
@@ -163,8 +161,7 @@ export const ImageRecipeProvider = () =>
           ? Effect.succeed(props.imageRecipeName)
           : createPhysicalName({ id, maxLength: 126 });
 
-      const toVersion = (props: ImageRecipeProps) =>
-        props.semanticVersion ?? "1.0.0";
+      const toVersion = (props: ImageRecipeProps) => props.semanticVersion ?? "1.0.0";
 
       const toArn = (name: string, version: string) =>
         imageBuilderArn("image-recipe", `${name}/${version}`);
@@ -172,20 +169,14 @@ export const ImageRecipeProvider = () =>
       const getRecipe = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImageRecipe({ imageRecipeArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.imageRecipe;
       });
 
       const toAttrs = Effect.fn(function* (recipe: imagebuilder.ImageRecipe) {
         if (!recipe.arn || !recipe.name || !recipe.version) {
           return yield* Effect.fail(
-            new Error(
-              "Image Builder image recipe is missing its ARN, name, or version",
-            ),
+            new Error("Image Builder image recipe is missing its ARN, name, or version"),
           );
         }
         return {
@@ -227,8 +218,7 @@ export const ImageRecipeProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
-            output?.imageRecipeArn ??
-            (yield* toArn(yield* toName(id, olds), toVersion(olds)));
+            output?.imageRecipeArn ?? (yield* toArn(yield* toName(id, olds), toVersion(olds)));
           const recipe = yield* getRecipe(arn);
           if (recipe === undefined) return undefined;
           const attrs = yield* toAttrs(recipe);
@@ -257,9 +247,7 @@ export const ImageRecipeProvider = () =>
             const observedComponents = (observed.components ?? []).map(
               (component) => component.componentArn,
             );
-            const desiredComponents = news.components.map(
-              (component) => component.componentArn,
-            );
+            const desiredComponents = news.components.map((component) => component.componentArn);
             if (
               !deepEqual(observedComponents, desiredComponents) ||
               observed.parentImage !== news.parentImage
@@ -281,23 +269,18 @@ export const ImageRecipeProvider = () =>
               description: news.description,
               blockDeviceMappings: news.blockDeviceMappings,
               workingDirectory: news.workingDirectory,
-              additionalInstanceConfiguration:
-                news.additionalInstanceConfiguration,
+              additionalInstanceConfiguration: news.additionalInstanceConfiguration,
               amiTags: news.amiTags,
               tags: desiredTags,
               clientToken,
             });
             if (!created.imageRecipeArn) {
-              return yield* Effect.fail(
-                new Error("CreateImageRecipe returned no imageRecipeArn"),
-              );
+              return yield* Effect.fail(new Error("CreateImageRecipe returned no imageRecipeArn"));
             }
             observed = yield* getRecipe(created.imageRecipeArn);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `created Image Builder recipe '${name}' is not readable`,
-                ),
+                new Error(`created Image Builder recipe '${name}' is not readable`),
               );
             }
           }
@@ -317,9 +300,7 @@ export const ImageRecipeProvider = () =>
             imagebuilder.deleteImageRecipe({
               imageRecipeArn: output.imageRecipeArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Do not discard state until Image Builder confirms the owned
           // version is gone. The auto-created recipe log group is shared by
@@ -337,20 +318,14 @@ export const ImageRecipeProvider = () =>
             yield* Effect.sleep("1 second");
           }
 
-          const summaries = yield* imagebuilder.listImageRecipes
-            .pages({ owner: "Self" })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((pages) =>
-                Array.from(pages).flatMap(
-                  (page) => page.imageRecipeSummaryList ?? [],
-                ),
-              ),
-            );
+          const summaries = yield* imagebuilder.listImageRecipes.pages({ owner: "Self" }).pipe(
+            Stream.runCollect,
+            Effect.map((pages) =>
+              Array.from(pages).flatMap((page) => page.imageRecipeSummaryList ?? []),
+            ),
+          );
           const sameName = summaries.filter(
-            (summary) =>
-              summary.name === output.imageRecipeName &&
-              summary.arn !== undefined,
+            (summary) => summary.name === output.imageRecipeName && summary.arn !== undefined,
           );
           const liveSameName = yield* Effect.forEach(
             sameName,
@@ -358,9 +333,7 @@ export const ImageRecipeProvider = () =>
             { concurrency: 4 },
           );
           if (liveSameName.every((recipe) => recipe === undefined)) {
-            yield* deleteImageBuilderLogGroup(
-              `/aws/imagebuilder/${output.imageRecipeName}`,
-            );
+            yield* deleteImageBuilderLogGroup(`/aws/imagebuilder/${output.imageRecipeName}`);
           }
         }),
 
@@ -383,9 +356,7 @@ export const ImageRecipeProvider = () =>
                 (summary) =>
                   getRecipe(summary.arn).pipe(
                     Effect.flatMap((recipe) =>
-                      recipe === undefined
-                        ? Effect.succeed(undefined)
-                        : toAttrs(recipe),
+                      recipe === undefined ? Effect.succeed(undefined) : toAttrs(recipe),
                     ),
                   ),
                 { concurrency: 4 },

@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
-export interface TerminateMicrovmRequest
-  extends microvms.TerminateMicrovmRequest {}
+export interface TerminateMicrovmRequest extends microvms.TerminateMicrovmRequest {}
 
 /**
  * Runtime binding for `TerminateMicrovm`.
@@ -28,12 +27,7 @@ export interface TerminateMicrovm extends Binding.Service<
   ) => Effect.Effect<
     (
       request: TerminateMicrovmRequest,
-    ) => Effect.Effect<
-      microvms.TerminateMicrovmResponse,
-      microvms.TerminateMicrovmError
-    >
+    ) => Effect.Effect<microvms.TerminateMicrovmResponse, microvms.TerminateMicrovmError>
   >
 > {}
-export const TerminateMicrovm = Binding.Service<TerminateMicrovm>(
-  "AWS.Lambda.TerminateMicrovm",
-);
+export const TerminateMicrovm = Binding.Service<TerminateMicrovm>("AWS.Lambda.TerminateMicrovm");

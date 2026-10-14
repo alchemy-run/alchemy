@@ -30,12 +30,7 @@ export interface ListSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<deadline.ListSessionsRequest, "farmId" | "queueId">,
-    ) => Effect.Effect<
-      deadline.ListSessionsResponse,
-      deadline.ListSessionsError
-    >
+    ) => Effect.Effect<deadline.ListSessionsResponse, deadline.ListSessionsError>
   >
 > {}
-export const ListSessions = Binding.Service<ListSessions>(
-  "AWS.Deadline.ListSessions",
-);
+export const ListSessions = Binding.Service<ListSessions>("AWS.Deadline.ListSessions");

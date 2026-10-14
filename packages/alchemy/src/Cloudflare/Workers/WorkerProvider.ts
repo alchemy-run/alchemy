@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -5,6 +6,7 @@ import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -12,28 +14,28 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { isHttpClientError } from "effect/unstable/http/HttpClientError";
-import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
+import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { localRuntimeServices } from "../LocalRuntime.ts";
-import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
-import { CloudflareLogs } from "../Logs.ts";
 import {
-  resolveZoneId,
-  type Reference as ZoneReference,
-} from "../Zone/lookup.ts";
+  assertBindingContainersOnAsyncClasses,
+  mergeWorkerContainers,
+} from "../Containers/ContainerConfiguration.ts";
+import { localRuntimeServices } from "../LocalRuntime.ts";
+import { CloudflareLogs } from "../Logs.ts";
+import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
+import { resolveZoneId, type Reference as ZoneReference } from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
@@ -44,11 +46,15 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
+import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
   Worker,
-  type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -57,15 +63,14 @@ import {
   getCacheBinding,
   getCronBindings,
   isContainerDecl,
+  resolveObservability,
 } from "./WorkerAsyncBindings.ts";
-import type {
-  WireWorkerBinding,
-  WorkerBinding,
-  WorkerSettingsBinding,
+import {
+  type WireWorkerBinding,
+  type WorkerBinding,
+  type WorkerSettingsBinding,
+  withoutDevOnlyBindings,
 } from "./WorkerBinding.ts";
-import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
-import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -85,18 +90,14 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
  * Moving a Durable Object class between Workers is always declared: set
  * `transferredFrom` on the Durable Object at its **new host** — naming the
  * former host by Worker logical id (same stack) or physical script name — and
- * Alchemy performs the data-preserving `transferred_classes` migration on the
- * new host's deploy; this deploy then converges on its own. To abandon the
+ * Alchemy moves the namespace, with its data, on the new host's deploy; this
+ * deploy then converges on its own. To abandon the
  * data instead, remove the binding entirely in one deploy (which deletes the
  * class and its data), then add the cross-script binding in a second deploy.
  */
 export class DurableObjectTransferRequired extends Data.TaggedError(
   "DurableObjectTransferRequired",
-)<{
-  scriptName: string;
-  className: string;
-  targetScriptName: string | undefined;
-}> {
+)<{ scriptName: string; className: string; targetScriptName: string | undefined }> {
   override get message() {
     return (
       `Durable Object class '${this.className}' still lives on Worker '${this.scriptName}' but this deploy re-binds it as a cross-script reference` +
@@ -118,12 +119,7 @@ export class DurableObjectTransferRequired extends Data.TaggedError(
  */
 export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
   "AmbiguousDurableObjectTransfer",
-)<{
-  scriptName: string;
-  logicalId: string;
-  className: string;
-  sources: string[];
-}> {
+)<{ scriptName: string; logicalId: string; className: string; sources: string[] }> {
   override get message() {
     return (
       `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
@@ -141,9 +137,7 @@ export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
  *
  * @internal
  */
-export const resolveNamespaceName = (
-  namespace: unknown,
-): string | undefined => {
+export const resolveNamespaceName = (namespace: unknown): string | undefined => {
   if (namespace == null) return undefined;
   if (typeof namespace === "string") return namespace;
   return (namespace as { name?: string }).name;
@@ -175,9 +169,7 @@ export const resolveTailConsumers = (
   if (tailConsumers == null) return undefined;
   return tailConsumers.flatMap((consumer) => {
     const service =
-      typeof consumer === "string"
-        ? consumer
-        : (consumer as { workerName?: unknown }).workerName;
+      typeof consumer === "string" ? consumer : (consumer as { workerName?: unknown }).workerName;
     return typeof service === "string" ? [{ service }] : [];
   });
 };
@@ -189,9 +181,7 @@ export const resolveTailConsumers = (
  * worker, an out-of-range `traffic`, or a gradual rollout that requires
  * changes the versions API can't carry (assets, DO migrations).
  */
-export class WorkerVersionConfigError extends Data.TaggedError(
-  "WorkerVersionConfigError",
-)<{
+export class WorkerVersionConfigError extends Data.TaggedError("WorkerVersionConfigError")<{
   message: string;
 }> {}
 
@@ -204,14 +194,60 @@ export class WorkerVersionConfigError extends Data.TaggedError(
  *
  * @internal
  */
-export const resolveVersionParentName = (
-  version: WorkerProps["version"],
-): string | undefined => {
+export const resolveVersionParentName = (version: WorkerProps["version"]): string | undefined => {
   const parent = version?.parent;
   if (parent == null) return undefined;
   if (typeof parent === "string") return parent;
   const workerName = (parent as { workerName?: unknown }).workerName;
   return typeof workerName === "string" ? workerName : undefined;
+};
+
+/**
+ * A Worker's `preview` configuration is invalid — combined with
+ * `version.parent`, missing `preview.of`, a bad Preview name, or a
+ * script-level setting that belongs to the parent.
+ */
+export class WorkerPreviewConfigError extends Data.TaggedError("WorkerPreviewConfigError")<{
+  message: string;
+}> {}
+
+/**
+ * Resolve the parent script *name* from a resolved `preview.of` prop.
+ *
+ * @internal
+ */
+export const resolvePreviewParentName = (preview: WorkerProps["preview"]): string | undefined => {
+  const parent = preview?.of;
+  if (parent == null) return undefined;
+  if (typeof parent === "string") return parent;
+  const workerName = (parent as { workerName?: unknown }).workerName;
+  return typeof workerName === "string" ? workerName : undefined;
+};
+
+const toPreviewWireKey = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
+const toPreviewWire = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(toPreviewWire);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        toPreviewWireKey(k),
+        toPreviewWire(v),
+      ]),
+    );
+  }
+  return value;
+};
+
+/** Convert Alchemy's binding array into wrangler's Preview `env` map. */
+const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
+  const env: Record<string, unknown> = {};
+  for (const binding of bindings) {
+    const { name, ...rest } = binding as unknown as { name?: unknown } & Record<string, unknown>;
+    if (typeof name !== "string") continue;
+    env[name] = toPreviewWire(rest);
+  }
+  return env;
 };
 
 /**
@@ -228,8 +264,7 @@ const getSelfRolloutTraffic = (news: WorkerProps): number | undefined => {
 };
 
 const validateTraffic = (traffic: number | undefined) =>
-  traffic !== undefined &&
-  (!Number.isFinite(traffic) || traffic < 0 || traffic > 100)
+  traffic !== undefined && (!Number.isFinite(traffic) || traffic < 0 || traffic > 100)
     ? Effect.fail(
         new WorkerVersionConfigError({
           message: `version.traffic must be a percentage between 0 and 100, got ${traffic}`,
@@ -276,38 +311,30 @@ export const resolveVersionAffinity = (
       ...(affinity.key !== undefined ? ["key"] : []),
     ];
     if (declared.length > 1) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message: `version.affinity accepts exactly one key source, got ${declared.join(" and ")}. Combine sources with a raw \`key\` expression instead.`,
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message: `version.affinity accepts exactly one key source, got ${declared.join(" and ")}. Combine sources with a raw \`key\` expression instead.`,
+      });
     }
     if (declared.length === 0 && affinity.ip !== true) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message:
-            "version.affinity requires a key source: set `cookie`, `header`, `key`, or `ip: true`.",
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message:
+          "version.affinity requires a key source: set `cookie`, `header`, `key`, or `ip: true`.",
+      });
     }
     if (affinity.key !== undefined && affinity.ip === true) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message:
-            "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message:
+          "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
+      });
     }
     for (const [prop, name] of [
       ["cookie", affinity.cookie],
       ["header", affinity.header],
     ] as const) {
       if (name !== undefined && !AFFINITY_NAME_PATTERN.test(name)) {
-        return yield* Effect.fail(
-          new WorkerVersionConfigError({
-            message: `version.affinity.${prop} '${name}' is not a valid ${prop} name: expected only letters, digits, '_', '.', and '-'.`,
-          }),
-        );
+        return yield* new WorkerVersionConfigError({
+          message: `version.affinity.${prop} '${name}' is not a valid ${prop} name: expected only letters, digits, '_', '.', and '-'.`,
+        });
       }
     }
     const source: ResolvedVersionAffinity["source"] =
@@ -321,9 +348,7 @@ export const resolveVersionAffinity = (
             : { kind: "ip" };
     return {
       source,
-      ipFallback:
-        affinity.ip === true &&
-        (source.kind === "cookie" || source.kind === "header"),
+      ipFallback: affinity.ip === true && (source.kind === "cookie" || source.kind === "header"),
     };
   });
 
@@ -341,9 +366,7 @@ interface AffinityZoneHost {
  *
  * @internal exported for unit testing.
  */
-export const affinityHostExpression = (
-  hosts: readonly AffinityZoneHost[],
-): string => {
+export const affinityHostExpression = (hosts: readonly AffinityZoneHost[]): string => {
   const dedupe = (values: string[]) => [...new Set(values)].sort();
   const exact = dedupe(hosts.filter((h) => !h.wildcard).map((h) => h.host));
   const wild = dedupe(hosts.filter((h) => h.wildcard).map((h) => h.host));
@@ -365,8 +388,7 @@ interface AffinityRuleSpec {
   value: string;
 }
 
-const affinityRulePrefix = (scriptName: string) =>
-  `alchemy:worker:${scriptName}:affinity`;
+const affinityRulePrefix = (scriptName: string) => `alchemy:worker:${scriptName}:affinity`;
 
 /**
  * The transform rules pinning one zone's traffic: a primary rule filling
@@ -423,9 +445,7 @@ export const buildAffinityZoneRules = (
  * A Worker's `domain` configuration is invalid — a hostname appears in more
  * than one role (name/aliases/redirects), or a redirect targets itself.
  */
-export class WorkerDomainConfigError extends Data.TaggedError(
-  "WorkerDomainConfigError",
-)<{
+export class WorkerDomainConfigError extends Data.TaggedError("WorkerDomainConfigError")<{
   message: string;
 }> {}
 
@@ -449,9 +469,7 @@ export interface ResolvedWorkersDev {
  *
  * @internal exported for unit testing.
  */
-export const resolveWorkersDev = (
-  workersDev: WorkerProps["workersDev"],
-): ResolvedWorkersDev => {
+export const resolveWorkersDev = (workersDev: WorkerProps["workersDev"]): ResolvedWorkersDev => {
   if (workersDev === undefined || workersDev === true) {
     return { enabled: true, previewsEnabled: true };
   }
@@ -477,6 +495,8 @@ export interface ResolvedWorkerDomain {
   redirects: string[];
   /** Pinned zone from props, when the caller set zoneId / zone / zoneName. */
   zone?: ZoneReference;
+  /** Serve Worker Previews on this custom domain. */
+  previews?: boolean;
 }
 
 const isZoneReference = (value: unknown): value is ZoneReference => {
@@ -492,11 +512,7 @@ const isZoneReference = (value: unknown): value is ZoneReference => {
 /** Collapse Worker.domain zone pin fields to one {@link ZoneReference}. */
 export const resolveWorkerDomainZone = (
   config:
-    | {
-        readonly zoneId?: unknown;
-        readonly zoneName?: unknown;
-        readonly zone?: unknown;
-      }
+    | { readonly zoneId?: unknown; readonly zoneName?: unknown; readonly zone?: unknown }
     | undefined,
 ): ZoneReference | undefined => {
   if (config === undefined) return undefined;
@@ -559,35 +575,33 @@ export const resolveWorkerDomain = (
     if (config === undefined) return undefined;
     const name = toPunycode(config.name);
     const aliases = Array.from(new Set((config.aliases ?? []).map(toPunycode)));
-    const redirects = Array.from(
-      new Set((config.redirects ?? []).map(toPunycode)),
-    );
+    const redirects = Array.from(new Set((config.redirects ?? []).map(toPunycode)));
     const overlap = [
       ...aliases.filter((h) => h === name),
       ...redirects.filter((h) => h === name || aliases.includes(h)),
     ];
     if (overlap.length > 0) {
-      return yield* Effect.fail(
-        new WorkerDomainConfigError({
-          message: `Each hostname may play only one role in a Worker's domain config; ${[...new Set(overlap)].map((h) => `'${h}'`).join(", ")} appears in more than one of name/aliases/redirects.`,
-        }),
-      );
+      return yield* new WorkerDomainConfigError({
+        message: `Each hostname may play only one role in a Worker's domain config; ${[...new Set(overlap)].map((h) => `'${h}'`).join(", ")} appears in more than one of name/aliases/redirects.`,
+      });
     }
     const zone = resolveWorkerDomainZone(config);
-    return zone === undefined
-      ? { name, aliases, redirects }
-      : { name, aliases, redirects, zone };
+    const previews = "previews" in config && config.previews === true ? true : undefined;
+    return {
+      name,
+      aliases,
+      redirects,
+      ...(zone === undefined ? {} : { zone }),
+      ...(previews === undefined ? {} : { previews }),
+    };
   });
 
-const isWorkersDevHostname = (hostname: string) =>
-  hostname.endsWith(".workers.dev");
+const isWorkersDevHostname = (hostname: string) => hostname.endsWith(".workers.dev");
 
 // Hostnames that only appear in local-dev state (the dev server's
 // localhost/LAN URLs), never as attachable custom domains.
 const isLocalDevHostname = (hostname: string) =>
-  hostname === "localhost" ||
-  hostname === "::1" ||
-  /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+  hostname === "localhost" || hostname === "::1" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
 
 const urlHostname = (url: string): string => {
   try {
@@ -607,12 +621,9 @@ type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
  *
  * @internal exported for unit testing.
  */
-export const stateCustomDomains = (
-  domains: readonly unknown[] | undefined,
-): string[] =>
+export const stateCustomDomains = (domains: readonly unknown[] | undefined): string[] =>
   normalizeStateDomains(domains).filter(
-    (hostname) =>
-      !isWorkersDevHostname(hostname) && !isLocalDevHostname(hostname),
+    (hostname) => !isWorkersDevHostname(hostname) && !isLocalDevHostname(hostname),
   );
 
 /**
@@ -623,9 +634,7 @@ export const stateCustomDomains = (
  *
  * @internal exported for unit testing.
  */
-export const stateWorkerDomain = (
-  output: object | undefined,
-): ResolvedWorkerDomain | undefined => {
+export const stateWorkerDomain = (output: object | undefined): ResolvedWorkerDomain | undefined => {
   const state = output as
     | {
         domain?: {
@@ -635,6 +644,7 @@ export const stateWorkerDomain = (
           zone?: ZoneReference;
           zoneId?: unknown;
           zoneName?: unknown;
+          previews?: unknown;
         } | null;
         domains?: unknown[];
       }
@@ -644,13 +654,10 @@ export const stateWorkerDomain = (
     const zone = resolveWorkerDomainZone(domain);
     return {
       name: domain.name,
-      aliases: (domain.aliases ?? []).filter(
-        (h): h is string => typeof h === "string",
-      ),
-      redirects: (domain.redirects ?? []).filter(
-        (h): h is string => typeof h === "string",
-      ),
+      aliases: (domain.aliases ?? []).filter((h): h is string => typeof h === "string"),
+      redirects: (domain.redirects ?? []).filter((h): h is string => typeof h === "string"),
       ...(zone === undefined ? {} : { zone }),
+      ...(domain.previews === true ? { previews: true } : {}),
     };
   }
   const legacy = stateCustomDomains(state?.domains);
@@ -692,10 +699,7 @@ const getScriptSettings = (
       // the account-level one for the fields the provider reads.
       return settings as unknown as workers.GetScriptScriptAndVersionSettingResponse;
     }
-    return yield* workers.getScriptScriptAndVersionSetting({
-      accountId,
-      scriptName,
-    });
+    return yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
   });
 
 /**
@@ -743,9 +747,8 @@ const bindingTargetNotFoundRetrySchedule = () =>
 const isScriptPutTransportError = (e: { _tag?: string }): boolean =>
   isHttpClientError(e) && e.reason._tag === "TransportError";
 
-const retryableScriptPut = (
-  e: Parameters<typeof isBindingTargetNotFound>[0],
-): boolean => isBindingTargetNotFound(e) || isScriptPutTransportError(e);
+const retryableScriptPut = (e: Parameters<typeof isBindingTargetNotFound>[0]): boolean =>
+  isBindingTargetNotFound(e) || isScriptPutTransportError(e);
 
 /**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
@@ -760,14 +763,8 @@ const retryableScriptPut = (
  * out the legacy shape (older releases persisted the script *name*), the
  * `dev:`-marked local identity, and the precreate stub's provisional `""`.
  */
-const cachedWorkerId = (
-  value: string | undefined,
-  scriptName: string,
-): string | undefined =>
-  value !== undefined &&
-  value !== "" &&
-  value !== scriptName &&
-  !value.startsWith("dev:")
+const cachedWorkerId = (value: string | undefined, scriptName: string): string | undefined =>
+  value !== undefined && value !== "" && value !== scriptName && !value.startsWith("dev:")
     ? value
     : undefined;
 
@@ -818,8 +815,7 @@ const putWorkerScript = (params: {
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
-          metadata:
-            params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
+          metadata: params.metadata,
           files: params.files,
         })
         .pipe(
@@ -837,10 +833,7 @@ const putWorkerScript = (params: {
         files: params.files,
       })
       .pipe(
-        Effect.retry({
-          while: retryableScriptPut,
-          schedule: bindingTargetNotFoundRetrySchedule(),
-        }),
+        Effect.retry({ while: retryableScriptPut, schedule: bindingTargetNotFoundRetrySchedule() }),
       );
   });
 
@@ -864,23 +857,19 @@ const deleteWorkerScript = (
         force: true,
       });
     }
-    return yield* workers
-      .deleteScript({ accountId, scriptName, force: true })
-      .pipe(
-        // The script is still registered as a queue consumer (even with
-        // `force`). Normally the sibling Consumer resource detaches first,
-        // but state loss (e.g. a consumer row rewritten by a pre-stamping
-        // dev run) can strand a live consumer pointing at this script with
-        // nothing left to delete it. The script is going away, so any
-        // consumer wiring pointing at it is dead — detach and retry.
-        Effect.catchTag("QueueConsumerConflict", () =>
-          detachQueueConsumersOfScript(accountId, scriptName).pipe(
-            Effect.andThen(
-              workers.deleteScript({ accountId, scriptName, force: true }),
-            ),
-          ),
+    return yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
+      // The script is still registered as a queue consumer (even with
+      // `force`). Normally the sibling Consumer resource detaches first,
+      // but state loss (e.g. a consumer row rewritten by a pre-stamping
+      // dev run) can strand a live consumer pointing at this script with
+      // nothing left to delete it. The script is going away, so any
+      // consumer wiring pointing at it is dead — detach and retry.
+      Effect.catchTag("QueueConsumerConflict", () =>
+        detachQueueConsumersOfScript(accountId, scriptName).pipe(
+          Effect.andThen(workers.deleteScript({ accountId, scriptName, force: true })),
         ),
-      );
+      ),
+    );
   });
 
 /**
@@ -895,9 +884,7 @@ const deleteWorkerScript = (
  *
  * @internal exported for unit testing.
  */
-export const normalizeStateDomains = (
-  domains: readonly unknown[] | undefined,
-): string[] =>
+export const normalizeStateDomains = (domains: readonly unknown[] | undefined): string[] =>
   (domains ?? []).flatMap((u) => {
     if (typeof u === "string") {
       if (u.includes("://")) {
@@ -923,8 +910,7 @@ export const normalizeStateDomains = (
 export const shouldObserveWorkerDomains = (
   olds: Pick<WorkerProps, "domain"> | undefined,
   output: object | undefined,
-): boolean =>
-  olds?.domain !== undefined || stateWorkerDomain(output) !== undefined;
+): boolean => olds?.domain !== undefined || stateWorkerDomain(output) !== undefined;
 
 /**
  * Zone routes Alchemy is responsible for on this Worker. Used by `read` to
@@ -936,6 +922,26 @@ export const shouldObserveWorkerRoutes = (
   olds: Pick<WorkerProps, "routes"> | undefined,
   output: Pick<Worker["Attributes"], "routes"> | undefined,
 ): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
+
+const routeKey = (route: { pattern: string; zoneId: string }) => `${route.zoneId}:${route.pattern}`;
+
+/**
+ * Order observed zone routes the way state records them. `listRoutes`
+ * returns routes in Cloudflare's order while `reconcile` records them in
+ * declared order, and drift compares attributes positionally, so the same
+ * routes in another order would read as drift. Routes missing from state
+ * keep their listing order after the known ones.
+ *
+ * @internal exported for unit testing.
+ */
+export const orderObservedWorkerRoutes = <Route extends { pattern: string; zoneId: string }>(
+  observed: readonly Route[],
+  known: readonly { pattern: string; zoneId: string }[] | undefined,
+): Route[] => {
+  const position = new Map((known ?? []).map((route, index) => [routeKey(route), index]));
+  const rank = (route: Route) => position.get(routeKey(route)) ?? position.size;
+  return [...observed].sort((a, b) => rank(a) - rank(b));
+};
 
 /**
  * Cron triggers Alchemy is responsible for on this Worker. Used by `read` to
@@ -955,9 +961,7 @@ export const shouldObserveWorkerCrons = (
  * (`<subdomain>` in `https://<script>.<subdomain>.workers.dev`). When set,
  * Worker URL construction skips `GET /accounts/{id}/workers/subdomain`.
  */
-const CLOUDFLARE_WORKERS_SUBDOMAIN = Config.string(
-  "CLOUDFLARE_WORKERS_SUBDOMAIN",
-).pipe(
+const CLOUDFLARE_WORKERS_SUBDOMAIN = Config.String("CLOUDFLARE_WORKERS_SUBDOMAIN").pipe(
   Config.map((value) => value.trim()),
   Config.option,
 );
@@ -992,9 +996,7 @@ type MetadataHashValue =
  * Effects are dropped, never executed: evaluating one here may require
  * plan-phase context that is not available inside lifecycle operations.
  */
-const resolveMetadataHashValue = (
-  value: unknown,
-): Effect.Effect<MetadataHashValue> =>
+const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashValue> =>
   Effect.gen(function* () {
     if (Effect.isEffect(value)) {
       return undefined;
@@ -1031,16 +1033,12 @@ const resolveMetadataHashValue = (
       const entries = yield* Effect.all(
         Object.entries(resolved).map(([key, nested]) =>
           resolveMetadataHashValue(nested).pipe(
-            Effect.map(
-              (materializedNested) => [key, materializedNested] as const,
-            ),
+            Effect.map((materializedNested) => [key, materializedNested] as const),
           ),
         ),
         { concurrency: "unbounded" },
       );
-      return Object.fromEntries(
-        entries.filter(([, nested]) => nested !== undefined),
-      );
+      return Object.fromEntries(entries.filter(([, nested]) => nested !== undefined));
     }
     return undefined;
   });
@@ -1106,12 +1104,10 @@ const resolveWorkerMetadataHash = ({
     // materialized as different attribute projections between reconcile and a
     // later plan; hashing props.env as well would turn those irrelevant shape
     // differences into perpetual updates.
-    bindings: bindings.map((binding) => ({
-      sid: binding.sid,
-      data: binding.data,
-    })),
+    bindings: bindings.map((binding) => ({ sid: binding.sid, data: binding.data })),
     assets: workerAssetConfigForHash(props.assets),
     cache: props.cache,
+    entrypoints: props.entrypoints,
     limits: props.limits,
     logpush: props.logpush,
     observability: props.observability,
@@ -1141,6 +1137,14 @@ const resolveWorkerMetadataHash = ({
           tag: props.version.tag,
         }
       : undefined,
+    preview: props.preview
+      ? {
+          of: resolvePreviewParentName(props.preview),
+          name: props.preview.name,
+          message: props.preview.message,
+          tag: props.preview.tag,
+        }
+      : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
 export const WorkerProvider = () =>
@@ -1150,8 +1154,7 @@ export const WorkerProvider = () =>
     // compose INTO the local variant so a live deploy only constructs them
     // if the local provider is actually demanded (e.g. deleting a local
     // dev worker's state row). See ProviderLayer.dual.
-    local: () =>
-      LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices())),
+    local: () => LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices())),
   });
 
 export const LiveWorkerProvider = () =>
@@ -1162,6 +1165,7 @@ export const LiveWorkerProvider = () =>
 
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
+      const dotAlchemy = yield* dotAlchemyDirectory;
 
       // const createScriptSubdomain = yield* workers.createScriptSubdomain;
       // const deleteScript = yield* workers.deleteScript;
@@ -1205,10 +1209,7 @@ export const LiveWorkerProvider = () =>
       // The two toggles are independent on the Cloudflare API: `enabled`
       // drives the stable `<name>.<account>.workers.dev` URL and
       // `previews_enabled` the per-version preview URLs.
-      const setWorkerSubdomain = Effect.fn(function* (
-        name: string,
-        desired: ResolvedWorkersDev,
-      ) {
+      const setWorkerSubdomain = Effect.fn(function* (name: string, desired: ResolvedWorkersDev) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* workers.createScriptSubdomain({
           accountId,
@@ -1221,12 +1222,8 @@ export const LiveWorkerProvider = () =>
       const normalizeCrons = (crons: string[] | undefined): string[] =>
         Array.from(new Set(crons ?? []));
 
-      const hasSelfUrlBinding = (
-        bindings: readonly ResourceBinding<Worker["Binding"]>[],
-      ) =>
-        bindings.some((b) =>
-          (b.data.bindings ?? []).some((item) => item.type === "self_url"),
-        );
+      const hasSelfUrlBinding = (bindings: readonly ResourceBinding<Worker["Binding"]>[]) =>
+        bindings.some((b) => (b.data.bindings ?? []).some((item) => item.type === "self_url"));
 
       // Resolve the URL this Worker will be served at — the same formula that
       // produces the `url` attribute (first custom domain in user order, else
@@ -1252,19 +1249,12 @@ export const LiveWorkerProvider = () =>
 
       const getWorkerCrons = Effect.fn(function* (scriptName: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* workers
-          .getScriptSchedule({
-            accountId,
-            scriptName,
-          })
-          .pipe(
-            Effect.map((response) =>
-              normalizeCrons(
-                response.schedules.map((schedule) => schedule.cron),
-              ),
-            ),
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed([])),
-          );
+        return yield* workers.getScriptSchedule({ accountId, scriptName }).pipe(
+          Effect.map((response) =>
+            normalizeCrons(response.schedules.map((schedule) => schedule.cron)),
+          ),
+          Effect.catchTag("WorkerNotFound", () => Effect.succeed([])),
+        );
       });
 
       const reconcileCrons = (
@@ -1285,29 +1275,20 @@ export const LiveWorkerProvider = () =>
           if (!changed) return live;
 
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
-            yield* session.note(
-              `Reconciling Cron Triggers (${desired.length}) ...`,
-            );
+            yield* session.note(`Reconciling Cron Triggers (${desired.length}) ...`, {
+              kind: "status",
+            });
           }
 
           const result = yield* workers
-            .putScriptSchedule({
-              accountId,
-              scriptName,
-              body: desired.map((cron) => ({ cron })),
-            })
+            .putScriptSchedule({ accountId, scriptName, body: desired.map((cron) => ({ cron })) })
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.max([
-                  Schedule.exponential(200),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
               }),
             );
-          return normalizeCrons(
-            result.schedules.map((schedule) => schedule.cron),
-          );
+          return normalizeCrons(result.schedules.map((schedule) => schedule.cron));
         });
 
       /**
@@ -1338,6 +1319,7 @@ export const LiveWorkerProvider = () =>
         scriptName: string,
         desired: string[],
         zone?: ZoneReference,
+        previewsEnabled?: boolean,
       ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1347,28 +1329,24 @@ export const LiveWorkerProvider = () =>
           // simply be out of date. Without this we PUT domains that are
           // already registered to this same Worker and Cloudflare
           // returns a confusing "hostname already in use" error.
-          const liveAll = yield* workers
-            .listDomains({
-              accountId,
-              service: scriptName,
-            })
-            .pipe(
-              Effect.map((r) =>
-                (r.result ?? []).flatMap((d) =>
-                  d.id && d.hostname && d.zoneId
-                    ? [
-                        {
-                          id: d.id,
-                          hostname: d.hostname,
-                          zoneId: d.zoneId,
-                          service: d.service ?? undefined,
-                        },
-                      ]
-                    : [],
-                ),
+          const liveAll = yield* workers.listDomains({ accountId, service: scriptName }).pipe(
+            Effect.map((r) =>
+              (r.result ?? []).flatMap((d) =>
+                d.id && d.hostname && d.zoneId
+                  ? [
+                      {
+                        id: d.id,
+                        hostname: d.hostname,
+                        zoneId: d.zoneId,
+                        service: d.service ?? undefined,
+                        previewsEnabled: d.previewsEnabled === true,
+                      },
+                    ]
+                  : [],
               ),
-              Effect.catch(() => Effect.succeed([])),
-            );
+            ),
+            Effect.orElseSucceed(() => []),
+          );
 
           const desiredSet = new Set(desired);
           const liveByHostname = new Map(liveAll.map((d) => [d.hostname, d]));
@@ -1402,13 +1380,10 @@ export const LiveWorkerProvider = () =>
                 : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
             if (
               live &&
-              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId) &&
+              live.previewsEnabled === (previewsEnabled === true)
             ) {
-              return {
-                hostname: live.hostname,
-                id: live.id,
-                zoneId: live.zoneId,
-              };
+              return { hostname: live.hostname, id: live.id, zoneId: live.zoneId };
             }
 
             if (live) {
@@ -1423,19 +1398,12 @@ export const LiveWorkerProvider = () =>
             // Not attached to this Worker — but it could still belong
             // to another Worker. Check before we try to PUT so we can
             // emit a helpful error instead of the raw 409.
-            const otherOwner = yield* workers
-              .listDomains({
-                accountId,
-                hostname,
-              })
-              .pipe(
-                Effect.map((r) =>
-                  (r.result ?? []).find(
-                    (d) => d.hostname === hostname && d.service !== scriptName,
-                  ),
-                ),
-                Effect.catch(() => Effect.succeed(undefined)),
-              );
+            const otherOwner = yield* workers.listDomains({ accountId, hostname }).pipe(
+              Effect.map((r) =>
+                (r.result ?? []).find((d) => d.hostname === hostname && d.service !== scriptName),
+              ),
+              Effect.orElseSucceed(() => undefined),
+            );
             if (otherOwner?.id) {
               return yield* Effect.die(
                 new Error(
@@ -1446,9 +1414,7 @@ export const LiveWorkerProvider = () =>
               );
             }
 
-            const zoneId =
-              desiredZoneId ??
-              (yield* inferZoneIdForHostname(hostname, zoneCache));
+            const zoneId = desiredZoneId ?? (yield* inferZoneIdForHostname(hostname, zoneCache));
             // Same eventual-consistency window as `setWorkerSubdomain`:
             // PUT /accounts/.../workers/domains right after `putScript`
             // can return `WorkerNotFound` until Cloudflare's script
@@ -1459,25 +1425,23 @@ export const LiveWorkerProvider = () =>
                 hostname,
                 service: scriptName,
                 zoneId,
+                // Private-beta field — only send it when the user opted
+                // into custom-domain Previews. Omitting it keeps the
+                // public PUT /workers/domains body unchanged for everyone
+                // else.
+                ...(previewsEnabled === true ? { previewsEnabled: true } : {}),
               })
               .pipe(
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
-                  schedule: Schedule.max([
-                    Schedule.exponential(200),
-                    Schedule.recurs(15),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
                 }),
                 Effect.retry({
                   while: (error) => error._tag === "HostnameAlreadyInUse",
                   schedule: workerDomainConflictSchedule,
                 }),
               );
-            return {
-              hostname,
-              id: res.id ?? "",
-              zoneId: res.zoneId ?? zoneId,
-            };
+            return { hostname, id: res.id ?? "", zoneId: res.zoneId ?? zoneId };
           });
 
           const applied = yield* Effect.all(desired.map(attachDomain), {
@@ -1494,29 +1458,41 @@ export const LiveWorkerProvider = () =>
       // best-effort. Only consulted in previews-only mode
       // (`workersDev: { enabled: false, previewsEnabled: true }`), where it
       // is the Worker's only workers.dev surface.
-      const getPreviewUrl = Effect.fn(function* (
-        scriptName: string,
-        accountSubdomain: string,
-      ) {
+      const getPreviewUrl = Effect.fn(function* (scriptName: string, accountSubdomain: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const deployments = yield* workers
-          .listScriptDeployments({ accountId, scriptName })
-          .pipe(
-            Effect.map((response) => response.deployments ?? []),
-            Effect.catch(() => Effect.succeed([])),
-          );
-        const latest = [...deployments].sort((a, b) =>
-          b.createdOn.localeCompare(a.createdOn),
-        )[0];
+        const deployments = yield* workers.listScriptDeployments({ accountId, scriptName }).pipe(
+          Effect.map((response) => response.deployments ?? []),
+          Effect.orElseSucceed(() => []),
+        );
+        const latest = [...deployments].sort((a, b) => b.createdOn.localeCompare(a.createdOn))[0];
         const version = latest?.versions?.reduce(
           (max, candidate) =>
-            max === undefined || candidate.percentage > max.percentage
-              ? candidate
-              : max,
+            max === undefined || candidate.percentage > max.percentage ? candidate : max,
           undefined as { percentage: number; versionId: string } | undefined,
         );
         if (!version?.versionId) return undefined;
         return `https://${version.versionId.slice(0, 8)}-${scriptName}.${accountSubdomain}.workers.dev`;
+      });
+
+      const computeStableWorkerUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: ResolvedWorkersDev;
+        domain: ResolvedWorkerDomain | undefined;
+      }) {
+        const { workersDev, domain, scriptName } = params;
+        const urls: string[] = [];
+        if (domain) {
+          urls.push(
+            `https://${domain.name}`,
+            ...domain.aliases.map((hostname) => `https://${hostname}`),
+          );
+        }
+        if (workersDev.enabled) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountSubdomain = yield* getAccountSubdomain(accountId);
+          urls.push(`https://${scriptName}.${accountSubdomain}.workers.dev`);
+        }
+        return urls;
       });
 
       /**
@@ -1543,37 +1519,23 @@ export const LiveWorkerProvider = () =>
         /** user-provided `version.alias` attached to the uploaded version */
         uploadedVersionAlias?: string;
       }) {
-        const { workersDev, domain, scriptName } = params;
-        const urls: string[] = [];
-        if (domain) {
-          urls.push(
-            `https://${domain.name}`,
-            ...domain.aliases.map((hostname) => `https://${hostname}`),
-          );
-        }
-        if (workersDev.enabled || workersDev.previewsEnabled) {
+        const { workersDev, scriptName } = params;
+        const urls = yield* computeStableWorkerUrls(params);
+        if (workersDev.previewsEnabled) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const accountSubdomain = yield* getAccountSubdomain(accountId);
-          if (workersDev.enabled) {
-            urls.push(`https://${scriptName}.${accountSubdomain}.workers.dev`);
-          }
-          if (workersDev.previewsEnabled) {
-            if (params.uploadedVersionId !== undefined) {
-              if (params.uploadedVersionAlias !== undefined) {
-                urls.push(
-                  `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
-                );
-              }
+          if (params.uploadedVersionId !== undefined) {
+            if (params.uploadedVersionAlias !== undefined) {
               urls.push(
-                `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+                `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
               );
-            } else if (!workersDev.enabled) {
-              const previewUrl = yield* getPreviewUrl(
-                scriptName,
-                accountSubdomain,
-              );
-              if (previewUrl) urls.push(previewUrl);
             }
+            urls.push(
+              `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+            );
+          } else if (!workersDev.enabled) {
+            const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
+            if (previewUrl) urls.push(previewUrl);
           }
         }
         return urls;
@@ -1613,16 +1575,11 @@ export const LiveWorkerProvider = () =>
         if (zoneIds.size === 0) return;
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
-            .getPhasForZone({
-              zoneId,
-              rulesetPhase: "http_request_dynamic_redirect",
-            })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
+            .pipe(Effect.orElseSucceed(() => undefined));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
-            .filter(
-              (hostname) => params.zoneIdByHostname.get(hostname) === zoneId,
-            )
+            .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
             .map((hostname) => ({
               action: "redirect" as const,
               expression: `http.host eq "${hostname}"`,
@@ -1660,10 +1617,7 @@ export const LiveWorkerProvider = () =>
                 lastUpdated: _lastUpdated,
                 version: _version,
                 ...rest
-              } = rule as Record<string, unknown> & {
-                lastUpdated?: string;
-                version?: string;
-              };
+              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
               return rest;
             });
           yield* rulesets.putPhasForZone({
@@ -1708,18 +1662,11 @@ export const LiveWorkerProvider = () =>
           const hosts = params.desired?.hostsByZone.get(zoneId);
           const ourDesired =
             params.desired !== undefined && hosts !== undefined
-              ? buildAffinityZoneRules(
-                  params.scriptName,
-                  params.desired.affinity,
-                  hosts,
-                )
+              ? buildAffinityZoneRules(params.scriptName, params.desired.affinity, hosts)
               : [];
           const entrypoint = yield* rulesets
-            .getPhasForZone({
-              zoneId,
-              rulesetPhase: "http_request_late_transform",
-            })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
+            .pipe(Effect.orElseSucceed(() => undefined));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -1736,12 +1683,8 @@ export const LiveWorkerProvider = () =>
                       | undefined
                   )?.headers
                 : undefined;
-            const header = headers?.[AFFINITY_HEADER] as
-              | { expression?: unknown }
-              | undefined;
-            return typeof header?.expression === "string"
-              ? header.expression
-              : undefined;
+            const header = headers?.[AFFINITY_HEADER] as { expression?: unknown } | undefined;
+            return typeof header?.expression === "string" ? header.expression : undefined;
           };
           const ourExisting = existingRules.filter(isOurs);
           const converged =
@@ -1764,10 +1707,7 @@ export const LiveWorkerProvider = () =>
                 lastUpdated: _lastUpdated,
                 version: _version,
                 ...rest
-              } = rule as Record<string, unknown> & {
-                lastUpdated?: string;
-                version?: string;
-              };
+              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
               return rest;
             });
           yield* rulesets.putPhasForZone({
@@ -1781,12 +1721,7 @@ export const LiveWorkerProvider = () =>
                 enabled: true,
                 expression: rule.expression,
                 actionParameters: {
-                  headers: {
-                    [AFFINITY_HEADER]: {
-                      operation: "set",
-                      expression: rule.value,
-                    },
-                  },
+                  headers: { [AFFINITY_HEADER]: { operation: "set", expression: rule.value } },
                 },
               })),
             ] as PutZoneRedirectRules,
@@ -1795,13 +1730,7 @@ export const LiveWorkerProvider = () =>
         return [...(params.desired?.hostsByZone.keys() ?? [])].sort();
       });
 
-      type NormalizedWorkerRoute = {
-        pattern: string;
-        zoneId: string;
-      };
-
-      const routeKey = (route: { pattern: string; zoneId: string }) =>
-        `${route.zoneId}:${route.pattern}`;
+      type NormalizedWorkerRoute = { pattern: string; zoneId: string };
 
       // Derive a concrete hostname inside the zone from a route pattern so
       // zone inference can walk the DNS label hierarchy. A wildcard label
@@ -1809,9 +1738,7 @@ export const LiveWorkerProvider = () =>
       // parent labels matter for finding the zone.
       const hostnameFromPattern = (pattern: string): string => {
         const hostPart = pattern.split("/")[0] ?? pattern;
-        return hostPart.startsWith("*.")
-          ? `routes.${hostPart.slice(2)}`
-          : hostPart;
+        return hostPart.startsWith("*.") ? `routes.${hostPart.slice(2)}` : hostPart;
       };
 
       // Resolve each route's zone to a concrete zone id: an explicit
@@ -1836,10 +1763,7 @@ export const LiveWorkerProvider = () =>
                     zone: route.zone ?? route.zoneName!,
                     hostname: hostnameFromPattern(pattern),
                   })
-                : yield* inferZoneIdForHostname(
-                    hostnameFromPattern(pattern),
-                    zoneCache,
-                  );
+                : yield* inferZoneIdForHostname(hostnameFromPattern(pattern), zoneCache);
             const key = routeKey({ pattern, zoneId });
             if (seen.has(key)) continue;
             seen.add(key);
@@ -1852,10 +1776,7 @@ export const LiveWorkerProvider = () =>
       // Routes without an id/pattern or owned by another script are
       // ignored. Zones the token can't read are skipped rather than
       // failing the whole listing.
-      const listWorkerRoutesInZones = (
-        scriptName: string,
-        zoneIds: readonly string[],
-      ) => {
+      const listWorkerRoutesInZones = (scriptName: string, zoneIds: readonly string[]) => {
         const uniqueZoneIds = Array.from(new Set(zoneIds));
         if (uniqueZoneIds.length === 0) {
           return Effect.succeed([] as Worker["Attributes"]["routes"]);
@@ -1864,14 +1785,21 @@ export const LiveWorkerProvider = () =>
         const routesByZone = Effect.all(
           uniqueZoneIds.map((zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
-              Effect.map((response) =>
+              Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
                   route.id && route.pattern && route.script === scriptName
-                    ? [{ id: route.id, pattern: route.pattern, zoneId }]
+                    ? [
+                        {
+                          id: route.id,
+                          pattern: route.pattern,
+                          zoneId,
+                          url: routePatternUrl(route.pattern),
+                        },
+                      ]
                     : [],
                 ),
               ),
-              Effect.catch(() => Effect.succeed([])),
+              Effect.orElseSucceed(() => []),
             ),
           ),
           // Bounded: this issues one request per zone, so a Worker with routes
@@ -1906,7 +1834,7 @@ export const LiveWorkerProvider = () =>
         listWorkerRoutesInZones(
           scriptName,
           (knownRoutes ?? []).map((route) => route.zoneId),
-        );
+        ).pipe(Effect.map((routes) => orderObservedWorkerRoutes(routes, knownRoutes)));
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -1926,13 +1854,9 @@ export const LiveWorkerProvider = () =>
           );
           const liveAll = yield* listWorkerRoutesInZones(scriptName, zoneIds);
           const desiredKeys = new Set(desired.map(routeKey));
-          const liveByKey = new Map(
-            liveAll.map((route) => [routeKey(route), route]),
-          );
+          const liveByKey = new Map(liveAll.map((route) => [routeKey(route), route]));
 
-          const toRemove = liveAll.filter(
-            (route) => !desiredKeys.has(routeKey(route)),
-          );
+          const toRemove = liveAll.filter((route) => !desiredKeys.has(routeKey(route)));
           yield* Effect.all(
             toRemove.map((route) =>
               workers
@@ -1944,18 +1868,14 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
-          const attachRoute = Effect.fn(function* (
-            route: NormalizedWorkerRoute,
-          ) {
+          const attachRoute = Effect.fn(function* (route: NormalizedWorkerRoute) {
             const existing = liveByKey.get(routeKey(route));
             if (existing) return existing;
 
-            const zoneRoutes = yield* workers
-              .listRoutes({ zoneId: route.zoneId })
-              .pipe(
-                Effect.map((response) => response.result ?? []),
-                Effect.catch(() => Effect.succeed([])),
-              );
+            const zoneRoutes = yield* workers.listRoutes({ zoneId: route.zoneId }).pipe(
+              Effect.map((response) => response.result ?? []),
+              Effect.orElseSucceed(() => []),
+            );
             const otherOwner = zoneRoutes.find(
               (candidate) =>
                 candidate.pattern === route.pattern &&
@@ -1976,11 +1896,7 @@ export const LiveWorkerProvider = () =>
             // previous reconcile) created the route between our observation
             // and now — re-list and converge if it points at this script.
             const created = yield* workers
-              .createRoute({
-                zoneId: route.zoneId,
-                pattern: route.pattern,
-                script: scriptName,
-              })
+              .createRoute({ zoneId: route.zoneId, pattern: route.pattern, script: scriptName })
               .pipe(
                 // Same eventual-consistency window as `putDomain`: creating
                 // a route right after `putScript` can race Cloudflare's
@@ -1989,27 +1905,21 @@ export const LiveWorkerProvider = () =>
                 // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
-                  schedule: Schedule.max([
-                    Schedule.exponential(200),
-                    Schedule.recurs(15),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
                 }),
                 Effect.catchTag("InvalidRoute", (originalError) =>
                   Effect.gen(function* () {
-                    const match = yield* workers
-                      .listRoutes({ zoneId: route.zoneId })
-                      .pipe(
-                        Effect.map((response) =>
-                          (response.result ?? []).find(
-                            (candidate) =>
-                              candidate.pattern === route.pattern &&
-                              candidate.script === scriptName,
-                          ),
+                    const match = yield* workers.listRoutes({ zoneId: route.zoneId }).pipe(
+                      Effect.map((response) =>
+                        (response.result ?? []).find(
+                          (candidate) =>
+                            candidate.pattern === route.pattern && candidate.script === scriptName,
                         ),
-                        Effect.catch(() => Effect.succeed(undefined)),
-                      );
+                      ),
+                      Effect.orElseSucceed(() => undefined),
+                    );
                     if (!match?.id) {
-                      return yield* Effect.fail(originalError);
+                      return yield* originalError;
                     }
                     return { id: match.id, pattern: match.pattern };
                   }),
@@ -2019,12 +1929,11 @@ export const LiveWorkerProvider = () =>
               id: created.id,
               pattern: created.pattern,
               zoneId: route.zoneId,
+              url: routePatternUrl(created.pattern),
             };
           });
 
-          return yield* Effect.all(desired.map(attachRoute), {
-            concurrency: "unbounded",
-          });
+          return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
         });
 
       const createAlchemyWorkerTags = (id: string) => [
@@ -2033,10 +1942,7 @@ export const LiveWorkerProvider = () =>
         `alchemy:id:${id}`,
       ];
 
-      const hasAlchemyWorkerTags = (
-        id: string,
-        tags: readonly string[] | undefined,
-      ) => {
+      const hasAlchemyWorkerTags = (id: string, tags: readonly string[] | undefined) => {
         const actualTags = new Set(tags ?? []);
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
@@ -2061,67 +1967,150 @@ export const LiveWorkerProvider = () =>
         logicalId: string;
         className: string;
         sources: readonly string[];
-        observedNamespaces: readonly { script: string; class: string }[];
+        observedNamespaces: readonly ObservedDurableObjectNamespace[];
       }) {
         if (params.sources.length === 0) {
           return undefined;
         }
-        const candidates = Array.from(
-          new Set(
-            params.observedNamespaces.flatMap((ns) =>
-              ns.class === params.className &&
-              ns.script !== params.selfScriptName
-                ? [ns.script]
-                : [],
-            ),
+        // The class already lives here — e.g. a transfer committed by an
+        // earlier deploy that stopped before its final upload. Nothing to
+        // move.
+        if (
+          params.observedNamespaces.some(
+            (ns) => ns.script === params.selfScriptName && ns.class === params.className,
+          )
+        ) {
+          return undefined;
+        }
+        const observedScripts = yield* workers.listScripts
+          .items({ accountId: params.accountId })
+          .pipe(Stream.runCollect);
+        const logicalSources = new Set(
+          observedScripts.flatMap((script) =>
+            script.id != null &&
+            params.sources.some((source) => hasAlchemyWorkerTags(source, script.tags ?? []))
+              ? [script.id]
+              : [],
           ),
         );
+        // Direct names remain candidates even when both listings omit the script.
+        const candidates = new Set([
+          ...params.sources,
+          ...logicalSources,
+          ...params.observedNamespaces.flatMap((ns) =>
+            ns.class === params.className ? [ns.script] : [],
+          ),
+        ]);
         const matched: string[] = [];
         for (const script of candidates) {
-          if (params.sources.includes(script)) {
-            matched.push(script);
+          if (script === params.selfScriptName) continue;
+          // A same-class namespace alone does not identify a declared source.
+          const knownSource =
+            logicalSources.has(script) ||
+            (params.sources.includes(script) &&
+              (observedScripts.some((observed) => observed.id === script) ||
+                params.observedNamespaces.some((ns) => ns.script === script)));
+          const settings = yield* getScriptSettings(params.accountId, script, undefined).pipe(
+            Effect.catchTags({
+              WorkerNotFound: (error) =>
+                knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+              WorkerHasNoVersions: (error) =>
+                knownSource || params.sources.includes(script)
+                  ? Effect.fail(error)
+                  : Effect.succeed(undefined),
+            }),
+          );
+          if (
+            settings === undefined ||
+            (!params.sources.includes(script) &&
+              !logicalSources.has(script) &&
+              !params.sources.some((source) => hasAlchemyWorkerTags(source, settings.tags ?? [])))
+          ) {
             continue;
           }
-          const settings = yield* getScriptSettings(
-            params.accountId,
-            script,
-            undefined,
-          ).pipe(
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () =>
-              Effect.succeed(undefined),
-            ),
+          const localBinding = settings.bindings?.find(
+            (binding) =>
+              binding.type === "durable_object_namespace" &&
+              binding.className === params.className &&
+              (binding.scriptName == null || binding.scriptName === script),
           );
-          const tags = new Set(settings?.tags ?? []);
+          const namespaceId =
+            localBinding?.type === "durable_object_namespace"
+              ? (localBinding.namespaceId ?? undefined)
+              : undefined;
+          const findNamespace = (namespaces: typeof params.observedNamespaces) =>
+            namespaces.find((ns) =>
+              namespaceId === undefined
+                ? ns.script === script && ns.class === params.className
+                : ns.id === namespaceId,
+            );
+          let namespace = findNamespace(params.observedNamespaces);
           if (
-            tags.has(`alchemy:stack:${stack.name}`) &&
-            tags.has(`alchemy:stage:${stack.stage}`) &&
-            params.sources.some((source) => tags.has(`alchemy:id:${source}`))
+            namespace === undefined &&
+            (localBinding !== undefined ||
+              Object.values(getDurableObjectTagMap(settings.tags ?? [])).includes(params.className))
           ) {
+            // A known source namespace must be located, not replaced with a fresh one.
+            namespace = yield* listDurableObjectNamespaces(params.accountId).pipe(
+              Effect.flatMap((namespaces) => {
+                const namespace = findNamespace(namespaces);
+                return namespace
+                  ? Effect.succeed(namespace)
+                  : Effect.fail(
+                      new MissingDurableObjects({
+                        scriptName: script,
+                        expected: [params.className],
+                      }),
+                    );
+              }),
+              Effect.retry({
+                while: (error) => error._tag === "MissingDurableObjects",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 5,
+              }),
+              // The `alchemy:dos:` tag alone is stale on a *former* host: after
+              // a `transferred_classes` migration Cloudflare rewrites the old
+              // host's local binding to a className-less reference to the moved
+              // namespace (left dangling once the new host is deleted), but the
+              // former host's tags are only rewritten on its next deploy. Such a
+              // script no longer hosts the class — it is not a transfer source.
+              // Under `exports` the binding keeps its class name and is
+              // repointed at the new host instead.
+              Effect.catchTag("MissingDurableObjects", (error) =>
+                localBinding === undefined &&
+                settings.bindings?.some(
+                  (binding) =>
+                    binding.type === "durable_object_namespace" &&
+                    ((!binding.className &&
+                      (binding.scriptName == null || binding.scriptName === script)) ||
+                      (binding.className === params.className &&
+                        binding.scriptName != null &&
+                        binding.scriptName !== script)),
+                )
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+              ),
+            );
+          }
+          if (namespace?.script === script && namespace.class === params.className) {
             matched.push(script);
           }
         }
         if (matched.length > 1) {
-          return yield* Effect.fail(
-            new AmbiguousDurableObjectTransfer({
-              scriptName: params.selfScriptName,
-              logicalId: params.logicalId,
-              className: params.className,
-              sources: matched,
-            }),
-          );
+          return yield* new AmbiguousDurableObjectTransfer({
+            scriptName: params.selfScriptName,
+            logicalId: params.logicalId,
+            className: params.className,
+            sources: matched,
+          });
         }
         return matched[0];
       });
 
-      const getDurableObjects = (
-        bindings: readonly WorkerSettingsBinding[] | null | undefined,
-      ) => {
+      const getDurableObjects = (bindings: readonly WorkerSettingsBinding[] | null | undefined) => {
         const namespaces = Object.fromEntries(
           (bindings ?? []).flatMap((binding) =>
-            binding.type === "durable_object_namespace" &&
-            binding.className &&
-            binding.namespaceId
+            binding.type === "durable_object_namespace" && binding.className && binding.namespaceId
               ? [[binding.className, binding.namespaceId]]
               : [],
           ),
@@ -2138,8 +2127,7 @@ export const LiveWorkerProvider = () =>
             bindings?.flatMap((binding) =>
               binding.type === "durable_object_namespace" &&
               binding.className &&
-              (binding.scriptName === undefined ||
-                binding.scriptName === workerName)
+              (binding.scriptName === undefined || binding.scriptName === workerName)
                 ? [binding.className]
                 : [],
             ) ?? [],
@@ -2152,30 +2140,15 @@ export const LiveWorkerProvider = () =>
         dispatchNamespace?: string,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* getScriptSettings(
-          accountId,
-          scriptName,
-          dispatchNamespace,
-        ).pipe(
-          Effect.map((settings) => {
+        return yield* getScriptSettings(accountId, scriptName, dispatchNamespace).pipe(
+          Effect.flatMap((settings) => {
             const namespaces = getDurableObjects(settings.bindings);
-            const missing = expectedClassNames.filter(
-              (className) => !namespaces[className],
-            );
+            const missing = expectedClassNames.filter((className) => !namespaces[className]);
             if (missing.length > 0) {
-              return Effect.fail(
-                new MissingDurableObjects({
-                  scriptName,
-                  expected: missing,
-                }),
-              );
+              return Effect.fail(new MissingDurableObjects({ scriptName, expected: missing }));
             }
-            return Effect.succeed({
-              settings,
-              durableObjectNamespaces: namespaces,
-            });
+            return Effect.succeed({ settings, durableObjectNamespaces: namespaces });
           }),
-          Effect.flatten,
           Effect.retry({
             // `MissingDurableObjects`: the DO bindings haven't
             // surfaced in the version settings yet. `WorkerHasNoVersions` /
@@ -2190,17 +2163,12 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.max([
-              Schedule.exponential(100),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
           }),
         );
       });
 
-      const prepareAssets = Effect.fn(function* (
-        assets: WorkerProps["assets"],
-      ) {
+      const prepareAssets = Effect.fn(function* (assets: WorkerProps["assets"]) {
         if (!assets) {
           return undefined;
         }
@@ -2210,124 +2178,109 @@ export const LiveWorkerProvider = () =>
           return yield* readAssets(config);
         }
 
+        // Framework sources supply the directory; routing-only config has no files to read.
+        if (typeof assets === "object" && assets.directory === undefined) {
+          return undefined;
+        }
+
         // Handle string path or AssetsProps
-        return yield* readAssets(
-          typeof assets === "string" ? { directory: assets } : assets,
-        );
+        return yield* readAssets(typeof assets === "string" ? { directory: assets } : assets);
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
+      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
         (isPythonMain(props.main)
           ? readPythonWorkerBundle({
               id,
+              fqn,
               main: props.main,
               compatibility: getCompatibility(props),
             })
           : props.bundle === false
-            ? readPrebuiltWorkerBundle({
-                main: props.main!,
-                rules: props.rules,
-              })
+            ? readPrebuiltWorkerBundle({ main: props.main!, rules: props.rules })
             : bundler.build({
                 id,
                 main: props.main!,
                 compatibility: getCompatibility(props),
                 entry: props.isExternal
-                  ? {
-                      kind: "external",
-                    }
-                  : {
-                      kind: "effect",
-                      exports: props.exports ?? {},
-                    },
+                  ? { kind: "external" }
+                  : { kind: "effect", exports: props.exports ?? {} },
                 stack: { name: stack.name, stage: stack.stage },
                 extraOptions: props.build,
               })
         ).pipe(Artifacts.cached("build"));
 
       const hashScript = (script: string) =>
-        Effect.sync(() =>
-          crypto.createHash("sha256").update(script).digest("hex"),
-        );
+        Effect.sync(() => crypto.createHash("sha256").update(script).digest("hex"));
 
       const viteBuild = Effect.fn(function* (
+        id: string,
+        fqn: string,
         props: WorkerProps,
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
         const Vite = yield* loadVite;
-        const { clientDirectory, base, serverBundle, externalWorkspaces } =
-          yield* Vite.viteBuild(
-            props.vite?.rootDir,
-            Object.fromEntries(
-              (yield* Effect.all(
-                Object.entries(props.env ?? {}).map(
-                  Effect.fn(function* ([key, value]) {
-                    return [
-                      key,
-                      typeof value === "string"
-                        ? value
-                        : Redacted.isRedacted(value) &&
-                            typeof Redacted.value(value) === "string"
-                          ? Redacted.value(value)
-                          : // `Worker.URL` (bare tag or called) — resolved to
-                            // this Worker's own URL. The bare tag is
-                            // Effect-shaped, so check before `Effect.isEffect`.
-                            isSelfUrl(value)
-                            ? selfUrl
-                            : // A `WorkerLoader` is a real Effect that also carries
-                              // the `~alchemy/Kind` marker — it is a binding, not a
-                              // runnable env value. Check it before `Effect.isEffect`
-                              // so we don't execute it as an inlined env entry.
-                              isWorkerLoader(value)
+        const { clientDirectory, base, serverBundle, externalWorkspaces } = yield* Vite.viteBuild(
+          props.vite?.rootDir,
+          Object.fromEntries(
+            (yield* Effect.all(
+              Object.entries(props.env ?? {}).map(
+                Effect.fn(function* ([key, value]) {
+                  return [
+                    key,
+                    typeof value === "string"
+                      ? value
+                      : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
+                        ? Redacted.value(value)
+                        : // `Worker.URL` (bare tag or called) — resolved to
+                          // this Worker's own URL. The bare tag is
+                          // Effect-shaped, so check before `Effect.isEffect`.
+                          isSelfUrl(value)
+                          ? selfUrl
+                          : // A `WorkerLoader` is a real Effect that also carries
+                            // the `~alchemy/Kind` marker — it is a binding, not a
+                            // runnable env value. Check it before `Effect.isEffect`
+                            // so we don't execute it as an inlined env entry.
+                            isWorkerLoader(value)
+                            ? undefined
+                            : // A `Cloudflare.Container` declaration is likewise
+                              // Effect-shaped but is a binding (DO namespace +
+                              // ContainerApplication) — yielding it would resolve
+                              // the started-instance tag, which only exists inside
+                              // a Durable Object (#997).
+                              isContainerDecl(value)
                               ? undefined
-                              : // A `Cloudflare.Container` declaration is likewise
-                                // Effect-shaped but is a binding (DO namespace +
-                                // ContainerApplication) — yielding it would resolve
-                                // the started-instance tag, which only exists inside
-                                // a Durable Object (#997).
-                                isContainerDecl(value)
-                                ? undefined
-                                : Effect.isEffect(value)
-                                  ? yield* value as any as Effect.Effect<any>
-                                  : undefined,
-                    ];
-                  }),
-                ),
-              )).filter(([_, value]) => value !== undefined),
-            ),
-            {
-              // A relative `vite.main` is documented to resolve from the Vite
-              // root. The rolldown plugin resolves the worker entry with no
-              // importer (i.e. against `process.cwd()`), which breaks when the
-              // deploy runs from a different directory (e.g. a monorepo infra
-              // package) — absolutize before handing it over (#796).
-              main: props.vite?.main
-                ? path.resolve(
-                    initialCwd,
-                    props.vite.rootDir ?? ".",
-                    props.vite.main,
-                  )
-                : undefined,
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: compatibility.flags,
-              viteEnvironments: props.vite?.viteEnvironments,
-            },
-          );
+                              : Effect.isEffect(value)
+                                ? yield* value as any as Effect.Effect<any>
+                                : undefined,
+                  ];
+                }),
+              ),
+            )).filter(([_, value]) => value !== undefined),
+          ),
+          {
+            // A relative `vite.main` is documented to resolve from the Vite
+            // root. The rolldown plugin resolves the worker entry with no
+            // importer (i.e. against `process.cwd()`), which breaks when the
+            // deploy runs from a different directory (e.g. a monorepo infra
+            // package) — absolutize before handing it over (#796).
+            main: props.vite?.main
+              ? path.resolve(initialCwd, props.vite.rootDir ?? ".", props.vite.main)
+              : undefined,
+            compatibilityDate: compatibility.date,
+            compatibilityFlags: compatibility.flags,
+            viteEnvironments: props.vite?.viteEnvironments,
+          },
+          fqn,
+        );
         const [assets, bundle, input] = yield* Effect.all(
           [
             clientDirectory
               ? readAssets({
-                  ...(props.assets && typeof props.assets !== "string"
-                    ? props.assets
-                    : undefined),
+                  ...(props.assets && typeof props.assets !== "string" ? props.assets : undefined),
                   // `clientDirectory` from the build child is absolute;
                   // the base only matters as a legacy fallback.
-                  directory: path.resolve(
-                    initialCwd,
-                    props.vite?.rootDir ?? ".",
-                    clientDirectory,
-                  ),
+                  directory: path.resolve(initialCwd, props.vite?.rootDir ?? ".", clientDirectory),
                   // The resolved Vite `base` is what rewrote the URLs in
                   // the emitted HTML, so it is the only prefix the
                   // manifest can agree with.
@@ -2335,11 +2288,7 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
-            Vite.hashViteInput(
-              props.vite?.rootDir,
-              props.vite?.memo,
-              externalWorkspaces,
-            ),
+            Vite.hashViteInput(props.vite?.rootDir, props.vite?.memo, externalWorkspaces),
           ],
           { concurrency: "unbounded" },
         );
@@ -2348,12 +2297,7 @@ export const LiveWorkerProvider = () =>
             new Error("Vite build produced neither assets nor server output"),
           );
         }
-        return {
-          assets,
-          bundle,
-          input: input.hash,
-          additionalWorkspaces: input.workspaces,
-        };
+        return { assets, bundle, input: input.hash, additionalWorkspaces: input.workspaces };
       });
 
       // Loaded lazily: `./Sources/Vite.ts` pulls in
@@ -2364,6 +2308,7 @@ export const LiveWorkerProvider = () =>
 
       const prepareAssetsAndBundle = (
         id: string,
+        fqn: string,
         workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
@@ -2377,7 +2322,9 @@ export const LiveWorkerProvider = () =>
           if (props.source) {
             const source = yield* resolveSource(props);
             const ctx = makeSourceContext({
+              dotAlchemy,
               id,
+              fqn,
               workerName,
               props,
               compatibility: getCompatibility(props),
@@ -2402,25 +2349,20 @@ export const LiveWorkerProvider = () =>
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
-                opts.skipAssetsRead
-                  ? Effect.succeed(undefined)
-                  : prepareAssets(props.assets),
+                opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
                 hashScript(props.script),
               ],
               { concurrency: "unbounded" },
             );
             return {
               assets,
-              bundle: {
-                files: [{ path: "main.js", content: props.script }],
-                hash: bundleHash,
-              },
+              bundle: { files: [{ path: "main.js", content: props.script }], hash: bundleHash },
               input: undefined,
               additionalWorkspaces: undefined,
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props, opts.selfUrl);
+            return yield* viteBuild(id, fqn, props, opts.selfUrl);
           }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
@@ -2436,9 +2378,7 @@ export const LiveWorkerProvider = () =>
               );
             }
             return {
-              assets: opts.skipAssetsRead
-                ? undefined
-                : yield* prepareAssets(props.assets),
+              assets: opts.skipAssetsRead ? undefined : yield* prepareAssets(props.assets),
               bundle: undefined,
               input: undefined,
               additionalWorkspaces: undefined,
@@ -2446,19 +2386,12 @@ export const LiveWorkerProvider = () =>
           }
           const [assets, bundle] = yield* Effect.all(
             [
-              opts.skipAssetsRead
-                ? Effect.succeed(undefined)
-                : prepareAssets(props.assets),
-              prepareBundle(id, props),
+              opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
+              prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
           );
-          return {
-            assets,
-            bundle,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          };
+          return { assets, bundle, input: undefined, additionalWorkspaces: undefined };
         }).pipe(
           Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
@@ -2489,10 +2422,7 @@ export const LiveWorkerProvider = () =>
         // `assetsChanged` applies during diff. Without the `undefined` check
         // a greenfield create (`output === undefined`) compares `undefined
         // === undefined`, sets `skip`, and uploads a Worker with no assets.
-        if (
-          !Predicate.hasProperty(assets, "hash") ||
-          assets.hash === undefined
-        ) {
+        if (!Predicate.hasProperty(assets, "hash") || assets.hash === undefined) {
           return undefined;
         }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
@@ -2514,6 +2444,36 @@ export const LiveWorkerProvider = () =>
       };
 
       /**
+       * Merge `Worker["Binding"].env` from active bindings into `news.env`.
+       * Stack-level `worker.bind({ env })` is how a later resource (webhook
+       * secret, etc.) attaches env without the Worker init depending on it.
+       */
+      const secretTextFromEnvValue = (value: unknown): string | undefined => {
+        if (Redacted.isRedacted(value)) {
+          const inner = Redacted.value(value);
+          return typeof inner === "string" ? inner : undefined;
+        }
+        if (isRedactedMarker(value) && typeof value.value === "string") {
+          return value.value;
+        }
+        return undefined;
+      };
+
+      const newsWithBoundEnv = (
+        news: WorkerProps,
+        bindings: readonly ResourceBinding<Worker["Binding"]>[],
+      ): { news: WorkerProps; boundKeys: string[] } => {
+        const bound: Record<string, any> = {};
+        for (const binding of bindings) {
+          if ((binding as { action?: string }).action === "delete") continue;
+          if (binding.data?.env) Object.assign(bound, binding.data.env);
+        }
+        const boundKeys = Object.keys(bound);
+        if (boundKeys.length === 0) return { news, boundKeys };
+        return { news: { ...news, env: { ...news.env, ...bound } }, boundKeys };
+      };
+
+      /**
        * Append the standard Alchemy runtime bindings plus the user's `env`
        * entries (routed by shape: `Redacted` → secret_text, string →
        * plain_text, everything else → json) to a metadata binding list.
@@ -2526,59 +2486,24 @@ export const LiveWorkerProvider = () =>
         workerName: string,
       ) => {
         metadataBindings.push(
-          {
-            type: "plain_text",
-            name: "ALCHEMY_PHASE",
-            text: "runtime",
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_WORKER_NAME",
-            text: workerName,
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_STACK_NAME",
-            text: stack.name,
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_STAGE",
-            text: stack.stage,
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
-            text: accountId,
-          },
+          { type: "plain_text", name: "ALCHEMY_PHASE", text: "runtime" },
+          { type: "plain_text", name: "ALCHEMY_WORKER_NAME", text: workerName },
+          { type: "plain_text", name: "ALCHEMY_STACK_NAME", text: stack.name },
+          { type: "plain_text", name: "ALCHEMY_STAGE", text: stack.stage },
+          { type: "plain_text", name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID", text: accountId },
         );
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
             if (value === undefined) continue;
             if (metadataBindings.some((b) => b.name === key)) continue;
-            if (Redacted.isRedacted(value)) {
-              const unredacted = Redacted.value(value);
-              metadataBindings.push({
-                type: "secret_text",
-                name: key,
-                text:
-                  typeof unredacted === "string"
-                    ? unredacted
-                    : JSON.stringify(unredacted),
-              });
+            const secretText = secretTextFromEnvValue(value);
+            if (secretText !== undefined) {
+              metadataBindings.push({ type: "secret_text", name: key, text: secretText });
             } else if (typeof value === "string") {
-              metadataBindings.push({
-                type: "plain_text",
-                name: key,
-                text: value,
-              });
+              metadataBindings.push({ type: "plain_text", name: key, text: value });
             } else {
-              metadataBindings.push({
-                type: "json",
-                name: key,
-                json: value,
-              });
+              metadataBindings.push({ type: "json", name: key, json: value });
             }
           }
         }
@@ -2599,14 +2524,11 @@ export const LiveWorkerProvider = () =>
         message: string | undefined;
       }) {
         const { accountId, scriptName, versionId, traffic } = params;
-        const split = yield* Effect.gen(function* () {
+        const resolveSplit = Effect.gen(function* () {
           if (traffic >= 100) {
             return [{ versionId, percentage: 100 }];
           }
-          const { deployments } = yield* workers.listScriptDeployments({
-            accountId,
-            scriptName,
-          });
+          const { deployments } = yield* workers.listScriptDeployments({ accountId, scriptName });
           // Deployments are returned newest-first; the live version is the
           // highest-percentage version of the most recent deployment.
           const stable = deployments[0]?.versions
@@ -2621,14 +2543,13 @@ export const LiveWorkerProvider = () =>
             { versionId: stable.versionId, percentage: 100 - traffic },
           ];
         });
+        const split = yield* resolveSplit;
         const deployment = yield* workers.createScriptDeployment({
           accountId,
           scriptName,
           strategy: "percentage",
           versions: split,
-          annotations: params.message
-            ? { workersMessage: params.message }
-            : undefined,
+          annotations: params.message ? { workersMessage: params.message } : undefined,
         });
         return deployment.id;
       });
@@ -2653,18 +2574,14 @@ export const LiveWorkerProvider = () =>
         const userAlias = news.version?.alias;
         if (userAlias !== undefined) {
           if (!/^[a-z][a-z0-9-]*$/.test(userAlias)) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `version.alias '${userAlias}' is invalid: aliases must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `version.alias '${userAlias}' is invalid: aliases must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+            });
           }
           if (userAlias.length > budget) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `version.alias '${userAlias}' is too long: '<alias>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the alias.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `version.alias '${userAlias}' is too long: '<alias>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the alias.`,
+            });
           }
           return userAlias;
         }
@@ -2703,19 +2620,14 @@ export const LiveWorkerProvider = () =>
         accountId: string,
         scriptName: string,
       ) {
-        const subdomain = yield* workers
-          .getScriptSubdomain({ accountId, scriptName })
-          .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
-              enabled: false,
-              previewsEnabled: false,
-            })),
-          );
+        const subdomain = yield* workers.getScriptSubdomain({ accountId, scriptName }).pipe(
+          Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
+            enabled: false,
+            previewsEnabled: false,
+          })),
+        );
         const accountSubdomain = yield* getAccountSubdomain(accountId);
-        return {
-          previewsEnabled: subdomain.previewsEnabled === true,
-          accountSubdomain,
-        };
+        return { previewsEnabled: subdomain.previewsEnabled === true, accountSubdomain };
       });
 
       /**
@@ -2752,22 +2664,18 @@ export const LiveWorkerProvider = () =>
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
         if (forbidden.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message:
-                `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
-                `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message:
+              `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+          });
         }
         yield* validateTraffic(news.version?.traffic);
         const cronBindings = getCronBindings(bindings);
         if (cronBindings.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Cron Triggers are script-level settings and cannot be registered from a version of '${parentName}'. Configure crons on the parent Worker.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Cron Triggers are script-level settings and cannot be registered from a version of '${parentName}'. Configure crons on the parent Worker.`,
+          });
         }
         // Any locally-hosted DO class (a durable_object_namespace binding
         // without a foreign scriptName) or DO/Workflow export would require
@@ -2776,18 +2684,13 @@ export const LiveWorkerProvider = () =>
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
         const exportedClasses = Object.keys(news.exports ?? {});
         if (hostedClasses.length > 0 || exportedClasses.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `A version of '${parentName}' cannot host Durable Object or Workflow classes (${[
-                ...new Set([
-                  ...hostedClasses.map((c) => c.className),
-                  ...exportedClasses,
-                ]),
-              ].join(
-                ", ",
-              )}): class migrations apply to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `A version of '${parentName}' cannot host Durable Object or Workflow classes (${[
+              ...new Set([...hostedClasses.map((c) => c.className), ...exportedClasses]),
+            ].join(
+              ", ",
+            )}): Durable Object and Workflow classes belong to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
+          });
         }
       });
 
@@ -2802,20 +2705,20 @@ export const LiveWorkerProvider = () =>
        */
       const putWorkerVersion = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
         output: Worker["Attributes"] | undefined,
       ) {
+        ({ news } = newsWithBoundEnv(news, bindings));
         const { accountId } = yield* yield* CloudflareEnvironment;
         const version = news.version!;
         const parentName = resolveVersionParentName(version);
         if (parentName === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `version.parent did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `version.parent did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+          });
         }
         yield* validateVersionWorkerProps(news, bindings, parentName);
         const traffic = version.traffic ?? 0;
@@ -2826,21 +2729,21 @@ export const LiveWorkerProvider = () =>
         // lets a `Worker.URL` (self_url) binding be baked into the
         // version's own bindings.
         const alias = yield* resolveVersionAlias(id, news, parentName);
-        const { previewsEnabled, accountSubdomain } =
-          yield* resolveVersionPreviewContext(accountId, parentName);
+        const { previewsEnabled, accountSubdomain } = yield* resolveVersionPreviewContext(
+          accountId,
+          parentName,
+        );
         const aliasedUrl =
           alias !== undefined && previewsEnabled
             ? `https://${alias}-${parentName}.${accountSubdomain}.workers.dev`
             : undefined;
         const selfUrl = hasSelfUrlBinding(bindings) ? aliasedUrl : undefined;
         if (hasSelfUrlBinding(bindings) && selfUrl === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: previewsEnabled
-                ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
-                : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: previewsEnabled
+              ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
+              : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
+          });
         }
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
@@ -2849,9 +2752,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, parentName, news, {
-          skipAssetsRead: false,
-        });
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, { skipAssetsRead: false });
         const metadataHash = yield* resolveWorkerMetadataHash({
           props: news,
           bindings,
@@ -2869,7 +2770,7 @@ export const LiveWorkerProvider = () =>
         // service binding on the parent script (versions have no name of
         // their own).
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item) =>
+          withoutDevOnlyBindings(b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
               : item.type === "self_service"
@@ -2877,37 +2778,27 @@ export const LiveWorkerProvider = () =>
                     type: "service" as const,
                     name: item.name,
                     service: parentName,
+                    ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                    ...(item.props !== undefined && { props: item.props }),
                   }
                 : item,
           ),
         );
-        let metadataAssets:
-          | workers.CreateScriptVersionRequest["metadata"]["assets"]
-          | undefined;
+        let metadataAssets: workers.CreateScriptVersionRequest["metadata"]["assets"] | undefined;
         if (assets) {
-          yield* Effect.logInfo(
-            `Cloudflare Worker version: uploading assets for ${parentName}`,
-          );
-          const { jwt } = yield* uploadAssets(
-            accountId,
-            parentName,
-            assets,
-            session,
-          );
-          metadataAssets = {
-            jwt,
-            config: mergeAssetsConfigFiles(assets.config, assets),
-          };
+          yield* Effect.logInfo(`Cloudflare Worker version: uploading assets for ${parentName}`);
+          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
+          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
           metadataBindings.push({ type: "assets", name: "ASSETS" });
         }
-        appendAlchemyAndEnvBindings(
-          metadataBindings,
-          news,
-          accountId,
-          parentName,
-        );
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
         const compatibility = getCompatibility(news);
-        yield* session.note(`Uploading version of ${parentName} ...`);
+        // A version of a parent that hosts Durable Objects must re-declare
+        // the parent's live `exports`: Cloudflare reconciles a deployed
+        // version against its own map and rejects splitting traffic between
+        // versions whose maps differ.
+        const parentExports = yield* getLiveDurableObjectExports(accountId, parentName);
+        yield* session.note(`Uploading version of ${parentName} ...`, { kind: "status" });
         const created = yield* workers
           .createScriptVersion({
             accountId,
@@ -2919,10 +2810,16 @@ export const LiveWorkerProvider = () =>
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               cacheOptions: news.cache ?? getCacheBinding(bindings),
+              exports: nonEmptyExports({
+                ...parentExports,
+                ...(yield* workerEntrypointExports(
+                  parentName,
+                  news.entrypoints,
+                  Object.keys(parentExports ?? {}),
+                )),
+              }),
               annotations:
-                alias !== undefined ||
-                version.message !== undefined ||
-                version.tag !== undefined
+                alias !== undefined || version.message !== undefined || version.tag !== undefined
                   ? {
                       workersAlias: alias,
                       workersMessage: version.message,
@@ -2947,17 +2844,15 @@ export const LiveWorkerProvider = () =>
           );
         const versionId = created.id ?? undefined;
         if (versionId === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Cloudflare did not return a version id for the uploaded version of '${parentName}'.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Cloudflare did not return a version id for the uploaded version of '${parentName}'.`,
+          });
         }
         let deploymentId: string | undefined;
         if (traffic > 0) {
-          yield* session.note(
-            `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
-          );
+          yield* session.note(`Deploying version at ${traffic}% of ${parentName}'s traffic ...`, {
+            kind: "status",
+          });
           deploymentId = yield* deployVersionTraffic({
             accountId,
             scriptName: parentName,
@@ -3009,15 +2904,13 @@ export const LiveWorkerProvider = () =>
               addHost(route.zoneId, { host, wildcard: host.includes("*") });
             }
             if (hostsByZone.size === 0) {
-              return yield* Effect.fail(
-                new WorkerVersionConfigError({
-                  message:
-                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
-                    `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
-                }),
-              );
+              return yield* new WorkerVersionConfigError({
+                message:
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
+                  `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
+              });
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", { kind: "status" });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: parentName,
@@ -3035,10 +2928,7 @@ export const LiveWorkerProvider = () =>
         const versionedUrl = previewsEnabled
           ? `https://${versionId.split("-")[0]}-${parentName}.${accountSubdomain}.workers.dev`
           : undefined;
-        const urls = [
-          ...(aliasedUrl ? [aliasedUrl] : []),
-          ...(versionedUrl ? [versionedUrl] : []),
-        ];
+        const urls = [...(aliasedUrl ? [aliasedUrl] : []), ...(versionedUrl ? [versionedUrl] : [])];
         return {
           // A version worker never owns a script — carry the *parent*
           // script's immutable ID (its preview URLs are protected through
@@ -3066,8 +2956,299 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
+      /**
+       * Reconcile a *Preview Worker*: create/update a first-class Preview of
+       * the parent script and upload this Worker's code + bindings as a
+       * Preview deployment. Isolated same-Worker Durable Object classes
+       * get their own namespace per Preview.
+       */
+      const putWorkerPreview = Effect.fn(function* (
+        id: string,
+        fqn: string,
+        news: WorkerProps,
+        bindings: ResourceBinding<Worker["Binding"]>[],
+        session: ScopedPlanStatusSession,
+        output: Worker["Attributes"] | undefined,
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const preview = news.preview!;
+        const parentName = resolvePreviewParentName(preview);
+        if (parentName === undefined) {
+          return yield* new WorkerPreviewConfigError({
+            message: `preview.of did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+          });
+        }
+        if (news.version !== undefined) {
+          return yield* new WorkerPreviewConfigError({
+            message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+          });
+        }
+        const forbidden = (
+          [
+            ["name", news.name],
+            ["namespace", news.namespace],
+            ["crons", news.crons],
+            ["tailConsumers", news.tailConsumers],
+            ["streamingTailConsumers", news.streamingTailConsumers],
+            ["domain", news.domain],
+            ["routes", news.routes],
+            ["workersDev", news.workersDev],
+            ["access", news.access],
+          ] as const
+        ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
+        if (forbidden.length > 0) {
+          return yield* new WorkerPreviewConfigError({
+            message:
+              `preview.of creates a Preview of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+          });
+        }
+        const cronBindings = getCronBindings(bindings);
+        if (cronBindings.length > 0) {
+          return yield* new WorkerPreviewConfigError({
+            message: `Cron Triggers are script-level settings and cannot be registered from a Preview of '${parentName}'. Configure crons on the parent Worker.`,
+          });
+        }
+
+        const budget = 63 - parentName.length - 1;
+        const userName = preview.name;
+        let previewName: string;
+        if (userName !== undefined) {
+          if (!/^[a-z][a-z0-9-]*$/.test(userName)) {
+            return yield* new WorkerPreviewConfigError({
+              message: `preview.name '${userName}' is invalid: names must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+            });
+          }
+          if (userName.length > budget) {
+            return yield* new WorkerPreviewConfigError({
+              message: `preview.name '${userName}' is too long: '<name>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the name.`,
+            });
+          }
+          previewName = userName;
+        } else if (budget < 4) {
+          return yield* new WorkerPreviewConfigError({
+            message: `Cannot derive a Preview name: '<name>-${parentName}' must fit in a 63-character DNS label. Set preview.name to a short value or shorten the parent's name.`,
+          });
+        } else {
+          const readable = stack.stage
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+          const derived = (readable.length > 0 ? readable : `p${id}`)
+            .slice(0, budget)
+            .replace(/-+$/, "");
+          previewName = /^[a-z]/.test(derived) ? derived : `p${derived}`.slice(0, budget);
+        }
+
+        yield* Effect.logInfo(
+          `Cloudflare Worker Preview: ${previewName} of ${parentName} (from ${id})`,
+        );
+
+        const existingPreview = yield* workers
+          .getPreview({ accountId, workerId: parentName, previewId: previewName })
+          .pipe(
+            Effect.catchTags({
+              PreviewNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () =>
+                Effect.fail(
+                  new WorkerPreviewConfigError({
+                    message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                  }),
+                ),
+            }),
+          );
+
+        const previewResource =
+          existingPreview ??
+          (yield* workers
+            .createPreview({
+              accountId,
+              workerId: parentName,
+              name: previewName,
+              ignoreBaseConfig: true,
+            })
+            .pipe(
+              Effect.catchTag("PreviewAlreadyExists", () =>
+                workers
+                  .getPreview({ accountId, workerId: parentName, previewId: previewName })
+                  .pipe(
+                    Effect.retry({
+                      while: (error) => error._tag === "PreviewNotFound",
+                      schedule: Schedule.spaced("500 millis"),
+                      times: 8,
+                    }),
+                  ),
+              ),
+              Effect.catchTag("WorkerNotFound", () =>
+                Effect.fail(
+                  new WorkerPreviewConfigError({
+                    message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                  }),
+                ),
+              ),
+            ));
+
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        const parentAttrs =
+          typeof preview.of === "object" && preview.of !== null
+            ? (preview.of as unknown as Partial<Worker["Attributes"]>)
+            : undefined;
+        const parentDomainName = parentAttrs?.domain?.name;
+        const parentDomainPreviews = parentAttrs?.domain?.previews === true;
+        const constructedUrls = [
+          ...(parentDomainPreviews && parentDomainName
+            ? [`https://${previewResource.slug}.${parentDomainName}`]
+            : []),
+          `https://${previewResource.slug}-${parentName}.${accountSubdomain}.workers.dev`,
+        ];
+        const stableUrl = previewResource.urls?.[0] ?? constructedUrls[0];
+        const selfUrl = hasSelfUrlBinding(bindings) ? stableUrl : undefined;
+
+        yield* Effect.logInfo(
+          `Cloudflare Worker Preview: preparing bundle for ${parentName} (preview ${previewName})`,
+        );
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, { skipAssetsRead: false });
+        const metadataHash = yield* resolveWorkerMetadataHash({
+          props: news,
+          bindings,
+          accountId,
+          stack: { name: stack.name, stage: stack.stage },
+          selfUrl,
+        });
+        const hash = {
+          ...preparedHash,
+          metadata: metadataHash,
+        } satisfies Worker["Attributes"]["hash"];
+
+        const metadataBindings = bindings.flatMap((b) =>
+          withoutDevOnlyBindings(b.data.bindings ?? []).map((item) =>
+            item.type === "self_url"
+              ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                    ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                    ...(item.props !== undefined && { props: item.props }),
+                  }
+                : item,
+          ),
+        );
+        let metadataAssets: workers.CreatePreviewDeploymentMetadata["assets"] | undefined;
+        if (assets) {
+          yield* Effect.logInfo(`Cloudflare Worker Preview: uploading assets for ${parentName}`);
+          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
+          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
+
+        const hostedClasses = getDurableObjectBindings(bindings, parentName);
+        const classNames = [...new Set(hostedClasses.map((c) => c.className))];
+        let migrations: unknown = undefined;
+        if (classNames.length > 0) {
+          const latest = yield* workers
+            .getPreviewDeployment({
+              accountId,
+              workerId: parentName,
+              previewId: previewResource.id,
+              deploymentId: "latest",
+            })
+            .pipe(
+              Effect.catchTag(["PreviewNotFound", "PreviewDeploymentNotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const oldTag = latest?.migrationTag ?? undefined;
+          const previous = output?.previewDoClasses ?? [];
+          if (oldTag === undefined) {
+            migrations = { new_tag: "alchemy:v1", new_sqlite_classes: classNames };
+          } else {
+            const added = classNames.filter((c) => !previous.includes(c));
+            const deleted = previous.filter((c) => !classNames.includes(c));
+            if (added.length > 0 || deleted.length > 0) {
+              migrations = {
+                old_tag: oldTag,
+                new_tag: bumpMigrationTagVersion(oldTag) ?? "alchemy:v1",
+                ...(added.length > 0 ? { new_sqlite_classes: added } : {}),
+                ...(deleted.length > 0 ? { deleted_classes: deleted } : {}),
+              };
+            }
+          }
+        }
+
+        const compatibility = getCompatibility(news);
+        const annotations =
+          preview.message !== undefined || preview.tag !== undefined
+            ? {
+                ...(preview.message !== undefined ? { "workers/message": preview.message } : {}),
+                ...(preview.tag !== undefined ? { "workers/tag": preview.tag } : {}),
+              }
+            : undefined;
+
+        yield* session.note(`Uploading Preview ${previewName} of ${parentName} ...`, {
+          kind: "status",
+        });
+        const deployment = yield* workers.createPreviewDeployment({
+          accountId,
+          workerId: parentName,
+          previewId: previewResource.id,
+          metadata: {
+            mainModule: bundle.main!,
+            assets: metadataAssets,
+            compatibilityDate: compatibility.date,
+            compatibilityFlags: compatibility.flags,
+            cacheOptions: news.cache ?? getCacheBinding(bindings),
+            annotations,
+            migrations,
+            exports: nonEmptyExports(
+              yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
+            ),
+            env: bindingsToPreviewEnv(metadataBindings),
+          },
+          files: bundle.files,
+        });
+
+        const refreshed = yield* workers
+          .getPreview({ accountId, workerId: parentName, previewId: previewResource.id })
+          .pipe(Effect.catchTag("PreviewNotFound", () => Effect.succeed(previewResource)));
+
+        const urls = [
+          ...new Set([...(refreshed.urls ?? []), ...constructedUrls, ...(deployment.urls ?? [])]),
+        ];
+        return {
+          workerId:
+            cachedWorkerId(output?.workerId, parentName) ??
+            (yield* findWorkerId(accountId, parentName)),
+          workerName: parentName,
+          namespace: undefined,
+          logpush: undefined,
+          url: urls[0],
+          urls,
+          domain: undefined,
+          tags: undefined,
+          durableObjectNamespaces: {},
+          accountId,
+          routes: [],
+          crons: [],
+          previewOf: parentName,
+          previewId: previewResource.id,
+          previewName,
+          previewSlug: previewResource.slug,
+          previewDoClasses: classNames.length > 0 ? classNames : undefined,
+          deploymentId: deployment.id,
+          hash,
+        } satisfies Worker["Attributes"];
+      });
+
       const putWorker = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         olds: WorkerProps | undefined,
@@ -3075,11 +3256,11 @@ export const LiveWorkerProvider = () =>
         session: ScopedPlanStatusSession,
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
       ) {
+        news = newsWithBoundEnv(news, bindings).news;
         const { accountId } = yield* yield* CloudflareEnvironment;
         // Prefer the deployed name: regenerating would target a different
         // script if the generator's output for this id ever drifts.
-        const name =
-          output?.workerName ?? (yield* createWorkerName(id, news.name));
+        const name = output?.workerName ?? (yield* createWorkerName(id, news.name));
         // When set, this Worker is a Workers for Platforms "user worker"
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
@@ -3087,11 +3268,9 @@ export const LiveWorkerProvider = () =>
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
+          });
         }
         // Resolve the Worker's own URL up front when a `Worker.URL` binding
         // is present: the value must exist before the bundle is built (Vite
@@ -3118,7 +3297,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -3145,7 +3324,7 @@ export const LiveWorkerProvider = () =>
         // `transferred_classes` migration below and must be stripped from the
         // wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item): WireWorkerBinding => {
+          withoutDevOnlyBindings(b.data.bindings ?? []).map((item): WireWorkerBinding => {
             // Lower the `Worker.URL` sentinel into the resolved URL —
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
@@ -3154,33 +3333,33 @@ export const LiveWorkerProvider = () =>
             // Lower the `Worker.Self` sentinel into a service
             // binding targeting this Worker's own physical name.
             if (item.type === "self_service") {
-              return { type: "service", name: item.name, service: name };
+              return {
+                type: "service",
+                name: item.name,
+                service: name,
+                ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                ...(item.props !== undefined && { props: item.props }),
+              };
             }
-            if (
-              item.type === "durable_object_namespace" &&
-              item.transferredFrom !== undefined
-            ) {
+            if (item.type === "durable_object_namespace" && item.transferredFrom !== undefined) {
               const { transferredFrom: _, ...rest } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
             // producer) are alchemy-only metadata on queue bindings — strip
             // them from the wire shape.
-            if (
-              item.type === "queue" &&
-              (item.queueId !== undefined || item.shim !== undefined)
-            ) {
+            if (item.type === "queue" && (item.queueId !== undefined || item.shim !== undefined)) {
               const { queueId: _, shim: __, ...rest } = item;
               return rest;
             }
             return item;
           }),
         );
-        const expectedDurableObjectClassNames =
-          getExpectedDurableObjectClassNames(metadataBindings, name);
-        let metadataAssets:
-          | workers.PutScriptRequest["metadata"]["assets"]
-          | undefined;
+        const expectedDurableObjectClassNames = getExpectedDurableObjectClassNames(
+          metadataBindings,
+          name,
+        );
+        let metadataAssets: workers.PutScriptRequest["metadata"]["assets"] | undefined;
         let keepAssets = false;
         if (prebuiltAssets?.skip) {
           // Hash matched what's already on Cloudflare: keep the
@@ -3199,10 +3378,7 @@ export const LiveWorkerProvider = () =>
               yield* readAssetsConfigFiles(prebuiltAssets.directory),
             ),
           };
-          metadataBindings.push({
-            type: "assets",
-            name: "ASSETS",
-          });
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
         } else if (assets) {
           // We had to read the directory. Even after the read, the
           // computed hash may match what's already deployed (e.g.
@@ -3222,9 +3398,7 @@ export const LiveWorkerProvider = () =>
             // pre-merges them — without this, framework header/redirect
             // rules never reach Cloudflare. Idempotent for pre-merged
             // configs (explicit config wins).
-            metadataAssets = {
-              config: mergeAssetsConfigFiles(assets.config, assets),
-            };
+            metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -3234,6 +3408,7 @@ export const LiveWorkerProvider = () =>
               name,
               assets,
               session,
+              dispatchNamespace,
             );
             metadataAssets = {
               jwt,
@@ -3241,10 +3416,7 @@ export const LiveWorkerProvider = () =>
               config: mergeAssetsConfigFiles(assets.config, assets),
             };
           }
-          metadataBindings.push({
-            type: "assets",
-            name: "ASSETS",
-          });
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
         }
         appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
         yield* Effect.logInfo(
@@ -3257,20 +3429,15 @@ export const LiveWorkerProvider = () =>
         const sizeKB = size / 1024;
         const sizeMB = sizeKB / 1024;
         const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`);
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, { kind: "status" });
 
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
-          (yield* workers
-            .getScriptScriptAndVersionSetting({
-              accountId,
-              scriptName: name,
-            })
-            .pipe(
-              Effect.map((s) => s as typeof s | undefined),
-              Effect.catch(() => Effect.succeed(undefined)),
-            ));
+          (yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }).pipe(
+            Effect.map((s) => s as typeof s | undefined),
+            Effect.orElseSucceed(() => undefined),
+          ));
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
@@ -3280,28 +3447,22 @@ export const LiveWorkerProvider = () =>
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
         const currentDoClassNameByLogicalId = Object.fromEntries(
-          currentDoBindings.map((binding) => [
-            binding.logicalId,
-            binding.className,
-          ]),
+          currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
         );
-
-        // Parse alchemy:migration-tag:{version}
-        const oldMigrationTag = oldTags.flatMap((tag) =>
-          tag.startsWith("alchemy:migration-tag:")
-            ? [tag.slice("alchemy:migration-tag:".length)]
-            : [],
-        )[0];
-        const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
 
         // Compute delete-class candidates. Candidates are validated against
         // observed namespace ownership below — a class may already have been
         // transferred to another script by its new host's deploy.
+        // Several bindings may name one class (e.g. two Containers sharing a
+        // Durable Object class): a class stays while any binding hosts it.
+        const currentDoClasses = new Set(currentDoBindings.map((binding) => binding.className));
         const deletedClassCandidates: string[] = [];
-        for (const [logicalId, className] of Object.entries(
-          oldDoClassNameByLogicalId,
-        )) {
-          if (!currentDoClassNameByLogicalId[logicalId]) {
+        for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+          if (
+            !currentDoClassNameByLogicalId[logicalId] &&
+            !currentDoClasses.has(className) &&
+            !deletedClassCandidates.includes(className)
+          ) {
             deletedClassCandidates.push(className);
           }
         }
@@ -3313,16 +3474,15 @@ export const LiveWorkerProvider = () =>
         // and we don't own its lifecycle.
         if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
           for (const oldBinding of oldBindings) {
-            const ownedLocally =
-              !("scriptName" in oldBinding) || oldBinding.scriptName === name;
+            const ownedLocally = !("scriptName" in oldBinding) || oldBinding.scriptName === name;
             if (
               oldBinding.type === "durable_object_namespace" &&
               "className" in oldBinding &&
               oldBinding.className &&
               ownedLocally &&
-              !currentDoBindings.some(
-                (binding) => binding.bindingName === oldBinding.name,
-              )
+              !currentDoBindings.some((binding) => binding.bindingName === oldBinding.name) &&
+              !currentDoClasses.has(oldBinding.className) &&
+              !deletedClassCandidates.includes(oldBinding.className)
             ) {
               deletedClassCandidates.push(oldBinding.className);
             }
@@ -3346,33 +3506,36 @@ export const LiveWorkerProvider = () =>
           }
         }
 
-        // One account-level namespace listing serves both sides of a
-        // transfer: the destination checks the source still hosts the class
-        // before emitting `transferred_classes`, and the former host checks
-        // whether a to-be-deleted class was already transferred away.
-        // Dispatch-namespace user workers keep the legacy behavior — their
-        // namespaces don't surface on the account-level list.
+        // One account-level namespace listing is the observed Durable Object
+        // state for this deploy: the `exports` map declares every namespace
+        // this script owns (with its storage backend), the destination of a
+        // transfer checks the source still hosts the class, and the former
+        // host checks whether a to-be-deleted class was already transferred
+        // away. Dispatch-namespace user workers keep the legacy `migrations`
+        // flow — their namespaces don't surface on the account-level list.
         const mayTransferIn = currentDoBindings.some(
           (binding) =>
-            !oldDoClassNameByLogicalId[binding.logicalId] &&
-            binding.transferredFrom !== undefined,
+            !oldDoClassNameByLogicalId[binding.logicalId] && binding.transferredFrom !== undefined,
+        );
+        const hostedDurableObjectsBefore = oldBindings.some(
+          (binding) =>
+            binding.type === "durable_object_namespace" &&
+            (!("scriptName" in binding) ||
+              binding.scriptName === undefined ||
+              binding.scriptName === name),
         );
         const observedNamespaces =
-          !dispatchNamespace &&
-          (deletedClassCandidates.length > 0 || mayTransferIn)
-            ? yield* listDurableObjectNamespaces(accountId)
+          deletedClassCandidates.length > 0 ||
+          mayTransferIn ||
+          currentDoBindings.length > 0 ||
+          hostedDurableObjectsBefore
+            ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
             : [];
         const hosts = (
           namespaces: readonly { script: string; class: string }[],
           scriptName: string,
           className: string,
-        ) =>
-          namespaces.some(
-            (ns) => ns.script === scriptName && ns.class === className,
-          );
-        const scriptHostsClass = (scriptName: string, className: string) =>
-          hosts(observedNamespaces, scriptName, className);
-
+        ) => namespaces.some((ns) => ns.script === scriptName && ns.class === className);
         const deletedClasses: string[] = [];
         for (const className of deletedClassCandidates) {
           if (dispatchNamespace) {
@@ -3380,35 +3543,68 @@ export const LiveWorkerProvider = () =>
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
+          const namespaceId =
+            oldBindings.flatMap((binding) =>
+              binding.type === "durable_object_namespace" &&
+              "className" in binding &&
+              binding.className === className &&
+              (!("scriptName" in binding) ||
+                binding.scriptName === undefined ||
+                binding.scriptName === name) &&
+              "namespaceId" in binding &&
+              typeof binding.namespaceId === "string"
+                ? [binding.namespaceId]
+                : [],
+            )[0] ??
+            output?.durableObjectNamespaces?.[className] ??
+            observedNamespaces.find((ns) => ns.script === name && ns.class === className)?.id;
           if (targetScriptName === undefined) {
-            // Plain removal. Delete only if the namespace actually still
-            // lives here — it may have been transferred to another script by
-            // that script's deploy, or removed out-of-band. The stale
-            // alchemy:do tag drops out either way because tags are recomputed
-            // from current bindings.
-            if (scriptHostsClass(name, className)) {
+            const findNamespace = (namespaces: typeof observedNamespaces) =>
+              namespaces.find((ns) =>
+                namespaceId === undefined
+                  ? ns.script === name && ns.class === className
+                  : ns.id === namespaceId,
+              );
+            // Absence from an account listing does not prove a transfer.
+            const namespace =
+              findNamespace(observedNamespaces) ??
+              (yield* listDurableObjectNamespaces(accountId, dispatchNamespace).pipe(
+                Effect.flatMap((namespaces) => {
+                  const namespace = findNamespace(namespaces);
+                  return namespace
+                    ? Effect.succeed(namespace)
+                    : Effect.fail(
+                        new MissingDurableObjects({ scriptName: name, expected: [className] }),
+                      );
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "MissingDurableObjects",
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 5,
+                }),
+              ));
+            if (namespace.script === name && namespace.class === className) {
               deletedClasses.push(className);
             }
             continue;
           }
-          // The class went local → cross-script. When the new host's deploy
-          // ran a `transferred_classes` migration moments ago, the account
-          // listing can briefly still attribute the namespace to this script,
-          // so re-observe with a short bounded budget until the transfer
-          // becomes visible (namespace off this script) or the state is
-          // conclusively a conflict (still here — including the case where
-          // the target created a *fresh* namespace for the same class name).
-          const namespaces = yield* listDurableObjectNamespaces(accountId).pipe(
+          // A missing listing is inconclusive; the original namespace must appear on the new host.
+          const transferred = (namespaces: typeof observedNamespaces) =>
+            namespaceId !== undefined &&
+            namespaces.some(
+              (ns) =>
+                ns.id === namespaceId && ns.script === targetScriptName && ns.class === className,
+            );
+          const namespaces = yield* listDurableObjectNamespaces(accountId, dispatchNamespace).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (observed) =>
-                !hosts(observed, name, className) ||
-                hosts(observed, targetScriptName, className),
+                transferred(observed) ||
+                (hosts(observed, name, className) && hosts(observed, targetScriptName, className)),
               times: 5,
             }),
           );
-          if (!hosts(namespaces, name, className)) {
-            // Transferred away — nothing to delete.
+          if (transferred(namespaces)) {
             continue;
           }
           // local → cross-script transition without a transfer. Fail before
@@ -3416,34 +3612,46 @@ export const LiveWorkerProvider = () =>
           // anyway, and silently deleting would destroy the namespace's
           // data. See the error's docs for the two ways out
           // (`transferredFrom` on the new host, or a two-phase removal).
-          return yield* Effect.fail(
-            new DurableObjectTransferRequired({
-              scriptName: name,
-              className,
-              targetScriptName,
-            }),
-          );
+          return yield* new DurableObjectTransferRequired({
+            scriptName: name,
+            className,
+            targetScriptName,
+          });
         }
 
-        // Collect container-backed class names so we can send container metadata
-        const containerClassNames = new Set(
-          bindings.flatMap((b) =>
-            (b.data.containers ?? []).map((c) => c.className),
-          ),
+        // Collect container-backed classes so we can send container metadata.
+        // A Durable Object-managed class merges the images of every bound
+        // Container under one entry; `name` and `images` are only set for it.
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
         );
+        const containerClasses = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, name, images }) => ({ className, name, images }),
+        );
+
+        // Classes the deployed script hosts locally, by migration tag or by
+        // an observed local Durable Object binding.
+        const deployedDoClasses = new Set([
+          ...Object.values(oldDoClassNameByLogicalId),
+          ...oldBindings.flatMap((old) =>
+            old.type === "durable_object_namespace" &&
+            "className" in old &&
+            old.className &&
+            (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+              ? [old.className]
+              : [],
+          ),
+        ]);
 
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
-        const transferredClasses: {
-          from: string;
-          fromScript: string;
-          to: string;
-        }[] = [];
+        const transferredClasses: { from: string; fromScript: string; to: string }[] = [];
         for (const binding of currentDoBindings) {
-          let previousClassName: string | undefined =
-            oldDoClassNameByLogicalId[binding.logicalId];
+          let previousClassName: string | undefined = oldDoClassNameByLogicalId[binding.logicalId];
           if (!previousClassName) {
             // No DO metadata tag maps this logical id to a class — the
             // worker was created outside Alchemy (raw API / Wrangler) or
@@ -3474,6 +3682,24 @@ export const LiveWorkerProvider = () =>
               previousClassName = observed.className;
             }
           }
+          // Another binding already hosts this class on the deployed script
+          // (several bindings may name one class): the class exists, so a
+          // binding added for it creates nothing.
+          if (
+            (!previousClassName || previousClassName !== binding.className) &&
+            deployedDoClasses.has(binding.className)
+          ) {
+            continue;
+          }
+          // A logical id that moved to another class while its old class is
+          // still hosted by another binding is a new class, not a rename.
+          if (
+            previousClassName !== undefined &&
+            previousClassName !== binding.className &&
+            currentDoClasses.has(previousClassName)
+          ) {
+            previousClassName = undefined;
+          }
           if (!previousClassName) {
             // A class new to this script is a host move when the declaration
             // says so: `transferredFrom` lists the former host(s) — moves
@@ -3490,10 +3716,7 @@ export const LiveWorkerProvider = () =>
                   selfScriptName: name,
                   logicalId: binding.logicalId,
                   className: binding.className,
-                  sources: normalizeTransferSources(
-                    binding.transferredFrom,
-                    name,
-                  ),
+                  sources: normalizeTransferSources(binding.transferredFrom, name),
                   observedNamespaces,
                 });
             if (fromScript !== undefined) {
@@ -3509,27 +3732,30 @@ export const LiveWorkerProvider = () =>
             }
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
-            // Durable Objects require it.
-            newSqliteClasses.push(binding.className);
-          } else if (previousClassName !== binding.className) {
-            renamedClasses.push({
-              from: previousClassName,
-              to: binding.className,
-            });
+            // Durable Objects require it. Several bindings may name one class
+            // (e.g. two Containers sharing a class); create it once.
+            if (!newSqliteClasses.includes(binding.className)) {
+              newSqliteClasses.push(binding.className);
+            }
+          } else if (
+            previousClassName !== binding.className &&
+            !renamedClasses.some(
+              (rename) => rename.from === previousClassName && rename.to === binding.className,
+            )
+          ) {
+            renamedClasses.push({ from: previousClassName, to: binding.className });
           }
         }
 
         yield* Effect.logInfo(
-          `Cloudflare Worker put: durable object reconciliation ${JSON.stringify(
-            {
-              oldDoClassNameByLogicalId,
-              currentDoClassNameByLogicalId,
-              deletedClasses,
-              renamedClasses,
-              transferredClasses,
-              newSqliteClasses,
-            },
-          )}`,
+          `Cloudflare Worker put: durable object reconciliation ${JSON.stringify({
+            oldDoClassNameByLogicalId,
+            currentDoClassNameByLogicalId,
+            deletedClasses,
+            renamedClasses,
+            transferredClasses,
+            newSqliteClasses,
+          })}`,
         );
 
         // Pack every DO logical-id→class mapping into as few `alchemy:dos:`
@@ -3537,61 +3763,54 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        const alchemyTags = [
-          ...createAlchemyWorkerTags(id),
-          ...alchemyDoTags,
-          ...(newMigrationTag
-            ? [`alchemy:migration-tag:${newMigrationTag}`]
-            : []),
-        ];
-        const metadataTags = Array.from(
-          new Set([...alchemyTags, ...(news.tags ?? [])]),
-        );
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
+        const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
-        const migrations = {
-          oldTag: oldMigrationTag,
-          newTag: newMigrationTag,
-          newClasses,
-          deletedClasses,
+        // Cloudflare's declarative `exports` map: the complete Durable Object
+        // lifecycle of this script. Every namespace Cloudflare reports for
+        // this script stays declared with its observed storage backend
+        // (adopted classes Alchemy never bound included — an undeclared
+        // namespace is rejected, never silently deleted), then this deploy's
+        // creates, renames, deletes and incoming transfers are applied on top.
+        const exportsMap = buildDurableObjectExports({
+          scriptName: name,
+          observedNamespaces,
+          hostedClasses: currentDoBindings.map((binding) => binding.className),
           renamedClasses,
+          deletedClasses,
           transferredClasses,
-          newSqliteClasses,
-        };
-
-        const metadataContainers = [...containerClassNames].map(
-          (className) => ({
-            className,
-          }),
+        });
+        Object.assign(
+          exportsMap,
+          yield* workerEntrypointExports(name, news.entrypoints, Object.keys(exportsMap)),
         );
+        const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
+
+        const metadataContainers = containerClasses;
 
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
-        const streamingTailConsumers = resolveTailConsumers(
-          news.streamingTailConsumers,
-        );
+        const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
+        const observability = resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
+          annotations: news.version
+            ? { workersMessage: news.version.message, workersTag: news.version.tag }
+            : undefined,
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
           cacheOptions: news.cache ?? getCacheBinding(bindings),
           compatibilityDate: compatibility.date,
           compatibilityFlags: compatibility.flags,
-          containers:
-            metadataContainers.length > 0 ? metadataContainers : undefined,
+          containers: metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
           keepBindings: undefined,
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
-          migrations,
-          observability: news.observability ?? {
-            enabled: true,
-            logs: {
-              enabled: true,
-              invocationLogs: true,
-            },
-          },
+          exports: nonEmptyExports(exportsMap),
+          observability,
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -3623,22 +3842,31 @@ export const LiveWorkerProvider = () =>
           !dispatchNamespace
         ) {
           const migratedClasses = [
-            ...migrations.newClasses,
-            ...migrations.newSqliteClasses,
-            ...migrations.deletedClasses,
-            ...migrations.renamedClasses.map((r) => r.to),
-            ...migrations.transferredClasses.map((t) => t.to),
+            ...newClasses,
+            ...newSqliteClasses,
+            ...deletedClasses,
+            ...renamedClasses.map((r) => r.to),
+            ...transferredClasses.map((t) => t.to),
           ];
           if (migratedClasses.length > 0) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}), which requires a migration — migrations cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}). Durable Object lifecycle changes cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+            });
           }
-          yield* session.note(
-            `Uploading version of ${name} (${bundleSize}) ...`,
-          );
+          if (rolloutTraffic > 0) {
+            // Cloudflare rejects a split between versions that declare
+            // different `exports` — including the first deploy after a
+            // Worker moves from `migrations` to `exports`.
+            const liveExports = yield* getLiveDurableObjectExports(accountId, name);
+            if (!sameDurableObjectExports(metadata.exports, liveExports)) {
+              return yield* new WorkerVersionConfigError({
+                message: `This deploy of '${name}' changes its Durable Object exports${liveExports === undefined ? " (its live version still uses migrations)" : ""}. A gradual rollout needs every version to declare the same exports. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+              });
+            }
+          }
+          yield* session.note(`Uploading version of ${name} (${bundleSize}) ...`, {
+            kind: "status",
+          });
           const created = yield* workers
             .createScriptVersion({
               accountId,
@@ -3651,6 +3879,10 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
+                // No lifecycle changes reach this path (checked above): the
+                // map only re-declares the live classes, as Cloudflare
+                // requires once a Worker uses `exports`.
+                exports: metadata.exports,
                 annotations:
                   news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||
@@ -3672,16 +3904,14 @@ export const LiveWorkerProvider = () =>
             );
           versionId = created.id ?? undefined;
           if (versionId === undefined) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `Cloudflare did not return a version id for the uploaded version of '${name}'.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `Cloudflare did not return a version id for the uploaded version of '${name}'.`,
+            });
           }
           if (rolloutTraffic > 0) {
-            yield* session.note(
-              `Deploying version at ${rolloutTraffic}% of traffic ...`,
-            );
+            yield* session.note(`Deploying version at ${rolloutTraffic}% of traffic ...`, {
+              kind: "status",
+            });
             deploymentId = yield* deployVersionTraffic({
               accountId,
               scriptName: name,
@@ -3700,58 +3930,70 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
             );
           }
-          worker = yield* putWorkerScriptWithMigrationRecovery();
-        }
-
-        function putWorkerScriptWithMigrationRecovery() {
-          return putWorkerScript({
+          if (transferringIn.size > 0) {
+            // A transfer is two-phase under `exports`: this Worker first
+            // declares the class `expecting-transfer` (Cloudflare rejects a
+            // binding to it until the namespace arrives, so that binding is
+            // held back, and its `alchemy:dos` tag too — a crash before the
+            // commit then re-plans the transfer instead of creating a fresh
+            // namespace), then the former host commits with a `transferred`
+            // tombstone, then the full upload below binds the moved class.
+            const stagedTags = Array.from(
+              new Set([
+                ...createAlchemyWorkerTags(id),
+                ...encodeDurableObjectTags(
+                  currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
+                ),
+                ...(news.tags ?? []),
+              ]),
+            );
+            yield* putWorkerScript({
+              accountId,
+              scriptName: name,
+              dispatchNamespace,
+              metadata: {
+                ...metadata,
+                tags: stagedTags,
+                bindings: metadata.bindings?.filter(
+                  (binding) =>
+                    !(
+                      binding.type === "durable_object_namespace" &&
+                      transferringIn.has(binding.className) &&
+                      (binding.scriptName === undefined || binding.scriptName === name)
+                    ),
+                ),
+              },
+              files: bundle.files,
+            });
+            for (const fromScript of new Set(transferredClasses.map((t) => t.fromScript))) {
+              yield* commitDurableObjectTransfer({
+                accountId,
+                fromScript,
+                toScript: name,
+                classNames: transferredClasses
+                  .filter((transfer) => transfer.fromScript === fromScript)
+                  .map((transfer) => transfer.from),
+                observedNamespaces,
+              });
+            }
+          }
+          worker = yield* putWorkerScript({
             accountId,
             scriptName: name,
             dispatchNamespace,
-            metadata,
+            metadata: {
+              ...metadata,
+              exports: metadata.exports && settleTransfers(metadata.exports),
+            },
             files: bundle.files,
-          }).pipe(
-            Effect.catch((err) => {
-              // When adopting a Worker managed by Wrangler (or after a previous
-              // deploy with mismatched migrations), the old_tag precondition
-              // fails. The only way to discover the actual tag is through the
-              // error message — getScriptSettings is meant to return it but
-              // doesn't at runtime.
-              const msg = String(
-                typeof err === "object" && err !== null && "message" in err
-                  ? err.message
-                  : err,
-              );
-              const expectedTag = msg.match(
-                /when expected tag is ['"]?([^'"]+)['"]?/,
-              )?.[1];
-              if (expectedTag) {
-                return putWorkerScript({
-                  accountId,
-                  scriptName: name,
-                  dispatchNamespace,
-                  metadata: {
-                    ...metadata,
-                    migrations: {
-                      ...migrations,
-                      oldTag: expectedTag,
-                      newTag: bumpMigrationTagVersion(expectedTag),
-                    },
-                  },
-                  files: bundle.files,
-                });
-              }
-              // @effect-diagnostics-next-line anyUnknownInErrorContext:off
-              return Effect.fail(err as any);
-            }),
-          );
+          });
         }
-        const { settings, durableObjectNamespaces } =
-          yield* getWorkerSettingsWithDurableObjects(
-            name,
-            expectedDurableObjectClassNames,
-            dispatchNamespace,
-          );
+
+        const { settings, durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
+          name,
+          expectedDurableObjectClassNames,
+          dispatchNamespace,
+        );
         // Workers for Platforms user workers are invoked via dynamic dispatch,
         // never routed directly — they have no workers.dev subdomain, custom
         // domains, zone routes, or cron triggers. Skip all of that
@@ -3761,12 +4003,10 @@ export const LiveWorkerProvider = () =>
             workerId:
               worker.tag ??
               cachedWorkerId(output?.workerId, name) ??
-              (yield* Effect.fail(
-                new WorkerIdNotFound({
-                  scriptName: name,
-                  message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
-                }),
-              )),
+              (yield* new WorkerIdNotFound({
+                scriptName: name,
+                message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
+              })),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
@@ -3779,13 +4019,56 @@ export const LiveWorkerProvider = () =>
             routes: [],
             crons: [],
             tailConsumers:
-              settings.tailConsumers?.map((c) => ({ service: c.service })) ??
-              tailConsumers,
+              settings.tailConsumers?.map((c) => ({ service: c.service })) ?? tailConsumers,
             // The settings read endpoint doesn't expose
             // `streaming_tail_consumers`; record what this deploy uploaded.
             streamingTailConsumers,
             hash,
           } satisfies Worker["Attributes"];
+        }
+        const issuesEnabled = observability.issues?.enabled ?? false;
+        if (
+          versionId === undefined &&
+          (settings.observability?.issues?.enabled ?? false) !== issuesEnabled
+        ) {
+          // PATCH replaces observability; preserve the full observed configuration.
+          const observed = settings.observability;
+          yield* workers
+            .patchScriptSetting({
+              accountId,
+              scriptName: name,
+              observability: {
+                ...observed,
+                headSamplingRate: observed?.headSamplingRate ?? undefined,
+                redactQueryString: observed?.redactQueryString ?? undefined,
+                logs: observed?.logs
+                  ? {
+                      ...observed.logs,
+                      destinations: observed.logs.destinations ?? undefined,
+                      headSamplingRate: observed.logs.headSamplingRate ?? undefined,
+                      persist: observed.logs.persist ?? undefined,
+                    }
+                  : undefined,
+                traces: observed?.traces
+                  ? {
+                      ...observed.traces,
+                      destinations: observed.traces.destinations ?? undefined,
+                      enabled: observed.traces.enabled ?? undefined,
+                      headSamplingRate: observed.traces.headSamplingRate ?? undefined,
+                      persist: observed.traces.persist ?? undefined,
+                      propagationPolicy: observed.traces.propagationPolicy ?? undefined,
+                    }
+                  : undefined,
+                issues: { enabled: issuesEnabled },
+              },
+            })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.exponential("100 millis"),
+                times: 6,
+              }),
+            );
         }
         // Reconcile the workers.dev settings against observed cloud state.
         // We can't diff `news.workersDev` against `olds.workersDev` here
@@ -3796,12 +4079,9 @@ export const LiveWorkerProvider = () =>
         // a previous failed/external action left it as).
         const workersDev = resolveWorkersDev(news.workersDev);
         const observedSubdomain = yield* workers
-          .getScriptSubdomain({
-            accountId,
-            scriptName: name,
-          })
+          .getScriptSubdomain({ accountId, scriptName: name })
           .pipe(
-            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            Effect.orElseSucceed((): workers.GetScriptSubdomainResponse => ({
               enabled: false,
               previewsEnabled: false,
             })),
@@ -3812,6 +4092,7 @@ export const LiveWorkerProvider = () =>
         ) {
           yield* session.note(
             `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            { kind: "status" },
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -3827,10 +4108,7 @@ export const LiveWorkerProvider = () =>
                 error._tag === "WorkerNotFound" ||
                 error._tag === "InternalServerError" ||
                 error._tag === "UnknownCloudflareError",
-              schedule: Schedule.max([
-                Schedule.exponential(200),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
             }),
           );
         }
@@ -3846,9 +4124,7 @@ export const LiveWorkerProvider = () =>
         const manageCustomDomains = news.domain !== undefined;
         const domainConfig = yield* resolveWorkerDomain(news.domain);
         const previousDomain = stateWorkerDomain(output);
-        let effectiveDomain = manageCustomDomains
-          ? domainConfig
-          : previousDomain;
+        let effectiveDomain = manageCustomDomains ? domainConfig : previousDomain;
         if (!manageCustomDomains && previousDomain !== undefined) {
           // Unmanaged, but state remembers domains: observe which of them
           // are actually still attached and carry only those forward —
@@ -3858,12 +4134,8 @@ export const LiveWorkerProvider = () =>
           // domains) never pay this listDomains call (#926).
           const live = new Set(
             yield* workers.listDomains({ accountId, service: name }).pipe(
-              Effect.map((r) =>
-                (r.result ?? []).flatMap((d) =>
-                  d.hostname ? [d.hostname] : [],
-                ),
-              ),
-              Effect.catch(() => Effect.succeed([] as string[])),
+              Effect.map((r) => (r.result ?? []).flatMap((d) => (d.hostname ? [d.hostname] : []))),
+              Effect.orElseSucceed(() => [] as string[]),
             ),
           );
           const serving = [
@@ -3875,42 +4147,33 @@ export const LiveWorkerProvider = () =>
               ? {
                   name: serving[0],
                   aliases: serving.slice(1),
-                  redirects: previousDomain.redirects.filter((h) =>
-                    live.has(h),
-                  ),
+                  redirects: previousDomain.redirects.filter((h) => live.has(h)),
                 }
               : undefined;
         }
         if (manageCustomDomains) {
           const desiredHostnames = domainConfig
-            ? [
-                domainConfig.name,
-                ...domainConfig.aliases,
-                ...domainConfig.redirects,
-              ]
+            ? [domainConfig.name, ...domainConfig.aliases, ...domainConfig.redirects]
             : [];
-          yield* session.note(
-            `Reconciling custom domains (${desiredHostnames.length}) ...`,
-          );
+          yield* session.note(`Reconciling custom domains (${desiredHostnames.length}) ...`, {
+            kind: "status",
+          });
           // Capture hostname → zone for *currently attached* domains before
           // reconcile detaches removed ones — a removed redirect hostname's
           // zone is otherwise unresolvable and its rule couldn't be cleaned.
-          const liveBeforeReconcile = yield* workers
-            .listDomains({ accountId, service: name })
-            .pipe(
-              Effect.map((r) =>
-                (r.result ?? []).flatMap((d) =>
-                  d.hostname && d.zoneId
-                    ? [[d.hostname, d.zoneId] as const]
-                    : [],
-                ),
+          const liveBeforeReconcile = yield* workers.listDomains({ accountId, service: name }).pipe(
+            Effect.map((r) =>
+              (r.result ?? []).flatMap((d) =>
+                d.hostname && d.zoneId ? [[d.hostname, d.zoneId] as const] : [],
               ),
-              Effect.catch(() => Effect.succeed([])),
-            );
+            ),
+            Effect.orElseSucceed(() => []),
+          );
           const reconciled = yield* reconcileDomains(
             name,
             desiredHostnames,
             domainConfig?.zone,
+            domainConfig?.previews,
           );
           const zoneIdByHostname = new Map([
             ...liveBeforeReconcile,
@@ -3934,30 +4197,23 @@ export const LiveWorkerProvider = () =>
         const desiredRoutes = yield* normalizeRoutes(news.routes);
         const previousRoutes = output?.routes ?? [];
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
-          yield* session.note(
-            `Reconciling worker routes (${desiredRoutes.length}) ...`,
-          );
+          yield* session.note(`Reconciling worker routes (${desiredRoutes.length}) ...`, {
+            kind: "status",
+          });
         }
-        const routes = yield* reconcileRoutes(
-          name,
-          desiredRoutes,
-          previousRoutes,
-        );
+        const routes = yield* reconcileRoutes(name, desiredRoutes, previousRoutes);
         // Version-affinity transform rules (`version.affinity`): pin each
         // user to one version during gradual rollouts by filling the
         // version-key header from a stable request property, on every zone
         // this Worker serves on. Runs after the domain/route reconciles so
         // freshly attached surfaces resolve their zones, and also when only
         // *previous* state holds rules, so removing affinity converges.
-        const affinity =
-          news.version?.parent == null ? news.version?.affinity : undefined;
+        const affinity = news.version?.parent == null ? news.version?.affinity : undefined;
         const previousAffinityZoneIds = output?.affinityZoneIds ?? [];
         let affinityZoneIds: string[] | undefined;
         if (affinity !== undefined || previousAffinityZoneIds.length > 0) {
           const resolvedAffinity =
-            affinity !== undefined
-              ? yield* resolveVersionAffinity(affinity)
-              : undefined;
+            affinity !== undefined ? yield* resolveVersionAffinity(affinity) : undefined;
           let hostsByZone: Map<string, AffinityZoneHost[]> | undefined;
           if (resolvedAffinity !== undefined) {
             hostsByZone = new Map();
@@ -3985,15 +4241,13 @@ export const LiveWorkerProvider = () =>
               addHost(route.zoneId, { host, wildcard: host.includes("*") });
             }
             if (hostsByZone.size === 0) {
-              return yield* Effect.fail(
-                new WorkerVersionConfigError({
-                  message:
-                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
-                    `On the bare workers.dev URL, clients must send the header themselves.`,
-                }),
-              );
+              return yield* new WorkerVersionConfigError({
+                message:
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
+                  `On the bare workers.dev URL, clients must send the header themselves.`,
+              });
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", { kind: "status" });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: name,
@@ -4005,10 +4259,7 @@ export const LiveWorkerProvider = () =>
           });
           affinityZoneIds = placed.length > 0 ? placed : undefined;
         }
-        const desiredCrons = normalizeCrons([
-          ...getCronBindings(bindings),
-          ...(news.crons ?? []),
-        ]);
+        const desiredCrons = normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]);
         const previousCrons = output?.crons ?? [];
         // Same gating as read: skip getScriptSchedule when neither props nor
         // prior state indicate cron management (#926).
@@ -4041,8 +4292,7 @@ export const LiveWorkerProvider = () =>
           // script-level settings (tail consumers included) at their live
           // values until the next full deploy.
           tailConsumers:
-            settings.tailConsumers?.map((c) => ({ service: c.service })) ??
-            tailConsumers,
+            settings.tailConsumers?.map((c) => ({ service: c.service })) ?? tailConsumers,
           // GET script-settings has no `streaming_tail_consumers` field (the
           // API only carries it on upload metadata), so the uploaded value is
           // authoritative here. In the gradual-rollout branch the versions
@@ -4087,16 +4337,12 @@ export const LiveWorkerProvider = () =>
         // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
         // the hash-less shape, not a supplied hash — fall through to the
         // directory read instead of comparing undefined forever-dirty.
-        if (
-          Predicate.hasProperty(assets, "hash") &&
-          assets.hash !== undefined
-        ) {
+        if (Predicate.hasProperty(assets, "hash") && assets.hash !== undefined) {
           return assets.hash !== output.hash?.assets;
         }
         const read = yield* prepareAssets(assets).pipe(
-          Effect.catchTag(
-            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
-            () => Effect.succeed(undefined),
+          Effect.catchTag(["PlatformError", "AssetTooLargeError", "TooManyAssetsError"], () =>
+            Effect.succeed(undefined),
           ),
         );
         return read === undefined || read.hash !== output.hash?.assets;
@@ -4104,6 +4350,7 @@ export const LiveWorkerProvider = () =>
 
       const hasChanged = Effect.fn(function* (
         id: string,
+        fqn: string,
         props: WorkerProps,
         output: Worker["Attributes"],
         bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
@@ -4124,20 +4371,23 @@ export const LiveWorkerProvider = () =>
             props.version?.parent != null
               ? (resolveVersionParentName(props.version) ?? output.versionOf)
               : undefined;
-          const selfUrl = hasSelfUrlBinding(bindings)
-            ? versionParent !== undefined
-              ? yield* Effect.gen(function* () {
-                  const alias = yield* resolveVersionAlias(
-                    id,
-                    props,
-                    versionParent,
-                  );
-                  return alias !== undefined
-                    ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-                    : undefined;
-                })
-              : yield* resolveSelfUrl(output.workerName, props, accountId)
-            : undefined;
+          const previewParent =
+            props.preview?.of != null
+              ? (resolvePreviewParentName(props.preview) ?? output.previewOf)
+              : undefined;
+          const resolveBoundSelfUrl = Effect.gen(function* () {
+            if (previewParent !== undefined) {
+              return output.url;
+            }
+            if (versionParent !== undefined) {
+              const alias = yield* resolveVersionAlias(id, props, versionParent);
+              return alias !== undefined
+                ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+                : undefined;
+            }
+            return yield* resolveSelfUrl(output.workerName, props, accountId);
+          });
+          const selfUrl = hasSelfUrlBinding(bindings) ? yield* resolveBoundSelfUrl : undefined;
           const metadataHash = yield* resolveWorkerMetadataHash({
             props,
             bindings,
@@ -4157,7 +4407,9 @@ export const LiveWorkerProvider = () =>
           const source = yield* resolveSource(props);
           const slots = yield* source.hash(
             makeSourceContext({
+              dotAlchemy,
               id,
+              fqn,
               workerName: output.workerName,
               props,
               compatibility: getCompatibility(props),
@@ -4166,10 +4418,7 @@ export const LiveWorkerProvider = () =>
             output.hash,
           );
           for (const slot of ["bundle", "input", "assets"] as const) {
-            if (
-              slots[slot] !== undefined &&
-              slots[slot] !== output.hash?.[slot]
-            ) {
+            if (slots[slot] !== undefined && slots[slot] !== output.hash?.[slot]) {
               return true;
             }
           }
@@ -4218,9 +4467,7 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
-          Effect.map((b) => b.hash),
-        );
+        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(Effect.map((b) => b.hash));
         if (bundleHash !== output.hash?.bundle) {
           return true;
         }
@@ -4257,40 +4504,33 @@ export const LiveWorkerProvider = () =>
                   // type; a narrower element (e.g. via `satisfies`, which omits
                   // `hash`) would derail `Res` inference and cascade every
                   // lifecycle method's requirement channel to `never`.
-                  (page.result ?? []).flatMap(
-                    (script): Worker["Attributes"][] =>
-                      script.id
-                        ? [
-                            {
-                              accountId,
-                              // Practically always present; an empty value
-                              // is healed by the per-script read.
-                              workerId: script.tag ?? "",
-                              workerName: script.id,
-                              namespace: undefined,
-                              logpush: script.logpush ?? undefined,
-                              url: undefined,
-                              tags: script.tags ?? undefined,
-                              durableObjectNamespaces: {},
-                              urls: [],
-                              domain: undefined,
-                              routes: [],
-                              crons: [],
-                            },
-                          ]
-                        : [],
+                  (page.result ?? []).flatMap((script): Worker["Attributes"][] =>
+                    script.id
+                      ? [
+                          {
+                            accountId,
+                            // Practically always present; an empty value
+                            // is healed by the per-script read.
+                            workerId: script.tag ?? "",
+                            workerName: script.id,
+                            namespace: undefined,
+                            logpush: script.logpush ?? undefined,
+                            url: undefined,
+                            tags: script.tags ?? undefined,
+                            durableObjectNamespaces: {},
+                            urls: [],
+                            domain: undefined,
+                            routes: [],
+                            crons: [],
+                          },
+                        ]
+                      : [],
                   ),
                 ),
               ),
             );
           }),
-        diff: Effect.fn(function* ({
-          id,
-          news: desired,
-          olds,
-          output,
-          newBindings,
-        }) {
+        diff: Effect.fn(function* ({ id, fqn, news: desired, olds, output, newBindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Effect-valued `env` entries (tagged Worker classes / resource
           // Effects — the circular-bindings pattern) never resolve at plan
@@ -4310,34 +4550,38 @@ export const LiveWorkerProvider = () =>
           // script are distinct cloud resources; moving a Worker into, out of,
           // or between namespaces requires a replacement.
           const newNamespace = resolveNamespaceName(news.namespace);
-          const oldNamespace =
-            output?.namespace ?? resolveNamespaceName(olds?.namespace);
+          const oldNamespace = output?.namespace ?? resolveNamespaceName(olds?.namespace);
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          // A version worker (version.parent) and a script-owning Worker are
-          // distinct cloud resources, and a version belongs to exactly one
-          // parent script — switching mode or parent is a replacement.
+          // A version worker (version.parent), a Preview Worker
+          // (preview.of), and a script-owning Worker are distinct cloud
+          // resources — switching mode or parent is a replacement.
           const newIsVersion = news.version?.parent != null;
-          const oldIsVersion =
-            output?.versionOf !== undefined || olds?.version?.parent != null;
+          const oldIsVersion = output?.versionOf !== undefined || olds?.version?.parent != null;
           if (newIsVersion !== oldIsVersion) {
             return { action: "replace" };
           }
           if (newIsVersion) {
             const newParent = resolveVersionParentName(news.version);
-            const oldParent =
-              output?.versionOf ?? resolveVersionParentName(olds?.version);
-            if (
-              newParent !== undefined &&
-              oldParent !== undefined &&
-              newParent !== oldParent
-            ) {
+            const oldParent = output?.versionOf ?? resolveVersionParentName(olds?.version);
+            if (newParent !== undefined && oldParent !== undefined && newParent !== oldParent) {
               return { action: "replace" };
             }
           }
-          const oldWorkerName =
-            output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+          const newIsPreview = news.preview?.of != null;
+          const oldIsPreview = output?.previewOf !== undefined || olds?.preview?.of != null;
+          if (newIsPreview !== oldIsPreview) {
+            return { action: "replace" };
+          }
+          if (newIsPreview) {
+            const newParent = resolvePreviewParentName(news.preview);
+            const oldParent = output?.previewOf ?? resolvePreviewParentName(olds?.preview);
+            if (newParent !== undefined && oldParent !== undefined && newParent !== oldParent) {
+              return { action: "replace" };
+            }
+          }
+          const oldWorkerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id
           // differently today (a Worker replace would also destroy its
@@ -4363,6 +4607,7 @@ export const LiveWorkerProvider = () =>
                   d.aliases,
                   [...d.redirects].sort(),
                   d.zone ?? null,
+                  d.previews === true,
                 ]);
           // An omitted `domain` unmanages the surface (#942): reconcile
           // carries previously-observed custom domains forward in state, so
@@ -4370,13 +4615,10 @@ export const LiveWorkerProvider = () =>
           // dirty plan on every deploy, forever. Only a declared `domain`
           // (including `null`, the explicit detach-all) participates.
           const domainsChanged =
-            news.domain !== undefined &&
-            domainKey(newDomainConfig) !== domainKey(oldDomainConfig);
+            news.domain !== undefined && domainKey(newDomainConfig) !== domainKey(oldDomainConfig);
           const newCrons = normalizeCrons([
             ...(Array.isArray(newBindings)
-              ? getCronBindings(
-                  newBindings as ResourceBinding<Worker["Binding"]>[],
-                )
+              ? getCronBindings(newBindings as ResourceBinding<Worker["Binding"]>[])
               : []),
             ...(news.crons ?? []),
           ]).sort();
@@ -4384,9 +4626,7 @@ export const LiveWorkerProvider = () =>
           const cronsChanged =
             newCrons.length !== oldCrons.length ||
             newCrons.some((cron, index) => cron !== oldCrons[index]);
-          const newRouteKeys = (yield* normalizeRoutes(news.routes))
-            .map(routeKey)
-            .sort();
+          const newRouteKeys = (yield* normalizeRoutes(news.routes)).map(routeKey).sort();
           const oldRouteKeys = (output?.routes ?? []).map(routeKey).sort();
           const routesChanged =
             newRouteKeys.length !== oldRouteKeys.length ||
@@ -4440,9 +4680,7 @@ export const LiveWorkerProvider = () =>
                 workerName,
               ).sort()
             : [];
-          const oldDoClassNames = Object.keys(
-            output.durableObjectNamespaces ?? {},
-          ).sort();
+          const oldDoClassNames = Object.keys(output.durableObjectNamespaces ?? {}).sort();
           const doNamespacesStable =
             oldWorkerName === workerName &&
             newDoClassNames.length === oldDoClassNames.length &&
@@ -4451,8 +4689,7 @@ export const LiveWorkerProvider = () =>
           // `workerId` (interrupted precreates a provisional ""). Plan one
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
-          const legacyWorkerId =
-            cachedWorkerId(output.workerId, output.workerName) === undefined;
+          const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
           if (
             legacyWorkerId ||
             domainsChanged ||
@@ -4460,6 +4697,7 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(
               id,
+              fqn,
               news,
               output,
               Array.isArray(newBindings)
@@ -4482,10 +4720,7 @@ export const LiveWorkerProvider = () =>
             if (doNamespacesStable) {
               stables.push("durableObjectNamespaces");
             }
-            return {
-              action: "update",
-              stables: stables.length > 0 ? stables : undefined,
-            };
+            return { action: "update", stables: stables.length > 0 ? stables : undefined };
           }
           // Machine-local source paths and resource-backed `env` values have
           // already been compared by their content hashes and canonical
@@ -4497,30 +4732,21 @@ export const LiveWorkerProvider = () =>
               const { env: _env, ...rest } = props;
               return {
                 ...rest,
-                ...(props.main !== undefined
-                  ? { main: "<source>" }
-                  : undefined),
+                ...(props.main !== undefined ? { main: "<source>" } : undefined),
                 ...(props.assets
                   ? {
                       assets: {
-                        ...(typeof props.assets === "string"
-                          ? undefined
-                          : props.assets),
+                        ...(typeof props.assets === "string" ? undefined : props.assets),
                         directory: "<source>",
                       },
                     }
                   : undefined),
-                ...(props.vite
-                  ? { vite: { ...props.vite, rootDir: "<source>" } }
-                  : undefined),
+                ...(props.vite ? { vite: { ...props.vite, rootDir: "<source>" } } : undefined),
               };
             };
             if (
               olds !== undefined &&
-              !havePropsChanged(
-                normalizeComparedProps(olds),
-                normalizeComparedProps(news),
-              )
+              !havePropsChanged(normalizeComparedProps(olds), normalizeComparedProps(news))
             ) {
               return { action: "noop" };
             }
@@ -4528,6 +4754,7 @@ export const LiveWorkerProvider = () =>
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4536,9 +4763,9 @@ export const LiveWorkerProvider = () =>
           // no placeholder is needed for circular bindings either. (`news`
           // is raw here — `version.parent` may be an unresolved ref, but its
           // *presence* is statically known.)
-          if (news.version?.parent != null) {
+          if (news.version?.parent != null || news.preview?.of != null) {
             yield* Effect.logInfo(
-              `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
+              `Cloudflare Worker precreate: skipping stub for ${news.preview?.of != null ? "Preview" : "version"} worker ${id}`,
             );
             return {
               // Provisional: a version worker resolves its parent's
@@ -4576,8 +4803,7 @@ export const LiveWorkerProvider = () =>
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace:
-                typeof news.namespace === "string" ? news.namespace : undefined,
+              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4617,32 +4843,23 @@ export const LiveWorkerProvider = () =>
           ).filter((binding) => !binding.transferredFrom);
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
-          // Container binding (mirrors reconcile's `containerClassNames`).
+          // Container binding (mirrors reconcile's `containerClasses`).
           // Mapping every DO class to a container would wrongly mark plain DOs
           // as container-backed in the placeholder.
+          yield* assertBindingContainersOnAsyncClasses(
+            bindings.flatMap((b) => b.data.containers ?? []),
+            exportDerived.map((binding) => binding.className),
+          );
           const containers = Array.from(
-            new Set(
-              bindings.flatMap((b) =>
-                (b.data.containers ?? []).map((c) => c.className),
-              ),
-            ),
+            new Set(bindings.flatMap((b) => (b.data.containers ?? []).map((c) => c.className))),
           ).map((className) => ({ className }));
           const alchemyDoTags = encodeDurableObjectTags(durableObjects);
-          const alchemyTags = [
-            ...createAlchemyWorkerTags(id),
-            ...alchemyDoTags,
-          ];
-          const tags = Array.from(
-            new Set([...alchemyTags, ...(news.tags ?? [])]),
-          );
+          const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
+          const tags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
           yield* validateWorkerTags(name, tags, alchemyTags.length);
+          yield* Effect.logInfo(`Cloudflare Worker precreate: starting ${name}`);
           yield* Effect.logInfo(
-            `Cloudflare Worker precreate: starting ${name}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker precreate: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
+            `Cloudflare Worker precreate: durable objects ${JSON.stringify(durableObjects)}`,
           );
           const existingSettings = yield* getScriptSettings(
             accountId,
@@ -4655,39 +4872,26 @@ export const LiveWorkerProvider = () =>
             // worker the dispatch-namespace endpoints report a missing
             // script as `DispatchNamespaceScriptNotFound` (and a missing
             // namespace as `DispatchNamespaceNotFound`).
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
           );
-          let durableObjectNamespaces = getDurableObjects(
-            existingSettings?.bindings,
-          );
+          let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
 
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
             // `read` + AdoptPolicy. Either we own it (matching tags) or
             // the user opted in to a takeover (`--adopt` / `adopt(true)`).
-            yield* Effect.logInfo(
-              `Cloudflare Worker precreate: reusing existing ${name}`,
-            );
+            yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
-            yield* session.note("Pre-creating worker...");
+            yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
-            const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
-              .map(
-                (className) =>
-                  `export class ${className} extends DurableObject {}`,
-              )
-              .join("\n")}`;
+            const placeholderScript = makePlaceholderScript(doClasses);
             placeholder = yield* putWorkerScript({
               accountId,
               scriptName: name,
@@ -4708,25 +4912,17 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
-                migrations:
+                // A fresh script: every hosted class is new and SQLite-backed.
+                exports:
                   doClasses.length > 0
-                    ? {
-                        oldTag: undefined,
-                        newTag: undefined,
-                        newClasses: [],
-                        deletedClasses: [],
-                        renamedClasses: [],
-                        transferredClasses: [],
-                        newSqliteClasses: doClasses,
-                      }
+                    ? Object.fromEntries(
+                        doClasses.map((className) => [
+                          className,
+                          { type: "durable-object", storage: "sqlite" },
+                        ]),
+                      )
                     : undefined,
-                observability: news.observability ?? {
-                  enabled: true,
-                  logs: {
-                    enabled: true,
-                    invocationLogs: true,
-                  },
-                },
+                observability: resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -4744,48 +4940,61 @@ export const LiveWorkerProvider = () =>
               // up the patch yet.
               Effect.retry({
                 while: (e) =>
-                  e._tag === "InternalServerError" ||
-                  e._tag === "UnknownCloudflareError",
-                schedule: Schedule.max([
-                  Schedule.exponential(1000),
-                  Schedule.recurs(5),
-                ]),
+                  e._tag === "InternalServerError" || e._tag === "UnknownCloudflareError",
+                schedule: Schedule.max([Schedule.exponential(1000), Schedule.recurs(5)]),
               }),
             );
             if (doClasses.length > 0) {
-              ({ durableObjectNamespaces } =
-                yield* getWorkerSettingsWithDurableObjects(
-                  name,
-                  doClasses,
-                  dispatchNamespace,
-                ));
-            }
-          }
-
-          if (existingSettings && doClasses.length > 0) {
-            ({ durableObjectNamespaces } =
-              yield* getWorkerSettingsWithDurableObjects(
+              ({ durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
                 name,
                 doClasses,
                 dispatchNamespace,
               ));
+            }
           }
+
+          if (existingSettings && doClasses.length > 0) {
+            ({ durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
+              name,
+              doClasses,
+              dispatchNamespace,
+            ));
+          }
+
+          /**
+           * Precreate publishes the URLs that are known before the first
+           * upload, so cycle peers that interpolate `worker.url` (e.g. a
+           * Website reading its API's URL while the API allows the Website's
+           * origin, or Stripe.WebhookEndpoint) get a valid HTTPS URL instead of
+           * `undefined`: the custom domain and its aliases when `domain` is
+           * already resolved, then the stable workers.dev URL when
+           * `workersDev` is enabled (the default). Version/preview URLs are
+           * still unresolved; reconcile overwrites `url`/`urls` with the
+           * final values.
+           */
+          const domain = isResolved(news.domain)
+            ? yield* resolveWorkerDomain(news.domain)
+            : undefined;
+          const urls = yield* computeStableWorkerUrls({
+            scriptName: name,
+            workersDev: resolveWorkersDev(news.workersDev as WorkerProps["workersDev"]),
+            domain,
+          });
 
           return {
             // The placeholder upload's tag (or, when adopting an existing
             // script, the listing lookup); reconcile re-records it after
             // the full deploy.
-            workerId:
-              placeholder?.tag ?? (yield* findWorkerId(accountId, name)),
+            workerId: placeholder?.tag ?? (yield* findWorkerId(accountId, name)),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
-            url: undefined,
+            url: urls[0],
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
-            urls: [],
-            domain: undefined,
+            urls,
+            domain,
             routes: [],
             crons: [],
           } satisfies Worker["Attributes"];
@@ -4798,10 +5007,7 @@ export const LiveWorkerProvider = () =>
             // potentially brand as adoptable) a resource we don't own. The
             // version itself is immutable; all we verify is that it still
             // exists on the parent.
-            if (
-              output?.versionOf !== undefined ||
-              olds?.version?.parent != null
-            ) {
+            if (output?.versionOf !== undefined || olds?.version?.parent != null) {
               if (output?.versionOf === undefined || !output.versionId) {
                 // No recorded version (e.g. state was written before the
                 // upload completed) — nothing to observe; reconcile will
@@ -4821,23 +5027,28 @@ export const LiveWorkerProvider = () =>
                   ),
                 );
             }
-            const workerName =
-              output?.workerName ?? (yield* createWorkerName(id, olds?.name));
-            const dispatchNamespace =
-              output?.namespace ?? resolveNamespaceName(olds?.namespace);
-            yield* Effect.logInfo(
-              `Cloudflare Worker read: checking ${workerName}`,
-            );
+            if (output?.previewOf !== undefined || olds?.preview?.of != null) {
+              if (output?.previewOf === undefined || !output.previewId) {
+                return undefined;
+              }
+              return yield* workers
+                .getPreview({ accountId, workerId: output.previewOf, previewId: output.previewId })
+                .pipe(
+                  Effect.map(() => output),
+                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () =>
+                    Effect.succeed(undefined),
+                  ),
+                );
+            }
+            const workerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+            const dispatchNamespace = output?.namespace ?? resolveNamespaceName(olds?.namespace);
+            yield* Effect.logInfo(`Cloudflare Worker read: checking ${workerName}`);
 
             // Workers for Platforms user workers have no subdomain, custom
             // domains, or cron triggers — read only the script settings from
             // the dispatch-namespace endpoint.
             if (dispatchNamespace) {
-              const settings = yield* getScriptSettings(
-                accountId,
-                workerName,
-                dispatchNamespace,
-              );
+              const settings = yield* getScriptSettings(accountId, workerName, dispatchNamespace);
               yield* Effect.logInfo(
                 `Cloudflare Worker read: found ${workerName} in dispatch namespace ${dispatchNamespace}`,
               );
@@ -4876,17 +5087,16 @@ export const LiveWorkerProvider = () =>
                 domain: undefined,
                 routes: [],
                 crons: [],
-                tailConsumers: settings.tailConsumers?.map((c) => ({
-                  service: c.service,
-                })),
+                tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
                 // Not observable: GET script-settings has no
                 // `streaming_tail_consumers` field. Carry the last deployed
                 // value forward like other provider-managed caches.
                 streamingTailConsumers: output?.streamingTailConsumers,
+                // The bundle hash is computed locally during deployment and
+                // cannot be reconstructed from Cloudflare's read APIs.
+                hash: output?.hash,
               } satisfies Worker["Attributes"];
-              return hasAlchemyWorkerTags(id, settings.tags ?? [])
-                ? attrs
-                : Unowned(attrs);
+              return hasAlchemyWorkerTags(id, settings.tags ?? []) ? attrs : Unowned(attrs);
             }
 
             // We deliberately don't call `listScripts({ accountId })` here:
@@ -4906,38 +5116,40 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
+            // This is the last gradual-rollout upload receipt, not the active
+            // traffic deployment. Preserve it only while that version exists.
+            const uploadedVersionId = output?.versionId
+              ? yield* workers
+                  .getScriptVersion({
+                    accountId,
+                    scriptName: workerName,
+                    versionId: output.versionId,
+                  })
+                  .pipe(
+                    Effect.map(() => output.versionId),
+                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                  )
+              : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
             const observeCrons = shouldObserveWorkerCrons(olds, output);
-            const [subdomain, settings, domainsList, routesList] =
-              yield* Effect.all(
-                [
-                  workers.getScriptSubdomain({
-                    accountId,
-                    scriptName: workerName,
-                  }),
-                  workers.getScriptScriptAndVersionSetting({
-                    accountId,
-                    scriptName: workerName,
-                  }),
-                  observeDomains
-                    ? workers
-                        .listDomains({
-                          accountId,
-                          service: workerName,
-                        })
-                        .pipe(Effect.map((r) => r.result ?? []))
-                    : Effect.succeed(
-                        [] as workers.ListDomainsResponse["result"],
-                      ),
-                  observeRoutes
-                    ? readWorkerRoutes(workerName, output?.routes)
-                    : Effect.succeed([] as Worker["Attributes"]["routes"]),
-                ],
-                // Bound concurrency so a single Worker read doesn't stampede
-                // the account alongside every other Worker's lifecycle calls.
-                { concurrency: 1 },
-              );
+            const [subdomain, settings, domainsList, routesList] = yield* Effect.all(
+              [
+                workers.getScriptSubdomain({ accountId, scriptName: workerName }),
+                workers.getScriptScriptAndVersionSetting({ accountId, scriptName: workerName }),
+                observeDomains
+                  ? workers
+                      .listDomains({ accountId, service: workerName })
+                      .pipe(Effect.map((r) => r.result ?? []))
+                  : Effect.succeed([] as workers.ListDomainsResponse["result"]),
+                observeRoutes
+                  ? readWorkerRoutes(workerName, output?.routes)
+                  : Effect.succeed([] as Worker["Attributes"]["routes"]),
+              ],
+              // Bound concurrency so a single Worker read doesn't stampede
+              // the account alongside every other Worker's lifecycle calls.
+              { concurrency: 1 },
+            );
             // Classify the observed hostnames using the declared config
             // (`olds.domain`): the canonical name and each alias/redirect
             // keep their declared role while still attached; drift (attached
@@ -4948,48 +5160,30 @@ export const LiveWorkerProvider = () =>
             const declared = yield* resolveWorkerDomain(olds?.domain).pipe(
               Effect.orElseSucceed(() => undefined),
             );
-            const observed = new Set(
-              domainsList.flatMap((d) => (d.hostname ? [d.hostname] : [])),
-            );
+            const observed = new Set(domainsList.flatMap((d) => (d.hostname ? [d.hostname] : [])));
             const keptName =
-              declared !== undefined && observed.has(declared.name)
-                ? declared.name
-                : undefined;
-            const keptAliases =
-              declared?.aliases.filter((h) => observed.has(h)) ?? [];
-            const keptRedirects =
-              declared?.redirects.filter((h) => observed.has(h)) ?? [];
+              declared !== undefined && observed.has(declared.name) ? declared.name : undefined;
+            const keptAliases = declared?.aliases.filter((h) => observed.has(h)) ?? [];
+            const keptRedirects = declared?.redirects.filter((h) => observed.has(h)) ?? [];
             const classified = new Set([
               ...(keptName ? [keptName] : []),
               ...keptAliases,
               ...keptRedirects,
             ]);
             const drift = [...observed].filter((h) => !classified.has(h));
-            const serving = [
-              ...(keptName ? [keptName] : []),
-              ...keptAliases,
-              ...drift,
-            ];
+            const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
             const observedDomain =
               serving.length > 0
-                ? {
-                    name: serving[0],
-                    aliases: serving.slice(1),
-                    redirects: keptRedirects,
-                  }
+                ? { name: serving[0], aliases: serving.slice(1), redirects: keptRedirects }
                 : undefined;
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
-                ? [
-                    `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`,
-                  ]
+                ? [`https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
                 : []),
             ];
             const crons = observeCrons ? yield* getWorkerCrons(workerName) : [];
-            yield* Effect.logInfo(
-              `Cloudflare Worker read: found ${workerName}`,
-            );
+            yield* Effect.logInfo(`Cloudflare Worker read: found ${workerName}`);
             const attrs = {
               accountId,
               // The settings endpoint doesn't expose the immutable ID;
@@ -5009,17 +5203,19 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjects(settings.bindings),
               routes: routesList,
               crons,
-              tailConsumers: settings.tailConsumers?.map((c) => ({
-                service: c.service,
-              })),
+              tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
               // Not observable: GET script-settings has no
               // `streaming_tail_consumers` field. Carry the last deployed
               // value forward like other provider-managed caches.
               streamingTailConsumers: output?.streamingTailConsumers,
+              // The bundle hash is computed locally during deployment and
+              // cannot be reconstructed from Cloudflare's read APIs.
+              hash: output?.hash,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -5028,9 +5224,7 @@ export const LiveWorkerProvider = () =>
             // safe to silently adopt even without `--adopt`) or branded with
             // `Unowned` (caller must opt in via `--adopt` or the engine
             // raises `OwnedBySomeoneElse`).
-            return hasAlchemyWorkerTags(id, settings.tags ?? [])
-              ? attrs
-              : Unowned(attrs);
+            return hasAlchemyWorkerTags(id, settings.tags ?? []) ? attrs : Unowned(attrs);
           },
           (effect) =>
             effect.pipe(
@@ -5038,50 +5232,38 @@ export const LiveWorkerProvider = () =>
               // as "not deployed" — fall through to (re)create like NotFound.
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
-              Effect.catchTag("WorkerNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.catchTag("WorkerHasNoVersions", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.catchTag("DispatchNamespaceNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.succeed(undefined),
+                WorkerHasNoVersions: () => Effect.succeed(undefined),
+                DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+                DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              }),
             ),
         ),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          olds,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, fqn, news, olds, bindings, output, session }) {
+          yield* assertCloudflareTelemetryCompatibility(news, bindings);
+          if (news.preview?.of != null && news.version?.parent != null) {
+            return yield* new WorkerPreviewConfigError({
+              message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+            });
+          }
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
-            return yield* putWorkerVersion(id, news, bindings, session, output);
+            return yield* putWorkerVersion(id, fqn, news, bindings, session, output);
+          }
+          if (news.preview?.of != null) {
+            return yield* putWorkerPreview(id, fqn, news, bindings, session, output);
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name =
-            output?.workerName ?? (yield* createWorkerName(id, news.name));
+          const name = output?.workerName ?? (yield* createWorkerName(id, news.name));
           const durableObjects = getDurableObjectBindings(bindings, name).map(
-            ({ logicalId, className }) => ({
-              logicalId,
-              className,
-            }),
+            ({ logicalId, className }) => ({ logicalId, className }),
           );
+          yield* Effect.logInfo(`Cloudflare Worker reconcile: starting ${name}`);
           yield* Effect.logInfo(
-            `Cloudflare Worker reconcile: starting ${name}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
+            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(durableObjects)}`,
           );
 
           const dispatchNamespace = resolveNamespaceName(news.namespace);
@@ -5097,20 +5279,29 @@ export const LiveWorkerProvider = () =>
           ).pipe(
             // After a pre-create stub (or under a busy account right after
             // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". Treat it as "no
-            // existing settings" so reconcile proceeds to upload/converge.
-            // The dispatch-namespace endpoints raise
+            // registry and 404 with "has no versions" (or the script itself as
+            // not-yet-found, as the version-settings read after the first
+            // upload also sees). If we already hold attributes for this script,
+            // wait briefly for the registry: planning the stub's Durable Object
+            // classes as new again is rejected by Cloudflare. A worker that
+            // really is gone still falls through to the upsert below.
+            // Dispatch-namespace precreate returns a stub without uploading,
+            // so a missing dispatch script or namespace is expected on its
+            // first reconcile, not this race, and is not retried; the
+            // dispatch-namespace endpoints raise
             // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceScriptNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("DispatchNamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.retry({
+              while: (error) =>
+                output !== undefined &&
+                (error._tag === "WorkerNotFound" || error._tag === "WorkerHasNoVersions"),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
+            }),
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
@@ -5123,15 +5314,7 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          return yield* putWorker(
-            id,
-            news,
-            bindings,
-            olds,
-            output,
-            session,
-            existingSettings,
-          );
+          return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
         }),
         delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
@@ -5157,22 +5340,16 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker delete: releasing version ${output.versionId} of ${output.versionOf}`,
             );
             const { deployments } = yield* workers
-              .listScriptDeployments({
-                accountId: output.accountId,
-                scriptName: output.versionOf,
-              })
+              .listScriptDeployments({ accountId: output.accountId, scriptName: output.versionOf })
               .pipe(
                 Effect.catchTag("WorkerNotFound", () =>
                   Effect.succeed({
-                    deployments:
-                      [] as workers.ListScriptDeploymentsResponse["deployments"],
+                    deployments: [] as workers.ListScriptDeploymentsResponse["deployments"],
                   }),
                 ),
               );
             const latest = deployments[0];
-            if (
-              !latest?.versions.some((v) => v.versionId === output.versionId)
-            ) {
+            if (!latest?.versions.some((v) => v.versionId === output.versionId)) {
               // Not part of the live deployment — the version just ages out.
               return;
             }
@@ -5198,22 +5375,24 @@ export const LiveWorkerProvider = () =>
               .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
             return;
           }
-          yield* Effect.logInfo(
-            `Cloudflare Worker delete: deleting ${output.workerName}`,
-          );
+          if (output.previewOf !== undefined) {
+            const previewId = output.previewId ?? output.previewName;
+            if (!previewId) return;
+            yield* Effect.logInfo(
+              `Cloudflare Worker delete: deleting Preview ${previewId} of ${output.previewOf}`,
+            );
+            yield* workers
+              .deletePreview({ accountId: output.accountId, workerId: output.previewOf, previewId })
+              .pipe(Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.void));
+            return;
+          }
+          yield* Effect.logInfo(`Cloudflare Worker delete: deleting ${output.workerName}`);
           // Workers for Platforms user workers have no custom domains; delete
           // the script straight out of its dispatch namespace.
           if (output.namespace) {
-            yield* deleteWorkerScript(
-              output.accountId,
-              output.workerName,
-              output.namespace,
-            ).pipe(
+            yield* deleteWorkerScript(output.accountId, output.workerName, output.namespace).pipe(
               Effect.catchTag(
-                [
-                  "DispatchNamespaceScriptNotFound",
-                  "DispatchNamespaceNotFound",
-                ],
+                ["DispatchNamespaceScriptNotFound", "DispatchNamespaceNotFound"],
                 () => Effect.void,
               ),
             );
@@ -5224,13 +5403,10 @@ export const LiveWorkerProvider = () =>
           // straight from Cloudflare handles both the normal case and
           // adopted workers whose domains we never recorded.
           const liveDomains = yield* workers
-            .listDomains({
-              accountId: output.accountId,
-              service: output.workerName,
-            })
+            .listDomains({ accountId: output.accountId, service: output.workerName })
             .pipe(
               Effect.map((r) => r.result ?? []),
-              Effect.catch(() => Effect.succeed([])),
+              Effect.orElseSucceed(() => []),
             );
           // Remove our redirect rules from each affected zone's dynamic
           // redirect entrypoint *before* detaching the domains — the live
@@ -5254,13 +5430,11 @@ export const LiveWorkerProvider = () =>
               domain: undefined,
               zoneIdByHostname: new Map(
                 liveDomains.flatMap((d) =>
-                  d.hostname && d.zoneId
-                    ? [[d.hostname, d.zoneId] as const]
-                    : [],
+                  d.hostname && d.zoneId ? [[d.hostname, d.zoneId] as const] : [],
                 ),
               ),
               previousRedirects: redirects,
-            }).pipe(Effect.catch(() => Effect.void));
+            }).pipe(Effect.ignore);
           }
           if (liveDomains.length) {
             yield* Effect.all(
@@ -5268,13 +5442,8 @@ export const LiveWorkerProvider = () =>
                 d.id
                   ? [
                       workers
-                        .deleteDomain({
-                          accountId: output.accountId,
-                          domainId: d.id,
-                        })
-                        .pipe(
-                          Effect.catchTag("DomainNotFound", () => Effect.void),
-                        ),
+                        .deleteDomain({ accountId: output.accountId, domainId: d.id })
+                        .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
                     ]
                   : [],
               ),
@@ -5288,26 +5457,18 @@ export const LiveWorkerProvider = () =>
             yield* Effect.all(
               output.routes.map((route) =>
                 workers
-                  .deleteRoute({
-                    zoneId: route.zoneId,
-                    routeId: route.id,
-                  })
+                  .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                   .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
               ),
               { concurrency: "unbounded" },
             );
           }
-          yield* deleteWorkerScript(
-            output.accountId,
-            output.workerName,
-            undefined,
-          ).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+          yield* deleteWorkerScript(output.accountId, output.workerName, undefined).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.void),
+          );
         }),
         tail: ({ output }) =>
-          telemetry.tailScript({
-            accountId: output.accountId,
-            scriptName: output.workerName,
-          }),
+          telemetry.tailScript({ accountId: output.accountId, scriptName: output.workerName }),
         logs: ({ output, options }) =>
           telemetry.queryLogs({
             accountId: output.accountId,
@@ -5331,8 +5492,7 @@ const contentTypeForModule = (filePath: string) => {
   // JS shims under `python_modules/workers/` must be ES modules so the
   // runtime can resolve them via `import_from_javascript()`.
   if (filePath.startsWith("python_modules/")) {
-    return filePath.startsWith("python_modules/workers/") &&
-      /\.m?js$/.test(filePath)
+    return filePath.startsWith("python_modules/workers/") && /\.m?js$/.test(filePath)
       ? "application/javascript+module"
       : "application/octet-stream";
   }
@@ -5366,23 +5526,249 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 /**
- * Observe every Durable Object namespace on the account as `(script, class)`
- * pairs. Namespace ownership is authoritative cloud state: after a
- * `transferred_classes` migration the namespace moves to the receiving
+ * Observe every Durable Object namespace on the account with its identity,
+ * script and class. Namespace ownership is authoritative cloud state: after a
+ * transfer the namespace moves to the receiving
  * script, so this is how both sides of a transfer observe where a class
  * currently lives — the destination checks the source still hosts the class
  * before emitting the transfer, and the former host checks whether a class
- * it is about to delete has already been transferred away.
+ * it is about to delete has already been transferred away. Missing records
+ * are inconclusive because pagination is not an atomic account snapshot.
  */
-const listDurableObjectNamespaces = (accountId: string) =>
+const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
   durableObjectsApi.listNamespaces.items({ accountId }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
-        ns.script && ns.class ? [{ script: ns.script, class: ns.class }] : [],
+        // Only namespaces in the caller's context: an account-level script
+        // and a dispatch-namespace script may share a name.
+        ns.script && ns.class && (ns.dispatchNamespace ?? undefined) === dispatchNamespace
+          ? [
+              {
+                id: ns.id,
+                script: ns.script,
+                class: ns.class,
+                useSqlite: ns.useSqlite ?? undefined,
+              },
+            ]
+          : [],
       ),
     ),
   );
+
+type ObservedDurableObjectNamespace = {
+  id?: string | null;
+  script: string;
+  class: string;
+  useSqlite?: boolean;
+};
+
+/** The storage backend Cloudflare reports for a script's class. */
+const observedStorage = (
+  observedNamespaces: readonly ObservedDurableObjectNamespace[],
+  scriptName: string,
+  className: string,
+): "sqlite" | "legacy-kv" =>
+  observedNamespaces.find((ns) => ns.script === scriptName && ns.class === className)?.useSqlite ===
+  false
+    ? "legacy-kv"
+    : "sqlite";
+
+/**
+ * Build a script's declarative `exports` map: every namespace Cloudflare
+ * reports for the script stays live with its observed storage backend, then
+ * the classes this deploy hosts, renames, deletes and receives are applied
+ * on top. New classes are SQLite-backed (Cloudflare no longer provisions
+ * key-value namespaces).
+ *
+ * @internal
+ */
+const buildDurableObjectExports = (params: {
+  scriptName: string;
+  observedNamespaces: readonly ObservedDurableObjectNamespace[];
+  hostedClasses: readonly string[];
+  renamedClasses: readonly { from: string; to: string }[];
+  deletedClasses: readonly string[];
+  transferredClasses: readonly { from: string; fromScript: string; to: string }[];
+}): Record<string, workers.PutScriptMetadataExport> => {
+  const { scriptName, observedNamespaces } = params;
+  const exports: Record<string, workers.PutScriptMetadataExport> = {};
+  const live = (className: string, storageOf = className) => {
+    exports[className] = {
+      type: "durable-object",
+      storage: observedStorage(observedNamespaces, scriptName, storageOf),
+    };
+  };
+  for (const ns of observedNamespaces) {
+    if (ns.script === scriptName) live(ns.class);
+  }
+  for (const className of params.hostedClasses) {
+    const renamed = params.renamedClasses.find((rename) => rename.to === className);
+    live(className, renamed?.from ?? className);
+  }
+  for (const { from, to } of params.renamedClasses) {
+    exports[from] = { type: "durable-object", state: "renamed", renamedTo: to };
+  }
+  for (const className of params.deletedClasses) {
+    exports[className] = { type: "durable-object", state: "deleted" };
+  }
+  for (const { from, fromScript, to } of params.transferredClasses) {
+    exports[to] = {
+      type: "durable-object",
+      storage: observedStorage(observedNamespaces, fromScript, from),
+      state: "expecting-transfer",
+      transferFrom: fromScript,
+    };
+  }
+  return exports;
+};
+
+/**
+ * The `{ type: "worker", cache }` export entries for a Worker's configured
+ * entrypoints. Fails when a name is also a Durable Object class: one export
+ * name has exactly one type.
+ *
+ * @internal
+ */
+const workerEntrypointExports = (
+  scriptName: string,
+  entrypoints: WorkerProps["entrypoints"],
+  durableObjectClasses: Iterable<string>,
+) =>
+  Effect.gen(function* () {
+    const reserved = new Set(durableObjectClasses);
+    const exports: Record<string, workers.PutScriptMetadataExport> = {};
+    for (const [name, settings] of Object.entries(entrypoints ?? {})) {
+      if (reserved.has(name)) {
+        return yield* new InvalidWorkerEntrypoints({
+          scriptName,
+          reason: `worker "${scriptName}" configures entrypoint "${name}", but "${name}" is a Durable Object export of this Worker. Entrypoint settings apply to WorkerEntrypoint exports and the default export only.`,
+        });
+      }
+      exports[name] = { type: "worker", cache: settings.cache };
+    }
+    return exports;
+  });
+
+/** `undefined` for an empty `exports` map, so the field is omitted on upload. */
+const nonEmptyExports = (exports: Record<string, workers.PutScriptMetadataExport>) =>
+  Object.keys(exports).length > 0 ? exports : undefined;
+
+/**
+ * The Durable Object `exports` of the version serving most of a script's
+ * traffic, as live entries (Cloudflare omits tombstones). `undefined` when
+ * nothing is deployed or the live version predates `exports` (the legacy
+ * `migrations` flow).
+ *
+ * @internal
+ */
+const getLiveDurableObjectExports = (accountId: string, scriptName: string) =>
+  Effect.gen(function* () {
+    const { deployments } = yield* workers.listScriptDeployments({ accountId, scriptName });
+    const live = [...(deployments[0]?.versions ?? [])].sort(
+      (a, b) => b.percentage - a.percentage,
+    )[0];
+    if (!live) return undefined;
+    const version = yield* workers.getScriptVersion({
+      accountId,
+      scriptName,
+      versionId: live.versionId,
+    });
+    const exports = version.resources?.scriptRuntime?.exports;
+    if (exports == null) return undefined;
+    const durableObjects: Record<string, workers.PutScriptMetadataExport> = {};
+    for (const [className, entry] of Object.entries(exports)) {
+      if (entry?.type === "durable-object") {
+        durableObjects[className] = {
+          type: "durable-object",
+          storage: "storage" in entry ? (entry.storage ?? undefined) : undefined,
+        };
+      }
+    }
+    return Object.keys(durableObjects).length > 0 ? durableObjects : undefined;
+  });
+
+/**
+ * Whether two `exports` maps declare the same live Durable Object classes
+ * with the same storage. Cloudflare requires every version in a
+ * multi-version (gradual) deployment to declare identical `exports`.
+ *
+ * @internal
+ */
+const sameDurableObjectExports = (
+  a: Record<string, workers.PutScriptMetadataExport | undefined> | undefined,
+  b: Record<string, workers.PutScriptMetadataExport | undefined> | undefined,
+): boolean => {
+  const live = (map: typeof a) =>
+    Object.entries(map ?? {})
+      .filter(([, entry]) => entry?.type === "durable-object" && entry.state === undefined)
+      .map(([className, entry]) => `${className}:${entry?.storage ?? ""}`)
+      .sort()
+      .join(",");
+  return live(a) === live(b);
+};
+
+/**
+ * The `exports` map after incoming transfers have committed: each
+ * `expecting-transfer` entry becomes a live entry.
+ *
+ * @internal
+ */
+const settleTransfers = (
+  exports: Record<string, workers.PutScriptMetadataExport | undefined>,
+): Record<string, workers.PutScriptMetadataExport> =>
+  Object.fromEntries(
+    Object.entries(exports).flatMap(([className, entry]) =>
+      entry === undefined
+        ? []
+        : [
+            [
+              className,
+              entry.state === "expecting-transfer"
+                ? { type: entry.type, storage: entry.storage }
+                : entry,
+            ],
+          ],
+    ),
+  );
+
+/**
+ * Commit a Durable Object transfer on the former host. Once the new host has
+ * declared the classes `expecting-transfer`, the former host's settings are
+ * patched with a `transferred` tombstone for each moved class, keeping every
+ * other namespace it hosts live. Cloudflare moves the namespaces, with their
+ * data, when the patch lands; the former host's bindings and tags are
+ * untouched.
+ *
+ * @internal
+ */
+const commitDurableObjectTransfer = (params: {
+  accountId: string;
+  fromScript: string;
+  toScript: string;
+  classNames: readonly string[];
+  observedNamespaces: readonly ObservedDurableObjectNamespace[];
+}) =>
+  workers.patchScriptScriptAndVersionSetting({
+    accountId: params.accountId,
+    scriptName: params.fromScript,
+    // The settings part is sent verbatim, so entries use wire names.
+    settings: {
+      exports: Object.fromEntries(
+        params.observedNamespaces
+          .filter((ns) => ns.script === params.fromScript)
+          .map((ns) => [
+            ns.class,
+            params.classNames.includes(ns.class)
+              ? { type: "durable-object", state: "transferred", transferred_to: params.toScript }
+              : {
+                  type: "durable-object",
+                  storage: observedStorage(params.observedNamespaces, params.fromScript, ns.class),
+                },
+          ]),
+      ),
+    },
+  });
 
 /**
  * Coerce a resolved `transferredFrom` declaration to its list form, dropping
@@ -5393,16 +5779,11 @@ const normalizeTransferSources = (
   value: string | readonly string[] | undefined,
   selfScriptName: string,
 ): string[] =>
-  (value === undefined
-    ? []
-    : Array.isArray(value)
-      ? value
-      : [value as string]
-  ).filter((source) => source !== selfScriptName);
+  (value === undefined ? [] : Array.isArray(value) ? value : [value as string]).filter(
+    (source) => source !== selfScriptName,
+  );
 
-function bumpMigrationTagVersion(
-  oldTag: string | undefined,
-): string | undefined {
+function bumpMigrationTagVersion(oldTag: string | undefined): string | undefined {
   if (!oldTag) return undefined;
   const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
   if (!version) return "alchemy:v1";
@@ -5410,11 +5791,56 @@ function bumpMigrationTagVersion(
 }
 
 /**
+ * The script `precreate` uploads to break a dependency cycle: it only has to
+ * declare the Durable Object classes so their namespaces exist before the
+ * real script is uploaded later in the same deploy.
+ *
+ * Each placeholder Durable Object class resets itself on any call. An
+ * instance that starts on the placeholder (e.g. an edge that has not yet
+ * seen the real version) would otherwise keep running the empty class for
+ * as long as callers keep it busy, failing every RPC call with "The RPC
+ * receiver does not implement the method". `ctx.abort()` fails the in-flight
+ * call and resets the object, so the next call constructs it from the
+ * currently deployed version. The constructor returns a `Proxy` (the
+ * technique `DurableObjectBridge` uses) so that every RPC method name
+ * resolves to the reset.
+ */
+const makePlaceholderScript = (doClasses: readonly string[]) => {
+  const worker = `export default { fetch() { return new Response("Alchemy worker is being deployed...", { status: 503, headers: { "Cache-Control": "no-store" } }) } };\n`;
+  if (doClasses.length === 0) return worker;
+  return `import { DurableObject } from "cloudflare:workers";
+
+const alchemyResetReason = "Alchemy worker is being deployed";
+class AlchemyPlaceholderDurableObject extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    return new Proxy(this, {
+      get: (target, prop) =>
+        typeof prop !== "string" || prop in target
+          ? Reflect.get(target, prop)
+          : () => target.ctx.abort(alchemyResetReason),
+    });
+  }
+  fetch() { this.ctx.abort(alchemyResetReason); }
+  alarm() { this.ctx.abort(alchemyResetReason); }
+}
+
+${worker}${doClasses.map((className) => `export class ${className} extends AlchemyPlaceholderDurableObject {}`).join("\n")}
+`;
+};
+
+/**
  * Merges a worker's export-derived and binding-derived Durable Object class
  * lists for the precreate placeholder, deduping by class name. The
  * binding-derived entry wins on a collision so the `alchemy:dos:` tag keys off
  * the same logical id (the binding sid) that `reconcile` writes.
  */
+/** The Durable Object classes a Worker implements as Effect-native exports. */
+function effectNativeDurableObjectClasses(exports: WorkerProps["exports"] | undefined) {
+  const exportMap = (exports ?? {}) as Record<string, unknown>;
+  return Object.keys(exportMap).filter((name) => isDurableObjectExport(exportMap[name]));
+}
+
 function mergeDurableObjectClasses(
   exportDerived: ReadonlyArray<{
     logicalId: string;
@@ -5429,17 +5855,12 @@ function mergeDurableObjectClasses(
 ) {
   return Array.from(
     new Map(
-      [...exportDerived, ...bindingDerived].map(
-        (binding) => [binding.className, binding] as const,
-      ),
+      [...exportDerived, ...bindingDerived].map((binding) => [binding.className, binding] as const),
     ).values(),
   );
 }
 
-function getDurableObjectBindings(
-  bindings: ReadonlyArray<ResourceBinding>,
-  workerName: string,
-) {
+function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, workerName: string) {
   // Resource authors (and the `make`/`yield* Tag`/plan-vs-apply machinery)
   // can register the same DO binding multiple times under the same logical
   // id — `binding()` is a plain `worker.bind` and intentionally has no
@@ -5451,11 +5872,7 @@ function getDurableObjectBindings(
   const seen = new Set<string>();
   return bindings.flatMap((binding) =>
     (binding.data.bindings ?? []).flatMap((item: WorkerBinding) => {
-      if (
-        item.type !== "durable_object_namespace" ||
-        !("className" in item) ||
-        !item.className
-      ) {
+      if (item.type !== "durable_object_namespace" || !("className" in item) || !item.className) {
         return [];
       }
       if (item.scriptName !== undefined && item.scriptName !== workerName) {
@@ -5473,8 +5890,7 @@ function getDurableObjectBindings(
           // `transferred_classes` migration. Normalize an empty list to
           // "not declared"; self-references are dropped at resolution time.
           transferredFrom:
-            Array.isArray(item.transferredFrom) &&
-            item.transferredFrom.length === 0
+            Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
         },
@@ -5503,6 +5919,11 @@ const LEGACY_DO_TAG_PREFIX = "alchemy:do:";
 const PACKED_DO_TAG_PREFIX = "alchemy:dos:";
 
 class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
+  scriptName: string;
+  reason: string;
+}> {}
+
+class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoints")<{
   scriptName: string;
   reason: string;
 }> {}
@@ -5538,10 +5959,7 @@ export function encodeDurableObjectTags(
   let payload = "";
   for (const pair of pairs) {
     const appended = payload === "" ? pair : `${payload};${pair}`;
-    if (
-      PACKED_DO_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES &&
-      payload !== ""
-    ) {
+    if (PACKED_DO_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES && payload !== "") {
       tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
       payload = pair;
     } else {
@@ -5583,12 +6001,8 @@ export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
       for (const pair of tag.slice(PACKED_DO_TAG_PREFIX.length).split(";")) {
         if (pair === "") continue;
         const eq = pair.indexOf("=");
-        const logicalId = decodeURIComponent(
-          eq === -1 ? pair : pair.slice(0, eq),
-        );
-        const className = decodeURIComponent(
-          eq === -1 ? pair : pair.slice(eq + 1),
-        );
+        const logicalId = decodeURIComponent(eq === -1 ? pair : pair.slice(0, eq));
+        const className = decodeURIComponent(eq === -1 ? pair : pair.slice(eq + 1));
         if (logicalId && className) {
           map[logicalId] = className;
         }
@@ -5615,34 +6029,28 @@ const validateWorkerTags = (
 ) =>
   Effect.gen(function* () {
     if (tags.length > MAX_TAGS_PER_WORKER) {
-      return yield* Effect.fail(
-        new InvalidWorkerTags({
-          scriptName,
-          reason:
-            `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
-            `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
-            `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
-        }),
-      );
+      return yield* new InvalidWorkerTags({
+        scriptName,
+        reason:
+          `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
+          `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
+          `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
+      });
     }
     const encoder = new TextEncoder();
     for (const tag of tags) {
       if (tag.includes(",") || tag.includes("&")) {
-        return yield* Effect.fail(
-          new InvalidWorkerTags({
-            scriptName,
-            reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
-          }),
-        );
+        return yield* new InvalidWorkerTags({
+          scriptName,
+          reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
+        });
       }
       const bytes = yield* Effect.sync(() => encoder.encode(tag).length);
       if (bytes > MAX_TAG_BYTES) {
-        return yield* Effect.fail(
-          new InvalidWorkerTags({
-            scriptName,
-            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
-          }),
-        );
+        return yield* new InvalidWorkerTags({
+          scriptName,
+          reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+        });
       }
     }
   });

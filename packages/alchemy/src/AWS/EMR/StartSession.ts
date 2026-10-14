@@ -29,6 +29,4 @@ export interface StartSession extends Binding.Service<
     ) => Effect.Effect<SVC.StartSessionOutput, SVC.StartSessionError>
   >
 > {}
-export const StartSession = Binding.Service<StartSession>(
-  "AWS.EMR.StartSession",
-);
+export const StartSession = Binding.Service<StartSession>("AWS.EMR.StartSession");

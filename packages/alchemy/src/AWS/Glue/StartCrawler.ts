@@ -30,11 +30,7 @@ export interface StartCrawler extends Binding.Service<
   "AWS.Glue.StartCrawler",
   (
     crawler: Crawler,
-  ) => Effect.Effect<
-    () => Effect.Effect<glue.StartCrawlerResponse, glue.StartCrawlerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<glue.StartCrawlerResponse, glue.StartCrawlerError>>
 > {}
 
-export const StartCrawler = Binding.Service<StartCrawler>(
-  "AWS.Glue.StartCrawler",
-);
+export const StartCrawler = Binding.Service<StartCrawler>("AWS.Glue.StartCrawler");

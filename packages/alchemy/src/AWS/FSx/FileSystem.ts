@@ -151,17 +151,19 @@ export interface FileSystem extends Resource<
  */
 export const FileSystem = Resource<FileSystem>("AWS.FSx.FileSystem");
 
-const fsxTagsToRecord = (
-  tags: readonly fsx.Tag[] | undefined,
-): Record<string, string> =>
+const fsxTagsToRecord = (tags: readonly fsx.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
-const deleteConfigFor = (
-  type: fsx.FileSystemType,
-): Partial<fsx.DeleteFileSystemRequest> => {
-  switch (type) {
+const deleteConfigFor = (fs: fsx.FileSystem): Partial<fsx.DeleteFileSystemRequest> => {
+  switch (fs.FileSystemType) {
     case "LUSTRE":
-      return { LustreConfiguration: { SkipFinalBackup: true } };
+      // Scratch deployments have no backups at all — FSx rejects ANY
+      // LustreConfiguration on delete ("Final backup during delete is not
+      // supported on file systems using the Scratch deployment type"), even
+      // SkipFinalBackup: true.
+      return fs.LustreConfiguration?.DeploymentType?.startsWith("SCRATCH")
+        ? {}
+        : { LustreConfiguration: { SkipFinalBackup: true } };
     case "WINDOWS":
       return { WindowsConfiguration: { SkipFinalBackup: true } };
     case "OPENZFS":
@@ -192,21 +194,15 @@ export const FileSystemProvider = () =>
       });
 
       const findById = Effect.fn(function* (fileSystemId: string) {
-        return yield* fsx
-          .describeFileSystems({ FileSystemIds: [fileSystemId] })
-          .pipe(
-            Effect.map((r) => r.FileSystems?.[0]),
-            Effect.catchTag("FileSystemNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* fsx.describeFileSystems({ FileSystemIds: [fileSystemId] }).pipe(
+          Effect.map((r) => r.FileSystems?.[0]),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
       const listAll = fsx.describeFileSystems.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.FileSystems ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.FileSystems ?? [])),
       );
 
       // FSx has no creation-token lookup, so recover lost state by scanning
@@ -230,9 +226,7 @@ export const FileSystemProvider = () =>
               Effect.gen(function* () {
                 return {
                   fileSystemId: fs.FileSystemId!,
-                  fileSystemArn:
-                    fs.ResourceARN ??
-                    (yield* fileSystemArnOf(fs.FileSystemId!)),
+                  fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
                   fileSystemType: fs.FileSystemType ?? "LUSTRE",
                   dnsName: fs.DNSName,
                   vpcId: fs.VpcId,
@@ -250,15 +244,12 @@ export const FileSystemProvider = () =>
           }
           const attrs = {
             fileSystemId: fs.FileSystemId!,
-            fileSystemArn:
-              fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
+            fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
             fileSystemType: fs.FileSystemType ?? "LUSTRE",
             dnsName: fs.DNSName,
             vpcId: fs.VpcId,
           };
-          return (yield* hasAlchemyTags(id, fsxTagsToRecord(fs.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, fsxTagsToRecord(fs.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -308,9 +299,10 @@ export const FileSystemProvider = () =>
                 WindowsConfiguration: news.windowsConfiguration,
                 OntapConfiguration: news.ontapConfiguration,
                 OpenZFSConfiguration: news.openZFSConfiguration,
-                Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
-                ),
+                Tags: Object.entries({ ...news.tags, ...internalTags }).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
               })
               .pipe(Effect.map((r) => r.FileSystem!));
           }
@@ -354,8 +346,7 @@ export const FileSystemProvider = () =>
           yield* session.note(fileSystemId);
           return {
             fileSystemId,
-            fileSystemArn:
-              fs.ResourceARN ?? (yield* fileSystemArnOf(fileSystemId)),
+            fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fileSystemId)),
             fileSystemType: fs.FileSystemType ?? news.fileSystemType,
             dnsName: fs.DNSName,
             vpcId: fs.VpcId,
@@ -363,10 +354,13 @@ export const FileSystemProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // Observe first: the delete options depend on the deployment type.
+          const fs = yield* findById(output.fileSystemId);
+          if (fs === undefined || fs.Lifecycle === "DELETING") return;
           yield* fsx
             .deleteFileSystem({
               FileSystemId: output.fileSystemId,
-              ...deleteConfigFor(output.fileSystemType),
+              ...deleteConfigFor(fs),
             })
             .pipe(Effect.catchTag("FileSystemNotFound", () => Effect.void));
         }),

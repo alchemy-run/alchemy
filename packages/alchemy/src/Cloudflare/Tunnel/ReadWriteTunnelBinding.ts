@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
-import { makeTunnelClient } from "./TunnelBinding.ts";
 import { readWriteClient, ReadWriteTunnel } from "./ReadWriteTunnel.ts";
+import { makeTunnelClient } from "./TunnelBinding.ts";
 
 /** Runtime layer for {@link ReadWriteTunnel}. */
 export const ReadWriteTunnelBinding = Layer.effect(

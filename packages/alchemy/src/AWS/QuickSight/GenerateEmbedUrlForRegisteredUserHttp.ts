@@ -12,10 +12,7 @@ export const GenerateEmbedUrlForRegisteredUserHttp = Layer.effect(
     tag: "AWS.QuickSight.GenerateEmbedUrlForRegisteredUser",
     operation: quicksight.generateEmbedUrlForRegisteredUser,
     actions: ["quicksight:GenerateEmbedUrlForRegisteredUser"],
-    applyDefaults: (
-      request: GenerateEmbedUrlForRegisteredUserRequest,
-      dashboard,
-    ) => ({
+    applyDefaults: (request: GenerateEmbedUrlForRegisteredUserRequest, dashboard) => ({
       ...request,
       ExperienceConfiguration: request.ExperienceConfiguration ?? {
         Dashboard: { InitialDashboardId: dashboard.dashboardId },

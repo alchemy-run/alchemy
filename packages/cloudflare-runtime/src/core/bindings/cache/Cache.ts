@@ -1,15 +1,13 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const CacheWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/cache/Cache.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/bindings/cache/Cache.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import * as PluginContext from "../../PluginContext.ts";
@@ -25,9 +23,7 @@ import {
   SERVICE_CACHE_STORAGE,
 } from "./CacheOptions.shared.ts";
 
-export class Cache extends Plugin.Service<Cache>()(
-  "cloudflare-runtime/plugin/Cache",
-) {}
+export class Cache extends Plugin.Service<Cache>()("cloudflare-runtime/plugin/Cache") {}
 
 /**
  * Always-on plugin implementing the Cache API (`caches.default` /
@@ -49,27 +45,24 @@ export const CacheLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "Cache",
-          message:
-            "Cannot configure Cache persistence: the Storage service has no disk path.",
+          message: "Cannot configure Cache persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
       const persistPath = path.join(storageDiskPath, "cache");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "Cache",
-              message: `Failed to create Cache persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Cache",
+            message: `Failed to create Cache persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -89,10 +82,8 @@ export const CacheLive = Layer.effect(
             const cacheService: WorkerdConfig.Service = {
               name: SERVICE_CACHE,
               worker: {
-                compatibilityDate: "2025-01-01",
-                modules: formatInternalWorkerModules(
-                  yield* Effect.promise(CacheWorker.worker),
-                ),
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                modules: formatInternalWorkerModules(yield* Effect.promise(CacheWorker.worker)),
                 durableObjectNamespaces: [
                   {
                     className: CACHE_OBJECT_CLASS_NAME,

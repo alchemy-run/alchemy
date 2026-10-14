@@ -23,9 +23,9 @@ interface RepositoryScopedRequest {
 }
 
 /** The bound repository's own ARN (repository-level actions). */
-export const repositoryArns = (
-  repository: Repository,
-): OutputType<string>[] => [repository.repositoryArn];
+export const repositoryArns = (repository: Repository): OutputType<string>[] => [
+  repository.repositoryArn,
+];
 
 /**
  * ARN matching every package in the bound repository

@@ -7,10 +7,7 @@ import type { Role } from "../IAM/Role.ts";
  * `StartJob` request with `ExecutionRoleArn` injected from the bound
  * execution role.
  */
-export interface StartJobRequest extends Omit<
-  location.StartJobRequest,
-  "ExecutionRoleArn"
-> {}
+export interface StartJobRequest extends Omit<location.StartJobRequest, "ExecutionRoleArn"> {}
 
 /**
  * Starts a Location batch metadata job (e.g. batch address validation over
@@ -44,9 +41,7 @@ export interface StartJob extends Binding.Service<
   (
     executionRole: Role,
   ) => Effect.Effect<
-    (
-      request: StartJobRequest,
-    ) => Effect.Effect<location.StartJobResponse, location.StartJobError>
+    (request: StartJobRequest) => Effect.Effect<location.StartJobResponse, location.StartJobError>
   >
 > {}
 export const StartJob = Binding.Service<StartJob>("AWS.Location.StartJob");

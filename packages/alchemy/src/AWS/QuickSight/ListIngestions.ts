@@ -31,16 +31,8 @@ export interface ListIngestions extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        quicksight.ListIngestionsRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.ListIngestionsResponse,
-      quicksight.ListIngestionsError
-    >
+      request?: Omit<quicksight.ListIngestionsRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.ListIngestionsResponse, quicksight.ListIngestionsError>
   >
 > {}
-export const ListIngestions = Binding.Service<ListIngestions>(
-  "AWS.QuickSight.ListIngestions",
-);
+export const ListIngestions = Binding.Service<ListIngestions>("AWS.QuickSight.ListIngestions");

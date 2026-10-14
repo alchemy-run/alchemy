@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import { AccountAssignment, Group, PermissionSet } from "@/AWS/IdentityCenter";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -68,5 +68,30 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:identitycenter", "live"], timeout: 300_000 },
+);
+
+// A `creating` row can persist without resolved Outputs (`targetId` from
+// `account.accountId`). Distilled `ListAccountAssignments` then fails with
+// `ParseError: Expected string at ["AccountId"]`. Guarded `read` must report
+// not-found without calling AWS.
+test.provider(
+  "read returns undefined when creating-state lost targetId",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(AccountAssignment);
+      const result = yield* provider.read!({
+        id: "AccountAssignment",
+        fqn: "AccountAssignment",
+        instanceId: "test-instance",
+        olds: {
+          permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
+          principalId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          principalType: "GROUP",
+        } as AccountAssignment["Props"],
+        output: undefined,
+      });
+      expect(result).toBeUndefined();
+    }),
+  { tags: ["provider:aws", "provider:aws:identitycenter", "live"] },
 );

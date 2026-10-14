@@ -2,23 +2,20 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import type { InputProps } from "../../Input.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
+import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { Table } from "../DynamoDB/Table.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { EventSourceMapping } from "../Lambda/EventSourceMapping.ts";
-import {
-  Function as LambdaFunction,
-  type FunctionProps,
-} from "../Lambda/Function.ts";
+import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { Server, type ServerDevProps } from "./Server.ts";
-import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -26,13 +23,13 @@ import {
   type WebsiteEdgeProps,
   type WebsiteInvalidationProps,
 } from "./shared.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
 /**
  * The framework-integration module that drives the `@opennextjs/aws` build
  * (it is its own deploy target — the module IS the AWS pipeline).
  */
-export const NEXTJS_AWS_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nextjs/aws";
+export const NEXTJS_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/aws";
 
 /** The S3 key prefix the OpenNext ISR/fetch cache seed is uploaded under. */
 export const NEXTJS_CACHE_PREFIX = "_cache";
@@ -56,32 +53,31 @@ export interface NextjsProps {
   /**
    * SSR server (Lambda) configuration.
    */
-  server?: {
-    /**
-     * Memory allocated to the server function, in MB.
-     * @default 1024
-     */
-    memorySize?: number;
-    /**
-     * Maximum request duration.
-     * @default 30 seconds
-     */
-    timeout?: Duration.Duration;
-    /**
-     * Environment variables for the server function.
-     */
-    environment?: Record<string, any>;
-    /**
-     * Instruction set architecture.
-     * @default "x86_64"
-     */
-    architecture?: "x86_64" | "arm64";
-    /**
-     * Lambda runtime for the server function.
-     * @default "nodejs24.x"
-     */
-    runtime?: FunctionProps["runtime"];
-  };
+  /**
+   * Memory allocated to the server function, in MB.
+   * @default 1024
+   */
+  memorySize?: number;
+  /**
+   * Maximum server request duration.
+   * @default 30 seconds
+   */
+  timeout?: Duration.Duration;
+  /**
+   * Environment variables for the SSR server (Lambda environment).
+   * Values accept `Output`s (e.g. `API_URL: api.url`).
+   */
+  env?: Record<string, any>;
+  /**
+   * Server instruction set architecture.
+   * @default "x86_64"
+   */
+  architecture?: "x86_64" | "arm64";
+  /**
+   * Lambda runtime for the server function.
+   * @default "nodejs24.x"
+   */
+  runtime?: FunctionProps["runtime"];
   /**
    * Image optimization (Lambda) configuration.
    */
@@ -177,19 +173,19 @@ export interface NextjsProps {
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
  *
  * @resource
  */
+
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
-  function* (id: string, props: NextjsProps = {}) {
+  function* (id: string, propsIn: InputProps<NextjsProps> = {}) {
+    const props = propsIn as NextjsProps;
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site
@@ -201,7 +197,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       framework: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       target: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       root: props.rootDir,
-      env: props.server?.environment,
+      env: props.env,
       memo: props.memo,
       dev: props.dev,
     });
@@ -239,9 +235,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     const fromDist = (relative: string) =>
       Output.map((dir: string | undefined) => {
         if (!dir) {
-          throw new Error(
-            "The Next.js build produced no .open-next directory.",
-          );
+          throw new Error("The Next.js build produced no .open-next directory.");
         }
         return `${dir}/${relative}`;
       })(build.distDir as any) as Input<string>;
@@ -306,10 +300,10 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       // OpenNext's server-functions/default is a complete deployment unit
       // (entry + traced .next output + its own node_modules) — ship as-is.
       bundle: false,
-      runtime: props.server?.runtime ?? "nodejs24.x",
-      architecture: props.server?.architecture,
-      memorySize: props.server?.memorySize ?? 1024,
-      timeout: props.server?.timeout ?? Duration.seconds(30),
+      runtime: props.runtime ?? "nodejs24.x",
+      architecture: props.architecture,
+      memorySize: props.memorySize ?? 1024,
+      timeout: props.timeout ?? Duration.seconds(30),
       env: {
         // The env names OpenNext's s3/sqs/dynamodb overrides read. Regions
         // are omitted: the SDK falls back to the Lambda runtime's own
@@ -318,7 +312,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
         CACHE_BUCKET_KEY_PREFIX: NEXTJS_CACHE_PREFIX,
         REVALIDATION_QUEUE_URL: revalidationQueue.queueUrl,
         CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
-        ...props.server?.environment,
+        ...props.env,
       },
       functionUrl: {
         authType: "NONE",
@@ -328,44 +322,42 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       },
     });
 
-    yield* server.bind`Allow(${server}, AWS.Website.Nextjs.Cache(${cacheBucket}))`(
-      {
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-            Resource: [Output.interpolate`${cacheBucket.bucketArn}/*` as any],
-          },
-          {
-            Effect: "Allow",
-            Action: ["s3:ListBucket"],
-            Resource: [cacheBucket.bucketArn as any],
-          },
-          {
-            Effect: "Allow",
-            Action: ["sqs:SendMessage"],
-            Resource: [revalidationQueue.queueArn as any],
-          },
-          {
-            Effect: "Allow",
-            Action: [
-              "dynamodb:GetItem",
-              "dynamodb:PutItem",
-              "dynamodb:DeleteItem",
-              "dynamodb:Query",
-              "dynamodb:Scan",
-              "dynamodb:BatchGetItem",
-              "dynamodb:BatchWriteItem",
-              "dynamodb:UpdateItem",
-            ],
-            Resource: [
-              tagCacheTable.tableArn as any,
-              Output.interpolate`${tagCacheTable.tableArn}/index/*` as any,
-            ],
-          },
-        ] satisfies PolicyStatement[],
-      },
-    );
+    yield* server.bind`Allow(${server}, AWS.Website.Nextjs.Cache(${cacheBucket}))`({
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+          Resource: [Output.interpolate`${cacheBucket.bucketArn}/*` as any],
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:ListBucket"],
+          Resource: [cacheBucket.bucketArn as any],
+        },
+        {
+          Effect: "Allow",
+          Action: ["sqs:SendMessage"],
+          Resource: [revalidationQueue.queueArn as any],
+        },
+        {
+          Effect: "Allow",
+          Action: [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:Query",
+            "dynamodb:Scan",
+            "dynamodb:BatchGetItem",
+            "dynamodb:BatchWriteItem",
+            "dynamodb:UpdateItem",
+          ],
+          Resource: [
+            tagCacheTable.tableArn as any,
+            Output.interpolate`${tagCacheTable.tableArn}/index/*` as any,
+          ],
+        },
+      ] satisfies PolicyStatement[],
+    });
 
     // ISR revalidation consumer: drains the FIFO queue and HEAD-requests
     // stale pages with the prerender revalidate header.
@@ -427,32 +419,24 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       },
     });
 
-    yield* imageFunction.bind`Allow(${imageFunction}, AWS.S3.GetObject(${bucket}))`(
-      {
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["s3:GetObject"],
-            Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
-          },
-        ] satisfies PolicyStatement[],
-      },
-    );
+    yield* imageFunction.bind`Allow(${imageFunction}, AWS.S3.GetObject(${bucket}))`({
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject"],
+          Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
+        },
+      ] satisfies PolicyStatement[],
+    });
 
     const urlHost = (url: string | undefined) => {
       if (!url) {
-        throw new Error(
-          "A Next.js Lambda function did not produce a Function URL.",
-        );
+        throw new Error("A Next.js Lambda function did not produce a Function URL.");
       }
       return new URL(url).hostname;
     };
-    const serverHost = Output.map(urlHost)(
-      server.functionUrl as any,
-    ) as Input<string>;
-    const imageHost = Output.map(urlHost)(
-      imageFunction.functionUrl as any,
-    ) as Input<string>;
+    const serverHost = Output.map(urlHost)(server.functionUrl as any) as Input<string>;
+    const imageHost = Output.map(urlHost)(imageFunction.functionUrl as any) as Input<string>;
 
     const siteProps: StaticSiteProps = {
       path: build.clientDir as unknown as string,

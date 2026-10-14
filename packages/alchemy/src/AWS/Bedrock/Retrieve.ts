@@ -7,10 +7,7 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
  * The `Retrieve` request with the binding-injected `knowledgeBaseId` removed —
  * it is supplied automatically from the bound {@link KnowledgeBase}.
  */
-export interface RetrieveRequest extends Omit<
-  bedrock.RetrieveRequest,
-  "knowledgeBaseId"
-> {}
+export interface RetrieveRequest extends Omit<bedrock.RetrieveRequest, "knowledgeBaseId"> {}
 
 /**
  * Runtime binding for `bedrock-agent-runtime:Retrieve` — query a
@@ -47,9 +44,7 @@ export interface Retrieve extends Binding.Service<
   <K extends KnowledgeBase>(
     knowledgeBase: K,
   ) => Effect.Effect<
-    (
-      request: RetrieveRequest,
-    ) => Effect.Effect<bedrock.RetrieveResponse, bedrock.RetrieveError>
+    (request: RetrieveRequest) => Effect.Effect<bedrock.RetrieveResponse, bedrock.RetrieveError>
   >
 > {}
 export const Retrieve = Binding.Service<Retrieve>("AWS.Bedrock.Retrieve");

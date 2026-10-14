@@ -30,10 +30,7 @@ export interface ListHostedZonesByVPC extends Binding.Service<
   () => Effect.Effect<
     (
       request: route53.ListHostedZonesByVPCRequest,
-    ) => Effect.Effect<
-      route53.ListHostedZonesByVPCResponse,
-      route53.ListHostedZonesByVPCError
-    >
+    ) => Effect.Effect<route53.ListHostedZonesByVPCResponse, route53.ListHostedZonesByVPCError>
   >
 > {}
 export const ListHostedZonesByVPC = Binding.Service<ListHostedZonesByVPC>(

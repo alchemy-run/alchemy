@@ -105,10 +105,7 @@ export interface Transformer extends Resource<
 export const Transformer = Resource<Transformer>("AWS.B2BI.Transformer");
 
 const toAttrs = (
-  r:
-    | b2bi.GetTransformerResponse
-    | b2bi.CreateTransformerResponse
-    | b2bi.UpdateTransformerResponse,
+  r: b2bi.GetTransformerResponse | b2bi.CreateTransformerResponse | b2bi.UpdateTransformerResponse,
 ) => ({
   transformerId: r.transformerId,
   transformerArn: r.transformerArn,
@@ -143,9 +140,7 @@ export const TransformerProvider = () =>
               ? b2bi
                   .getTransformer({ transformerId: head.value.transformerId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   )
               : Effect.succeed(undefined),
           ),
@@ -177,11 +172,7 @@ export const TransformerProvider = () =>
           const found = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -198,11 +189,7 @@ export const TransformerProvider = () =>
           let live = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -269,9 +256,7 @@ export const TransformerProvider = () =>
           // an active transformer rejects all updates).
           yield* b2bi
             .deleteTransformer({ transformerId: output.transformerId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // NOTE: transformer creation auto-creates the shared account-level
           // /aws/vendedlogs/b2bi/transformers log group. That group is a
           // service-managed singleton (like a service-linked role) and MUST
@@ -287,9 +272,7 @@ export const TransformerProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getTransformer({ transformerId: s.transformerId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               ),
             ),
             Stream.filter((item) => item !== undefined),

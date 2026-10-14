@@ -28,10 +28,7 @@ export interface DescribeRestoreJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: backup.DescribeRestoreJobInput,
-    ) => Effect.Effect<
-      backup.DescribeRestoreJobOutput,
-      backup.DescribeRestoreJobError
-    >
+    ) => Effect.Effect<backup.DescribeRestoreJobOutput, backup.DescribeRestoreJobError>
   >
 > {}
 export const DescribeRestoreJob = Binding.Service<DescribeRestoreJob>(

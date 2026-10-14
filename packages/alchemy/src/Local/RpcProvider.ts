@@ -7,10 +7,10 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { Artifacts, ArtifactStore, makeScopedArtifacts } from "../Artifacts.ts";
-import { InstanceId } from "../InstanceId.ts";
 import type { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
+import { ResourceContext } from "../ResourceContext.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
@@ -42,7 +42,7 @@ import { RpcProviderProxy } from "./RpcProviderProxy.ts";
  * ```
  *
  * @param cls - The tag of the resource class to construct a provider for.
- * @param serverEntryUrl - The main file for the server entry point, if the provider is to be run in a separate process. This is typically obtained using `import.meta.url` or `import.meta.resolve`.
+ * @param providersUrl - URL of the module whose default export is the provider group's layer (the layer this provider is registered in). When the provider runs in the dev sidecar, the sidecar imports that module on first use — see `Local/Sidecar.ts`. Typically `import.meta.resolve("./Local.ts")`.
  * @param eff - The Effect to use to construct the provider.
  * @returns A layer containing the RpcProvider.
  */
@@ -166,7 +166,7 @@ export const effect = <
   ListReq = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
-  serverEntryUrl: string,
+  providersUrl: string,
   eff: Effect.Effect<
     RpcProviderService<
       R,
@@ -206,36 +206,36 @@ export const effect = <
                 Predicate.hasProperty(args[0], "instanceId") &&
                   Predicate.isString(args[0].instanceId)
                   ? Layer.merge(
-                      layerFallback(InstanceId, args[0].instanceId),
-                      Layer.succeed(
-                        Artifacts,
-                        makeScopedArtifacts(store, args[0].instanceId),
-                      ),
+                      Predicate.hasProperty(args[0], "id") &&
+                        Predicate.isString(args[0].id) &&
+                        Predicate.hasProperty(args[0], "fqn") &&
+                        Predicate.isString(args[0].fqn)
+                        ? layerFallback(ResourceContext, {
+                            logicalId: args[0].id,
+                            fqn: args[0].fqn,
+                            instanceId: args[0].instanceId,
+                            type: cls.Type,
+                          })
+                        : Layer.empty,
+                      Layer.succeed(Artifacts, makeScopedArtifacts(store, args[0].instanceId)),
                     )
                   : Layer.empty,
               );
               return result.pipe(
-                Stream.isStream(result)
-                  ? Stream.provide(services)
-                  : Effect.provide(services),
+                Stream.isStream(result) ? Stream.provide(services) : Effect.provide(services),
               );
             };
           },
         });
       }
-      return withDefaultList(yield* client.value.get(serverEntryUrl, cls.Type));
+      return withDefaultList(yield* client.value.get(providersUrl, cls.Type));
     }),
   );
 
-const layerFallback = <I, S>(
-  service: Context.Key<I, S>,
-  defaultValue: NoInfer<S>,
-) =>
+const layerFallback = <I, S>(service: Context.Key<I, S>, defaultValue: NoInfer<S>) =>
   Layer.effect(
     service,
-    Effect.serviceOption(service).pipe(
-      Effect.map(Option.getOrElse(() => defaultValue)),
-    ),
+    Effect.serviceOption(service).pipe(Effect.map(Option.getOrElse(() => defaultValue))),
   );
 
 /**
@@ -247,8 +247,7 @@ const layerFallback = <I, S>(
  */
 export const providerServices = <ROut, E, RIn>(
   self: Layer.Layer<ROut, E, RIn>,
-): Layer.Layer<ROut, E, RIn | AlchemyContext> =>
-  providerServicesEffect(Effect.succeed(self));
+): Layer.Layer<ROut, E, RIn | AlchemyContext> => self.pipe(Effect.succeed, providerServicesEffect);
 
 /**
  * Conditionally constructs a layer for use by an RpcProvider.

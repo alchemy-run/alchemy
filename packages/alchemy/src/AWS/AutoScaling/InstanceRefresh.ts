@@ -37,10 +37,7 @@ export interface InstanceRefreshClient {
    */
   start: (
     request?: StartInstanceRefreshRequest,
-  ) => Effect.Effect<
-    autoscaling.StartInstanceRefreshAnswer,
-    autoscaling.StartInstanceRefreshError
-  >;
+  ) => Effect.Effect<autoscaling.StartInstanceRefreshAnswer, autoscaling.StartInstanceRefreshError>;
   /**
    * Cancel the in-progress refresh. Instances already replaced are not rolled
    * back — use `rollback` for that.
@@ -112,6 +109,4 @@ export interface InstanceRefresh extends Binding.Service<
   (group: AutoScalingGroup) => Effect.Effect<InstanceRefreshClient>
 > {}
 
-export const InstanceRefresh = Binding.Service<InstanceRefresh>(
-  "AWS.AutoScaling.InstanceRefresh",
-);
+export const InstanceRefresh = Binding.Service<InstanceRefresh>("AWS.AutoScaling.InstanceRefresh");

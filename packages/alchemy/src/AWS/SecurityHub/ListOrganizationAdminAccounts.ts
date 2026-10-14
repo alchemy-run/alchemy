@@ -33,7 +33,6 @@ export interface ListOrganizationAdminAccounts extends Binding.Service<
     >
   >
 > {}
-export const ListOrganizationAdminAccounts =
-  Binding.Service<ListOrganizationAdminAccounts>(
-    "AWS.SecurityHub.ListOrganizationAdminAccounts",
-  );
+export const ListOrganizationAdminAccounts = Binding.Service<ListOrganizationAdminAccounts>(
+  "AWS.SecurityHub.ListOrganizationAdminAccounts",
+);

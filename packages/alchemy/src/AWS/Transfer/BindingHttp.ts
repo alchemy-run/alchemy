@@ -19,12 +19,7 @@ import type { User } from "./User.ts";
  * callable injects the bound {@link Server}'s ID as `ServerId` and the
  * deploy-time half grants `actions` on the server's ARN.
  */
-export const makeTransferServerHttpBinding = <
-  I extends { ServerId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Transfer.StartServer`. */
   tag: string;
   /** The distilled operation; `ServerId` is injected from the server. */
@@ -53,10 +48,7 @@ export const makeTransferServerHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  options.resource?.(server) ??
-                    Output.interpolate`${server.arn}`,
-                ],
+                Resource: [options.resource?.(server) ?? Output.interpolate`${server.arn}`],
               },
             ],
           });

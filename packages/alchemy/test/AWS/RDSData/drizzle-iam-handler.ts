@@ -1,13 +1,13 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RDS from "@/AWS/RDS";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RDS from "@/AWS/RDS";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { RDSDataInfra } from "./infra.ts";
 
 const main = path.resolve(import.meta.dirname, "drizzle-iam-handler.ts");
@@ -43,8 +43,7 @@ export default RDSDrizzleIamFunction.make(
     timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
-    const { cluster, subnetA, subnetB, lambdaSecurityGroup } =
-      yield* RDSDataInfra;
+    const { cluster, subnetA, subnetB, lambdaSecurityGroup } = yield* RDSDataInfra;
 
     const connect = yield* RDS.Connect(cluster, {
       auth: "iam",
@@ -78,28 +77,27 @@ export default RDSDrizzleIamFunction.make(
             database: info.database,
             username: info.username,
             hasToken:
-              typeof info.password === "string" &&
-              info.password.includes("X-Amz-Signature="),
+              typeof info.password === "string" && info.password.includes("X-Amz-Signature="),
             ssl: info.ssl,
-            canRefresh:
-              refreshed !== undefined && refreshed.includes("X-Amz-Signature="),
+            canRefresh: refreshed !== undefined && refreshed.includes("X-Amz-Signature="),
           });
         }
 
         // Socket round-trip: IAM token auth + TLS + in-VPC connectivity.
         if (request.method === "GET" && pathname === "/drizzle-health") {
-          const rows = (yield* db.execute(sql`select 1 as one`)) as unknown as {
-            one: number;
-          }[];
+          // `"objects"` mode resolves to the row array; the default `"raw"`
+          // mode resolves to pg's whole QueryResult (`{ rows, rowCount, ... }`).
+          const rows = yield* db.execute<{ one: number }>(sql`select 1 as one`, "objects");
           return yield* HttpServerResponse.json({ rows });
         }
 
         // Cross-path consistency: rows written via the Data API fixture are
         // visible over the wire-protocol connection.
         if (request.method === "GET" && pathname === "/drizzle-todos") {
-          const rows = (yield* db.execute(
+          const rows = yield* db.execute<{ count: number }>(
             sql`select count(*)::int as count from todos`,
-          )) as unknown as { count: number }[];
+            "objects",
+          );
           return yield* HttpServerResponse.json({ rows });
         }
 

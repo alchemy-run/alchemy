@@ -4,11 +4,7 @@ import type { RotationRules } from "./RotationSchedule.ts";
 import type { Secret } from "./Secret.ts";
 
 /** A step of the Secrets Manager rotation protocol. */
-export type RotationStep =
-  | "createSecret"
-  | "setSecret"
-  | "testSecret"
-  | "finishSecret";
+export type RotationStep = "createSecret" | "setSecret" | "testSecret" | "finishSecret";
 
 /**
  * The payload Secrets Manager sends the rotation function on each step of a
@@ -93,9 +89,7 @@ export function onSecretRotation<S extends Secret, Req = never>(
   propsOrProcess:
     | RotationEventSourceProps
     | ((event: SecretRotationEvent) => Effect.Effect<void, never, Req>),
-  maybeProcess?: (
-    event: SecretRotationEvent,
-  ) => Effect.Effect<void, never, Req>,
+  maybeProcess?: (event: SecretRotationEvent) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<void, never, RotationEventSource> {
   const [props, process] =
     typeof propsOrProcess === "function"

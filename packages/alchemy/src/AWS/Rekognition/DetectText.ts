@@ -32,12 +32,7 @@ export interface DetectText extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DetectTextRequest,
-    ) => Effect.Effect<
-      rekognition.DetectTextResponse,
-      rekognition.DetectTextError
-    >
+    ) => Effect.Effect<rekognition.DetectTextResponse, rekognition.DetectTextError>
   >
 > {}
-export const DetectText = Binding.Service<DetectText>(
-  "AWS.Rekognition.DetectText",
-);
+export const DetectText = Binding.Service<DetectText>("AWS.Rekognition.DetectText");

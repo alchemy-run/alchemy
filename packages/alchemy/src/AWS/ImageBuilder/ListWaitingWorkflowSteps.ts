@@ -35,7 +35,6 @@ export interface ListWaitingWorkflowSteps extends Binding.Service<
     >
   >
 > {}
-export const ListWaitingWorkflowSteps =
-  Binding.Service<ListWaitingWorkflowSteps>(
-    "AWS.ImageBuilder.ListWaitingWorkflowSteps",
-  );
+export const ListWaitingWorkflowSteps = Binding.Service<ListWaitingWorkflowSteps>(
+  "AWS.ImageBuilder.ListWaitingWorkflowSteps",
+);

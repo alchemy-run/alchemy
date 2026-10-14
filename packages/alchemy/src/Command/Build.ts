@@ -118,15 +118,18 @@ export const Build = Resource<Build>("Command.Build");
 /**
  * Resolves `Redacted` env values to their plain string so that a change in a
  * secret's value still busts the memo hash (the hash is one-way, so the secret
- * itself is never recoverable from state).
+ * itself is never recoverable from state). `undefined`-valued entries are
+ * dropped (they mean "unset").
  */
 const resolveEnv = (env: CommandRunProps["env"]) =>
   env
     ? Object.fromEntries(
-        Object.entries(env).map(([key, value]) => [
-          key,
-          Redacted.isRedacted(value) ? Redacted.value(value) : value,
-        ]),
+        Object.entries(env)
+          .filter(
+            (entry): entry is [string, string | Redacted.Redacted<string>] =>
+              entry[1] !== undefined,
+          )
+          .map(([key, value]) => [key, Redacted.isRedacted(value) ? Redacted.value(value) : value]),
       )
     : undefined;
 
@@ -204,18 +207,13 @@ export const BuildProvider = () =>
           if (havePropsChanged(olds, news)) return { action: "update" };
 
           const newOutput = yield* makeOutput(news).pipe(
-            Effect.catchReason(
-              "CommandError",
-              "OutputNotFound",
-              () => Effect.undefined,
-            ),
+            Effect.catchReason("CommandError", "OutputNotFound", () => Effect.undefined),
           );
           return {
             action: Equal.equals(newOutput, output) ? "noop" : "update",
           };
         }),
-        reconcile: ({ news, session }) =>
-          run(news, session).pipe(Effect.andThen(makeOutput(news))),
+        reconcile: ({ news, session }) => run(news, session).pipe(Effect.andThen(makeOutput(news))),
         delete: Effect.fn(function* ({ output }) {
           // `output.outdir` is persisted relative to the initial cwd.
           const outdir = path.resolve(initialCwd, output.outdir);

@@ -27,10 +27,7 @@ export interface DeleteDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.DeleteDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      neptune.DeleteDBClusterSnapshotResult,
-      neptune.DeleteDBClusterSnapshotError
-    >
+    ) => Effect.Effect<neptune.DeleteDBClusterSnapshotResult, neptune.DeleteDBClusterSnapshotError>
   >
 > {}
 export const DeleteDBClusterSnapshot = Binding.Service<DeleteDBClusterSnapshot>(

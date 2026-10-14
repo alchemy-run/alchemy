@@ -35,7 +35,6 @@ export interface UpdateRevealConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateRevealConfiguration =
-  Binding.Service<UpdateRevealConfiguration>(
-    "AWS.Macie2.UpdateRevealConfiguration",
-  );
+export const UpdateRevealConfiguration = Binding.Service<UpdateRevealConfiguration>(
+  "AWS.Macie2.UpdateRevealConfiguration",
+);

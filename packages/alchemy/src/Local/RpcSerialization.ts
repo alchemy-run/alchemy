@@ -1,3 +1,4 @@
+import * as NodeUtil from "node:util";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -7,14 +8,9 @@ import { flow } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as NodeUtil from "node:util";
 import * as Output from "../Output.ts";
 import { isRedactedMarker, type RedactedMarker } from "../RuntimeContext.ts";
-import {
-  decodeDuration,
-  DURATION_MARKER,
-  encodeState,
-} from "../State/StateEncoding.ts";
+import { decodeDuration, DURATION_MARKER, encodeState } from "../State/StateEncoding.ts";
 
 type RpcEffectHandler<Args extends Array<any>, Success, Error> = (
   ...args: Args
@@ -64,8 +60,8 @@ export type RpcUnwrapped<T> =
 export const wrapRpcHandlers = <T extends Record<string, any>>(
   handlers: T,
   streamKeys?: Array<keyof T>,
-): RpcWrapped<T> => {
-  return Object.fromEntries(
+): RpcWrapped<T> =>
+  Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
       typeof value === "function"
@@ -77,13 +73,12 @@ export const wrapRpcHandlers = <T extends Record<string, any>>(
           : value,
     ]),
   ) as RpcWrapped<T>;
-};
 
 export const unwrapRpcHandlers = <T extends Record<string, any>>(
   handlers: RpcWrapped<T>,
   streamKeys?: Array<keyof T>,
-): RpcUnwrapped<T> => {
-  return Object.fromEntries(
+): RpcUnwrapped<T> =>
+  Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
       typeof value === "function"
@@ -95,9 +90,9 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
           : value,
     ]),
   ) as RpcUnwrapped<T>;
-};
 
-const serializeError = Schema.encodeSync(Schema.Defect());
+const serializeError = (value: unknown) =>
+  Schema.encodeEffect(Schema.Defect())(value).pipe(Effect.orDie);
 
 const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcEffectHandler<Args, Success, Error>,
@@ -106,33 +101,34 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
     (args) => deserializeRpcArgs(args) as Args,
     (args) => handler(...args),
     Effect.exit,
-    Effect.map((exit): RpcSerializedExit<Success, Error> => {
+    Effect.flatMap((exit): Effect.Effect<RpcSerializedExit<Success, Error>> => {
       if (exit._tag === "Success") {
         // Success values need the same marker treatment as args: provider
         // attributes can legitimately carry `Redacted` secrets (e.g. a local
         // container's bound env), and a raw Redacted reaching capnweb dies
         // with `TypeError: Cannot serialize value: <redacted>`.
-        return {
+        return Effect.succeed({
           _tag: "Success",
           value: serializeRpcArgs(exit.value) as Success,
-        };
+        });
       }
-      return {
-        _tag: "Failure",
-        cause: exit.cause.reasons.map((reason): RpcSerializedCause<Error> => {
+      return Effect.forEach(
+        exit.cause.reasons,
+        (reason): Effect.Effect<RpcSerializedCause<Error>> => {
           switch (reason._tag) {
             case "Fail":
-              return {
-                _tag: "Fail",
-                error: serializeError(reason.error) as Error,
-              };
+              return serializeError(reason.error).pipe(
+                Effect.map((error) => ({ _tag: "Fail", error: error as Error })),
+              );
             case "Die":
-              return { _tag: "Die", defect: serializeError(reason.defect) };
+              return serializeError(reason.defect).pipe(
+                Effect.map((defect) => ({ _tag: "Die", defect })),
+              );
             case "Interrupt":
-              return { _tag: "Interrupt", fiberId: reason.fiberId };
+              return Effect.succeed({ _tag: "Interrupt", fiberId: reason.fiberId });
           }
-        }),
-      };
+        },
+      ).pipe(Effect.map((cause) => ({ _tag: "Failure", cause })));
     }),
     Effect.runPromise,
   );
@@ -239,10 +235,7 @@ const serializeRpcArgs = (value: unknown): unknown => {
   }
   if (value && typeof value === "object" && !("toJSON" in value)) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        serializeRpcArgs(child),
-      ]),
+      Object.entries(value).map(([key, child]) => [key, serializeRpcArgs(child)]),
     );
   }
   return value;
@@ -270,9 +263,7 @@ const isContextMarker = (value: object): value is ContextMarker =>
   "description" in value &&
   typeof value.description === "string";
 
-const isDurationEnvelope = (
-  value: object,
-): value is { [DURATION_MARKER]: unknown } =>
+const isDurationEnvelope = (value: object): value is { [DURATION_MARKER]: unknown } =>
   DURATION_MARKER in value && Object.keys(value).length === 1;
 
 const deserializeRpcArgs = (value: unknown): unknown => {
@@ -310,10 +301,7 @@ const deserializeRpcArgs = (value: unknown): unknown => {
       return decodeDuration(value[DURATION_MARKER]) ?? value;
     }
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        deserializeRpcArgs(child),
-      ]),
+      Object.entries(value).map(([key, child]) => [key, deserializeRpcArgs(child)]),
     );
   }
   return value;

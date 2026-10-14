@@ -7,10 +7,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
  * Request for {@link ListQueuedMessages}. The bound device's id is injected
  * automatically.
  */
-export interface ListQueuedMessagesRequest extends Omit<
-  iotw.ListQueuedMessagesRequest,
-  "Id"
-> {}
+export interface ListQueuedMessagesRequest extends Omit<iotw.ListQueuedMessagesRequest, "Id"> {}
 
 /**
  * Runtime binding for `iotwireless:ListQueuedMessages` — list the downlink
@@ -44,10 +41,7 @@ export interface ListQueuedMessages extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListQueuedMessagesRequest,
-    ) => Effect.Effect<
-      iotw.ListQueuedMessagesResponse,
-      iotw.ListQueuedMessagesError
-    >
+    ) => Effect.Effect<iotw.ListQueuedMessagesResponse, iotw.ListQueuedMessagesError>
   >
 > {}
 export const ListQueuedMessages = Binding.Service<ListQueuedMessages>(

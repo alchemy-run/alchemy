@@ -35,10 +35,7 @@ export interface DescribeCodeBinding extends Binding.Service<
       Language: string;
       /** The version of the schema. Defaults to the latest. */
       SchemaVersion?: string;
-    }) => Effect.Effect<
-      schemas.DescribeCodeBindingResponse,
-      schemas.DescribeCodeBindingError
-    >
+    }) => Effect.Effect<schemas.DescribeCodeBindingResponse, schemas.DescribeCodeBindingError>
   >
 > {}
 export const DescribeCodeBinding = Binding.Service<DescribeCodeBinding>(

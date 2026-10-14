@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link BatchAssociateResource}.
  */
-export interface BatchAssociateResourceRequest
-  extends fms.BatchAssociateResourceRequest {}
+export interface BatchAssociateResourceRequest extends fms.BatchAssociateResourceRequest {}
 
 /**
  * Runtime binding for `fms:BatchAssociateResource`.
@@ -35,10 +34,7 @@ export interface BatchAssociateResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: BatchAssociateResourceRequest,
-    ) => Effect.Effect<
-      fms.BatchAssociateResourceResponse,
-      fms.BatchAssociateResourceError
-    >
+    ) => Effect.Effect<fms.BatchAssociateResourceResponse, fms.BatchAssociateResourceError>
   >
 > {}
 

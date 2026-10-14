@@ -1,22 +1,18 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { TEST_CSR } from "./fixtures/csr.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = "alchemy-test-2.us";
 // Each test owns a DISTINCT hostname. Adoption keys purely off the hostname
@@ -45,102 +41,103 @@ const getCertificate = (certificateId: string) =>
 const expectRevoked = (certificateId: string) =>
   getCertificate(certificateId).pipe(
     Effect.flatMap((cert) =>
-      cert.revokedAt
-        ? Effect.void
-        : Effect.fail({ _tag: "CertificateNotRevoked" } as const),
+      cert.revokedAt ? Effect.void : Effect.fail({ _tag: "CertificateNotRevoked" } as const),
     ),
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotRevoked",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
-test.provider("issue, verify, and revoke a certificate", (stack) =>
-  Effect.gen(function* () {
-    const hostname = `originissue.${zoneName}`;
-    yield* stack.destroy();
+test.provider(
+  "issue, verify, and revoke a certificate",
+  (stack) =>
+    Effect.gen(function* () {
+      const hostname = `originissue.${zoneName}`;
+      yield* stack.destroy();
 
-    const cert = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
+      const cert = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
 
-    // Issuance is synchronous — the signed PEM comes back on create.
-    expect(cert.certificateId).toBeTruthy();
-    expect(cert.certificate).toContain("-----BEGIN CERTIFICATE-----");
-    expect(cert.csr).toContain("-----BEGIN CERTIFICATE REQUEST-----");
-    expect(cert.hostnames).toEqual([hostname]);
-    expect(cert.requestType).toEqual("origin-rsa");
-    expect(cert.requestedValidity).toEqual(90);
-    expect(cert.expiresOn).toBeTruthy();
+      // Issuance is synchronous — the signed PEM comes back on create.
+      expect(cert.certificateId).toBeTruthy();
+      expect(cert.certificate).toContain("-----BEGIN CERTIFICATE-----");
+      expect(cert.csr).toContain("-----BEGIN CERTIFICATE REQUEST-----");
+      expect(cert.hostnames).toEqual([hostname]);
+      expect(cert.requestType).toEqual("origin-rsa");
+      expect(cert.requestedValidity).toEqual(90);
+      expect(cert.expiresOn).toBeTruthy();
 
-    // Out-of-band verification: the certificate is live and not revoked.
-    const live = yield* getCertificate(cert.certificateId);
-    expect(live.id).toEqual(cert.certificateId);
-    expect(live.hostnames).toEqual([hostname]);
-    expect(live.revokedAt ?? null).toBeNull();
+      // Out-of-band verification: the certificate is live and not revoked.
+      const live = yield* getCertificate(cert.certificateId);
+      expect(live.id).toEqual(cert.certificateId);
+      expect(live.hostnames).toEqual([hostname]);
+      expect(live.revokedAt ?? null).toBeNull();
 
-    // Redeploying identical props is a no-op (same certificate).
-    const noop = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
-    expect(noop.certificateId).toEqual(cert.certificateId);
+      // Redeploying identical props is a no-op (same certificate).
+      const noop = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
+      expect(noop.certificateId).toEqual(cert.certificateId);
 
-    // Destroy revokes the certificate; a second destroy is idempotent.
-    yield* stack.destroy();
-    yield* expectRevoked(cert.certificateId);
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      // Destroy revokes the certificate; a second destroy is idempotent.
+      yield* stack.destroy();
+      yield* expectRevoked(cert.certificateId);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:origincacertificate", "live"] },
 );
 
-test.provider("list enumerates issued certificates", (stack) =>
-  Effect.gen(function* () {
-    const hostname = `originlist.${zoneName}`;
-    yield* stack.destroy();
+test.provider(
+  "list enumerates issued certificates",
+  (stack) =>
+    Effect.gen(function* () {
+      const hostname = `originlist.${zoneName}`;
+      yield* stack.destroy();
 
-    const cert = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("ListCert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
+      const cert = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("ListCert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate,
+      );
+      const all = yield* provider.list();
 
-    // `list()` is account-wide but enumerated per zone with the `zone_id`
-    // query param; a zone the scoped token can't read for Origin CA rejects
-    // with the typed `Forbidden` tag, which is swallowed so that zone simply
-    // contributes []. The standing token can list the test zone, so the
-    // freshly issued certificate must appear in the exhaustively-paginated
-    // result in the `read` Attributes shape.
-    expect(Array.isArray(all)).toBe(true);
-    const match = all.find((c) => c.certificateId === cert.certificateId);
-    expect(match).toBeDefined();
-    expect(match!.certificateId).toEqual(cert.certificateId);
-    expect(match!.hostnames).toEqual([hostname]);
-    expect(match!.requestType).toEqual("origin-rsa");
+      // `list()` is account-wide but enumerated per zone with the `zone_id`
+      // query param; a zone the scoped token can't read for Origin CA rejects
+      // with the typed `Forbidden` tag, which is swallowed so that zone simply
+      // contributes []. The standing token can list the test zone, so the
+      // freshly issued certificate must appear in the exhaustively-paginated
+      // result in the `read` Attributes shape.
+      expect(Array.isArray(all)).toBe(true);
+      const match = all.find((c) => c.certificateId === cert.certificateId);
+      expect(match).toBeDefined();
+      expect(match!.certificateId).toEqual(cert.certificateId);
+      expect(match!.hostnames).toEqual([hostname]);
+      expect(match!.requestType).toEqual("origin-rsa");
 
-    yield* stack.destroy();
-    yield* expectRevoked(cert.certificateId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* expectRevoked(cert.certificateId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:origincacertificate", "live"] },
 );
 
 // Explicit revoke for certificates the wedged-state recovery orphans out of
@@ -181,20 +178,17 @@ test.provider(
       // interrupted deploy leaves behind: `creating`, no attributes, and the
       // Output-valued props lost in the state round-trip (#736).
       const state = yield* yield* State;
-      const stage = "test"; // scratch stacks default to the "test" stage
+      const stage = stack.stage;
       const wedgeRow = (junk: Record<string, unknown>) =>
         Effect.gen(function* () {
           const fqns = yield* state.list({ stack: stack.name, stage });
           const rows = yield* Effect.forEach(fqns, (fqn) =>
-            state
-              .get({ stack: stack.name, stage, fqn })
-              .pipe(Effect.map((row) => ({ fqn, row }))),
+            state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
           );
           const wedged = rows.find(
             (r): r is { fqn: string; row: ResourceState } =>
               isResourceState(r.row) &&
-              r.row.resourceType ===
-                "Cloudflare.OriginCaCertificate.OriginCaCertificate",
+              r.row.resourceType === "Cloudflare.OriginCaCertificate.OriginCaCertificate",
           );
           if (!wedged) {
             return yield* Effect.die(
@@ -217,9 +211,7 @@ test.provider(
       // The wedge orphans the previous certificate out of engine state, so
       // destroy can never reclaim it — revoke it explicitly on scope close
       // even if the body fails mid-way.
-      yield* Effect.addFinalizer(() =>
-        revokeQuietly(created.certificateId).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => revokeQuietly(created.certificateId).pipe(Effect.ignore));
 
       // Wedge 1 — the #736 shape: the hostnames array survives serialization
       // but its Output-valued ELEMENT deserializes as undefined. Before the
@@ -235,9 +227,7 @@ test.provider(
       expect(live.hostnames).toEqual([hostname]);
       expect(live.revokedAt ?? null).toBeNull();
 
-      yield* Effect.addFinalizer(() =>
-        revokeQuietly(recovered.certificateId).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => revokeQuietly(recovered.certificateId).pipe(Effect.ignore));
 
       // Wedge 2 — every Output-valued prop lost wholesale (`undefined`, not
       // `[undefined]`): the whole hostnames array AND the csr. Guarded both
@@ -261,81 +251,88 @@ test.provider(
       yield* expectRevoked(created.certificateId);
       yield* expectRevoked(recovered.certificateId);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:origincacertificate", "live"],
+    timeout: 240_000,
+  },
 );
 
-test.provider("replacement on requestedValidity change", (stack) =>
-  Effect.gen(function* () {
-    const hostname = `originvalidity.${zoneName}`;
-    yield* stack.destroy();
+test.provider(
+  "replacement on requestedValidity change",
+  (stack) =>
+    Effect.gen(function* () {
+      const hostname = `originvalidity.${zoneName}`;
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
-    expect(initial.requestedValidity).toEqual(90);
+      const initial = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
+      expect(initial.requestedValidity).toEqual(90);
 
-    // There is no update API — changing the validity issues a new
-    // certificate and revokes the old one.
-    const replaced = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 30,
-      }).pipe(adopt(true)),
-    );
+      // There is no update API — changing the validity issues a new
+      // certificate and revokes the old one.
+      const replaced = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 30,
+        }).pipe(adopt(true)),
+      );
 
-    expect(replaced.certificateId).not.toEqual(initial.certificateId);
-    expect(replaced.requestedValidity).toEqual(30);
-    yield* expectRevoked(initial.certificateId);
+      expect(replaced.certificateId).not.toEqual(initial.certificateId);
+      expect(replaced.requestedValidity).toEqual(30);
+      yield* expectRevoked(initial.certificateId);
 
-    const live = yield* getCertificate(replaced.certificateId);
-    expect(live.revokedAt ?? null).toBeNull();
+      const live = yield* getCertificate(replaced.certificateId);
+      expect(live.revokedAt ?? null).toBeNull();
 
-    yield* stack.destroy();
-    yield* expectRevoked(replaced.certificateId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* expectRevoked(replaced.certificateId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:origincacertificate", "live"] },
 );
 
-test.provider("replacement on hostnames change", (stack) =>
-  Effect.gen(function* () {
-    const hostname = `originhostsa.${zoneName}`;
-    const altHostname = `originhostsb.${zoneName}`;
-    yield* stack.destroy();
+test.provider(
+  "replacement on hostnames change",
+  (stack) =>
+    Effect.gen(function* () {
+      const hostname = `originhostsa.${zoneName}`;
+      const altHostname = `originhostsb.${zoneName}`;
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
-        csr: TEST_CSR,
-        hostnames: [hostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
-    expect(initial.hostnames).toEqual([hostname]);
+      const initial = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
+          csr: TEST_CSR,
+          hostnames: [hostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
+      expect(initial.hostnames).toEqual([hostname]);
 
-    // Hostnames are immutable — changing the set issues a new certificate
-    // and revokes the old one.
-    const replaced = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
-        csr: TEST_CSR,
-        hostnames: [hostname, altHostname],
-        requestType: "origin-rsa",
-        requestedValidity: 90,
-      }).pipe(adopt(true)),
-    );
+      // Hostnames are immutable — changing the set issues a new certificate
+      // and revokes the old one.
+      const replaced = yield* stack.deploy(
+        Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
+          csr: TEST_CSR,
+          hostnames: [hostname, altHostname],
+          requestType: "origin-rsa",
+          requestedValidity: 90,
+        }).pipe(adopt(true)),
+      );
 
-    expect(replaced.certificateId).not.toEqual(initial.certificateId);
-    expect([...replaced.hostnames].sort()).toEqual(
-      [hostname, altHostname].sort(),
-    );
-    yield* expectRevoked(initial.certificateId);
+      expect(replaced.certificateId).not.toEqual(initial.certificateId);
+      expect([...replaced.hostnames].sort()).toEqual([hostname, altHostname].sort());
+      yield* expectRevoked(initial.certificateId);
 
-    yield* stack.destroy();
-    yield* expectRevoked(replaced.certificateId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* expectRevoked(replaced.certificateId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:origincacertificate", "live"] },
 );

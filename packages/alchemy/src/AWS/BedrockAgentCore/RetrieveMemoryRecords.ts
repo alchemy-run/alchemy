@@ -49,10 +49,7 @@ export interface RetrieveMemoryRecords extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RetrieveMemoryRecordsRequest,
-    ) => Effect.Effect<
-      agentcore.RetrieveMemoryRecordsOutput,
-      agentcore.RetrieveMemoryRecordsError
-    >
+    ) => Effect.Effect<agentcore.RetrieveMemoryRecordsOutput, agentcore.RetrieveMemoryRecordsError>
   >
 > {}
 export const RetrieveMemoryRecords = Binding.Service<RetrieveMemoryRecords>(

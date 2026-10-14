@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -115,15 +110,13 @@ export interface CustomVerificationEmailTemplate extends Resource<
  *
  * @resource
  */
-export const CustomVerificationEmailTemplate =
-  Resource<CustomVerificationEmailTemplate>(
-    "AWS.SES.CustomVerificationEmailTemplate",
-  );
+export const CustomVerificationEmailTemplate = Resource<CustomVerificationEmailTemplate>(
+  "AWS.SES.CustomVerificationEmailTemplate",
+);
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // getCustomVerificationEmailTemplate returns no ARN, so the ARN
 // listTagsForResource needs is derived — verified live against SES.
@@ -138,20 +131,13 @@ export const CustomVerificationEmailTemplateProvider = () =>
         id: string,
         props: Pick<CustomVerificationEmailTemplateProps, "templateName">,
       ) {
-        return (
-          props.templateName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.templateName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getCustomVerificationEmailTemplate({ TemplateName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       // The get returns no tags, so ownership costs a second API call. Only
@@ -182,14 +168,11 @@ export const CustomVerificationEmailTemplateProvider = () =>
             .pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.CustomVerificationEmailTemplates ?? [])
-            .flatMap((meta) =>
-              meta.TemplateName ? [{ templateName: meta.TemplateName }] : [],
-            );
+            .flatMap((meta) => (meta.TemplateName ? [{ templateName: meta.TemplateName }] : []));
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.templateName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.templateName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTemplate(name);
           if (!found) return undefined;
           // Templates are taggable and reconcile brands the ones it creates,

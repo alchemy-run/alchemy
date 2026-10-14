@@ -28,13 +28,6 @@ export interface GetHostedZone extends Binding.Service<
   "AWS.Route53.GetHostedZone",
   (
     zone: HostedZone,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      route53.GetHostedZoneResponse,
-      route53.GetHostedZoneError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<route53.GetHostedZoneResponse, route53.GetHostedZoneError>>
 > {}
-export const GetHostedZone = Binding.Service<GetHostedZone>(
-  "AWS.Route53.GetHostedZone",
-);
+export const GetHostedZone = Binding.Service<GetHostedZone>("AWS.Route53.GetHostedZone");

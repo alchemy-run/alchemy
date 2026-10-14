@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type { GetActionResponseAction } from "@distilled.cloud/hetzner/actions";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -22,13 +22,9 @@ export class ActionTimeout extends Data.TaggedError("ActionTimeout")<{
   status: string;
 }> {}
 
-export type ActionRef =
-  | number
-  | Pick<GetActionResponseAction, "id">
-  | GetActionResponseAction;
+export type ActionRef = number | Pick<GetActionResponseAction, "id"> | GetActionResponseAction;
 
-const actionIdOf = (ref: ActionRef): number =>
-  typeof ref === "number" ? ref : ref.id;
+const actionIdOf = (ref: ActionRef): number => (typeof ref === "number" ? ref : ref.id);
 
 const isErrorStatus = (status: string): boolean => status === "error";
 const isSuccessStatus = (status: string): boolean => status === "success";
@@ -63,16 +59,15 @@ const backoff = Schedule.min([
 /**
  * Poll a Hetzner Action until it reaches `success` or `error`.
  *
- * Bounded: at most 10 polls, exponential backoff starting at 500ms and
- * capped at 5s (under 60s total). Already-finished actions return
- * immediately.
+ * Bounded: at most 24 polls, exponential backoff starting at 500ms and
+ * capped at 5s. Already-finished actions return immediately.
  */
 export const waitForAction = (
   ref: ActionRef,
 ): Effect.Effect<
   GetActionResponseAction,
-  ActionFailed | ActionTimeout | Services.actions.GetActionError,
-  Services.actions.HetznerOpContext
+  ActionFailed | ActionTimeout | Hetzner.actions.GetActionError,
+  Hetzner.actions.HetznerOpContext
 > =>
   Effect.gen(function* () {
     if (typeof ref !== "number" && "status" in ref) {
@@ -83,7 +78,7 @@ export const waitForAction = (
     }
 
     const id = actionIdOf(ref);
-    return yield* Services.actions.getAction({ id }).pipe(
+    return yield* Hetzner.actions.getAction({ id }).pipe(
       Effect.flatMap(({ action }) =>
         Effect.gen(function* () {
           yield* failIfError(action);
@@ -98,11 +93,8 @@ export const waitForAction = (
       ),
       Effect.retry({
         while: retryable,
-        times: 10,
-        schedule: Schedule.min([
-          Schedule.exponential(Duration.millis(500), 1.5),
-          Schedule.spaced(Duration.seconds(5)),
-        ]),
+        times: 24,
+        schedule: backoff,
       }),
       Effect.catchTag(
         "ActionPending",
@@ -122,8 +114,8 @@ export const waitForActions = (
   refs: ReadonlyArray<ActionRef>,
 ): Effect.Effect<
   GetActionResponseAction[],
-  ActionFailed | ActionTimeout | Services.actions.GetActionError,
-  Services.actions.HetznerOpContext
+  ActionFailed | ActionTimeout | Hetzner.actions.GetActionError,
+  Hetzner.actions.HetznerOpContext
 > => Effect.forEach(refs, waitForAction, { concurrency: 1 });
 
 /**
@@ -139,8 +131,8 @@ export const waitForZoneAction = (
   ref: ActionRef,
 ): Effect.Effect<
   GetActionResponseAction,
-  ActionFailed | ActionTimeout | Services.zoneActions.GetZonesActionError,
-  Services.zoneActions.HetznerOpContext
+  ActionFailed | ActionTimeout | Hetzner.zoneActions.GetZonesActionError,
+  Hetzner.zoneActions.HetznerOpContext
 > =>
   Effect.gen(function* () {
     if (typeof ref !== "number" && "status" in ref) {
@@ -151,7 +143,7 @@ export const waitForZoneAction = (
     }
 
     const id = actionIdOf(ref);
-    return yield* Services.zoneActions.getZonesAction({ id }).pipe(
+    return yield* Hetzner.zoneActions.getZonesAction({ id }).pipe(
       Effect.flatMap(({ action }) =>
         Effect.gen(function* () {
           yield* failIfError(action as GetActionResponseAction);
@@ -166,11 +158,8 @@ export const waitForZoneAction = (
       ),
       Effect.retry({
         while: retryable,
-        times: 10,
-        schedule: Schedule.min([
-          Schedule.exponential(Duration.millis(500), 1.5),
-          Schedule.spaced(Duration.seconds(5)),
-        ]),
+        times: 24,
+        schedule: backoff,
       }),
       Effect.catchTag(
         "ActionPending",

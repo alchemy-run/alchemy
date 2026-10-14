@@ -46,7 +46,6 @@ export interface ListCodeInterpreterSessions extends Binding.Service<
     >
   >
 > {}
-export const ListCodeInterpreterSessions =
-  Binding.Service<ListCodeInterpreterSessions>(
-    "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
-  );
+export const ListCodeInterpreterSessions = Binding.Service<ListCodeInterpreterSessions>(
+  "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
+);

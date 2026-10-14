@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface RegisterInstanceRequest extends Omit<
-  SD.RegisterInstanceRequest,
-  "ServiceId"
-> {}
+export interface RegisterInstanceRequest extends Omit<SD.RegisterInstanceRequest, "ServiceId"> {}
 
 /**
  * Runtime binding for `servicediscovery:RegisterInstance` — lets a
@@ -39,6 +36,4 @@ export interface RegisterInstance extends Binding.Service<
     ) => Effect.Effect<SD.RegisterInstanceResponse, SD.RegisterInstanceError>
   >
 > {}
-export const RegisterInstance = Binding.Service<RegisterInstance>(
-  "AWS.CloudMap.RegisterInstance",
-);
+export const RegisterInstance = Binding.Service<RegisterInstance>("AWS.CloudMap.RegisterInstance");

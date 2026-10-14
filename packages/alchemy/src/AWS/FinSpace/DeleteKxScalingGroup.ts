@@ -28,10 +28,7 @@ export interface DeleteKxScalingGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.DeleteKxScalingGroupRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.DeleteKxScalingGroupResponse,
-      SVC.DeleteKxScalingGroupError
-    >
+    ) => Effect.Effect<SVC.DeleteKxScalingGroupResponse, SVC.DeleteKxScalingGroupError>
   >
 > {}
 export const DeleteKxScalingGroup = Binding.Service<DeleteKxScalingGroup>(

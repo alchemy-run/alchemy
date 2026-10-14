@@ -39,6 +39,4 @@ export interface AddEndpoints extends Binding.Service<
     ) => Effect.Effect<ga.AddEndpointsResponse, ga.AddEndpointsError>
   >
 > {}
-export const AddEndpoints = Binding.Service<AddEndpoints>(
-  "AWS.GlobalAccelerator.AddEndpoints",
-);
+export const AddEndpoints = Binding.Service<AddEndpoints>("AWS.GlobalAccelerator.AddEndpoints");

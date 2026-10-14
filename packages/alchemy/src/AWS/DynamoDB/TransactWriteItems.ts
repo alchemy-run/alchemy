@@ -9,17 +9,12 @@ type NativeTransactWriteItem = NonNullable<
   DynamoDB.TransactWriteItemsInput["TransactItems"]
 >[number];
 
-type NativeConditionCheck = NonNullable<
-  NativeTransactWriteItem["ConditionCheck"]
->;
+type NativeConditionCheck = NonNullable<NativeTransactWriteItem["ConditionCheck"]>;
 type NativeDelete = NonNullable<NativeTransactWriteItem["Delete"]>;
 type NativePut = NonNullable<NativeTransactWriteItem["Put"]>;
 type NativeUpdate = NonNullable<NativeTransactWriteItem["Update"]>;
 
-export interface BoundConditionCheck extends Omit<
-  NativeConditionCheck,
-  "TableName"
-> {
+export interface BoundConditionCheck extends Omit<NativeConditionCheck, "TableName"> {
   Table: string;
 }
 
@@ -84,10 +79,7 @@ export interface TransactWriteItems extends Binding.Service<
   ) => Effect.Effect<
     (
       request: TransactWriteItemsRequest,
-    ) => Effect.Effect<
-      DynamoDB.TransactWriteItemsOutput,
-      DynamoDB.TransactWriteItemsError
-    >
+    ) => Effect.Effect<DynamoDB.TransactWriteItemsOutput, DynamoDB.TransactWriteItemsError>
   >
 > {}
 

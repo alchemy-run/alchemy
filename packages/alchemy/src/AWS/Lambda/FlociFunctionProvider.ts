@@ -16,7 +16,9 @@
  *   the emulator's assets bucket. The first swap repoints the function's
  *   code at that key with `UpdateFunctionCode`, which enrolls floci's
  *   reactive S3 sync; every later swap is a bare `PutObject` (measured
- *   111–138 ms re-extract, warm containers drained, no stale invoke).
+ *   111–138 ms re-extract, warm containers drained, no stale invoke) —
+ *   until an engine reconcile re-points the function at a content-addressed
+ *   key, after which the next swap re-enrolls it (see `enrolledAttrs`).
  *   `bundle: false` props fs-watch the prebuilt directory instead.
  * - **Replacement rules** — functionName and durableConfig-presence changes
  *   replace, mirroring the live diff.
@@ -35,10 +37,7 @@ import * as Stream from "effect/Stream";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { Assets, AssetsLive } from "../Assets.ts";
-import {
-  flociSidecarEntry,
-  makeDevWatchProvider,
-} from "../Local/DevWatchProvider.ts";
+import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import {
   Function,
   FunctionProvider,
@@ -46,19 +45,15 @@ import {
   type FunctionImageProps,
   type FunctionProps,
 } from "./Function.ts";
-import {
-  makeFunctionBundler,
-  type FunctionBundleResult,
-} from "./FunctionBundle.ts";
+import { makeFunctionBundler, type FunctionBundleResult } from "./FunctionBundle.ts";
 
-const isFunctionImageProps = (
-  props: FunctionProps,
-): props is FunctionImageProps => props.image !== undefined;
+const isFunctionImageProps = (props: FunctionProps): props is FunctionImageProps =>
+  props.image !== undefined;
 
 export const FlociFunctionProvider = () =>
   makeDevWatchProvider<Function, FunctionProps, Function["Attributes"]>(
     Function,
-    flociSidecarEntry(),
+    flociProvidersUrl(),
     {
       liveProvider: () => FunctionProvider(),
       // A FRESH `Assets` instance: its cached bucket lookup must resolve
@@ -146,7 +141,19 @@ export const FlociFunctionProvider = () =>
           const bundler = yield* makeFunctionBundler;
           const assets = yield* Assets;
           let lastHash = ctx.attrs.code?.hash ?? "";
-          let enrolledKey: string | undefined;
+          // The attributes object that was current when the watch loop
+          // last pointed the function at the stable dev key. Every
+          // engine-driven reconcile (a binding added, an env var changed,
+          // …) re-uploads the bundle to a content-addressed key and
+          // re-points the function THERE, silently detaching it from the
+          // dev key: floci's reactive S3 sync only follows the key the
+          // function is enrolled at, so every later PutObject would be
+          // ignored and hot swap would be dead until the next engine
+          // update. The skeleton hands the watcher a fresh attrs object per
+          // reconcile, so identity (not the code hash — a source edited
+          // back to its original content hashes the same) is the signal
+          // that a re-point happened and the function must be re-enrolled.
+          let enrolledAttrs: Function["Attributes"] | undefined;
           let startedAt = Date.now();
 
           const swap = Effect.fn(function* (result: FunctionBundleResult) {
@@ -160,10 +167,12 @@ export const FlociFunctionProvider = () =>
               Body: archive,
               ContentType: "application/zip",
             });
-            if (enrolledKey !== key) {
-              // First swap: repoint the function's code at the stable dev
-              // key — floci's reactive S3 sync then re-extracts on every
-              // subsequent PutObject with no further Lambda API calls.
+            const current = yield* ctx.currentAttrs;
+            if (enrolledAttrs !== current) {
+              // First swap, or the engine re-pointed the function since the
+              // last one: (re)point its code at the stable dev key — floci's
+              // reactive S3 sync then re-extracts on every subsequent
+              // PutObject with no further Lambda API calls.
               yield* Lambda.updateFunctionCode({
                 FunctionName: functionName,
                 S3Bucket: bucket,
@@ -175,7 +184,7 @@ export const FlociFunctionProvider = () =>
                   times: 8,
                 }),
               );
-              enrolledKey = key;
+              enrolledAttrs = current;
             }
             lastHash = result.identityHash;
             yield* Effect.logInfo(
@@ -198,10 +207,7 @@ export const FlociFunctionProvider = () =>
                   yield* swap(result);
                 }).pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[alchemy dev] ${functionName}: code swap failed`,
-                      cause,
-                    ),
+                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
                   ),
                 ),
               ),
@@ -210,11 +216,7 @@ export const FlociFunctionProvider = () =>
             // The exact rolldown config the deploy used — incremental
             // rebuilds produce the identical artifact shape.
             const plan = yield* bundler.resolveBundlePlan(props);
-            yield* Bundle.watch(
-              plan.inputOptions,
-              plan.outputOptions,
-              plan.extra,
-            ).pipe(
+            yield* Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
               Stream.runForEach((event) =>
                 Effect.gen(function* () {
                   switch (event._tag) {
@@ -229,19 +231,13 @@ export const FlociFunctionProvider = () =>
                       return;
                     }
                     case "Success": {
-                      const result = yield* bundler.finishBundle(
-                        plan,
-                        event.output,
-                      );
+                      const result = yield* bundler.finishBundle(plan, event.output);
                       yield* swap(result);
                     }
                   }
                 }).pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[alchemy dev] ${functionName}: code swap failed`,
-                      cause,
-                    ),
+                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
                   ),
                 ),
               ),

@@ -1,19 +1,16 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Exercise `QuerySearchNamespaceLocal` — the current-credentials HTTP
 // implementation of the `QuerySearchNamespace` binding — from inside an Action.
@@ -47,10 +44,7 @@ test.provider(
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const target = yield* AiSearchCrawlTargetWorker;
-          const namespace = yield* Cloudflare.AI.SearchNamespace(
-            "SearchNs",
-            {},
-          );
+          const namespace = yield* Cloudflare.AI.SearchNamespace("SearchNs", {});
           const instance = yield* Cloudflare.AI.SearchInstance("Search", {
             type: "web-crawler",
             source: target.url.as<string>(),
@@ -73,10 +67,21 @@ test.provider(
 
               return Effect.fn(function* () {
                 const id = yield* instanceId;
-                const list = yield* ns.list().pipe(
+                // The namespace instance list is eventually consistent: right
+                // after create (especially under load) it can still come back
+                // without the new instance. Poll until it shows up — bounded,
+                // so a never-listed instance still fails the assertion below.
+                // `search` filters by instance id server-side, so each poll
+                // is one small page regardless of the namespace's size.
+                const list = yield* ns.list({ search: id }).pipe(
                   Effect.retry({
                     schedule: Schedule.exponential("500 millis"),
                     times: 6,
+                  }),
+                  Effect.repeat({
+                    schedule: Schedule.spaced("3 seconds"),
+                    until: (list) => list.result.some((i) => i.id === id),
+                    times: 15,
                   }),
                 );
                 const info = yield* ns
@@ -102,7 +107,7 @@ test.provider(
       );
 
       expect(out.instanceId).toBeTruthy();
-      // `list()` enumerates the namespace's instances via the current creds.
+      // `list({ search })` finds the instance via the current creds.
       expect(out.ids).toContain(out.instanceId);
       // `.get(id).info()` scopes a single-instance read to this namespace.
       expect(out.info.id).toEqual(out.instanceId);
@@ -110,5 +115,8 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
 );

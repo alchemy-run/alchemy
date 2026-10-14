@@ -4,9 +4,7 @@ import type * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import type { BuildOutput } from "./BuildOutput.ts";
 
-export class FrameworkError extends Data.TaggedError<"FrameworkError">(
-  "FrameworkError",
-)<{
+export class FrameworkError extends Data.TaggedError<"FrameworkError">("FrameworkError")<{
   /** The framework the implementation drives (e.g. "vite", "waku", "astro"). */
   readonly framework?: string | undefined;
   readonly message: string;
@@ -16,6 +14,12 @@ export class FrameworkError extends Data.TaggedError<"FrameworkError">(
 export interface FrameworkBuildOptions {
   /** Project root. Defaults to the implementation's configured root / cwd. */
   readonly root?: string | undefined;
+  /**
+   * Process environment for the production-build child. Never applied to
+   * the parent: framework plugins mutate `process.env`, so the engine
+   * process must not share it with concurrent deploys.
+   */
+  readonly env?: Record<string, string> | undefined;
 }
 
 export interface FrameworkDevOptions {
@@ -59,9 +63,7 @@ export interface FrameworkDevServer {
 export class Framework extends Context.Service<
   Framework,
   {
-    readonly build: (
-      options?: FrameworkBuildOptions,
-    ) => Effect.Effect<BuildOutput, FrameworkError>;
+    readonly build: (options?: FrameworkBuildOptions) => Effect.Effect<BuildOutput, FrameworkError>;
     readonly dev: (
       options?: FrameworkDevOptions,
     ) => Effect.Effect<FrameworkDevServer, FrameworkError, Scope.Scope>;

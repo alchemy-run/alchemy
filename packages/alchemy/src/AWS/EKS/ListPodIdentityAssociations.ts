@@ -39,7 +39,6 @@ export interface ListPodIdentityAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListPodIdentityAssociations =
-  Binding.Service<ListPodIdentityAssociations>(
-    "AWS.EKS.ListPodIdentityAssociations",
-  );
+export const ListPodIdentityAssociations = Binding.Service<ListPodIdentityAssociations>(
+  "AWS.EKS.ListPodIdentityAssociations",
+);

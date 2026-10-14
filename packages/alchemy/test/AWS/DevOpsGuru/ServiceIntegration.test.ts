@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ServiceIntegration } from "@/AWS/DevOpsGuru/ServiceIntegration.ts";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ServiceIntegration } from "@/AWS/DevOpsGuru/ServiceIntegration.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -12,21 +12,22 @@ const { test } = Test.make({ providers: AWS.providers() });
 const observed = devopsguru.describeServiceIntegration({}).pipe(
   Effect.map(({ ServiceIntegration: config }) => ({
     opsCenter: config?.OpsCenter?.OptInStatus === "ENABLED",
-    logsAnomalyDetection:
-      config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
-    encryptionType:
-      config?.KMSServerSideEncryption?.Type ?? "AWS_OWNED_KMS_KEY",
+    logsAnomalyDetection: config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
+    encryptionType: config?.KMSServerSideEncryption?.Type ?? "AWS_OWNED_KMS_KEY",
   })),
 );
 
 // Ungated typed probe: describeServiceIntegration always answers with the
 // typed response shape — never an untyped catch-all.
-test.provider("describeServiceIntegration returns typed results", () =>
-  Effect.gen(function* () {
-    const config = yield* observed;
-    expect(typeof config.opsCenter).toBe("boolean");
-    expect(typeof config.logsAnomalyDetection).toBe("boolean");
-  }),
+test.provider(
+  "describeServiceIntegration returns typed results",
+  () =>
+    Effect.gen(function* () {
+      const config = yield* observed;
+      expect(typeof config.opsCenter).toBe("boolean");
+      expect(typeof config.logsAnomalyDetection).toBe("boolean");
+    }),
+  { tags: ["provider:aws", "provider:aws:devopsguru", "live"] },
 );
 
 // The integration is an account/region singleton. This test only runs when
@@ -88,5 +89,8 @@ test.provider(
       expect(after.logsAnomalyDetection).toBe(false);
       expect(after.encryptionType).toBe("AWS_OWNED_KMS_KEY");
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:devopsguru", "live"],
+    timeout: 180_000,
+  },
 );

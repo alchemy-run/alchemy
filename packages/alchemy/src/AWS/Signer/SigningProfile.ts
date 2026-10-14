@@ -161,16 +161,13 @@ export interface SigningProfile extends Resource<
  *
  * @resource
  */
-export const SigningProfile = Resource<SigningProfile>(
-  "AWS.Signer.SigningProfile",
-);
+export const SigningProfile = Resource<SigningProfile>("AWS.Signer.SigningProfile");
 
 /**
  * Signer profile names accept only `[a-zA-Z0-9_]` — coerce any other
  * character (hyphens from stack/stage names, etc.) to an underscore.
  */
-const sanitizeProfileName = (name: string): string =>
-  name.replace(/[^a-zA-Z0-9_]/g, "_");
+const sanitizeProfileName = (name: string): string => name.replace(/[^a-zA-Z0-9_]/g, "_");
 
 /** Coerce a distilled TagMap (values possibly undefined) to a plain record. */
 const toTagRecord = (
@@ -193,25 +190,16 @@ export const SigningProfileProvider = () =>
       ) {
         return (
           props.profileName ??
-          sanitizeProfileName(
-            yield* createPhysicalName({ id, delimiter: "_", maxLength: 64 }),
-          )
+          sanitizeProfileName(yield* createPhysicalName({ id, delimiter: "_", maxLength: 64 }))
         );
       });
 
       const getProfile = (profileName: string) =>
         signer
           .getSigningProfile({ profileName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const toAttributes = (
-        profileName: string,
-        live: signer.GetSigningProfileResponse,
-      ) => ({
+      const toAttributes = (profileName: string, live: signer.GetSigningProfileResponse) => ({
         profileName,
         arn: live.arn!,
         profileVersion: live.profileVersion!,
@@ -223,13 +211,7 @@ export const SigningProfileProvider = () =>
       return SigningProfile.Provider.of({
         // Updates only sync tags (all other props replace), so every
         // identifying attribute — including the version — is update-stable.
-        stables: [
-          "profileName",
-          "arn",
-          "profileVersion",
-          "profileVersionArn",
-          "platformId",
-        ],
+        stables: ["profileName", "arn", "profileVersion", "profileVersionArn", "platformId"],
 
         list: () =>
           signer.listSigningProfiles.pages({ includeCanceled: false }).pipe(
@@ -258,8 +240,7 @@ export const SigningProfileProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const profileName =
-            output?.profileName ?? (yield* createName(id, olds ?? {}));
+          const profileName = output?.profileName ?? (yield* createName(id, olds ?? {}));
           const live = yield* getProfile(profileName);
           // Canceled/revoked profiles cannot sign — treat them as deleted so
           // a re-deploy publishes a fresh active version.
@@ -287,8 +268,7 @@ export const SigningProfileProvider = () =>
               JSON.stringify(news.signingParameters ?? null) ||
             JSON.stringify(olds.signingMaterial ?? null) !==
               JSON.stringify(news.signingMaterial ?? null) ||
-            JSON.stringify(olds.overrides ?? null) !==
-              JSON.stringify(news.overrides ?? null)
+            JSON.stringify(olds.overrides ?? null) !== JSON.stringify(news.overrides ?? null)
           ) {
             return { action: "replace" } as const;
           }
@@ -296,8 +276,7 @@ export const SigningProfileProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const profileName =
-            output?.profileName ?? (yield* createName(id, news));
+          const profileName = output?.profileName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -322,31 +301,24 @@ export const SigningProfileProvider = () =>
               })
               .pipe(
                 // Race with a concurrent create — fall through to re-observe.
-                Effect.catchTag(
-                  "SigningProfileAlreadyExists",
-                  () => Effect.void,
-                ),
+                Effect.catchTag("SigningProfileAlreadyExists", () => Effect.void),
               );
             live = yield* getProfile(profileName);
           }
           if (live === undefined) {
             // Extremely unlikely read-after-write miss; surface loudly.
-            return yield* Effect.fail(
-              new signer.ResourceNotFoundException({
-                message: `signing profile ${profileName} not visible after PutSigningProfile`,
-              }),
-            );
+            return yield* signer.ResourceNotFoundException.make({
+              message: `signing profile ${profileName} not visible after PutSigningProfile`,
+            });
           }
           if (live.status !== "Active") {
             // The name is tombstoned by a canceled/revoked profile — Signer
             // reserves canceled names, so the profile cannot be recreated
             // under this name. Only reachable with a user-fixed profileName
             // (generated names get a fresh random suffix per instance).
-            return yield* Effect.fail(
-              new signer.SigningProfileAlreadyExists({
-                message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
-              }),
-            );
+            return yield* signer.SigningProfileAlreadyExists.make({
+              message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
+            });
           }
 
           // SYNC TAGS — diff against OBSERVED cloud tags (adoption may bring
@@ -377,9 +349,7 @@ export const SigningProfileProvider = () =>
           // succeeds); a missing profile is not an error.
           yield* signer
             .cancelSigningProfile({ profileName: output.profileName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

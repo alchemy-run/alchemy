@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as AOSS from "@/AWS/OpenSearchServerless";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as AOSS from "@/AWS/OpenSearchServerless";
 
 const main = path.resolve(import.meta.dirname, "index-bindings-handler.ts");
 
@@ -17,9 +17,7 @@ export const NET_POLICY = "alchemy-aossb-net";
 
 const INDEX_NAME = "alchemy-roundtrip";
 
-export class AossIndexFunction extends Lambda.Function<Lambda.Function>()(
-  "AossIndexFunction",
-) {}
+export class AossIndexFunction extends Lambda.Function<Lambda.Function>()("AossIndexFunction") {}
 
 export default AossIndexFunction.make(
   {
@@ -81,6 +79,43 @@ export default AossIndexFunction.make(
       deleteIndex,
     };
 
+    // Create → read → update → delete: exercises the runtime multi-tenant
+    // index pattern end-to-end and leaves no orphan.
+    const roundtrip = Effect.gen(function* () {
+      yield* createIndex({
+        indexName: INDEX_NAME,
+        indexSchema: {
+          mappings: { properties: { title: { type: "text" } } },
+        },
+      }).pipe(Effect.catchTag("ConflictException", () => Effect.void));
+
+      // Index visibility is eventually consistent — retry the read
+      // through the typed not-found window (bounded, ~30s).
+      const read = yield* Effect.retry(getIndex({ indexName: INDEX_NAME }), {
+        while: (e): boolean => e._tag === "ResourceNotFoundException",
+        schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+      });
+
+      yield* updateIndex({
+        indexName: INDEX_NAME,
+        indexSchema: {
+          mappings: {
+            properties: { body: { type: "text" } },
+          },
+        },
+      });
+
+      yield* deleteIndex({ indexName: INDEX_NAME }).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      );
+
+      return yield* HttpServerResponse.json({
+        created: true,
+        hadSchema: read.indexSchema !== undefined,
+        deleted: true,
+      });
+    });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -103,48 +138,13 @@ export default AossIndexFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/index/roundtrip") {
-          // Create → read → update → delete: exercises the runtime
-          // multi-tenant index pattern end-to-end and leaves no orphan. A
-          // crashed previous invocation surfaces the typed ConflictException
-          // on create — treat the existing index as the winner.
-          yield* createIndex({
-            indexName: INDEX_NAME,
-            indexSchema: {
-              mappings: { properties: { title: { type: "text" } } },
-            },
-          }).pipe(Effect.catchTag("ConflictException", () => Effect.void));
-
-          // Index visibility is eventually consistent — retry the read
-          // through the typed not-found window (bounded, ~30s).
-          const read = yield* Effect.retry(
-            getIndex({ indexName: INDEX_NAME }),
-            {
-              while: (e): boolean => e._tag === "ResourceNotFoundException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(10),
-              ]),
-            },
+          return yield* roundtrip.pipe(
+            // Surface the typed failure (AccessDenied while the data access
+            // policy propagates, …) so the test's retry log names it.
+            Effect.catch((e) =>
+              HttpServerResponse.json({ error: e._tag, message: e.message }, { status: 500 }),
+            ),
           );
-
-          yield* updateIndex({
-            indexName: INDEX_NAME,
-            indexSchema: {
-              mappings: {
-                properties: { body: { type: "text" } },
-              },
-            },
-          });
-
-          yield* deleteIndex({ indexName: INDEX_NAME }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-
-          return yield* HttpServerResponse.json({
-            created: true,
-            hadSchema: read.indexSchema !== undefined,
-            deleted: true,
-          });
         }
 
         return yield* HttpServerResponse.json(

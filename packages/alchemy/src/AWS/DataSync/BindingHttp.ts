@@ -32,12 +32,7 @@ const taskPolicyStatement = (task: Task, actions: readonly string[]) => ({
  * deploy-time half grants `actions` on the task ARN (and its execution
  * pattern).
  */
-export const makeDataSyncTaskHttpBinding = <
-  I extends { TaskArn?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDataSyncTaskHttpBinding = <I extends { TaskArn?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DataSync.StartTaskExecution`. */
   tag: string;
   /** The distilled operation; `TaskArn` is injected from the task. */
@@ -93,9 +88,7 @@ export const makeDataSyncTaskExecutionHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${task.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${task.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

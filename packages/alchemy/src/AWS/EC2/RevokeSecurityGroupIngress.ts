@@ -46,14 +46,10 @@ export interface RevokeSecurityGroupIngress extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RevokeSecurityGroupIngressRequest,
-    ) => Effect.Effect<
-      ec2.RevokeSecurityGroupIngressResult,
-      ec2.RevokeSecurityGroupIngressError
-    >
+    ) => Effect.Effect<ec2.RevokeSecurityGroupIngressResult, ec2.RevokeSecurityGroupIngressError>
   >
 > {}
 
-export const RevokeSecurityGroupIngress =
-  Binding.Service<RevokeSecurityGroupIngress>(
-    "AWS.EC2.RevokeSecurityGroupIngress",
-  );
+export const RevokeSecurityGroupIngress = Binding.Service<RevokeSecurityGroupIngress>(
+  "AWS.EC2.RevokeSecurityGroupIngress",
+);

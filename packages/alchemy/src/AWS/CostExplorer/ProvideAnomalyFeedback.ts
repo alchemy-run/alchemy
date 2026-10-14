@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ProvideAnomalyFeedback}.
  */
-export interface ProvideAnomalyFeedbackRequest
-  extends ce.ProvideAnomalyFeedbackRequest {}
+export interface ProvideAnomalyFeedbackRequest extends ce.ProvideAnomalyFeedbackRequest {}
 
 /**
  * Runtime binding for `ce:ProvideAnomalyFeedback`.
@@ -37,10 +36,7 @@ export interface ProvideAnomalyFeedback extends Binding.Service<
   () => Effect.Effect<
     (
       request: ProvideAnomalyFeedbackRequest,
-    ) => Effect.Effect<
-      ce.ProvideAnomalyFeedbackResponse,
-      ce.ProvideAnomalyFeedbackError
-    >
+    ) => Effect.Effect<ce.ProvideAnomalyFeedbackResponse, ce.ProvideAnomalyFeedbackError>
   >
 > {}
 

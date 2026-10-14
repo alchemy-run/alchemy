@@ -53,7 +53,6 @@ export interface GenerateDataKeyWithoutPlaintext extends Binding.Service<
   >
 > {}
 
-export const GenerateDataKeyWithoutPlaintext =
-  Binding.Service<GenerateDataKeyWithoutPlaintext>(
-    "AWS.KMS.GenerateDataKeyWithoutPlaintext",
-  );
+export const GenerateDataKeyWithoutPlaintext = Binding.Service<GenerateDataKeyWithoutPlaintext>(
+  "AWS.KMS.GenerateDataKeyWithoutPlaintext",
+);

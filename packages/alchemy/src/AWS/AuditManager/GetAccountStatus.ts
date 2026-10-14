@@ -23,10 +23,7 @@ export interface GetAccountStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.GetAccountStatusRequest,
-    ) => Effect.Effect<
-      auditmanager.GetAccountStatusResponse,
-      auditmanager.GetAccountStatusError
-    >
+    ) => Effect.Effect<auditmanager.GetAccountStatusResponse, auditmanager.GetAccountStatusError>
   >
 > {}
 

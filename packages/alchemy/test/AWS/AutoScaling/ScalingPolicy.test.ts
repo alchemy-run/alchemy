@@ -1,18 +1,14 @@
-import * as AWS from "@/AWS";
-import {
-  AutoScalingGroup,
-  LaunchTemplate,
-  ScalingPolicy,
-} from "@/AWS/AutoScaling";
-import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AutoScalingGroup, LaunchTemplate, ScalingPolicy } from "@/AWS/AutoScaling";
+import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -33,17 +29,15 @@ const assertPolicyGone = (policyName: string) =>
 // Out-of-band proof an Auto Scaling Group is deleted after the trailing
 // stack.destroy(): the name-filtered describe returns an empty list.
 const assertGroupGone = (name: string) =>
-  autoscaling
-    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
-    .pipe(
-      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
-      Effect.repeat({
-        until: (count) => count === 0,
-        schedule: Schedule.spaced("3 seconds"),
-        times: 10,
-      }),
-      Effect.map((count) => expect(count).toBe(0)),
-    );
+  autoscaling.describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any).pipe(
+    Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+    Effect.repeat({
+      until: (count) => count === 0,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
+    Effect.map((count) => expect(count).toBe(0)),
+  );
 
 // `list()` enumerates every scaling policy in the account/region via the
 // paginated `autoscaling.describePolicies` op (no AutoScalingGroupName filter,
@@ -99,7 +93,10 @@ test.provider(
       yield* assertPolicyGone(policy.policyName);
       yield* assertGroupGone("alchemy-test-policy-asg-list");
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
+    timeout: 240_000,
+  },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -196,32 +193,25 @@ test.provider(
       const liveCreated = yield* autoscaling.describePolicies({
         PolicyNames: [created.policyName],
       });
-      expect(liveCreated.ScalingPolicies?.[0]?.EstimatedInstanceWarmup).toEqual(
-        90,
-      );
+      expect(liveCreated.ScalingPolicies?.[0]?.EstimatedInstanceWarmup).toEqual(90);
 
       // Rewrite the policy's persisted row into the wedged shape an
       // interrupted deploy leaves behind: `creating`, no attributes, and the
       // Output-valued `autoScalingGroup` lost in the round-trip.
       const wedgeRow = Effect.gen(function* () {
         const state = yield* yield* State;
-        const stage = "test"; // scratch stacks default to the "test" stage
+        const stage = stack.stage;
         const fqns = yield* state.list({ stack: stack.name, stage });
         const rows = yield* Effect.forEach(fqns, (fqn) =>
-          state
-            .get({ stack: stack.name, stage, fqn })
-            .pipe(Effect.map((row) => ({ fqn, row }))),
+          state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
         );
         const wedged = rows.find(
           (r): r is { fqn: string; row: ResourceState } =>
-            isResourceState(r.row) &&
-            r.row.resourceType === "AWS.AutoScaling.ScalingPolicy",
+            isResourceState(r.row) && r.row.resourceType === "AWS.AutoScaling.ScalingPolicy",
         );
         if (!wedged) {
           return yield* Effect.die(
-            new Error(
-              "no AWS.AutoScaling.ScalingPolicy state row found after deploy",
-            ),
+            new Error("no AWS.AutoScaling.ScalingPolicy state row found after deploy"),
           );
         }
         yield* state.set({
@@ -247,9 +237,7 @@ test.provider(
       const recoveredInPlace = yield* deployPolicy();
       expect(recoveredInPlace.policyArn).toEqual(created.policyArn);
       expect(recoveredInPlace.policyName).toEqual(created.policyName);
-      expect(recoveredInPlace.autoScalingGroupName).toEqual(
-        created.autoScalingGroupName,
-      );
+      expect(recoveredInPlace.autoScalingGroupName).toEqual(created.autoScalingGroupName);
 
       // Variant B — wedge again AND delete the policy out-of-band so the
       // recovery `read` misses and `diff` runs with the junk olds. Pre-fix,
@@ -276,24 +264,23 @@ test.provider(
 
       const recreated = yield* deployPolicy();
       expect(recreated.policyName).toEqual(created.policyName);
-      expect(recreated.autoScalingGroupName).toEqual(
-        created.autoScalingGroupName,
-      );
+      expect(recreated.autoScalingGroupName).toEqual(created.autoScalingGroupName);
 
       // Out-of-band proof the policy is live again.
       const after = yield* autoscaling.describePolicies({
         PolicyNames: [created.policyName],
       });
-      expect(
-        (after.ScalingPolicies ?? []).some(
-          (p) => p.PolicyName === created.policyName,
-        ),
-      ).toBe(true);
+      expect((after.ScalingPolicies ?? []).some((p) => p.PolicyName === created.policyName)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
       yield* assertPolicyGone(created.policyName);
       yield* assertGroupGone(recoveryAsgName);
       yield* cleanupRecoveryLt;
     }).pipe(Effect.ensuring(cleanupRecoveryLt)),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
+    timeout: 240_000,
+  },
 );

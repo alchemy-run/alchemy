@@ -54,7 +54,6 @@ export interface GetTopPathStatisticsByTraffic extends Binding.Service<
   >
 > {}
 
-export const GetTopPathStatisticsByTraffic =
-  Binding.Service<GetTopPathStatisticsByTraffic>(
-    "AWS.WAFv2.GetTopPathStatisticsByTraffic",
-  );
+export const GetTopPathStatisticsByTraffic = Binding.Service<GetTopPathStatisticsByTraffic>(
+  "AWS.WAFv2.GetTopPathStatisticsByTraffic",
+);

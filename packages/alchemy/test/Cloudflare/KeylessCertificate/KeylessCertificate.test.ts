@@ -1,25 +1,21 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as keylessCertificates from "@distilled.cloud/cloudflare/keyless-certificates";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { CERT_1, CERT_2 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Keyless SSL is Enterprise-only. On the testing account's zone every
 // createKeylessCertificate fails with Cloudflare code 1067 ("Keyless SSL is
@@ -32,9 +28,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -45,15 +39,13 @@ const resolveZoneId = Effect.gen(function* () {
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
 const getKeyless = (zoneId: string, keylessCertificateId: string) =>
-  keylessCertificates
-    .getKeylessCertificate({ zoneId, keylessCertificateId })
-    .pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
+  keylessCertificates.getKeylessCertificate({ zoneId, keylessCertificateId }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
 
 // A destroyed Keyless SSL configuration either disappears (typed
 // `KeylessCertificateNotFound`, Cloudflare code 1005) or briefly lingers as
@@ -68,10 +60,7 @@ const expectGone = (zoneId: string, keylessCertificateId: string) =>
     Effect.catchTag("KeylessCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "KeylessNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -85,26 +74,21 @@ test.provider(
 
       // Listing works on every plan — verifies token scope and the typed
       // pagination surface out of band.
-      const existing = yield* keylessCertificates.listKeylessCertificates
-        .items({ zoneId })
-        .pipe(
-          Stream.runCollect,
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
-      expect(
-        Array.from(existing).filter((k) => k.status !== "deleted"),
-      ).toEqual([]);
+      const existing = yield* keylessCertificates.listKeylessCertificates.items({ zoneId }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
+      expect(Array.from(existing).filter((k) => k.status !== "deleted")).toEqual([]);
 
       // Reading a non-existent configuration surfaces the typed
       // `KeylessCertificateNotFound` (Cloudflare code 1005).
-      const readError = yield* getKeyless(
-        zoneId,
-        "00000000000000000000000000000000",
-      ).pipe(Effect.flip);
+      const readError = yield* getKeyless(zoneId, "00000000000000000000000000000000").pipe(
+        Effect.flip,
+      );
       expect(readError._tag).toEqual("KeylessCertificateNotFound");
 
       // Deleting a non-existent configuration converges idempotently once
@@ -146,6 +130,14 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:keylesscertificate",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+  },
 );
 
 // `list()` enumerates every zone in the account and lists its Keyless SSL
@@ -153,30 +145,33 @@ test.provider(
 // assertion runs on every plan: the testing account has no Keyless SSL
 // configurations (Enterprise-only), so the exhaustively-paginated result is a
 // well-typed (possibly empty) array whose elements match `read`'s Attributes.
-test.provider("list enumerates keyless certificates across zones", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates keyless certificates across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.KeylessCertificate.KeylessCertificate,
-    );
-    const all = yield* provider.list().pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
+      const provider = yield* Provider.findProvider(
+        Cloudflare.KeylessCertificate.KeylessCertificate,
+      );
+      const all = yield* provider.list().pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const item of all) {
-      expect(typeof item.keylessCertificateId).toBe("string");
-      expect(typeof item.zoneId).toBe("string");
-      expect(item.status).not.toEqual("deleted");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.keylessCertificateId).toBe("string");
+        expect(typeof item.zoneId).toBe("string");
+        expect(item.status).not.toEqual("deleted");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:keylesscertificate", "live"] },
 );
 
 // On an entitled Enterprise zone, the deployed configuration must appear in the
@@ -211,15 +206,14 @@ test.provider.skipIf(!enterpriseZoneId)(
         }),
       );
 
-      expect(
-        all.some(
-          (k) => k.keylessCertificateId === deployed.keylessCertificateId,
-        ),
-      ).toBe(true);
+      expect(all.some((k) => k.keylessCertificateId === deployed.keylessCertificateId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:keylesscertificate", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!enterpriseZoneId)(
@@ -265,18 +259,13 @@ test.provider.skipIf(!enterpriseZoneId)(
           enabled: false,
         }),
       );
-      expect(updated.keylessCertificateId).toEqual(
-        created.keylessCertificateId,
-      );
+      expect(updated.keylessCertificateId).toEqual(created.keylessCertificateId);
       expect(updated.host).toEqual(`keyless2.${zoneName}`);
       expect(updated.port).toEqual(24009);
       expect(updated.name).toEqual("alchemy-keyless-lifecycle-v2");
       expect(updated.enabled).toEqual(false);
 
-      const liveUpdated = yield* getKeyless(
-        zoneId,
-        updated.keylessCertificateId,
-      );
+      const liveUpdated = yield* getKeyless(zoneId, updated.keylessCertificateId);
       expect(liveUpdated.host).toEqual(`keyless2.${zoneName}`);
       expect(liveUpdated.port).toEqual(24009);
       expect(liveUpdated.enabled).toEqual(false);
@@ -293,14 +282,15 @@ test.provider.skipIf(!enterpriseZoneId)(
           enabled: false,
         }),
       );
-      expect(replaced.keylessCertificateId).not.toEqual(
-        updated.keylessCertificateId,
-      );
+      expect(replaced.keylessCertificateId).not.toEqual(updated.keylessCertificateId);
       yield* expectGone(zoneId, updated.keylessCertificateId);
 
       yield* stack.destroy();
 
       yield* expectGone(zoneId, replaced.keylessCertificateId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:keylesscertificate", "live"],
+    timeout: 120_000,
+  },
 );

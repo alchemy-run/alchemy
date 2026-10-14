@@ -7,9 +7,7 @@ import * as Data from "effect/Data";
  * Raised when the HTTP request fails, the response is not a 2xx (and not an
  * expected `404` on document lookups), or the body is not valid JSON.
  */
-export class OpenSearchApiError extends Data.TaggedError(
-  "AWS.OpenSearch.ApiError",
-)<{
+export class OpenSearchApiError extends Data.TaggedError("AWS.OpenSearch.ApiError")<{
   /** HTTP method of the failed request. */
   readonly method: string;
   /** Path relative to the domain endpoint. */

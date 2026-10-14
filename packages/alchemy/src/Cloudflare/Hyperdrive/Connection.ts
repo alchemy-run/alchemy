@@ -2,14 +2,15 @@ import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -43,7 +44,33 @@ export type AccessOrigin = {
   accessClientSecret: Redacted.Redacted<string>;
 };
 
-export type Origin = PublicOrigin | AccessOrigin;
+/**
+ * Origin configuration for a private database reached through Workers VPC.
+ *
+ * Hyperdrive egresses through a TCP VPC Service
+ * ({@link https://developers.cloudflare.com/workers-vpc/ Workers VPC}), which
+ * routes over a Cloudflare Tunnel into the private network — e.g. an Aurora
+ * or RDS instance inside an AWS VPC. The host and port live on the VPC
+ * Service, so they are not repeated here. mTLS cannot be combined with a VPC
+ * origin; TLS is managed on the VPC Service.
+ */
+export type VpcOrigin = {
+  scheme: Scheme;
+  /**
+   * Identifier of the TCP VPC Service to connect through, e.g.
+   * `service.serviceId` of a `Cloudflare.Connectivity.DirectoryService`
+   * with `type: "tcp"`.
+   */
+  serviceId: string;
+  database: string;
+  user: string;
+  /**
+   * Database password.
+   */
+  password: Redacted.Redacted<string>;
+};
+
+export type Origin = PublicOrigin | AccessOrigin | VpcOrigin;
 
 export type Caching = {
   /**
@@ -88,7 +115,8 @@ export type Props = {
   name?: string;
   /**
    * Database connection origin. Hyperdrive supports public Postgres/MySQL
-   * databases and databases fronted by Cloudflare Access.
+   * databases, databases fronted by Cloudflare Access, and private databases
+   * reached through a Workers VPC Service.
    */
   origin: Origin;
   /**
@@ -142,7 +170,36 @@ export type Connection = Resource<
  *     port: 5432,
  *     database: "app",
  *     user: "app",
- *     password: yield* Config.redacted("DB_PASSWORD"),
+ *     password: yield* Config.Redacted("DB_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Connecting to a private database
+ * A database inside a private network (e.g. Aurora or RDS in an AWS VPC) is
+ * reached through Workers VPC: run `cloudflared` inside the network with the
+ * Tunnel's token, expose the database as a TCP VPC Service, and point
+ * Hyperdrive at the service.
+ *
+ * **Example:** Aurora in an AWS VPC through Workers VPC
+ * ```typescript
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("VpcTunnel");
+ * const service = yield* Cloudflare.Connectivity.DirectoryService("Aurora", {
+ *   type: "tcp",
+ *   tcpPort: 5432,
+ *   appProtocol: "postgresql",
+ *   host: {
+ *     hostname: "my-cluster.cluster-abc123.us-east-1.rds.amazonaws.com",
+ *     resolverNetwork: { tunnelId: tunnel.tunnelId },
+ *   },
+ * });
+ * const hd = yield* Cloudflare.Hyperdrive.Connection("Aurora", {
+ *   origin: {
+ *     scheme: "postgres",
+ *     serviceId: service.serviceId,
+ *     database: "app",
+ *     user: "app",
+ *     password: yield* Config.Redacted("DB_PASSWORD"),
  *   },
  * });
  * ```
@@ -233,13 +290,11 @@ export const ProviderLive = () =>
               } as Mtls,
               dev: output?.dev,
             })),
-            Effect.catchTag("HyperdriveConfigNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createConfigName(id, olds?.name);
-      const match = yield* findConfigByName(name);
+      const match = yield* findByName(name);
       if (match) {
         return {
           hyperdriveId: match.id,
@@ -274,21 +329,20 @@ export const ProviderLive = () =>
       // to update; otherwise we createConfig and fall back to "find by
       // name then update" if Cloudflare reports the name is already in
       // use (race or a cold-start adoption).
-      const synced = output?.hyperdriveId
-        ? yield* hyperdrive.updateConfig({
-            accountId: output.accountId,
-            hyperdriveId: output.hyperdriveId,
-            name: output.name,
-            ...requestBody,
-          })
-        : yield* hyperdrive
-            .createConfig({ accountId, name, ...requestBody })
-            .pipe(
+      const synced = yield* (
+        output?.hyperdriveId
+          ? hyperdrive.updateConfig({
+              accountId: output.accountId,
+              hyperdriveId: output.hyperdriveId,
+              name: output.name,
+              ...requestBody,
+            })
+          : hyperdrive.createConfig({ accountId, name, ...requestBody }).pipe(
               Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
                 Effect.gen(function* () {
-                  const match = yield* findConfigByName(name);
+                  const match = yield* findByName(name);
                   if (!match) {
-                    return yield* Effect.fail(originalError);
+                    return yield* originalError;
                   }
                   return yield* hyperdrive.updateConfig({
                     accountId,
@@ -298,7 +352,18 @@ export const ProviderLive = () =>
                   });
                 }),
               ),
-            );
+            )
+      ).pipe(
+        // Cloudflare connects to the origin on create/update. A just-
+        // provisioned database, or a just-created Workers VPC Service that
+        // has not propagated yet (`destination_not_found`), is briefly
+        // unreachable.
+        Effect.retry({
+          while: (error) => error._tag === "HyperdriveOriginUnavailable",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+      );
 
       return {
         hyperdriveId: synced.id,
@@ -331,7 +396,7 @@ export const ProviderLocal = () =>
   Provider.succeed(Connection, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       if (!output?.hyperdriveId) return { action: "update" } as const;
       if (!isResolved(news)) return undefined;
       if (output.accountId !== accountId) {
@@ -345,7 +410,7 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountId = yield* localAccountId;
       return {
         hyperdriveId: output?.hyperdriveId ?? generateLocalId(),
         name: yield* createConfigName(id, news.name),
@@ -372,11 +437,7 @@ const createConfigName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-/**
- * Look up an existing Hyperdrive config by name in the ambient account.
- * Returns undefined when no config matches.
- */
-export const findConfigByName = (name: string) =>
+const findByName = (name: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     return yield* hyperdrive.listConfigs.items({ accountId }).pipe(
@@ -386,8 +447,7 @@ export const findConfigByName = (name: string) =>
     );
   });
 
-export const defaultPort = (scheme: Scheme): number =>
-  scheme === "mysql" ? 3306 : 5432;
+export const defaultPort = (scheme: Scheme): number => (scheme === "mysql" ? 3306 : 5432);
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;
@@ -399,6 +459,15 @@ const unwrap = (v: string | Redacted.Redacted<string>): string =>
  * runtime schema also accepts `Redacted<string>`.
  */
 const toRequestOrigin = (origin: Origin) => {
+  if ("serviceId" in origin) {
+    return {
+      database: origin.database,
+      password: unwrap(origin.password),
+      scheme: origin.scheme,
+      serviceId: origin.serviceId,
+      user: origin.user,
+    };
+  }
   if ("accessClientId" in origin) {
     return {
       accessClientId: unwrap(origin.accessClientId),

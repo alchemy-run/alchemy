@@ -49,13 +49,8 @@ export interface RestoreTable extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RestoreTableRequest,
-    ) => Effect.Effect<
-      keyspaces.RestoreTableResponse,
-      keyspaces.RestoreTableError
-    >
+    ) => Effect.Effect<keyspaces.RestoreTableResponse, keyspaces.RestoreTableError>
   >
 > {}
 
-export const RestoreTable = Binding.Service<RestoreTable>(
-  "AWS.Keyspaces.RestoreTable",
-);
+export const RestoreTable = Binding.Service<RestoreTable>("AWS.Keyspaces.RestoreTable");

@@ -134,6 +134,7 @@ export interface Variable extends Resource<
  * ```
  *
  * @resource
+ * @product Actions
  */
 export const Variable = Resource<Variable>("GitHub.Variable");
 
@@ -152,8 +153,7 @@ export const VariableProvider = () =>
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.name !== olds.name ||
-        resolveEnvironmentName(news.environment) !==
-          resolveEnvironmentName(olds.environment) ||
+        resolveEnvironmentName(news.environment) !== resolveEnvironmentName(olds.environment) ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
@@ -168,8 +168,7 @@ export const VariableProvider = () =>
       // variable from its old location before converging the new one.
       if (
         olds !== undefined &&
-        resolveEnvironmentName(olds.environment) !==
-          resolveEnvironmentName(news.environment)
+        resolveEnvironmentName(olds.environment) !== resolveEnvironmentName(news.environment)
       ) {
         yield* deleteVariable(olds);
       }
@@ -219,14 +218,11 @@ export const VariableProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const variables = await octokit.paginate(
-                  octokit.rest.actions.listRepoVariables,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const variables = await octokit.paginate(octokit.rest.actions.listRepoVariables, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return variables.map((v) => ({ updatedAt: v.updated_at }));
               } catch (error: any) {
                 // Repos with Actions disabled, or where the token lacks the

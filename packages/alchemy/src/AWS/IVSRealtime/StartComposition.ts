@@ -38,10 +38,7 @@ export interface StartComposition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartCompositionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.StartCompositionResponse,
-      ivsrealtime.StartCompositionError
-    >
+    ) => Effect.Effect<ivsrealtime.StartCompositionResponse, ivsrealtime.StartCompositionError>
   >
 > {}
 export const StartComposition = Binding.Service<StartComposition>(

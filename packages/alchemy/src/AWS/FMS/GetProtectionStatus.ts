@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetProtectionStatus}.
  */
-export interface GetProtectionStatusRequest
-  extends fms.GetProtectionStatusRequest {}
+export interface GetProtectionStatusRequest extends fms.GetProtectionStatusRequest {}
 
 /**
  * Runtime binding for `fms:GetProtectionStatus`.
@@ -32,10 +31,7 @@ export interface GetProtectionStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetProtectionStatusRequest,
-    ) => Effect.Effect<
-      fms.GetProtectionStatusResponse,
-      fms.GetProtectionStatusError
-    >
+    ) => Effect.Effect<fms.GetProtectionStatusResponse, fms.GetProtectionStatusError>
   >
 > {}
 

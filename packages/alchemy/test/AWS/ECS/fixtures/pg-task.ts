@@ -1,6 +1,6 @@
-import { Task } from "@/AWS/ECS/Task.ts";
 import * as Effect from "effect/Effect";
 import pg from "pg";
+import { Task } from "@/AWS/ECS/Task.ts";
 
 /**
  * Regression fixture for CommonJS dual-package resolution in bundled
@@ -14,9 +14,7 @@ import pg from "pg";
  * path behaviorally: a mis-resolved bundle exits 1 at boot; a correct one
  * logs the marker and exits 0.
  */
-export class CjsDualPackageTask extends Task<CjsDualPackageTask>()(
-  "EcsCjsDualPackageTask",
-) {}
+export class CjsDualPackageTask extends Task<CjsDualPackageTask>()("EcsCjsDualPackageTask") {}
 
 export default CjsDualPackageTask.make(
   {
@@ -42,9 +40,7 @@ export default CjsDualPackageTask.make(
         const pool = new pg.Pool({
           connectionString: "postgres://user:pass@localhost:5432/db",
         });
-        yield* Effect.log(
-          `alchemy-cjs-dual-ran: query=${typeof pool.query === "function"}`,
-        );
+        yield* Effect.log(`alchemy-cjs-dual-ran: query=${typeof pool.query === "function"}`);
         yield* Effect.promise(() => pool.end());
       }),
     };

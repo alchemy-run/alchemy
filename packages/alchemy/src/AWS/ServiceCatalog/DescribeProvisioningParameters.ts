@@ -39,7 +39,6 @@ export interface DescribeProvisioningParameters extends Binding.Service<
     >
   >
 > {}
-export const DescribeProvisioningParameters =
-  Binding.Service<DescribeProvisioningParameters>(
-    "AWS.ServiceCatalog.DescribeProvisioningParameters",
-  );
+export const DescribeProvisioningParameters = Binding.Service<DescribeProvisioningParameters>(
+  "AWS.ServiceCatalog.DescribeProvisioningParameters",
+);

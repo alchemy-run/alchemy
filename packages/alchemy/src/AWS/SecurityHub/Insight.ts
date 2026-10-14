@@ -77,31 +77,23 @@ export const InsightProvider = () =>
     InsightResource,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string }) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 128 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
       const getInsight = (arn: string) =>
         securityhub.getInsights({ InsightArns: [arn] }).pipe(
           Effect.map((r) => r.Insights?.[0]),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-          // The whole hub may be disabled — the insight is gone too.
-          Effect.catchTag("InvalidAccessException", () =>
-            Effect.succeed(undefined),
-          ),
-          // Security Hub reports an unknown insight ARN as invalid input.
-          Effect.catchTag("InvalidInputException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed(undefined),
+            // The whole hub may be disabled — the insight is gone too.
+            InvalidAccessException: () => Effect.succeed(undefined),
+            // Security Hub reports an unknown insight ARN as invalid input.
+            InvalidInputException: () => Effect.succeed(undefined),
+          }),
         );
 
       const listInsights = securityhub.getInsights.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((pages) =>
-          Array.from(pages).flatMap((page) => page.Insights ?? []),
-        ),
+        Effect.map((pages) => Array.from(pages).flatMap((page) => page.Insights ?? [])),
         Effect.catchTag("InvalidAccessException", () =>
           Effect.succeed([] as securityhub.Insight[]),
         ),
@@ -185,13 +177,13 @@ export const InsightProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the insight (or the whole hub) may already be gone.
-          yield* securityhub
-            .deleteInsight({ InsightArn: output.insightArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("InvalidAccessException", () => Effect.void),
-              Effect.catchTag("InvalidInputException", () => Effect.void),
-            );
+          yield* securityhub.deleteInsight({ InsightArn: output.insightArn }).pipe(
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              InvalidAccessException: () => Effect.void,
+              InvalidInputException: () => Effect.void,
+            }),
+          );
         }),
       };
     }),

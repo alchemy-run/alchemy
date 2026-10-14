@@ -18,12 +18,7 @@ import type { Rule } from "./Rule.ts";
  * ARN, and the runtime half injects the rule's `Identifier` into every
  * request.
  */
-export const makeRbinRuleHttpBinding = <
-  I extends { Identifier: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeRbinRuleHttpBinding = <I extends { Identifier: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Rbin.GetRule`. */
   tag: string;
   /** The distilled operation. */

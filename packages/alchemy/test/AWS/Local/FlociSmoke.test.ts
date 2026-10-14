@@ -1,27 +1,33 @@
+import { spawnSync } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 /**
  * Floci local-emulator smoke test.
  *
  * Deploys real AWS resources (S3 Bucket, SQS Queue, DynamoDB Table) through
  * the regular live providers, but pointed at a locally-running floci emulator
- * via the `{ method: "local" }` AWS auth method.
+ * via the floci-scoped environment the local AWS providers carry.
  *
  * ## How local mode is activated
  *
  * The AWS auth method is normally chosen by the profile entry in
- * `~/.alchemy/profiles.json` (written by `alchemy login --configure`). Tests
- * must not depend on the developer's on-disk profiles, so this file overrides
- * the `AlchemyProfile` service with a stub whose `loadOrConfigure` always
- * returns `{ method: "local" }` for the AWS auth provider. The stub is
- * `Layer.provide`d directly onto `AWS.providers()`, so it only affects this
- * file — `AWSEnvironment.Default` then resolves dummy credentials
- * (`test`/`test`), accountId `000000000000`, and endpoint
- * `http://localhost:4566`, and `ensureFloci()` guarantees the emulator is
- * serving (starting the `alchemy-floci` container if needed).
+ * `~/.alchemy/profiles.json` (written by `alchemy profile edit`). Tests
+ * must not depend on the developer's on-disk profiles. `Test.make({ dev:
+ * true })` runs the stack the way `alchemy dev` does, so the local AWS
+ * providers are selected; they carry their own floci-scoped environment,
+ * which resolves dummy credentials (`test`/`test`), accountId
+ * `000000000000`, and endpoint `http://localhost:4566`, and `ensureFloci()`
+ * guarantees the emulator is serving (starting the `alchemy-floci`
+ * container if needed). Without `dev: true` the live providers run against
+ * whatever account the profile resolves — the real cloud.
  *
  * ## Why no real-AWS calls can happen
  *
- * The `local` method's credentials are hardcoded dummies and its accountId is
- * fixed — it never calls STS. Every SDK call carries the emulator endpoint
+ * The floci environment's credentials are hardcoded dummies and its accountId
+ * is fixed — it never calls STS. Every SDK call carries the emulator endpoint
  * (via `Endpoint.fromEnvironment`); if any call ever escaped to real AWS it
  * would fail auth immediately (the dummy keys exist in no real account).
  *
@@ -29,18 +35,10 @@
  * daemon is unavailable.
  */
 import * as AWS from "@/AWS";
-import { AlchemyProfile, type ProfileService } from "@/Auth/Profile.ts";
 import { Table } from "@/AWS/DynamoDB";
 import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
 
@@ -49,36 +47,17 @@ const FLOCI_ENDPOINT = "http://localhost:4566";
 // down). Sync probe at collection time — skipIf needs a plain boolean.
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
 })();
 
-/**
- * Stub profile service forcing the AWS auth provider into
- * `{ method: "local" }` regardless of what is configured on disk.
- * `loadOrConfigure` mirrors the real implementation's `stored as Config`
- * narrowing (the generic `Config` is the auth provider's own config type).
- */
-const localProfileStub: ProfileService = {
-  readConfig: Effect.succeed({ version: 0, profiles: {} }),
-  writeConfig: () => Effect.void,
-  getProfile: () => Effect.succeed({ AWS: { method: "local" } }),
-  setProfile: () => Effect.void,
-  deleteProfile: () => Effect.succeed(false),
-  loadOrConfigure: <Config extends { method: string }>() =>
-    Effect.succeed({ method: "local" } as Config),
-};
+const providers = AWS.providers();
 
-const providers = AWS.providers().pipe(
-  Layer.provide(Layer.succeed(AlchemyProfile, localProfileStub)),
-);
-
-const { test } = Test.make({ providers });
+// `dev: true` runs the same topology as the real `alchemy dev` command
+// (including the RPC sidecar default for RPC-backed providers).
+const { test } = Test.make({ providers, dev: true });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof
@@ -102,9 +81,7 @@ const rawAwsJson = Effect.fn(function* (options: {
         "x-amz-date": "20260101T000000Z",
         authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
       }),
-      HttpClientRequest.setBody(
-        HttpBody.text(JSON.stringify(options.body), options.contentType),
-      ),
+      HttpClientRequest.setBody(HttpBody.text(JSON.stringify(options.body), options.contentType)),
     ),
   );
 });
@@ -166,11 +143,9 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(listQueues.status).toBe(200);
       const queues = (yield* listQueues.json) as { QueueUrls?: string[] };
-      expect(
-        queues.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ),
-      ).toBe(true);
+      expect(queues.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`))).toBe(
+        true,
+      );
 
       const describeTable = yield* rawAwsJson({
         service: "dynamodb",
@@ -202,9 +177,7 @@ test.provider.skipIf(!dockerAvailable)(
         QueueUrls?: string[];
       };
       expect(
-        queuesAfter.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ) ?? false,
+        queuesAfter.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`)) ?? false,
       ).toBe(false);
 
       const describeTableAfter = yield* rawAwsJson({
@@ -219,5 +192,8 @@ test.provider.skipIf(!dockerAvailable)(
       const getBucketAfter = yield* rawS3GetBucket(outputs.bucket.bucketName);
       expect(getBucketAfter.status).toBe(404); // NoSuchBucket
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dynamodb", "provider:aws:s3", "provider:aws:sqs", "local"],
+    timeout: 240_000,
+  },
 );

@@ -24,13 +24,9 @@ export interface RemoveManagedScalingPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.RemoveManagedScalingPolicyInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.RemoveManagedScalingPolicyOutput,
-      SVC.RemoveManagedScalingPolicyError
-    >
+    ) => Effect.Effect<SVC.RemoveManagedScalingPolicyOutput, SVC.RemoveManagedScalingPolicyError>
   >
 > {}
-export const RemoveManagedScalingPolicy =
-  Binding.Service<RemoveManagedScalingPolicy>(
-    "AWS.EMR.RemoveManagedScalingPolicy",
-  );
+export const RemoveManagedScalingPolicy = Binding.Service<RemoveManagedScalingPolicy>(
+  "AWS.EMR.RemoveManagedScalingPolicy",
+);

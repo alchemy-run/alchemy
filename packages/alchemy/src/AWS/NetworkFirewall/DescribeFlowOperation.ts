@@ -38,10 +38,7 @@ export interface DescribeFlowOperation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeFlowOperationRequest,
-    ) => Effect.Effect<
-      NFW.DescribeFlowOperationResponse,
-      NFW.DescribeFlowOperationError
-    >
+    ) => Effect.Effect<NFW.DescribeFlowOperationResponse, NFW.DescribeFlowOperationError>
   >
 > {}
 

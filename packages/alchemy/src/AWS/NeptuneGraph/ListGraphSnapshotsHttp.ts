@@ -1,9 +1,6 @@
 import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Layer from "effect/Layer";
-import {
-  makeNeptuneGraphGraphHttpBinding,
-  SNAPSHOT_ARN_WILDCARD,
-} from "./BindingHttp.ts";
+import { makeNeptuneGraphGraphHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 import { ListGraphSnapshots } from "./ListGraphSnapshots.ts";
 
 export const ListGraphSnapshotsHttp = Layer.effect(

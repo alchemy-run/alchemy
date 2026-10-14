@@ -34,6 +34,7 @@ export const makeQueueBinding = <Client>(options: {
         // remote-producer shim (see `QueueShim.ts`) — registered here as
         // ordinary engine-managed resources, like the `AccountApiToken`
         // the HTTP capability layers mint.
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- deploy-time only; remaining requirements are ambient where the Worker is evaluated
         const shim = yield* maybeQueueShim(queue, host).pipe(
           Effect.provideContext(context),
         ) as Effect.Effect<Effect.Success<ReturnType<typeof maybeQueueShim>>>;
@@ -59,9 +60,7 @@ export const makeQueueBinding = <Client>(options: {
 
 /** Primitives shared by the Worker-binding producer clients. */
 export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
-  const raw = Effect.sync(
-    () => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!,
-  );
+  const raw = Effect.sync(() => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!);
 
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SendError> =>
     Effect.tryPromise({
@@ -73,9 +72,7 @@ export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
         }),
     });
 
-  const use = <T>(
-    fn: (raw: runtime.Queue<unknown>) => Promise<T>,
-  ): Effect.Effect<T, SendError> =>
+  const use = <T>(fn: (raw: runtime.Queue<unknown>) => Promise<T>): Effect.Effect<T, SendError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
   return { raw, use, tryPromise };

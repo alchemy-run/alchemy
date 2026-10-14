@@ -49,7 +49,6 @@ export interface CheckDomainTransferability extends Binding.Service<
     >
   >
 > {}
-export const CheckDomainTransferability =
-  Binding.Service<CheckDomainTransferability>(
-    "AWS.Route53Domains.CheckDomainTransferability",
-  );
+export const CheckDomainTransferability = Binding.Service<CheckDomainTransferability>(
+  "AWS.Route53Domains.CheckDomainTransferability",
+);

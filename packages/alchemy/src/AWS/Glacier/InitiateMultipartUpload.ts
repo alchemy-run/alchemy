@@ -44,10 +44,7 @@ export interface InitiateMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: InitiateMultipartUploadRequest,
-    ) => Effect.Effect<
-      glacier.InitiateMultipartUploadOutput,
-      glacier.InitiateMultipartUploadError
-    >
+    ) => Effect.Effect<glacier.InitiateMultipartUploadOutput, glacier.InitiateMultipartUploadError>
   >
 > {}
 export const InitiateMultipartUpload = Binding.Service<InitiateMultipartUpload>(

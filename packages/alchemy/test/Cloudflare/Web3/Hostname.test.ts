@@ -1,30 +1,24 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone;
 });
@@ -41,21 +35,24 @@ const web3Entitled = !!process.env.CLOUDFLARE_TEST_WEB3;
 // `listAllZones`. On a non-entitled account each per-zone list answers
 // `Forbidden` and is skipped, so the result is a well-typed (possibly
 // empty) array. This always runs and proves the enumeration shape.
-test.provider("list returns a well-typed array of web3 hostnames", (stack) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Cloudflare.Web3.Hostname);
-    const all = yield* provider.list();
+test.provider(
+  "list returns a well-typed array of web3 hostnames",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Cloudflare.Web3.Hostname);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const item of all) {
-      expect(typeof item.hostnameId).toBe("string");
-      expect(typeof item.zoneId).toBe("string");
-      expect(typeof item.name).toBe("string");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.hostnameId).toBe("string");
+        expect(typeof item.zoneId).toBe("string");
+        expect(typeof item.name).toBe("string");
+      }
 
-    // Keep the destroy bookend so the harness state stays clean.
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      // Keep the destroy bookend so the harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:web3", "live"] },
 );
 
 // Deploy a real Web3 hostname and assert `list()` surfaces it. Gated behind
@@ -88,5 +85,8 @@ test.provider.skipIf(!web3Entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:web3", "provider:cloudflare:zone", "live"],
+    timeout: 120_000,
+  },
 );

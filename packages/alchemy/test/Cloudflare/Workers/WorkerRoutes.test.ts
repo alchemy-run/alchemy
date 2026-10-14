@@ -1,7 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
@@ -11,15 +7,17 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Drift from "@/Drift.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlAbsent, expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
@@ -39,9 +37,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -73,9 +69,7 @@ const findRoute = (zoneId: string, pattern: string) =>
 const ensureApexPlaceholder = (zoneId: string) =>
   Effect.gen(function* () {
     const existing = yield* dns.listRecords.items({ zoneId }).pipe(
-      Stream.filter(
-        (r) => r.name === zoneName && (r.type === "A" || r.type === "AAAA"),
-      ),
+      Stream.filter((r) => r.name === zoneName && (r.type === "A" || r.type === "AAAA")),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
       Effect.retry({
@@ -104,9 +98,7 @@ const purgeRoutes = (zoneId: string, ...patterns: string[]) =>
     listByPattern(zoneId, pattern).pipe(
       Effect.flatMap(
         Effect.forEach((r) =>
-          workers
-            .deleteRoute({ zoneId, routeId: r.id })
-            .pipe(Effect.catch(() => Effect.void)),
+          workers.deleteRoute({ zoneId, routeId: r.id }).pipe(Effect.catch(() => Effect.void)),
         ),
       ),
     ),
@@ -194,12 +186,8 @@ test.provider(
         expect(updated.routes.every((r) => r.zoneId === zoneId)).toBe(true);
 
         expect(yield* findRoute(zoneId, T1_V1)).toBeUndefined();
-        expect((yield* findRoute(zoneId, T1_V2))?.script).toEqual(
-          worker.workerName,
-        );
-        expect((yield* findRoute(zoneId, T1_ADDED))?.script).toEqual(
-          worker.workerName,
-        );
+        expect((yield* findRoute(zoneId, T1_V2))?.script).toEqual(worker.workerName);
+        expect((yield* findRoute(zoneId, T1_ADDED))?.script).toEqual(worker.workerName);
 
         // Remove — omitting the `routes` prop entirely detaches everything
         // recorded in the previous state.
@@ -220,15 +208,22 @@ test.provider(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
             if (workerName) {
-              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                Effect.ignore,
-              );
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
           }),
         ),
       );
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 // --- observed state is the baseline: drift removal + destroy cleanup ----
@@ -302,9 +297,7 @@ test.provider(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
             if (workerName) {
-              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                Effect.ignore,
-              );
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
           }),
         ),
@@ -313,7 +306,10 @@ test.provider(
       // Destroying the worker detaches its routes from the zone.
       expect(yield* findRoute(zoneId, T2_KEPT)).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],
+    timeout: 300_000,
+  },
 );
 
 // --- refusal: a pattern already routed to a different Worker ------------
@@ -358,9 +354,7 @@ test.provider(
           )
           .pipe(
             Effect.as(undefined),
-            Effect.catchCause((cause) =>
-              Effect.succeed(findAttachRefusal(cause)),
-            ),
+            Effect.catchCause((cause) => Effect.succeed(findAttachRefusal(cause))),
           );
 
         expect(error).toBeDefined();
@@ -369,9 +363,86 @@ test.provider(
         // The pattern still routes to its original owner.
         const live = yield* findRoute(zoneId, T3_PATTERN);
         expect(live?.script).toEqual(owner.workerName);
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)));
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)));
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],
+    timeout: 300_000,
+  },
+);
+
+// --- drift ignores the order Cloudflare lists unchanged routes in (#1825) -
+
+const T4_PATTERNS = ["a", "b", "c", "d"].map(
+  (segment) => `${zoneName}/${routeSuffix}/t4/${segment}/*`,
+);
+
+test.provider(
+  "drift reports unchanged routes as unchanged whatever order Cloudflare lists them in",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRoutes(zoneId, ...T4_PATTERNS);
+
+      const deployRoutes = (patterns: readonly string[]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("RouteOrderWorker", {
+              main,
+              workersDev: false,
+              routes: patterns.map((pattern) => ({ pattern, zoneName })),
+            });
+          }),
+        );
+
+      const listedOrder = (workerName: string) =>
+        workers.listRoutes.items({ zoneId }).pipe(
+          Stream.filter((r) => r.script === workerName && T4_PATTERNS.includes(r.pattern)),
+          Stream.map((r) => r.pattern),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+
+      let workerName: string | undefined;
+
+      yield* Effect.gen(function* () {
+        const worker = yield* deployRoutes(T4_PATTERNS);
+        workerName = worker.workerName;
+
+        // Redeploy the same routes declared in the reverse of Cloudflare's
+        // listing order, so state's order and the listing order differ.
+        const listed = yield* listedOrder(worker.workerName);
+        expect([...listed].sort()).toEqual([...T4_PATTERNS].sort());
+        const reordered = yield* deployRoutes([...listed].reverse());
+        expect(reordered.routes.map((r) => r.pattern)).toEqual([...listed].reverse());
+        expect(yield* listedOrder(worker.workerName)).toEqual(listed);
+
+        const detected = yield* Drift.detect({
+          name: stack.name,
+          stage: stack.stage,
+        }).pipe(Effect.provide(stack.state));
+        expect(detected.resources.RouteOrderWorker).toMatchObject({
+          action: "unchanged",
+          resourceType: "Cloudflare.Worker",
+        });
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* stack.destroy().pipe(Effect.ignore);
+            if (workerName) {
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
+            }
+          }),
+        ),
+      );
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],
+    timeout: 300_000,
+  },
 );
 
 /**
@@ -389,6 +460,5 @@ const findAttachRefusal = (cause: Cause.Cause<unknown>): Error | undefined =>
     )
     .find(
       (value): value is Error =>
-        value instanceof Error &&
-        value.message.includes("already attached to Worker"),
+        value instanceof Error && value.message.includes("already attached to Worker"),
     );

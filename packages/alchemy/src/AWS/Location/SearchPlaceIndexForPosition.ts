@@ -47,7 +47,6 @@ export interface SearchPlaceIndexForPosition extends Binding.Service<
     >
   >
 > {}
-export const SearchPlaceIndexForPosition =
-  Binding.Service<SearchPlaceIndexForPosition>(
-    "AWS.Location.SearchPlaceIndexForPosition",
-  );
+export const SearchPlaceIndexForPosition = Binding.Service<SearchPlaceIndexForPosition>(
+  "AWS.Location.SearchPlaceIndexForPosition",
+);

@@ -26,12 +26,7 @@ export interface StartChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.StartChannelRequest,
-    ) => Effect.Effect<
-      mediatailor.StartChannelResponse,
-      mediatailor.StartChannelError
-    >
+    ) => Effect.Effect<mediatailor.StartChannelResponse, mediatailor.StartChannelError>
   >
 > {}
-export const StartChannel = Binding.Service<StartChannel>(
-  "AWS.MediaTailor.StartChannel",
-);
+export const StartChannel = Binding.Service<StartChannel>("AWS.MediaTailor.StartChannel");

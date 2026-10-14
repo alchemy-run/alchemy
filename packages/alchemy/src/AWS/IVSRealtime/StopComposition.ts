@@ -25,12 +25,7 @@ export interface StopComposition extends Binding.Service<
   () => Effect.Effect<
     (
       request: ivsrealtime.StopCompositionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.StopCompositionResponse,
-      ivsrealtime.StopCompositionError
-    >
+    ) => Effect.Effect<ivsrealtime.StopCompositionResponse, ivsrealtime.StopCompositionError>
   >
 > {}
-export const StopComposition = Binding.Service<StopComposition>(
-  "AWS.IVSRealtime.StopComposition",
-);
+export const StopComposition = Binding.Service<StopComposition>("AWS.IVSRealtime.StopComposition");

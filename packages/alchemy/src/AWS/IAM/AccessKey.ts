@@ -111,13 +111,9 @@ export const AccessKeyProvider = () =>
       const existing = output
         ? yield* iam.listAccessKeys({ UserName: output.userName }).pipe(
             Effect.map((listed) =>
-              listed.AccessKeyMetadata.find(
-                (entry) => entry.AccessKeyId === output.accessKeyId,
-              ),
+              listed.AccessKeyMetadata.find((entry) => entry.AccessKeyId === output.accessKeyId),
             ),
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           )
         : undefined;
 
@@ -126,8 +122,7 @@ export const AccessKeyProvider = () =>
       // best we can do is preserve any redacted value already stored.
       let accessKeyId = existing?.AccessKeyId ?? output?.accessKeyId;
       let secretAccessKey = output?.secretAccessKey;
-      let createDate: Date | undefined =
-        existing?.CreateDate ?? output?.createDate;
+      let createDate: Date | undefined = existing?.CreateDate ?? output?.createDate;
 
       if (!existing) {
         const created = yield* iam.createAccessKey({
@@ -139,9 +134,7 @@ export const AccessKeyProvider = () =>
       }
 
       if (!accessKeyId) {
-        return yield* Effect.fail(
-          new Error(`AccessKey for user '${news.userName}' has no id`),
-        );
+        return yield* Effect.fail(new Error(`AccessKey for user '${news.userName}' has no id`));
       }
 
       // Sync — apply the desired status when it differs from the observed

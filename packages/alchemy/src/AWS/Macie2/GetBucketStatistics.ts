@@ -27,10 +27,7 @@ export interface GetBucketStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetBucketStatisticsRequest,
-    ) => Effect.Effect<
-      macie2.GetBucketStatisticsResponse,
-      macie2.GetBucketStatisticsError
-    >
+    ) => Effect.Effect<macie2.GetBucketStatisticsResponse, macie2.GetBucketStatisticsError>
   >
 > {}
 export const GetBucketStatistics = Binding.Service<GetBucketStatistics>(

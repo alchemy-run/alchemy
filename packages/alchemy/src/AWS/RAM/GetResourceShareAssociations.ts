@@ -35,7 +35,6 @@ export interface GetResourceShareAssociations extends Binding.Service<
     >
   >
 > {}
-export const GetResourceShareAssociations =
-  Binding.Service<GetResourceShareAssociations>(
-    "AWS.RAM.GetResourceShareAssociations",
-  );
+export const GetResourceShareAssociations = Binding.Service<GetResourceShareAssociations>(
+  "AWS.RAM.GetResourceShareAssociations",
+);

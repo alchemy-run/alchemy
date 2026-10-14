@@ -10,12 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  applyRedshiftTagDelta,
-  redshiftArn,
-  sameStringSet,
-  toTagRecord,
-} from "./internal.ts";
+import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
 /**
  * The kind of Redshift resource an {@link EventSubscription} filters on.
@@ -174,9 +169,7 @@ export interface EventSubscription extends Resource<
  *
  * @resource
  */
-export const EventSubscription = Resource<EventSubscription>(
-  "AWS.Redshift.EventSubscription",
-);
+export const EventSubscription = Resource<EventSubscription>("AWS.Redshift.EventSubscription");
 
 /**
  * Retry an effect while the subscription is mid-transition
@@ -208,22 +201,14 @@ export const EventSubscriptionProvider = () =>
       const readSubscription = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeEventSubscriptions({ SubscriptionName: name })
-          .pipe(
-            Effect.catchTag("SubscriptionNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined)));
         return response?.EventSubscriptionsList?.[0];
       });
 
-      const toAttrs = Effect.fn(function* (
-        subscription: redshift.EventSubscription,
-      ) {
+      const toAttrs = Effect.fn(function* (subscription: redshift.EventSubscription) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!subscription.CustSubscriptionId) {
-          return yield* Effect.fail(
-            new Error("Event subscription is missing its name"),
-          );
+          return yield* Effect.fail(new Error("Event subscription is missing its name"));
         }
         return {
           subscriptionName: subscription.CustSubscriptionId,
@@ -249,22 +234,17 @@ export const EventSubscriptionProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.subscriptionName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.subscriptionName ?? (yield* toName(id, olds ?? {}));
           const subscription = yield* readSubscription(name);
           if (!subscription?.CustSubscriptionId) return undefined;
           const attrs = yield* toAttrs(subscription);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -292,17 +272,10 @@ export const EventSubscriptionProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "SubscriptionAlreadyExistFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("SubscriptionAlreadyExistFault", () => Effect.void));
             observed = yield* readSubscription(name);
             if (!observed?.CustSubscriptionId) {
-              return yield* Effect.fail(
-                new Error(`Failed to create event subscription '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create event subscription '${name}'`));
             }
           }
 
@@ -314,10 +287,7 @@ export const EventSubscriptionProvider = () =>
             observed.SnsTopicArn !== news.snsTopicArn ||
             observed.SourceType !== news.sourceType ||
             !sameStringSet(observed.SourceIdsList, news.sourceIds) ||
-            !sameStringSet(
-              observed.EventCategoriesList,
-              news.eventCategories,
-            ) ||
+            !sameStringSet(observed.EventCategoriesList, news.eventCategories) ||
             observed.Severity !== news.severity ||
             observed.Enabled !== desiredEnabled
           ) {
@@ -335,9 +305,7 @@ export const EventSubscriptionProvider = () =>
             observed = yield* readSubscription(name);
             if (!observed?.CustSubscriptionId) {
               return yield* Effect.fail(
-                new Error(
-                  `Event subscription '${name}' not found after update`,
-                ),
+                new Error(`Event subscription '${name}' not found after update`),
               );
             }
           }
@@ -346,10 +314,7 @@ export const EventSubscriptionProvider = () =>
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "eventsubscription", name);
-          const { removed, upsert } = diffTags(
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           yield* applyRedshiftTagDelta({ arn, upsert, removed });
 
           yield* session.note(arn);
@@ -363,11 +328,7 @@ export const EventSubscriptionProvider = () =>
               .deleteEventSubscription({
                 SubscriptionName: output.subscriptionName,
               })
-              .pipe(
-                Effect.catchTag("SubscriptionNotFoundFault", () =>
-                  Effect.succeed(undefined),
-                ),
-              ),
+              .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined))),
           );
         }),
 
@@ -379,8 +340,7 @@ export const EventSubscriptionProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.EventSubscriptionsList ?? []).filter(
-                  (subscription) =>
-                    subscription.CustSubscriptionId !== undefined,
+                  (subscription) => subscription.CustSubscriptionId !== undefined,
                 ),
               ),
             ),

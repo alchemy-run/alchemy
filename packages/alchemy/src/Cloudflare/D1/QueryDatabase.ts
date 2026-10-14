@@ -28,9 +28,7 @@ export interface QueryDatabase extends Binding.Service<
   (database: Database) => Effect.Effect<QueryDatabaseClient>
 > {}
 
-export const QueryDatabase = Binding.Service<QueryDatabase>(
-  "Cloudflare.D1.QueryDatabase",
-);
+export const QueryDatabase = Binding.Service<QueryDatabase>("Cloudflare.D1.QueryDatabase");
 
 /**
  * Effect-native wrapper around a Cloudflare D1 prepared statement.
@@ -58,33 +56,21 @@ export class PreparedStatement {
   }
 
   /** Run the query and return all matching rows. */
-  all<T = unknown>(): Effect.Effect<
-    runtime.D1Result<T>,
-    never,
-    RuntimeContext
-  > {
+  all<T = unknown>(): Effect.Effect<runtime.D1Result<T>, never, RuntimeContext> {
     return this.withRuntime((stmt) => stmt.all<T>());
   }
 
   /** Run the query and return the first row, or `null` if no rows. */
   first<T = unknown>(): Effect.Effect<T | null, never, RuntimeContext>;
-  first<T = unknown>(
-    column: string,
-  ): Effect.Effect<T | null, never, RuntimeContext>;
-  first<T = unknown>(
-    column?: string,
-  ): Effect.Effect<T | null, never, RuntimeContext> {
+  first<T = unknown>(column: string): Effect.Effect<T | null, never, RuntimeContext>;
+  first<T = unknown>(column?: string): Effect.Effect<T | null, never, RuntimeContext> {
     return this.withRuntime((stmt) =>
       column !== undefined ? stmt.first<T>(column) : stmt.first<T>(),
     );
   }
 
   /** Run the query as a mutation; returns row metadata. */
-  run<T = unknown>(): Effect.Effect<
-    runtime.D1Result<T>,
-    never,
-    RuntimeContext
-  > {
+  run<T = unknown>(): Effect.Effect<runtime.D1Result<T>, never, RuntimeContext> {
     return this.withRuntime((stmt) => stmt.run<T>());
   }
 
@@ -97,9 +83,7 @@ export class PreparedStatement {
     columnNames: true;
   }): Effect.Effect<T[] | [string[], ...T[]], never, RuntimeContext> {
     return this.withRuntime((stmt) =>
-      options
-        ? stmt.raw<T>(options)
-        : (stmt.raw<T>() as Promise<T[] | [string[], ...T[]]>),
+      options ? stmt.raw<T>(options) : (stmt.raw<T>() as Promise<T[] | [string[], ...T[]]>),
     );
   }
 
@@ -139,9 +123,7 @@ export interface QueryDatabaseClient {
   /**
    * Execute raw SQL without prepared statements.
    */
-  exec: (
-    query: string,
-  ) => Effect.Effect<runtime.D1ExecResult, never, RuntimeContext>;
+  exec: (query: string) => Effect.Effect<runtime.D1ExecResult, never, RuntimeContext>;
   /**
    * Send multiple prepared statements in a single call.
    * Statements execute sequentially and are rolled back on failure.

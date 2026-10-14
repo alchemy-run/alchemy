@@ -1,12 +1,13 @@
 import * as Layer from "effect/Layer";
+import { ReadRedis } from "./ReadRedis.ts";
 import { makeRedisBinding } from "./RedisBinding.ts";
 import { makeReadRedisClient } from "./RedisHttp.ts";
-import { ReadRedis } from "./ReadRedis.ts";
 
 /**
  * HTTP implementation of {@link ReadRedis}.
  *
  * @layer
+ * @product Redis
  * @provides Fly.ReadRedis
  */
 export const ReadRedisHttp = Layer.effect(

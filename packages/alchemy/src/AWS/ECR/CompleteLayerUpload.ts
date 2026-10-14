@@ -38,10 +38,7 @@ export interface CompleteLayerUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CompleteLayerUploadRequest,
-    ) => Effect.Effect<
-      ecr.CompleteLayerUploadResponse,
-      ecr.CompleteLayerUploadError
-    >
+    ) => Effect.Effect<ecr.CompleteLayerUploadResponse, ecr.CompleteLayerUploadError>
   >
 > {}
 

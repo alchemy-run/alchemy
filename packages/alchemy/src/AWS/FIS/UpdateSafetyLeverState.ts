@@ -32,10 +32,7 @@ export interface UpdateSafetyLeverState extends Binding.Service<
   () => Effect.Effect<
     (
       request: fis.UpdateSafetyLeverStateRequest,
-    ) => Effect.Effect<
-      fis.UpdateSafetyLeverStateResponse,
-      fis.UpdateSafetyLeverStateError
-    >
+    ) => Effect.Effect<fis.UpdateSafetyLeverStateResponse, fis.UpdateSafetyLeverStateError>
   >
 > {}
 export const UpdateSafetyLeverState = Binding.Service<UpdateSafetyLeverState>(

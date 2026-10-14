@@ -26,9 +26,7 @@ export const ResetAuthorizersCacheHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/apis/${stage.apiId}/stages/${stage.stageName}/cache/authorizers`,
         ],
       });
-      return Effect.fn(
-        `AWS.ApiGatewayV2.ResetAuthorizersCache(${stage.LogicalId})`,
-      )(function* () {
+      return Effect.fn(`AWS.ApiGatewayV2.ResetAuthorizersCache(${stage.LogicalId})`)(function* () {
         return yield* resetAuthorizersCache({
           ApiId: yield* ApiId,
           StageName: yield* StageName,

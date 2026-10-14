@@ -35,12 +35,7 @@ export interface DescribeRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeRuleRequest,
-    ) => Effect.Effect<
-      eventbridge.DescribeRuleResponse,
-      eventbridge.DescribeRuleError
-    >
+    ) => Effect.Effect<eventbridge.DescribeRuleResponse, eventbridge.DescribeRuleError>
   >
 > {}
-export const DescribeRule = Binding.Service<DescribeRule>(
-  "AWS.EventBridge.DescribeRule",
-);
+export const DescribeRule = Binding.Service<DescribeRule>("AWS.EventBridge.DescribeRule");

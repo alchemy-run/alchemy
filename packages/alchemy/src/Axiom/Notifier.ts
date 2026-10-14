@@ -66,6 +66,7 @@ export type Notifier = Resource<
  * ```
  *
  * @resource
+ * @product Monitor
  */
 export const Notifier = Resource<Notifier>("Axiom.Notifier");
 
@@ -118,9 +119,7 @@ export const NotifierProvider = () =>
           return { ...result, id: result.id ?? observed.id! };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

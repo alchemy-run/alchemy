@@ -6,17 +6,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readIotWirelessTags,
-  sameShape,
-  syncIotWirelessTags,
-} from "./internal.ts";
+import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
 
 export interface ServiceProfileProps {
   /**
@@ -93,31 +85,20 @@ export interface ServiceProfile extends Resource<
  *
  * @resource
  */
-export const ServiceProfile = Resource<ServiceProfile>(
-  "AWS.IoTWireless.ServiceProfile",
-);
+export const ServiceProfile = Resource<ServiceProfile>("AWS.IoTWireless.ServiceProfile");
 
 export const ServiceProfileProvider = () =>
   Provider.effect(
     ServiceProfile,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getById = (serviceProfileId: string) =>
         iotw
           .getServiceProfile({ Id: serviceProfileId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Service profiles have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -145,15 +126,10 @@ export const ServiceProfileProvider = () =>
         return yield* getById(summary.Id);
       });
 
-      const toAttrs = Effect.fn(function* (
-        profile: iotw.GetServiceProfileResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (profile: iotw.GetServiceProfileResponse, name: string) {
         if (profile.Id === undefined || profile.Arn === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `IoT Wireless service profile '${name}' returned without Id/Arn`,
-            ),
+            new Error(`IoT Wireless service profile '${name}' returned without Id/Arn`),
           );
         }
         return {
@@ -164,11 +140,7 @@ export const ServiceProfileProvider = () =>
       });
 
       return ServiceProfile.Provider.of({
-        stables: [
-          "serviceProfileId",
-          "serviceProfileArn",
-          "serviceProfileName",
-        ],
+        stables: ["serviceProfileId", "serviceProfileArn", "serviceProfileName"],
 
         list: () =>
           iotw.listServiceProfiles.pages({}).pipe(
@@ -191,8 +163,7 @@ export const ServiceProfileProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.serviceProfileName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.serviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);
           if (profile === undefined) return undefined;
           const attrs = yield* toAttrs(profile, name);
@@ -214,8 +185,7 @@ export const ServiceProfileProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.serviceProfileName ?? (yield* createName(id, news));
+          const name = output?.serviceProfileName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -233,11 +203,7 @@ export const ServiceProfileProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             profile =
               created?.Id !== undefined
                 ? yield* getById(created.Id)
@@ -245,9 +211,7 @@ export const ServiceProfileProvider = () =>
           }
           if (profile === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless service profile '${name}' not found after create`,
-              ),
+              new Error(`IoT Wireless service profile '${name}' not found after create`),
             );
           }
 
@@ -260,12 +224,10 @@ export const ServiceProfileProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* iotw
-            .deleteServiceProfile({ Id: output.serviceProfileId })
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* iotw.deleteServiceProfile({ Id: output.serviceProfileId }).pipe(
+            Effect.asVoid,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),
