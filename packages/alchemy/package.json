@@ -481,6 +481,7 @@
     "@neon/functions": "catalog:",
     "@octokit/rest": "catalog:",
     "@octokit/webhooks": "catalog:",
+    "@peculiar/x509": "catalog:",
     "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
     "capnweb": "catalog:",
@@ -488,6 +489,7 @@
     "libsodium-wrappers": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
+    "reflect-metadata": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:",
     "yaml": "catalog:"

@@ -15,6 +15,7 @@ import { MinimumLogLevel } from "effect/References";
 import { CloudflareEnvironment } from "../../Cloudflare/CloudflareEnvironment.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import { trustEgressCa } from "./EgressCa.ts";
+import { startEgressProxy } from "./EgressProxy.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
 import { reportShutdown } from "./ShutdownSnapshot.ts";
 
@@ -46,7 +47,10 @@ export const bootstrapContainer = (
   // Before the program: anything it starts must trust the egress CA, and a
   // shutdown is reported so the owning Durable Object can snapshot first.
   const program = Effect.all([trustEgressCa, reportShutdown])
-    .pipe(Effect.andThen(resolveProgram("default", { telemetry: true })))
+    .pipe(
+      Effect.andThen(startEgressProxy),
+      Effect.andThen(resolveProgram("default", { telemetry: true })),
+    )
     .pipe(
       Effect.provide(
         entrypointLayer(entrypoint).pipe(
