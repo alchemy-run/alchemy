@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Firewall } from "./Firewall.ts";
 import type { FirewallPolicy } from "./FirewallPolicy.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
@@ -44,23 +43,20 @@ export const makeNetworkFirewallFirewallHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (firewall: Firewall) {
       const FirewallArn = yield* firewall.firewallArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${firewall}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [firewall.firewallArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${firewall})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [firewall.firewallArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${firewall.LogicalId})`)(function* (
         request?: Omit<I, "FirewallArn" | "FirewallName">,
@@ -93,23 +89,20 @@ export const makeNetworkFirewallFirewallPolicyHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: FirewallPolicy) {
       const FirewallPolicyArn = yield* policy.firewallPolicyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${policy}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [policy.firewallPolicyArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${policy})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [policy.firewallPolicyArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${policy.LogicalId})`)(function* (
         request?: Omit<I, "FirewallPolicyArn" | "FirewallPolicyName">,
@@ -142,23 +135,20 @@ export const makeNetworkFirewallRuleGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (ruleGroup: RuleGroup) {
       const RuleGroupArn = yield* ruleGroup.ruleGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${ruleGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [ruleGroup.ruleGroupArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${ruleGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [ruleGroup.ruleGroupArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${ruleGroup.LogicalId})`)(function* (
         request?: Omit<I, "RuleGroupArn" | "RuleGroupName" | "Type">,

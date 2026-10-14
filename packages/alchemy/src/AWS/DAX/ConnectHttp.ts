@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Cluster } from "./Cluster.ts";
 import { connectEnvPrefix } from "./Connect.ts";
 
@@ -64,28 +63,25 @@ export const makeDaxConnectHttpBinding = (options: {
       const EncryptionType = yield* cluster.clusterEndpointEncryptionType;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const prefix = connectEnvPrefix(cluster.LogicalId);
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}))`({
-            env: {
-              [`${prefix}_HOST`]: cluster.discoveryEndpointAddress,
-              // Lambda environment variables are strings — stringify the port.
-              [`${prefix}_PORT`]: Output.interpolate`${cluster.discoveryEndpointPort}`,
-              [`${prefix}_URL`]: cluster.discoveryEndpointUrl,
-              [`${prefix}_TLS`]: Output.map(cluster.clusterEndpointEncryptionType, (encryption) =>
-                encryption === "TLS" ? "true" : "false",
-              ),
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        yield* HostAccess.bind`${options.tag}(${cluster})`({
+          env: {
+            [`${prefix}_HOST`]: cluster.discoveryEndpointAddress,
+            // Lambda environment variables are strings — stringify the port.
+            [`${prefix}_PORT`]: Output.interpolate`${cluster.discoveryEndpointPort}`,
+            [`${prefix}_URL`]: cluster.discoveryEndpointUrl,
+            [`${prefix}_TLS`]: Output.map(cluster.clusterEndpointEncryptionType, (encryption) =>
+              encryption === "TLS" ? "true" : "false",
+            ),
+          },
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${cluster.clusterArn}`],
             },
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${cluster.clusterArn}`],
-              },
-            ],
-          });
-        }
+          ],
+        });
       }
 
       return Effect.gen(function* () {

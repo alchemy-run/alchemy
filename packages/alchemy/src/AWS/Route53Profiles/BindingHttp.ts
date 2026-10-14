@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Profile } from "./Profile.ts";
 
 /**
@@ -30,23 +29,20 @@ export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: Profile) {
       const ProfileId = yield* profile.profileId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${profile}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${profile})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${profile.LogicalId})`)(function* (
         request?: Omit<I, "ProfileId">,

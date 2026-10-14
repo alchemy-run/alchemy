@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { Output } from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared scaffolding for the Amazon HealthOmics HTTP bindings.
@@ -54,40 +53,37 @@ export const makeOmicsResourceHttpBinding = <
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (res: Res) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const Id = yield* options.id(res);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
-          // `Input<…>` contextual typing accepts the `Output<string>` ARN.
-          yield* host.bind`Allow(${host}, ${options.tag}(${res}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [options.arn(res)],
-              },
-              ...(options.passRole
-                ? ([
-                    {
-                      Effect: "Allow",
-                      Action: ["iam:PassRole"],
-                      Resource: ["*"],
-                      Condition: {
-                        StringEquals: {
-                          "iam:PassedToService": "omics.amazonaws.com",
-                        },
+        // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
+        // `Input<…>` contextual typing accepts the `Output<string>` ARN.
+        yield* HostAccess.bind`${options.tag}(${res})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [options.arn(res)],
+            },
+            ...(options.passRole
+              ? ([
+                  {
+                    Effect: "Allow",
+                    Action: ["iam:PassRole"],
+                    Resource: ["*"],
+                    Condition: {
+                      StringEquals: {
+                        "iam:PassedToService": "omics.amazonaws.com",
                       },
                     },
-                  ] satisfies PolicyStatement[])
-                : []),
-            ],
-          });
-        }
+                  },
+                ] satisfies PolicyStatement[])
+              : []),
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${res.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({ ...request, [options.key]: yield* Id } as I);
@@ -111,22 +107,19 @@ export const makeOmicsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

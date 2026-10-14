@@ -1,3 +1,8 @@
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Region from "@distilled.cloud/aws/Region";
+import * as SigV4 from "@distilled.cloud/aws/SigV4";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 /**
  * Shared scaffolding for the OpenSearch domain data-plane bindings.
  *
@@ -11,14 +16,8 @@
  * (`DomainRead` / `DomainWrite` / `DomainReadWrite`) and their `*Http`
  * layers are public.
  */
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Region from "@distilled.cloud/aws/Region";
-import * as SigV4 from "@distilled.cloud/aws/SigV4";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type {
   BulkResponse,
   CountResponse,
@@ -80,23 +79,22 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
   makeClient: (send: OpenSearchSend) => Client;
 }) =>
   Effect.gen(function* () {
-    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
+    const services = yield* HostAccess.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
 
     return Effect.fn(function* (domain: Domain) {
       const Endpoint = yield* domain.endpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.OpenSearch.${options.name}(${domain}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: options.iamActions,
-                Resource: [domain.domainArn, Output.interpolate`${domain.domainArn}/*`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.OpenSearch.${options.name}(${domain})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: options.iamActions,
+              Resource: [domain.domainArn, Output.interpolate`${domain.domainArn}/*`],
+            },
+          ],
+        });
       }
 
       const send: OpenSearchSend = Effect.fn(`AWS.OpenSearch.${options.name}(${domain.LogicalId})`)(

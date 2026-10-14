@@ -2,11 +2,10 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as Region from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import type { SqlConnectionInfo } from "../Connection/internal.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
@@ -25,29 +24,28 @@ export const ConnectHttp = Layer.effect(
     // Captured at layer build so the runtime callable only requires
     // RuntimeContext — the presign resolves credentials lazily from the
     // service on every mint, so refreshed execution-role creds are honored.
-    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
+    const services = yield* HostAccess.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
 
     return Effect.fn(function* (cluster: Cluster, options?: ConnectOptions) {
       const Host = yield* cluster.endpoint;
       const admin = options?.admin ?? false;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const prefix = connectEnvPrefix(cluster.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.DSQL.Connect(${cluster}))`({
-            env: {
-              [`${prefix}_HOST`]: cluster.endpoint,
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        yield* HostAccess.bind`AWS.DSQL.Connect(${cluster})`({
+          env: {
+            [`${prefix}_HOST`]: cluster.endpoint,
+          },
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [admin ? "dsql:DbConnectAdmin" : "dsql:DbConnect"],
+              Resource: [cluster.clusterArn],
             },
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [admin ? "dsql:DbConnectAdmin" : "dsql:DbConnect"],
-                Resource: [cluster.clusterArn],
-              },
-            ],
-          });
-        }
+          ],
+        });
       }
 
       const username = admin ? "admin" : options?.username;

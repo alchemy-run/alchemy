@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { unpackEnvValue } from "../../RuntimeContext.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { CacheCluster } from "./CacheCluster.ts";
 import {
   ConnectCacheCluster,
@@ -17,25 +16,22 @@ export const ConnectCacheClusterHttp = Layer.effect(
     return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
       const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ElastiCache.ConnectCacheCluster(${cluster}))`({
-            env: {
-              [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
-              [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>
-                String(tls ?? false),
-              ),
-            },
-            ...(options?.subnetIds || options?.securityGroupIds
-              ? {
-                  vpc: {
-                    subnetIds: options?.subnetIds ?? [],
-                    securityGroupIds: options?.securityGroupIds ?? [],
-                  },
-                }
-              : {}),
-          });
-        }
+        yield* HostAccess.bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+          env: {
+            [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
+            [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>
+              String(tls ?? false),
+            ),
+          },
+          ...(options?.subnetIds || options?.securityGroupIds
+            ? {
+                vpc: {
+                  subnetIds: options?.subnetIds ?? [],
+                  securityGroupIds: options?.securityGroupIds ?? [],
+                },
+              }
+            : {}),
+        });
       }
       return Effect.gen(function* () {
         const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(

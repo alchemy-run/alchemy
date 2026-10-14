@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
 
 /**
@@ -48,49 +47,46 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
   grantServiceLinkedRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (template: ExperimentTemplate) {
       const TemplateId = yield* template.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${template}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${template.arn}`,
-                  ...(options.grantExperimentWildcard
-                    ? [
-                        // arn:…:experiment-template/EXT… → arn:…:experiment/*
-                        template.arn.pipe(
-                          Output.map((arn) => `${arn.slice(0, arn.lastIndexOf(":"))}:experiment/*`),
-                        ),
-                      ]
-                    : []),
-                ],
-              },
-              ...(options.grantServiceLinkedRole
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: ["iam:CreateServiceLinkedRole"],
-                      Resource: [
-                        "arn:aws:iam::*:role/aws-service-role/fis.amazonaws.com/AWSServiceRoleForFIS",
-                      ],
-                      Condition: {
-                        StringEquals: {
-                          "iam:AWSServiceName": "fis.amazonaws.com",
-                        },
+        yield* HostAccess.bind`${options.tag}(${template})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${template.arn}`,
+                ...(options.grantExperimentWildcard
+                  ? [
+                      // arn:…:experiment-template/EXT… → arn:…:experiment/*
+                      template.arn.pipe(
+                        Output.map((arn) => `${arn.slice(0, arn.lastIndexOf(":"))}:experiment/*`),
+                      ),
+                    ]
+                  : []),
+              ],
+            },
+            ...(options.grantServiceLinkedRole
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: ["iam:CreateServiceLinkedRole"],
+                    Resource: [
+                      "arn:aws:iam::*:role/aws-service-role/fis.amazonaws.com/AWSServiceRoleForFIS",
+                    ],
+                    Condition: {
+                      StringEquals: {
+                        "iam:AWSServiceName": "fis.amazonaws.com",
                       },
                     },
-                  ]
-                : []),
-            ],
-          });
-        }
+                  },
+                ]
+              : []),
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${template.LogicalId})`)(function* (
         request?: Omit<I, "id" | "experimentTemplateId" | "clientToken">,
@@ -119,22 +115,19 @@ export const makeFisAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

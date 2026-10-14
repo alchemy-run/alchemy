@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 
 /**
  * Shared HTTP scaffolding for the geo-routes runtime bindings.
@@ -27,22 +26,19 @@ export const makeGeoRoutesHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.GeoRoutes.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.GeoRoutes.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.GeoRoutes.${options.capability}`)(function* (request: I) {
         return yield* op(request);

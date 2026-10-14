@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Application } from "./Application.ts";
 
 /**
@@ -41,44 +40,41 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ApplicationId = yield* application.applicationId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const passRoleStatements: PolicyStatement[] = options.passRole
-            ? [
-                {
-                  Effect: "Allow",
-                  Action: ["iam:PassRole"],
-                  Resource: ["*"],
-                  Condition: {
-                    StringEquals: {
-                      "iam:PassedToService": "emr-serverless.amazonaws.com",
-                    },
-                  },
-                },
-              ]
-            : [];
-          yield* host.bind`Allow(${host}, ${options.tag}(${application}))`({
-            policyStatements: [
+        const passRoleStatements: PolicyStatement[] = options.passRole
+          ? [
               {
                 Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${application.applicationArn}`,
-                  ...(options.subresources ?? []).map(
-                    (suffix) => Output.interpolate`${application.applicationArn}${suffix}`,
-                  ),
-                ],
+                Action: ["iam:PassRole"],
+                Resource: ["*"],
+                Condition: {
+                  StringEquals: {
+                    "iam:PassedToService": "emr-serverless.amazonaws.com",
+                  },
+                },
               },
-              ...passRoleStatements,
-            ],
-          });
-        }
+            ]
+          : [];
+        yield* HostAccess.bind`${options.tag}(${application})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${application.applicationArn}`,
+                ...(options.subresources ?? []).map(
+                  (suffix) => Output.interpolate`${application.applicationArn}${suffix}`,
+                ),
+              ],
+            },
+            ...passRoleStatements,
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
         request?: Omit<I, "applicationId" | "clientToken">,

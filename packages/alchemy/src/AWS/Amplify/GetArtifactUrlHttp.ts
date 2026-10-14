@@ -1,9 +1,8 @@
 import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { App } from "./App.ts";
 import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts";
 
@@ -13,22 +12,19 @@ import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts"
 export const GetArtifactUrlHttp = Layer.effect(
   GetArtifactUrl,
   Effect.gen(function* () {
-    const getArtifactUrl = yield* amplify.getArtifactUrl;
+    const getArtifactUrl = yield* HostAccess.withCredentials(amplify.getArtifactUrl);
 
     return Effect.fn(function* (app: App) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Amplify.GetArtifactUrl(${app}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["amplify:GetArtifactUrl"],
-                Resource: [Output.interpolate`${app.appArn}/branches/*/jobs/*/artifacts/*`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.Amplify.GetArtifactUrl(${app})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["amplify:GetArtifactUrl"],
+              Resource: [Output.interpolate`${app.appArn}/branches/*/jobs/*/artifacts/*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Amplify.GetArtifactUrl(${app.LogicalId})`)(function* (
         request: GetArtifactUrlRequest,

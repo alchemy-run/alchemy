@@ -1,10 +1,9 @@
 import type * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueSink, type QueueSinkEntry } from "./QueueSink.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
@@ -37,18 +36,15 @@ export const QueueSinkHttp = Layer.effect(
 
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["sqs:SendMessage", "sqs:SendMessageBatch"],
-                Resource: [Output.interpolate`${queue.queueArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.SQS.QueueSink(${queue})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["sqs:SendMessage", "sqs:SendMessageBatch"],
+              Resource: [Output.interpolate`${queue.queueArn}`],
+            },
+          ],
+        });
       }
       const sendBatch = yield* sendMessageBatch(queue);
       return makeBatchedSink<QueueSinkEntry, sqs.SendMessageBatchResult, sqs.SendMessageBatchError>(

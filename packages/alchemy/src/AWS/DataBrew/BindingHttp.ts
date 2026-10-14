@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Job } from "./Job.ts";
 import type { Project } from "./Project.ts";
 import type { Recipe } from "./Recipe.ts";
@@ -31,24 +30,21 @@ export const makeDataBrewJobHttpBinding = <I extends { Name?: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <J extends Job>(job: J) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${job}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${job.jobArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${job})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${job.jobArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "Name">) {
         return yield* op({ ...request, Name: yield* JobName } as I);
@@ -70,23 +66,20 @@ export const makeDataBrewProjectHttpBinding = <I extends { Name?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${project}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${project.projectArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${project})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${project.projectArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (
         request?: Omit<I, "Name">,
@@ -110,23 +103,20 @@ export const makeDataBrewRecipeHttpBinding = <I extends { Name?: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <Rec extends Recipe>(recipe: Rec) {
       const RecipeName = yield* recipe.recipeName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${recipe}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${recipe.recipeArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${recipe})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${recipe.recipeArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${recipe.LogicalId})`)(function* (
         request?: Omit<I, "Name">,

@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { withRoute53DomainsRegion } from "./internal.ts";
 
 /**
@@ -31,23 +30,20 @@ export const makeRoute53DomainsHttpBinding = <I extends object, A, E, R>(options
   Effect.gen(function* () {
     // Capture the client with the region pinned to us-east-1 — the Route 53
     // Domains API is not served from any other region.
-    const op = yield* withRoute53DomainsRegion(options.operation);
+    const op = yield* options.operation.pipe(withRoute53DomainsRegion, HostAccess.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Route53Domains.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                // route53domains has no resource-level IAM
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.Route53Domains.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              // route53domains has no resource-level IAM
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Route53Domains.${options.capability}`)(function* (request: I) {
         // The region must also be pinned at the call site: the yield-time

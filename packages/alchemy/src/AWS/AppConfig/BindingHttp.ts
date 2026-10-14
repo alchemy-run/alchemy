@@ -16,7 +16,7 @@ import type { Input } from "../../Input.ts";
 import type * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 
 /** Region/account available to an IAM grant factory. */
 export interface AppConfigIamContext {
@@ -62,7 +62,7 @@ export const makeAppConfigHttpBinding = <
   Layer.effect(
     service,
     Effect.gen(function* () {
-      const operation = yield* options.operation;
+      const operation = yield* HostAccess.withCredentials(options.operation);
 
       return Effect.fn(function* (...args: Parameters<Shape>) {
         const { identifiers, iam } = options.spec(...args);
@@ -76,24 +76,20 @@ export const makeAppConfigHttpBinding = <
         }
 
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          const host = yield* Binding.Host;
-          if (isBindingHost(host)) {
-            const { accountId, region } =
-              yield* AWSEnvironment.current as unknown as Effect.Effect<{
-                accountId: string;
-                region: string;
-              }>;
-            const { actions, resources } = iam({ accountId, region });
-            yield* host.bind(`Allow(${host.LogicalId}, ${service.key}(${label}))`, {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: actions,
-                  Resource: resources,
-                },
-              ],
-            });
-          }
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
+          const { actions, resources } = iam({ accountId, region });
+          yield* HostAccess.bind`${service.key}(${label})`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: actions,
+                Resource: resources,
+              },
+            ],
+          });
         }
 
         return Effect.fn(`${service.key}(${label})`)(function* (request: object) {

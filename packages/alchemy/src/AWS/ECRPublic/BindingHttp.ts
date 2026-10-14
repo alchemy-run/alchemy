@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { Region } from "../Region.ts";
 import type { PublicRepository } from "./Repository.ts";
 
@@ -53,23 +52,20 @@ export const makePublicRepositoryHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinEcrPublic(options.operation);
+    const op = yield* options.operation.pipe(pinEcrPublic, HostAccess.withCredentials);
 
     return Effect.fn(function* (repository: PublicRepository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ECRPublic.${options.capability}(${repository}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [repository.repositoryArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.ECRPublic.${options.capability}(${repository})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [repository.repositoryArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.ECRPublic.${options.capability}(${repository.LogicalId})`)(function* (
         request?: Omit<I, "repositoryName">,
@@ -105,22 +101,19 @@ export const makePublicRegistryHttpBinding = <I extends object, A, E, R>(options
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinEcrPublic(options.operation);
+    const op = yield* options.operation.pipe(pinEcrPublic, HostAccess.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ECRPublic.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.ECRPublic.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.ECRPublic.${options.capability}`)(function* (request?: I) {
         // Call-site region pin — see makePublicRepositoryHttpBinding above.

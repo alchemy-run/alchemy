@@ -1,8 +1,7 @@
 import * as AVP from "@distilled.cloud/aws/verifiedpermissions";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import {
   type BatchIsAuthorizedRequest,
   type BatchIsAuthorizedWithTokenRequest,
@@ -15,33 +14,32 @@ import type { PolicyStore } from "./PolicyStore.ts";
 export const IsAuthorizedHttp = Layer.effect(
   IsAuthorized,
   Effect.gen(function* () {
-    const isAuthorized = yield* AVP.isAuthorized;
-    const isAuthorizedWithToken = yield* AVP.isAuthorizedWithToken;
-    const batchIsAuthorized = yield* AVP.batchIsAuthorized;
-    const batchIsAuthorizedWithToken = yield* AVP.batchIsAuthorizedWithToken;
+    const isAuthorized = yield* HostAccess.withCredentials(AVP.isAuthorized);
+    const isAuthorizedWithToken = yield* HostAccess.withCredentials(AVP.isAuthorizedWithToken);
+    const batchIsAuthorized = yield* HostAccess.withCredentials(AVP.batchIsAuthorized);
+    const batchIsAuthorizedWithToken = yield* HostAccess.withCredentials(
+      AVP.batchIsAuthorizedWithToken,
+    );
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.VerifiedPermissions.IsAuthorized(${store}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                // the batch operations authorize under the non-batch
-                // verifiedpermissions:IsAuthorized[WithToken] actions
-                Action: [
-                  "verifiedpermissions:IsAuthorized",
-                  "verifiedpermissions:IsAuthorizedWithToken",
-                  "verifiedpermissions:BatchIsAuthorized",
-                  "verifiedpermissions:BatchIsAuthorizedWithToken",
-                ],
-                Resource: [store.policyStoreArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.VerifiedPermissions.IsAuthorized(${store})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              // the batch operations authorize under the non-batch
+              // verifiedpermissions:IsAuthorized[WithToken] actions
+              Action: [
+                "verifiedpermissions:IsAuthorized",
+                "verifiedpermissions:IsAuthorizedWithToken",
+                "verifiedpermissions:BatchIsAuthorized",
+                "verifiedpermissions:BatchIsAuthorizedWithToken",
+              ],
+              Resource: [store.policyStoreArn],
+            },
+          ],
+        });
       }
       const label = store.LogicalId;
       return {

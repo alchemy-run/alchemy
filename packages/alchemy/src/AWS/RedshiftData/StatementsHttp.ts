@@ -2,8 +2,7 @@ import * as data from "@distilled.cloud/aws/redshift-data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Workgroup } from "../RedshiftServerless/Workgroup.ts";
 import {
   RedshiftStatementFailed,
@@ -26,71 +25,68 @@ const isTerminal = (status: string | undefined): boolean =>
 export const StatementsHttp = Layer.effect(
   Statements,
   Effect.gen(function* () {
-    const executeStatement = yield* data.executeStatement;
-    const batchExecuteStatement = yield* data.batchExecuteStatement;
-    const describeStatement = yield* data.describeStatement;
-    const cancelStatement = yield* data.cancelStatement;
-    const getStatementResult = yield* data.getStatementResult;
-    const getStatementResultV2 = yield* data.getStatementResultV2;
-    const describeTableOp = yield* data.describeTable;
-    const listDatabasesOp = yield* data.listDatabases;
-    const listSchemasOp = yield* data.listSchemas;
-    const listTablesOp = yield* data.listTables;
-    const listStatementsOp = yield* data.listStatements;
+    const executeStatement = yield* HostAccess.withCredentials(data.executeStatement);
+    const batchExecuteStatement = yield* HostAccess.withCredentials(data.batchExecuteStatement);
+    const describeStatement = yield* HostAccess.withCredentials(data.describeStatement);
+    const cancelStatement = yield* HostAccess.withCredentials(data.cancelStatement);
+    const getStatementResult = yield* HostAccess.withCredentials(data.getStatementResult);
+    const getStatementResultV2 = yield* HostAccess.withCredentials(data.getStatementResultV2);
+    const describeTableOp = yield* HostAccess.withCredentials(data.describeTable);
+    const listDatabasesOp = yield* HostAccess.withCredentials(data.listDatabases);
+    const listSchemasOp = yield* HostAccess.withCredentials(data.listSchemas);
+    const listTablesOp = yield* HostAccess.withCredentials(data.listTables);
+    const listStatementsOp = yield* HostAccess.withCredentials(data.listStatements);
 
     return Effect.fn(function* (workgroup: Workgroup, options: StatementsOptions = {}) {
       const workgroupName = yield* workgroup.workgroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.RedshiftData.Statements(${workgroup}))`({
-            policyStatements: [
-              {
-                // Workgroup-scoped Data API actions (submit statements and
-                // read database metadata through the workgroup).
-                Effect: "Allow",
-                Action: [
-                  "redshift-data:ExecuteStatement",
-                  "redshift-data:BatchExecuteStatement",
-                  "redshift-data:DescribeTable",
-                  "redshift-data:ListDatabases",
-                  "redshift-data:ListSchemas",
-                  "redshift-data:ListTables",
-                ],
-                Resource: [workgroup.workgroupArn],
-              },
-              {
-                // Statement-scoped actions are authorized per-statement
-                // (owner condition), not by ARN.
-                Effect: "Allow",
-                Action: [
-                  "redshift-data:DescribeStatement",
-                  "redshift-data:GetStatementResult",
-                  "redshift-data:GetStatementResultV2",
-                  "redshift-data:CancelStatement",
-                  "redshift-data:ListStatements",
-                ],
-                Resource: ["*"],
-              },
-              {
-                // IAM temporary-credential auth against the serverless
-                // workgroup (used when no SecretArn is supplied).
-                Effect: "Allow",
-                Action: ["redshift-serverless:GetCredentials"],
-                Resource: [workgroup.workgroupArn],
-              },
-              ...(options.secretArn
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                      Resource: [options.secretArn],
-                    },
-                  ]
-                : []),
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.RedshiftData.Statements(${workgroup})`({
+          policyStatements: [
+            {
+              // Workgroup-scoped Data API actions (submit statements and
+              // read database metadata through the workgroup).
+              Effect: "Allow",
+              Action: [
+                "redshift-data:ExecuteStatement",
+                "redshift-data:BatchExecuteStatement",
+                "redshift-data:DescribeTable",
+                "redshift-data:ListDatabases",
+                "redshift-data:ListSchemas",
+                "redshift-data:ListTables",
+              ],
+              Resource: [workgroup.workgroupArn],
+            },
+            {
+              // Statement-scoped actions are authorized per-statement
+              // (owner condition), not by ARN.
+              Effect: "Allow",
+              Action: [
+                "redshift-data:DescribeStatement",
+                "redshift-data:GetStatementResult",
+                "redshift-data:GetStatementResultV2",
+                "redshift-data:CancelStatement",
+                "redshift-data:ListStatements",
+              ],
+              Resource: ["*"],
+            },
+            {
+              // IAM temporary-credential auth against the serverless
+              // workgroup (used when no SecretArn is supplied).
+              Effect: "Allow",
+              Action: ["redshift-serverless:GetCredentials"],
+              Resource: [workgroup.workgroupArn],
+            },
+            ...(options.secretArn
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                    Resource: [options.secretArn],
+                  },
+                ]
+              : []),
+          ],
+        });
       }
 
       const database = options.database ?? "dev";

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Farm } from "./Farm.ts";
 import type { Queue } from "./Queue.ts";
 
@@ -35,27 +34,21 @@ export const makeDeadlineQueueHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const FarmId = yield* queue.farmId;
       const QueueId = yield* queue.queueId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${queue}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  queue.queueArn,
-                  queue.queueArn.pipe(Output.map((arn) => `${arn}/job/*`)),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${queue})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [queue.queueArn, queue.queueArn.pipe(Output.map((arn) => `${arn}/job/*`))],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (
         request?: Omit<I, "farmId" | "queueId">,
@@ -90,27 +83,21 @@ export const makeDeadlineQueueSearchHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const FarmId = yield* queue.farmId;
       const QueueId = yield* queue.queueId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${queue}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  queue.queueArn,
-                  queue.queueArn.pipe(Output.map((arn) => `${arn}/job/*`)),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${queue})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [queue.queueArn, queue.queueArn.pipe(Output.map((arn) => `${arn}/job/*`))],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (
         request?: Omit<I, "farmId" | "queueIds">,
@@ -139,23 +126,20 @@ export const makeDeadlineFarmHttpBinding = <I extends { farmId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (farm: Farm) {
       const FarmId = yield* farm.farmId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${farm}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [farm.farmArn, farm.farmArn.pipe(Output.map((arn) => `${arn}/*`))],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${farm})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [farm.farmArn, farm.farmArn.pipe(Output.map((arn) => `${arn}/*`))],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${farm.LogicalId})`)(function* (
         request?: Omit<I, "farmId">,

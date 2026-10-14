@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Application } from "./Application.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { Index } from "./SearchIndex.ts";
@@ -49,28 +48,25 @@ export const makeQBusinessApplicationHttpBinding = <
   subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
       const applicationId = yield* application.applicationId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${application}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  application.applicationArn,
-                  ...(options.subResources ?? []).map(
-                    (suffix) => Output.interpolate`${application.applicationArn}/${suffix}`,
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${application})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                application.applicationArn,
+                ...(options.subResources ?? []).map(
+                  (suffix) => Output.interpolate`${application.applicationArn}/${suffix}`,
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
         request?: Omit<I, "applicationId">,
@@ -113,32 +109,29 @@ export const makeQBusinessIndexHttpBinding = <
   subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (index: Index) {
       const applicationId = yield* index.applicationId;
       const indexId = yield* index.indexId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${index}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  index.indexArn,
-                  // The index ARN is `…:application/{appId}/index/{indexId}`
-                  // — the parent application ARN is its prefix.
-                  index.indexArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
-                  ...(options.subResources ?? []).map(
-                    (suffix) => Output.interpolate`${index.indexArn}/${suffix}`,
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${index})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                index.indexArn,
+                // The index ARN is `…:application/{appId}/index/{indexId}`
+                // — the parent application ARN is its prefix.
+                index.indexArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
+                ...(options.subResources ?? []).map(
+                  (suffix) => Output.interpolate`${index.indexArn}/${suffix}`,
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${index.LogicalId})`)(function* (
         request?: Omit<I, "applicationId" | "indexId">,
@@ -179,34 +172,29 @@ export const makeQBusinessDataSourceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSource: DataSource) {
       const applicationId = yield* dataSource.applicationId;
       const indexId = yield* dataSource.indexId;
       const dataSourceId = yield* dataSource.dataSourceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataSource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  dataSource.dataSourceArn,
-                  // The data source ARN is
-                  // `…:application/{appId}/index/{indexId}/data-source/{dsId}`
-                  // — the parent index and application ARNs are prefixes.
-                  dataSource.dataSourceArn.pipe(
-                    Output.map((arn) => arn.split("/data-source/")[0]!),
-                  ),
-                  dataSource.dataSourceArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${dataSource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                dataSource.dataSourceArn,
+                // The data source ARN is
+                // `…:application/{appId}/index/{indexId}/data-source/{dsId}`
+                // — the parent index and application ARNs are prefixes.
+                dataSource.dataSourceArn.pipe(Output.map((arn) => arn.split("/data-source/")[0]!)),
+                dataSource.dataSourceArn.pipe(Output.map((arn) => arn.split("/index/")[0]!)),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataSource.LogicalId})`)(function* (
         request?: Omit<I, "applicationId" | "indexId" | "dataSourceId">,
@@ -255,32 +243,29 @@ export const makeQBusinessWebExperienceHttpBinding = <
   prepare?: (request: Req | undefined) => Omit<I, "applicationId" | "webExperienceId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (webExperience: WebExperience) {
       const applicationId = yield* webExperience.applicationId;
       const webExperienceId = yield* webExperience.webExperienceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${webExperience}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  webExperience.webExperienceArn,
-                  // The web experience ARN is
-                  // `…:application/{appId}/web-experience/{weId}` — the
-                  // parent application ARN is its prefix.
-                  webExperience.webExperienceArn.pipe(
-                    Output.map((arn) => arn.split("/web-experience/")[0]!),
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${webExperience})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                webExperience.webExperienceArn,
+                // The web experience ARN is
+                // `…:application/{appId}/web-experience/{weId}` — the
+                // parent application ARN is its prefix.
+                webExperience.webExperienceArn.pipe(
+                  Output.map((arn) => arn.split("/web-experience/")[0]!),
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${webExperience.LogicalId})`)(function* (request?: Req) {
         const wire = options.prepare

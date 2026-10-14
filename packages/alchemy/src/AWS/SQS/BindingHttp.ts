@@ -1,8 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isInstance } from "../EC2/Instance.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -19,18 +17,15 @@ import type { Queue } from "./Queue.ts";
 const grantOnQueue = (tag: string, queue: Queue, actions: readonly string[]) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host) || isInstance(host)) {
-        yield* host.bind`Allow(${host}, ${tag}(${queue}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...actions],
-              Resource: [Output.interpolate`${queue.queueArn}`],
-            },
-          ],
-        });
-      }
+      yield* HostAccess.bind`${tag}(${queue})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...actions],
+            Resource: [Output.interpolate`${queue.queueArn}`],
+          },
+        ],
+      });
     }
   });
 
@@ -49,7 +44,7 @@ export const makeQueueUrlHttpBinding = <I extends { QueueUrl?: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const QueueUrl = yield* queue.queueUrl;
@@ -80,7 +75,7 @@ export const makeQueueArnHttpBinding = <I extends { SourceArn?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       const SourceArn = yield* queue.queueArn;
@@ -111,7 +106,7 @@ export const makeQueueGrantHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
       yield* grantOnQueue(options.tag, queue, options.actions);

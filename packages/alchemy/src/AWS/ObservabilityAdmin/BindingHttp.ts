@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 
 /**
  * Shared HTTP scaffolding for the CloudWatch Observability Admin runtime
@@ -32,23 +31,20 @@ export const makeObservabilityAdminHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                // Account-level configuration reads have no resource ARN.
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.ObservabilityAdmin.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              // Account-level configuration reads have no resource ARN.
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.ObservabilityAdmin.${options.capability}`)(function* (request?: I) {
         return yield* op(request ?? ({} as I));

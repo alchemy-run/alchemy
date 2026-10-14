@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { ManagedThing } from "./ManagedThing.ts";
 
 /**
@@ -39,26 +38,21 @@ export const makeManagedThingHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: ManagedThing) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ManagedThingId = yield* thing.managedThingId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTManagedIntegrations.${options.capability}(${thing}))`(
+        yield* HostAccess.bind`AWS.IoTManagedIntegrations.${options.capability}(${thing})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [thing.managedThingArn],
-                },
-              ],
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [thing.managedThingArn],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`AWS.IoTManagedIntegrations.${options.capability}(${thing.LogicalId})`)(
         function* (request?: Omit<I, K>) {
@@ -90,22 +84,19 @@ export const makeManagedIntegrationsHttpBinding = <I extends object, A, E, R>(op
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTManagedIntegrations.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.IoTManagedIntegrations.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.IoTManagedIntegrations.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

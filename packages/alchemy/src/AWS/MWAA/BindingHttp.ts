@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -53,23 +52,20 @@ export const makeMWAAEnvironmentHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment) {
       const Name = yield* environment.environmentName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${environment}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${environment.arn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${environment})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${environment.arn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${environment.LogicalId})`)(function* (
         request?: Omit<I, "Name">,
@@ -97,32 +93,29 @@ export const makeMWAAAirflowRoleHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment, roleOptions?: AirflowRoleOptions) {
       const Name = yield* environment.environmentName;
       const airflowRole = roleOptions?.airflowRole ?? "Admin";
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${environment}, ${airflowRole}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                // The environment ARN is
-                // `arn:{partition}:airflow:{region}:{account}:environment/{name}`;
-                // the Airflow RBAC role ARN swaps the resource type and
-                // appends the role.
-                Resource: [
-                  environment.arn.pipe(
-                    Output.map((arn) => `${arn.replace(":environment/", ":role/")}/${airflowRole}`),
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${environment}, ${airflowRole})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              // The environment ARN is
+              // `arn:{partition}:airflow:{region}:{account}:environment/{name}`;
+              // the Airflow RBAC role ARN swaps the resource type and
+              // appends the role.
+              Resource: [
+                environment.arn.pipe(
+                  Output.map((arn) => `${arn.replace(":environment/", ":role/")}/${airflowRole}`),
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${environment.LogicalId})`)(function* (
         request?: Omit<I, "Name">,

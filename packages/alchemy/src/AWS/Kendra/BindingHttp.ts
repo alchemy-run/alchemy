@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { Index } from "./SearchIndex.ts";
 
@@ -53,28 +52,25 @@ export const makeKendraIndexHttpBinding = <
   prepare?: (request: Req) => Omit<I, "IndexId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (index: Index) {
       const IndexId = yield* index.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${index}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  index.arn,
-                  ...(options.subResources ?? []).map(
-                    (suffix) => Output.interpolate`${index.arn}/${suffix}`,
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${index})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                index.arn,
+                ...(options.subResources ?? []).map(
+                  (suffix) => Output.interpolate`${index.arn}/${suffix}`,
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${index.LogicalId})`)(function* (request?: Req) {
         const wire = options.prepare
@@ -112,30 +108,27 @@ export const makeKendraDataSourceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSource: DataSource) {
       const IndexId = yield* dataSource.indexId;
       const Id = yield* dataSource.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataSource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  dataSource.arn,
-                  // The data source ARN is
-                  // `…:index/{indexId}/data-source/{id}` — the parent index
-                  // ARN is its prefix.
-                  dataSource.arn.pipe(Output.map((arn) => arn.split("/data-source/")[0]!)),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${dataSource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                dataSource.arn,
+                // The data source ARN is
+                // `…:index/{indexId}/data-source/{id}` — the parent index
+                // ARN is its prefix.
+                dataSource.arn.pipe(Output.map((arn) => arn.split("/data-source/")[0]!)),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataSource.LogicalId})`)(function* (
         request?: Omit<I, "IndexId" | "Id">,

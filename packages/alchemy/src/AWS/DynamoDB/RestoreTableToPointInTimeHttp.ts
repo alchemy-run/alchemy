@@ -1,7 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as HostAccess from "../HostAccess.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableToPointInTime,
   type RestoreTableToPointInTimeRequest,
@@ -14,7 +15,7 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
     return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const SourceTableName = yield* from.tableName;
       const TargetTableName = yield* to.tableName;
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.RestoreTableToPointInTime(${from.LogicalId}, ${to.LogicalId})`,
         () => [
           {
@@ -38,19 +39,18 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
         ],
       );
       // Restores stay in-region: both tables must share it.
-      const region = yield* tablesRegion(access, [from, to]);
+      const restoreTableToPointInTime = yield* HostAccess.withCredentials(
+        DynamoDB.restoreTableToPointInTime,
+        tablesRegion([from, to]),
+      );
       return Effect.fn(
         `AWS.DynamoDB.RestoreTableToPointInTime(${from.LogicalId}, ${to.LogicalId})`,
       )(function* (request: RestoreTableToPointInTimeRequest) {
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.restoreTableToPointInTime({
-            ...request,
-            SourceTableName: yield* SourceTableName,
-            TargetTableName: yield* TargetTableName,
-          }),
-        );
+        return yield* restoreTableToPointInTime({
+          ...request,
+          SourceTableName: yield* SourceTableName,
+          TargetTableName: yield* TargetTableName,
+        });
       });
     });
   }),

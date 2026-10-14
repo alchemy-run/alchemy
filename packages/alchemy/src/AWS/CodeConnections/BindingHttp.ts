@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Connection } from "./Connection.ts";
 import type { RepositoryLink } from "./RepositoryLink.ts";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
@@ -38,23 +37,20 @@ export const makeConnectionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (connection: Connection) {
       const ConnectionArn = yield* connection.connectionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${connection}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${connection.connectionArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${connection})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${connection.connectionArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${connection.LogicalId})`)(function* (
         request?: Omit<I, "ConnectionArn">,
@@ -87,23 +83,20 @@ export const makeRepositoryLinkScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (repositoryLink: RepositoryLink) {
       const RepositoryLinkId = yield* repositoryLink.repositoryLinkId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${repositoryLink}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${repositoryLink.repositoryLinkArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${repositoryLink})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${repositoryLink.repositoryLinkArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${repositoryLink.LogicalId})`)(function* (
         request: Omit<I, "RepositoryLinkId">,
@@ -137,24 +130,21 @@ export const makeSyncConfigurationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (syncConfiguration: SyncConfiguration) {
       const ResourceName = yield* syncConfiguration.resourceName;
       const SyncType = yield* syncConfiguration.syncType;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${syncConfiguration}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${syncConfiguration})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${syncConfiguration.LogicalId})`)(function* (
         request?: Omit<I, "ResourceName" | "SyncType">,
@@ -181,22 +171,19 @@ export const makeCodeConnectionsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

@@ -1,3 +1,6 @@
+import { Region } from "@distilled.cloud/aws/Region";
+import * as sts from "@distilled.cloud/aws/sts";
+import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the Amazon S3 Control HTTP bindings.
  *
@@ -18,12 +21,8 @@
  *   (cached per binding) and are granted on `*` — job ARNs are
  *   server-assigned at runtime and unknowable at deploy time.
  */
-import { Region } from "@distilled.cloud/aws/Region";
-import * as sts from "@distilled.cloud/aws/sts";
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { AccessPoint } from "./AccessPoint.ts";
 import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
 
@@ -57,24 +56,21 @@ export const makeS3ControlAccessPointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (accessPoint: AccessPoint) {
       const AccountId = yield* accessPoint.accountId;
       const Name = yield* accessPoint.accessPointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${accessPoint}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [accessPoint.accessPointArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${accessPoint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [accessPoint.accessPointArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${accessPoint.LogicalId})`)(function* (
         request?: Omit<I, "AccountId" | "Name">,
@@ -109,24 +105,21 @@ export const makeS3ControlMrapHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* inMrapRegion(options.operation);
+    const op = yield* options.operation.pipe(inMrapRegion, HostAccess.withCredentials);
 
     return Effect.fn(function* (mrap: MultiRegionAccessPoint) {
       const AccountId = yield* mrap.accountId;
       const Mrap = yield* mrap.multiRegionAccessPointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${mrap}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [mrap.multiRegionAccessPointArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${mrap})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [mrap.multiRegionAccessPointArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${mrap.LogicalId})`)(function* (
         request?: Omit<I, "AccountId" | "Mrap">,
@@ -164,35 +157,32 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
-    const getCallerIdentity = yield* sts.getCallerIdentity;
+    const op = yield* HostAccess.withCredentials(options.operation);
+    const getCallerIdentity = yield* HostAccess.withCredentials(sts.getCallerIdentity);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: ["*"],
-            },
-          ];
-          if (options.passRole) {
-            // No `iam:PassedToService` condition — IAM does not populate the
-            // key for `s3:CreateJob`, so a conditioned grant is always
-            // denied. This matches the policy AWS documents for Batch
-            // Operations job creators.
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-            });
-          }
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements,
+        const policyStatements: PolicyStatement[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource: ["*"],
+          },
+        ];
+        if (options.passRole) {
+          // No `iam:PassedToService` condition — IAM does not populate the
+          // key for `s3:CreateJob`, so a conditioned grant is always
+          // denied. This matches the policy AWS documents for Batch
+          // Operations job creators.
+          policyStatements.push({
+            Effect: "Allow",
+            Action: ["iam:PassRole"],
+            Resource: ["*"],
           });
         }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements,
+        });
       }
       // Resolve the caller's account id lazily (first call inside the
       // Lambda) and cache it for the life of the binding.

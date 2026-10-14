@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Namespace } from "./Namespace.ts";
 
 /**
@@ -31,22 +30,19 @@ export const makeServerlessAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -77,26 +73,23 @@ export const makeServerlessNamespaceHttpBinding = <
   extraResources?: (namespaceArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (namespace: Namespace) {
       const Identifier = yield* namespace.namespaceName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const resources = options.extraResources;
-          yield* host.bind`Allow(${host}, ${options.tag}(${namespace}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: resources
-                  ? Output.map(namespace.namespaceArn, (arn) => [arn, ...resources(arn)])
-                  : [Output.interpolate`${namespace.namespaceArn}`],
-              },
-            ],
-          });
-        }
+        const resources = options.extraResources;
+        yield* HostAccess.bind`${options.tag}(${namespace})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: resources
+                ? Output.map(namespace.namespaceArn, (arn) => [arn, ...resources(arn)])
+                : [Output.interpolate`${namespace.namespaceArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${namespace.LogicalId})`)(function* (
         request: Omit<I, "namespaceName">,

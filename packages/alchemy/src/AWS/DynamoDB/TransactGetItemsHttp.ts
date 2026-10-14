@@ -1,7 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as HostAccess from "../HostAccess.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   TransactGetItems,
   type TransactGetItemsRequest,
@@ -31,7 +32,7 @@ export const TransactGetItemsHttp = Layer.effect(
         return yield* TableName;
       });
 
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.TransactGetItems(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -41,7 +42,10 @@ export const TransactGetItemsHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const transactGetItems = yield* HostAccess.withCredentials(
+        DynamoDB.transactGetItems,
+        tablesRegion(sortedTables),
+      );
 
       return Effect.fn(`AWS.DynamoDB.TransactGetItems(${sortedTables})`)(function* (
         request: TransactGetItemsRequest,
@@ -57,14 +61,10 @@ export const TransactGetItemsHttp = Layer.effect(
           }),
         );
 
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.transactGetItems({
-            ...request,
-            TransactItems: transactItems,
-          }),
-        );
+        return yield* transactGetItems({
+          ...request,
+          TransactItems: transactItems,
+        });
       });
     });
   }),

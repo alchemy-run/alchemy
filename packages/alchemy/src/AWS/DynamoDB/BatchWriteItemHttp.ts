@@ -1,13 +1,14 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HostAccess from "../HostAccess.ts";
 import {
   BatchWriteItem,
   type BatchWriteItemRequest,
   type BatchWriteItemTables,
   sortBatchWriteItemTables,
 } from "./BatchWriteItem.ts";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchWriteItemHttp = Layer.effect(
   BatchWriteItem,
@@ -32,7 +33,7 @@ export const BatchWriteItemHttp = Layer.effect(
         return yield* TableName;
       });
 
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.BatchWriteItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -42,7 +43,10 @@ export const BatchWriteItemHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const batchWriteItem = yield* HostAccess.withCredentials(
+        DynamoDB.batchWriteItem,
+        tablesRegion(sortedTables),
+      );
 
       return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(function* (
         request: BatchWriteItemRequest,
@@ -55,14 +59,10 @@ export const BatchWriteItemHttp = Layer.effect(
             }),
         );
 
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.batchWriteItem({
-            ...request,
-            RequestItems: Object.fromEntries(requestItems),
-          }),
-        );
+        return yield* batchWriteItem({
+          ...request,
+          RequestItems: Object.fromEntries(requestItems),
+        });
       });
     });
   }),

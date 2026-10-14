@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { DBCluster } from "./DBCluster.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
@@ -29,22 +28,19 @@ export const makeRdsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -75,26 +71,23 @@ export const makeRdsClusterHttpBinding = <
   extraResources?: (clusterArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster) {
       const Identifier = yield* cluster.dbClusterIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const resources = options.extraResources;
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: resources
-                  ? Output.map(cluster.dbClusterArn, (arn) => [arn, ...resources(arn)])
-                  : [Output.interpolate`${cluster.dbClusterArn}`],
-              },
-            ],
-          });
-        }
+        const resources = options.extraResources;
+        yield* HostAccess.bind`${options.tag}(${cluster})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: resources
+                ? Output.map(cluster.dbClusterArn, (arn) => [arn, ...resources(arn)])
+                : [Output.interpolate`${cluster.dbClusterArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         request?: Omit<I, "DBClusterIdentifier">,
@@ -130,26 +123,23 @@ export const makeRdsInstanceHttpBinding = <
   extraResources?: (instanceArn: string) => string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: DBInstance) {
       const Identifier = yield* instance.dbInstanceIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const resources = options.extraResources;
-          yield* host.bind`Allow(${host}, ${options.tag}(${instance}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: resources
-                  ? Output.map(instance.dbInstanceArn, (arn) => [arn, ...resources(arn)])
-                  : [Output.interpolate`${instance.dbInstanceArn}`],
-              },
-            ],
-          });
-        }
+        const resources = options.extraResources;
+        yield* HostAccess.bind`${options.tag}(${instance})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: resources
+                ? Output.map(instance.dbInstanceArn, (arn) => [arn, ...resources(arn)])
+                : [Output.interpolate`${instance.dbInstanceArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
         request?: Omit<I, "DBInstanceIdentifier">,

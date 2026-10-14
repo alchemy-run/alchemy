@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 
 /**
  * Shared HTTP-binding scaffolding for the ApiGatewayV2 capabilities
@@ -45,12 +44,10 @@ export const registerApiGatewayV2Binding = Effect.fn(function* (opts: {
   paths: (region: string) => ReadonlyArray<Input<string>>;
 }) {
   if (globalThis.__ALCHEMY_RUNTIME__) return;
-  const host = yield* Binding.Host;
-  if (!isBindingHost(host)) return;
   const { region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
     region: string;
   }>;
-  yield* host.bind`Allow(${host}, ${opts.cap}(${opts.target}))`({
+  yield* HostAccess.bind`${opts.cap}(${opts.target})`({
     policyStatements: [
       {
         Effect: "Allow",

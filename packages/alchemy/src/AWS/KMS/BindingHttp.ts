@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { keyLabel, keyPolicyStatement, type KeyLike } from "./KeyBinding.ts";
 
 /**
@@ -28,17 +27,14 @@ export const makeKmsKeyHttpBinding = <I extends { KeyId?: string }, A, E, R>(opt
   actions: readonly `kms:${string}`[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (key: KeyLike) {
       const KeyId = typeof key === "string" ? Effect.succeed(key) : yield* key.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${key}))`({
-            policyStatements: [keyPolicyStatement(options.actions, key)],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${key})`({
+          policyStatements: [keyPolicyStatement(options.actions, key)],
+        });
       }
       return Effect.fn(`${options.tag}(${keyLabel(key)})`)(function* (request?: Omit<I, "KeyId">) {
         const keyId = yield* KeyId;
@@ -61,22 +57,19 @@ export const makeKmsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly `kms:${string}`[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

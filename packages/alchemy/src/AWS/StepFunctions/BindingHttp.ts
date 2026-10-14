@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Activity } from "./Activity.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
@@ -47,18 +46,15 @@ const grant = (
 ) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host)) {
-        yield* host.bind`Allow(${host}, ${tag}(${scope}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...actions],
-              Resource: [...resources],
-            },
-          ],
-        });
-      }
+      yield* HostAccess.bind`${tag}(${scope})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...actions],
+            Resource: [...resources],
+          },
+        ],
+      });
     }
   });
 
@@ -83,7 +79,7 @@ export const makeStateMachineArnHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (stateMachine: StateMachine) {
       const StateMachineArn = yield* stateMachine.stateMachineArn;
@@ -121,7 +117,7 @@ export const makeExecutionScopedHttpBinding = <I, A, E, R>(options: {
   scope?: "execution" | "mapRun";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (stateMachine: StateMachine) {
       yield* grant(options.tag, stateMachine, options.actions, [
@@ -150,7 +146,7 @@ export const makeActivityArnHttpBinding = <I extends { activityArn?: string }, A
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (activity: Activity) {
       const ActivityArn = yield* activity.activityArn;
@@ -182,7 +178,7 @@ export const makeTaskCallbackHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (activity?: Activity) {
       yield* grant(options.tag, activity ?? "*", options.actions, [
@@ -209,22 +205,19 @@ export const makeSfnServiceHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* op(request);

@@ -5,11 +5,10 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import path from "pathe";
+import * as HostAccess from "@/AWS/HostAccess.ts";
 import * as Lambda from "@/AWS/Lambda";
-import { isBindingHost } from "@/AWS/Lambda/Function.ts";
 import * as S3 from "@/AWS/S3";
 import * as Signer from "@/AWS/Signer";
-import * as Binding from "@/Binding";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -82,23 +81,20 @@ export default SignerTestFunction.make(
     // job ("S3 bucket … not accessible") — grant the documented signing-
     // caller set the object-level bindings above don't cover.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host)) {
-        yield* host.bind`Allow(${host}, SignerSourceDestinationBucketAccess)`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [
-                "s3:GetBucketLocation",
-                "s3:GetBucketVersioning",
-                "s3:ListBucket",
-                "s3:ListBucketVersions",
-              ],
-              Resource: [src.bucketArn, dst.bucketArn],
-            },
-          ],
-        });
-      }
+      yield* HostAccess.bind`SignerSourceDestinationBucketAccess`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [
+              "s3:GetBucketLocation",
+              "s3:GetBucketVersioning",
+              "s3:ListBucket",
+              "s3:ListBucketVersions",
+            ],
+            Resource: [src.bucketArn, dst.bucketArn],
+          },
+        ],
+      });
     }
 
     const startSigningJob = yield* Signer.StartSigningJob(profile);

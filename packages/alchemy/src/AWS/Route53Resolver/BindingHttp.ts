@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { ResolverEndpoint } from "./ResolverEndpoint.ts";
 import type { ResolverRule } from "./ResolverRule.ts";
 
@@ -41,23 +40,20 @@ export const makeRoute53ResolverEndpointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: ResolverEndpoint) {
       const ResolverEndpointId = yield* endpoint.resolverEndpointId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${endpoint}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [endpoint.resolverEndpointArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${endpoint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [endpoint.resolverEndpointArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${endpoint.LogicalId})`)(function* (
         request?: Omit<I, "ResolverEndpointId">,
@@ -90,23 +86,20 @@ export const makeRoute53ResolverRuleHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: ResolverRule) {
       const ResolverRuleId = yield* rule.resolverRuleId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${rule}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [rule.resolverRuleArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${rule})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [rule.resolverRuleArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${rule.LogicalId})`)(function* (
         request?: Omit<I, "ResolverRuleId">,

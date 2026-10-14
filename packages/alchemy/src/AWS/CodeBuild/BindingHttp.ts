@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Project } from "./Project.ts";
 import type { ReportGroup } from "./ReportGroup.ts";
 
@@ -40,24 +39,21 @@ export const makeCodeBuildProjectNameHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${project}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${project.projectArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${project})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${project.projectArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (
         request?: Omit<I, "projectName">,
@@ -90,32 +86,29 @@ export const makeCodeBuildProjectHttpBinding = <I, A, E, R>(options: {
   sandboxScoped?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${project}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${project.projectArn}`,
-                  ...(options.sandboxScoped
-                    ? [
-                        Output.map(
-                          project.projectArn,
-                          (arn) => `${arn.replace(":project/", ":sandbox/")}:*`,
-                        ),
-                      ]
-                    : []),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${project})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${project.projectArn}`,
+                ...(options.sandboxScoped
+                  ? [
+                      Output.map(
+                        project.projectArn,
+                        (arn) => `${arn.replace(":project/", ":sandbox/")}:*`,
+                      ),
+                    ]
+                  : []),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (request: I) {
         return yield* op(request);
@@ -143,23 +136,20 @@ export const makeCodeBuildReportGroupArnHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends ReportGroup>(reportGroup: G) {
       const ReportGroupArn = yield* reportGroup.reportGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${reportGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${reportGroup.reportGroupArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${reportGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${reportGroup.reportGroupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${reportGroup.LogicalId})`)(function* (
         request?: Omit<I, "reportGroupArn">,
@@ -188,22 +178,19 @@ export const makeCodeBuildReportGroupHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends ReportGroup>(reportGroup: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${reportGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${reportGroup.reportGroupArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${reportGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${reportGroup.reportGroupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${reportGroup.LogicalId})`)(function* (request: I) {
         return yield* op(request);

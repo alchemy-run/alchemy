@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Endpoint } from "./Endpoint.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
@@ -30,23 +29,20 @@ export const makeFeatureGroupHttpBinding = <Req, I, A, E, R>(options: {
   prepare: (request: Req, featureGroupName: string) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (featureGroup: FeatureGroup) {
       const FeatureGroupName = yield* featureGroup.featureGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${featureGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [featureGroup.featureGroupArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${featureGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [featureGroup.featureGroupArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${featureGroup.LogicalId})`)(function* (request: Req) {
         const featureGroupName = yield* FeatureGroupName;
@@ -70,23 +66,20 @@ export const makeEndpointHttpBinding = <I extends { EndpointName?: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: Endpoint) {
       const EndpointName = yield* endpoint.endpointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${endpoint}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [endpoint.endpointArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${endpoint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [endpoint.endpointArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${endpoint.LogicalId})`)(function* (
         request?: Omit<I, "EndpointName">,

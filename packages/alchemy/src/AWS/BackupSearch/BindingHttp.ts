@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { SearchJob } from "./SearchJob.ts";
 
 /**
@@ -35,23 +34,20 @@ export const makeSearchJobScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (searchJob: SearchJob) {
       const SearchJobIdentifier = yield* searchJob.searchJobIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${searchJob}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${searchJob.searchJobArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${searchJob})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${searchJob.searchJobArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${searchJob.LogicalId})`)(function* (
         request?: Omit<I, "SearchJobIdentifier">,

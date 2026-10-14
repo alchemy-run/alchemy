@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Adapter } from "./Adapter.ts";
 
 /**
@@ -33,22 +32,19 @@ export const makeTextractHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.Textract.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Textract.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -72,26 +68,23 @@ export const makeTextractAdapterHttpBinding = <I extends { AdapterId?: string },
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* <Ad extends Adapter>(adapter: Ad) {
       const AdapterId = yield* adapter.adapterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}(${adapter}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [
-                  Output.interpolate`${adapter.adapterArn}`,
-                  Output.interpolate`${adapter.adapterArn}/versions/*`,
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.Textract.${options.capability}(${adapter})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [
+                Output.interpolate`${adapter.adapterArn}`,
+                Output.interpolate`${adapter.adapterArn}/versions/*`,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Textract.${options.capability}(${adapter.LogicalId})`)(function* (
         request?: Omit<I, "AdapterId">,

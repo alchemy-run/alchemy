@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { pinFms } from "./AdminAccount.ts";
 
 /**
@@ -44,23 +43,20 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
 }) =>
   Effect.gen(function* () {
     const op = options.pinToAdminRegion
-      ? yield* pinFms(options.operation)
-      : yield* options.operation;
+      ? yield* options.operation.pipe(pinFms, HostAccess.withCredentials)
+      : yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.FMS.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.FMS.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.FMS.${options.capability}`)(function* (request?: I) {
         // The admin-region pin must also be applied at the call site: the

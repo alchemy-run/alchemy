@@ -1,8 +1,7 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { cognitoMethods } from "./BindingHttp.ts";
 import type { UserPool } from "./UserPool.ts";
 import {
@@ -23,79 +22,92 @@ type UserPoolIdField = Pick<cip.AdminGetUserRequest, "UserPoolId">;
 export const UserPoolAdminHttp = Layer.effect(
   UserPoolAdmin,
   Effect.gen(function* () {
-    const adminCreateUser = yield* cip.adminCreateUser;
-    const adminGetUser = yield* cip.adminGetUser;
-    const adminSetUserPassword = yield* cip.adminSetUserPassword;
-    const adminUpdateUserAttributes = yield* cip.adminUpdateUserAttributes;
-    const adminDeleteUserAttributes = yield* cip.adminDeleteUserAttributes;
-    const adminDeleteUser = yield* cip.adminDeleteUser;
-    const adminConfirmSignUp = yield* cip.adminConfirmSignUp;
-    const adminDisableUser = yield* cip.adminDisableUser;
-    const adminEnableUser = yield* cip.adminEnableUser;
-    const adminResetUserPassword = yield* cip.adminResetUserPassword;
-    const adminInitiateAuth = yield* cip.adminInitiateAuth;
-    const adminRespondToAuthChallenge = yield* cip.adminRespondToAuthChallenge;
-    const adminUserGlobalSignOut = yield* cip.adminUserGlobalSignOut;
-    const adminAddUserToGroup = yield* cip.adminAddUserToGroup;
-    const adminRemoveUserFromGroup = yield* cip.adminRemoveUserFromGroup;
-    const adminListGroupsForUser = yield* cip.adminListGroupsForUser;
-    const adminSetUserMFAPreference = yield* cip.adminSetUserMFAPreference;
-    const adminLinkProviderForUser = yield* cip.adminLinkProviderForUser;
-    const adminDisableProviderForUser = yield* cip.adminDisableProviderForUser;
-    const adminGetDevice = yield* cip.adminGetDevice;
-    const adminListDevices = yield* cip.adminListDevices;
-    const adminForgetDevice = yield* cip.adminForgetDevice;
-    const adminUpdateDeviceStatus = yield* cip.adminUpdateDeviceStatus;
-    const adminListUserAuthEvents = yield* cip.adminListUserAuthEvents;
-    const adminUpdateAuthEventFeedback = yield* cip.adminUpdateAuthEventFeedback;
-    const listUsers = yield* cip.listUsers;
-    const listUsersInGroup = yield* cip.listUsersInGroup;
-    const listGroups = yield* cip.listGroups;
+    const adminCreateUser = yield* HostAccess.withCredentials(cip.adminCreateUser);
+    const adminGetUser = yield* HostAccess.withCredentials(cip.adminGetUser);
+    const adminSetUserPassword = yield* HostAccess.withCredentials(cip.adminSetUserPassword);
+    const adminUpdateUserAttributes = yield* HostAccess.withCredentials(
+      cip.adminUpdateUserAttributes,
+    );
+    const adminDeleteUserAttributes = yield* HostAccess.withCredentials(
+      cip.adminDeleteUserAttributes,
+    );
+    const adminDeleteUser = yield* HostAccess.withCredentials(cip.adminDeleteUser);
+    const adminConfirmSignUp = yield* HostAccess.withCredentials(cip.adminConfirmSignUp);
+    const adminDisableUser = yield* HostAccess.withCredentials(cip.adminDisableUser);
+    const adminEnableUser = yield* HostAccess.withCredentials(cip.adminEnableUser);
+    const adminResetUserPassword = yield* HostAccess.withCredentials(cip.adminResetUserPassword);
+    const adminInitiateAuth = yield* HostAccess.withCredentials(cip.adminInitiateAuth);
+    const adminRespondToAuthChallenge = yield* HostAccess.withCredentials(
+      cip.adminRespondToAuthChallenge,
+    );
+    const adminUserGlobalSignOut = yield* HostAccess.withCredentials(cip.adminUserGlobalSignOut);
+    const adminAddUserToGroup = yield* HostAccess.withCredentials(cip.adminAddUserToGroup);
+    const adminRemoveUserFromGroup = yield* HostAccess.withCredentials(
+      cip.adminRemoveUserFromGroup,
+    );
+    const adminListGroupsForUser = yield* HostAccess.withCredentials(cip.adminListGroupsForUser);
+    const adminSetUserMFAPreference = yield* HostAccess.withCredentials(
+      cip.adminSetUserMFAPreference,
+    );
+    const adminLinkProviderForUser = yield* HostAccess.withCredentials(
+      cip.adminLinkProviderForUser,
+    );
+    const adminDisableProviderForUser = yield* HostAccess.withCredentials(
+      cip.adminDisableProviderForUser,
+    );
+    const adminGetDevice = yield* HostAccess.withCredentials(cip.adminGetDevice);
+    const adminListDevices = yield* HostAccess.withCredentials(cip.adminListDevices);
+    const adminForgetDevice = yield* HostAccess.withCredentials(cip.adminForgetDevice);
+    const adminUpdateDeviceStatus = yield* HostAccess.withCredentials(cip.adminUpdateDeviceStatus);
+    const adminListUserAuthEvents = yield* HostAccess.withCredentials(cip.adminListUserAuthEvents);
+    const adminUpdateAuthEventFeedback = yield* HostAccess.withCredentials(
+      cip.adminUpdateAuthEventFeedback,
+    );
+    const listUsers = yield* HostAccess.withCredentials(cip.listUsers);
+    const listUsersInGroup = yield* HostAccess.withCredentials(cip.listUsersInGroup);
+    const listGroups = yield* HostAccess.withCredentials(cip.listGroups);
 
     return Effect.fn(function* <P extends UserPool>(pool: P) {
       const UserPoolId = yield* pool.userPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAdmin(${pool}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "cognito-idp:AdminAddUserToGroup",
-                  "cognito-idp:AdminConfirmSignUp",
-                  "cognito-idp:AdminCreateUser",
-                  "cognito-idp:AdminDeleteUser",
-                  "cognito-idp:AdminDeleteUserAttributes",
-                  "cognito-idp:AdminDisableProviderForUser",
-                  "cognito-idp:AdminDisableUser",
-                  "cognito-idp:AdminEnableUser",
-                  "cognito-idp:AdminForgetDevice",
-                  "cognito-idp:AdminGetDevice",
-                  "cognito-idp:AdminGetUser",
-                  "cognito-idp:AdminInitiateAuth",
-                  "cognito-idp:AdminLinkProviderForUser",
-                  "cognito-idp:AdminListDevices",
-                  "cognito-idp:AdminListGroupsForUser",
-                  "cognito-idp:AdminListUserAuthEvents",
-                  "cognito-idp:AdminRemoveUserFromGroup",
-                  "cognito-idp:AdminResetUserPassword",
-                  "cognito-idp:AdminRespondToAuthChallenge",
-                  "cognito-idp:AdminSetUserMFAPreference",
-                  "cognito-idp:AdminSetUserPassword",
-                  "cognito-idp:AdminUpdateAuthEventFeedback",
-                  "cognito-idp:AdminUpdateDeviceStatus",
-                  "cognito-idp:AdminUpdateUserAttributes",
-                  "cognito-idp:AdminUserGlobalSignOut",
-                  "cognito-idp:ListGroups",
-                  "cognito-idp:ListUsers",
-                  "cognito-idp:ListUsersInGroup",
-                ],
-                Resource: [pool.userPoolArn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.Cognito.UserPoolAdmin(${pool})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "cognito-idp:AdminAddUserToGroup",
+                "cognito-idp:AdminConfirmSignUp",
+                "cognito-idp:AdminCreateUser",
+                "cognito-idp:AdminDeleteUser",
+                "cognito-idp:AdminDeleteUserAttributes",
+                "cognito-idp:AdminDisableProviderForUser",
+                "cognito-idp:AdminDisableUser",
+                "cognito-idp:AdminEnableUser",
+                "cognito-idp:AdminForgetDevice",
+                "cognito-idp:AdminGetDevice",
+                "cognito-idp:AdminGetUser",
+                "cognito-idp:AdminInitiateAuth",
+                "cognito-idp:AdminLinkProviderForUser",
+                "cognito-idp:AdminListDevices",
+                "cognito-idp:AdminListGroupsForUser",
+                "cognito-idp:AdminListUserAuthEvents",
+                "cognito-idp:AdminRemoveUserFromGroup",
+                "cognito-idp:AdminResetUserPassword",
+                "cognito-idp:AdminRespondToAuthChallenge",
+                "cognito-idp:AdminSetUserMFAPreference",
+                "cognito-idp:AdminSetUserPassword",
+                "cognito-idp:AdminUpdateAuthEventFeedback",
+                "cognito-idp:AdminUpdateDeviceStatus",
+                "cognito-idp:AdminUpdateUserAttributes",
+                "cognito-idp:AdminUserGlobalSignOut",
+                "cognito-idp:ListGroups",
+                "cognito-idp:ListUsers",
+                "cognito-idp:ListUsersInGroup",
+              ],
+              Resource: [pool.userPoolArn],
+            },
+          ],
+        });
       }
       const methods = cognitoMethods("AWS.Cognito.UserPoolAdmin", pool.LogicalId);
       const withPool = methods.injecting(

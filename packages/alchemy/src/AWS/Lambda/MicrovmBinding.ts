@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
+import type * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { hostAwsAccess, regionFromArn, withRuntimeCredentials } from "./BindingHttp.ts";
+import { regionFromArn } from "./BindingHttp.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
@@ -13,7 +14,7 @@ import type { MicrovmImage } from "./MicrovmImage.ts";
 // NOT exported from `index.ts` — it only backs the per-operation `*Http` files.
 
 /** The distilled operation method, yielded to its request callable. */
-type Operation<Res, Err> = Effect.Effect<(req: any) => Effect.Effect<Res, Err, any>, any, any>;
+type Operation<Res, Err> = Effect.Effect<(req: any) => Effect.Effect<Res, Err, any>, never, any>;
 
 export interface ImageBindingOptions<Req, Res, Err, Self> {
   /** The `Binding.Service` contract this layer implements. */
@@ -114,10 +115,10 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
 
 /**
  * Build a MicroVM runtime binding bound to a {@link MicrovmImage}. At deploy it
- * registers the IAM grant on the host — the Lambda execution role directly, or
- * (for a Cloudflare Worker) a dedicated assume-role Role whose credentials are
- * bound onto the worker. At runtime it calls the distilled operation with the
- * host-appropriate credentials.
+ * grants the IAM statements to the host via `HostAccess.bind` — a native
+ * host's own role, or the role minted for an external host. At runtime it
+ * calls the distilled operation resolved with `HostAccess.withCredentials`,
+ * signing in the image's region on an external host.
  */
 export const makeImageBinding = <Req, Res, Err, Self>(
   options: ImageBindingOptions<Req, Res, Err, Self>,
@@ -125,33 +126,31 @@ export const makeImageBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
-      const run = yield* options.operation;
       return Effect.fn(function* (image: MicrovmImage) {
-        const host = yield* Binding.Host;
-
         // Accessors (registered on the host at deploy, resolved at runtime).
         const imageArn = yield* image.imageArn;
         // Region is derived from the resolved image ARN — via `Effect.map` of
         // the accessor, NOT a second Output binding (whose env key would embed
         // the mapper's source text and is brittle).
-        const region = Effect.map(imageArn, regionFromArn);
+        // resolved per bind because an external host signs in the image's own region
+        const run = yield* HostAccess.withCredentials(
+          options.operation,
+          Effect.succeed(Effect.map(imageArn, regionFromArn)),
+        );
 
-        const access = yield* hostAwsAccess(host, () => ({
-          label: `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}(${image.LogicalId}))`,
-          policyStatements: imagePolicyStatements(image, options),
-        }));
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* HostAccess.bind`AWS.Lambda.${options.name}(${image})`({
+            policyStatements: imagePolicyStatements(image, options),
+          });
+        }
 
         return Effect.fn(`AWS.Lambda.${options.name}(${image.LogicalId})`)(function* (
           request: Req,
         ) {
-          return yield* withRuntimeCredentials(
-            access,
-            region,
-            run(
-              options.injectImageIdentifier
-                ? { ...(request as object), imageIdentifier: yield* imageArn }
-                : request,
-            ),
+          return yield* run(
+            options.injectImageIdentifier
+              ? { ...(request as object), imageIdentifier: yield* imageArn }
+              : request,
           );
         });
       });
@@ -179,18 +178,16 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
-      const run = yield* options.operation;
+      const run = yield* HostAccess.withCredentials(options.operation);
       return Effect.fn(function* () {
-        const host = yield* Binding.Host;
-        const access = yield* hostAwsAccess(host, () => ({
-          label: `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}())`,
-          policyStatements: [{ Effect: "Allow", Action: options.actions, Resource: ["*"] }],
-        }));
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* HostAccess.bind`AWS.Lambda.${options.name}()`({
+            policyStatements: [{ Effect: "Allow", Action: options.actions, Resource: ["*"] }],
+          });
+        }
 
         return Effect.fn(`AWS.Lambda.${options.name}()`)(function* (request: Req) {
-          // Account-level operations are global; default the STS/endpoint region.
-          const region = Effect.succeed("us-east-1");
-          return yield* withRuntimeCredentials(access, region, run(request));
+          return yield* run(request);
         });
       });
     }),

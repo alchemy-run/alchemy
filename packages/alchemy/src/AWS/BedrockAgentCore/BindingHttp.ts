@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { BrowserCustom } from "./BrowserCustom.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 import type { Memory } from "./Memory.ts";
@@ -54,23 +53,20 @@ export const makeAgentCoreHttpBinding = <
   arns: (resource: Res) => readonly Output.Output<string>[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${resource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [...options.arns(resource)],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${resource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [...options.arns(resource)],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({

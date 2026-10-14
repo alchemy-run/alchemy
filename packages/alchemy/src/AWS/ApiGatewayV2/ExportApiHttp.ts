@@ -2,6 +2,7 @@ import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Api } from "./Api.ts";
 import { registerApiGatewayV2Binding } from "./BindingHttp.ts";
 import { ExportApi, type ExportApiRequest } from "./ExportApi.ts";
@@ -14,7 +15,7 @@ import { ExportApi, type ExportApiRequest } from "./ExportApi.ts";
 export const ExportApiHttp = Layer.effect(
   ExportApi,
   Effect.gen(function* () {
-    const exportApi = yield* agw2.exportApi;
+    const exportApi = yield* HostAccess.withCredentials(agw2.exportApi);
     return Effect.fn(function* <A extends Api>(api: A) {
       const ApiId = yield* api.apiId;
       yield* registerApiGatewayV2Binding({

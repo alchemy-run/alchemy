@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Blueprint } from "./Blueprint.ts";
 import type { DataAutomationLibrary } from "./DataAutomationLibrary.ts";
 import type { DataAutomationProject } from "./DataAutomationProject.ts";
@@ -43,30 +42,27 @@ export const makeBdaProjectHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (project: DataAutomationProject) {
       const projectArn = yield* project.projectArn;
       const projectStage = yield* project.projectStage;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${project}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${project.projectArn}`,
-                  // Cross-region inference profiles live in every region of
-                  // the geography (us./eu./apac.), so the profile resource
-                  // cannot be pinned to the deploy region.
-                  "arn:aws:bedrock:*:*:data-automation-profile/*",
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${project})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${project.projectArn}`,
+                // Cross-region inference profiles live in every region of
+                // the geography (us./eu./apac.), so the profile resource
+                // cannot be pinned to the deploy region.
+                "arn:aws:bedrock:*:*:data-automation-profile/*",
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (
         request: Omit<I, "dataAutomationConfiguration">,
@@ -103,26 +99,23 @@ export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E
   additionalResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (library: DataAutomationLibrary) {
       const libraryArn = yield* library.libraryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${library}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${library.libraryArn}`,
-                  ...(options.additionalResources ?? []),
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${library})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${library.libraryArn}`,
+                ...(options.additionalResources ?? []),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${library.LogicalId})`)(function* (
         request: Omit<I, "libraryArn">,
@@ -156,30 +149,27 @@ export const makeBdaBlueprintOptimizationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (blueprint: Blueprint) {
       const blueprintArn = yield* blueprint.blueprintArn;
       const blueprintStage = yield* blueprint.blueprintStage;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${blueprint}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${blueprint.blueprintArn}`,
-                  "arn:aws:bedrock:*:*:data-automation-profile/*",
-                  // The invoke authorizes against the invocation resource
-                  // (minted at runtime), not the blueprint ARN.
-                  "arn:aws:bedrock:*:*:blueprint-optimization-invocation/*",
-                ],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${blueprint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${blueprint.blueprintArn}`,
+                "arn:aws:bedrock:*:*:data-automation-profile/*",
+                // The invoke authorizes against the invocation resource
+                // (minted at runtime), not the blueprint ARN.
+                "arn:aws:bedrock:*:*:blueprint-optimization-invocation/*",
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${blueprint.LogicalId})`)(function* (
         request: Omit<I, "blueprint">,
@@ -210,23 +200,20 @@ export const makeBdaBlueprintHttpBinding = <I extends { blueprintArn: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (blueprint: Blueprint) {
       const blueprintArn = yield* blueprint.blueprintArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${blueprint}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${blueprint.blueprintArn}`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${blueprint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${blueprint.blueprintArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${blueprint.LogicalId})`)(function* (
         request: Omit<I, "blueprintArn">,
@@ -254,22 +241,19 @@ export const makeBdaAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* op(request);

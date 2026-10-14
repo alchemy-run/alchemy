@@ -174,3 +174,61 @@ test(
     timeout: 60_000,
   },
 );
+
+// ── plan-only: AWS bindings grant on a native host ──────────────────────────
+// The Service is a native AWS host, so an AWS binding used in its init
+// lands its IAM statements on the Service (its task role).
+class GrantingService extends AWS.ECS.Service<GrantingService>()(
+  "GrantingService",
+  Effect.gen(function* () {
+    const cluster = yield* ProbeCluster;
+    return { cluster, image: "nginx:1.27", port: 80 };
+  }),
+  Effect.gen(function* () {
+    yield* AWS.Lambda.ListFunctions();
+    yield* AWS.AccessAnalyzer.ValidatePolicy();
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(AWS.Lambda.ListFunctionsHttp, AWS.AccessAnalyzer.ValidatePolicyHttp),
+    ),
+  ),
+) {}
+
+test(
+  "an AWS binding in a native host's init grants on that host",
+  Effect.gen(function* () {
+    const plan = yield* Effect.gen(function* () {
+      yield* ProbeCluster;
+      return yield* GrantingService;
+    }).pipe(makePlan, Effect.timeout(30_000));
+
+    expect(plan.resources["GrantingService"]?.bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: {
+            policyStatements: [
+              { Effect: "Allow", Action: ["lambda:ListFunctions"], Resource: ["*"] },
+            ],
+          },
+        }),
+        expect.objectContaining({
+          sid: "Allow(GrantingService, AWS.AccessAnalyzer.ValidatePolicy())",
+          data: {
+            policyStatements: [
+              { Effect: "Allow", Action: ["access-analyzer:ValidatePolicy"], Resource: ["*"] },
+            ],
+          },
+        }),
+      ]),
+    );
+    // A native host signs with its own role: no identity is minted.
+    expect(plan.resources["GrantingServiceRole"]).toBeUndefined();
+  }),
+  {
+    tags: ["unit", "provider:aws", "provider:aws:ecs", "local"],
+    timeout: 60_000,
+  },
+);

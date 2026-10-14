@@ -1,11 +1,10 @@
 import type * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import { BusSink, type BusSinkEntry } from "./BusSink.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents } from "./PutEvents.ts";
@@ -77,28 +76,25 @@ export const BusSinkHttp = Layer.effect(
 
     return Effect.fn(function* (bus?: EventBus) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          // Pass the ARN as an unresolved Output — binding data is resolved
-          // by the engine before the host reconciles (see PutEventsHttp).
-          const resource = bus
-            ? Output.interpolate`${bus.eventBusArn}`
-            : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        // Pass the ARN as an unresolved Output — binding data is resolved
+        // by the engine before the host reconciles (see PutEventsHttp).
+        const resource = bus
+          ? Output.interpolate`${bus.eventBusArn}`
+          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, AWS.EventBridge.BusSink(${bus ?? "default"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["events:PutEvents"],
-                Resource: [resource],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.EventBridge.BusSink(${bus ?? "default"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["events:PutEvents"],
+              Resource: [resource],
+            },
+          ],
+        });
       }
       const put = yield* putEvents(bus);
       return makeBatchedSink<

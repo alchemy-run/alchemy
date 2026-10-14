@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { Detector } from "./Detector.ts";
 import type { EventType } from "./EventType.ts";
 import type { List } from "./List.ts";
@@ -34,24 +33,21 @@ export const makeFraudDetectorDetectorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (detector: Detector) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${detector}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [detector.arn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${detector})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [detector.arn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${detector.LogicalId})`)(function* (
         request: Omit<I, "detectorId">,
@@ -84,24 +80,21 @@ export const makeFraudDetectorListHttpBinding = <I extends { name: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (list: List) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ListName = yield* list.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${list}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [list.arn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${list})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [list.arn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${list.LogicalId})`)(function* (request: Omit<I, "name">) {
         const name = yield* ListName;
@@ -124,24 +117,21 @@ export const makeFraudDetectorEventTypeHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (eventType: EventType) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const EventTypeName = yield* eventType.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${eventType}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [eventType.arn],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`${options.tag}(${eventType})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [eventType.arn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${eventType.LogicalId})`)(function* (
         request: Omit<I, "eventTypeName">,

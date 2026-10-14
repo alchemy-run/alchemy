@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as HostAccess from "../HostAccess.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -47,24 +46,21 @@ export const makeQAppHttpBinding = <I extends { instanceId: string }, A, E, R>(o
   injectAppId?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (app: QApp) {
       const instanceId = yield* app.instanceId;
       const appId = yield* app.appId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.QApps.${options.capability}(${app}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [Output.interpolate`${app.appArn}`, Output.interpolate`${app.appArn}/*`],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.QApps.${options.capability}(${app})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [Output.interpolate`${app.appArn}`, Output.interpolate`${app.appArn}/*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.QApps.${options.capability}(${app.LogicalId})`)(function* (
         request?: Omit<I, "instanceId" | "appId">,
@@ -100,23 +96,20 @@ export const makeQAppsInstanceHttpBinding = <I extends { instanceId: string }, A
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* HostAccess.withCredentials(options.operation);
 
     return Effect.fn(function* (app: QApp) {
       const instanceId = yield* app.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.QApps.${options.capability}(${app}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* HostAccess.bind`AWS.QApps.${options.capability}(${app})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.QApps.${options.capability}(${app.LogicalId})`)(function* (
         request?: Omit<I, "instanceId">,
