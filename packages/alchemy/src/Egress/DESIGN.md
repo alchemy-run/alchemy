@@ -224,7 +224,7 @@ export default Cloudflare.Containers.Sandbox(
     main: import.meta.url,
     image: "node:24-bookworm",
     // A name is an instance type, chosen at start(): no extra builds.
-    sizes: { small: "basic", large: "standard-4" },
+    sizes: { small: "lite", large: "standard-4" },
   },
   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }).pipe(
     Effect.provide(NodeServices.layer),
@@ -1019,14 +1019,19 @@ Cloudflare.Worker("WorkGatewayWorker", { main }, WorkGateway.serve(implementatio
 AWS.Lambda.Function("WorkGatewayLambda", { main, url: true }, WorkGateway.serve(implementation));
 
 // Sandboxes: a declaration of sizes and accepted egress kinds
-export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large"; egress: GitHub.Egress | Anthropic.Egress }>()("Sandbox") {}
+export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large"; egress: GitHub.Egress | Anthropic.Egress }>()(
+  "Sandbox",
+  { egress: [GitHub.Egress, Anthropic.Egress] }, // the kinds as values: hosts install their tools
+) {}
 
-// Sandbox hosts: none of them name a gateway
-Cloudflare.Containers.Sandbox(Sandbox, { main, image, sizes: { small: "basic", large: "standard-4" } }, program);
-AWS.Lambda.MicrovmSandbox(Sandbox, { main, sizes: { small: "2 GB", large: "8 GB" } }, program);
+// Sandbox hosts (built): none of them name a gateway
+Cloudflare.Containers.Sandbox(Sandbox, { main, image, sizes: { small: "lite", large: "standard-4" } }, program);
+AWS.Lambda.MicrovmSandbox(Sandbox, { main, sizes: { small: "2 GB", large: "8 GB" }, networkConnector }, program);
+
+// Not built: further hosts would reuse the proxy, the run payload and Durable Object renewal;
+// only how the sandbox starts (and how its control port is reached) differs.
 AWS.ECS.Sandbox(Sandbox, { main, image, sizes: { small: { cpu: 1, memory: "4 GB" }, large: { cpu: 8, memory: "32 GB" } } }, program);
 Fly.Sandbox(Sandbox, { main, image, sizes: { small: "shared-cpu-2x", large: "performance-8x" } }, program);
-Local.Sandbox(Sandbox, { main }, program); // alchemy dev: the same proxy
 
 // The Durable Object: the same code on every host
 const work = yield* WorkGateway;
