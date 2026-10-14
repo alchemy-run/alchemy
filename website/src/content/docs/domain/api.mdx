@@ -7,7 +7,80 @@ import DAG from "../../../components/DAG.astro";
 
 An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views, streams and aggregates it may read. Everything else in the model stays private.
 
-An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers declaring one, serving it, and calling it.
+An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers what it can expose, declaring one, serving it, and calling it.
+
+## What an Api can expose
+
+An Api takes four kinds of entry. A command is something a client may ask for. A view, a stream or an aggregate is something a client may read. Every entry brings its own guard, so listing it on an Api never opens more than the entry itself allows.
+
+<DAG
+  nodes={[
+    { id: "client", label: "Client", type: "typed from the Api", kind: "query", col: 0, row: 1 },
+    { id: "api", label: "CustomerApi", type: "Domain.Api", col: 1, row: 1 },
+    { id: "command", label: "DepositMoney", type: "send", kind: "command", col: 2, row: 0 },
+    { id: "view", label: "AccountSummary", type: "get, watch", kind: "view", col: 2, row: 1 },
+    { id: "stream", label: "AccountCard", type: "peek, watch", kind: "stream", col: 2, row: 2 },
+    { id: "aggregate", label: "Account", type: "get, events", kind: "aggregate", col: 2, row: 3 },
+  ]}
+  edges={[
+    { from: "client", to: "api" },
+    { from: "api", to: "command" },
+    { from: "api", to: "view" },
+    { from: "api", to: "stream" },
+    { from: "api", to: "aggregate" },
+  ]}
+  caption="One Api, four kinds of entry. Each is guarded by its own middleware and rules."
+/>
+
+Policies, projections and external systems are never on an Api. They run inside the model, and a client reaches what they produce through the entries above: a projection's [stream](/domain/stream), a view a policy feeds, or a store you serve yourself.
+
+### Commands
+
+A command becomes a method that takes its target and input together, and returns the receipt with the reply. Its middleware runs first, and its aggregate's `decide` has the final say.
+
+```typescript title="test/apiEntries.ts"
+const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+```
+
+### Views
+
+A view becomes a namespace with four reads: `get` for the current state, `watch` for the state and every change, `events` for its emitted events, history first, and `list` for a page of them. `get` also takes `atLeast`, to read your own write. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
+
+```typescript title="test/apiEntries.ts"
+const summary = yield* bank.AccountSummary.get(accountId);
+const summaries = bank.AccountSummary.watch(accountId);
+const page = yield* bank.Statement.list(accountId, { order: "desc", take: 10 });
+```
+
+### Streams
+
+A stream becomes a namespace like a view's, with `peek` in place of `get`: the latest entry is the current value. It's guarded the same way, by its middleware and `validate`, judged against the latest entry. See [Stream](/domain/stream).
+
+```typescript title="test/apiEntries.ts"
+const card = yield* bank.AccountCard.peek(accountId);
+const cards = bank.AccountCard.watch(accountId);
+```
+
+### Aggregates
+
+An aggregate can be read directly too: its current state with `get` and `watch`, and its committed events with `events`. It's only allowed on an Api if it declares a `read` contract, because its state is otherwise private to its rules. The contract names the middleware and the check every read must pass.
+
+```typescript title="src/Account/Account.ts"
+read: {
+  middleware: [Session],
+  rejects: [NotOwner],
+  validate: Effect.fn(function* (_request, s) {
+    yield* mustOwn(s._tag === "Open" ? s.customerId : null);
+  }),
+},
+```
+
+```typescript title="test/apiEntries.ts"
+const account = yield* bank.Account.get(accountId);
+const history = bank.Account.events(accountId, { after: 0 });
+```
+
+Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.
 
 ## List what a client may reach
 
