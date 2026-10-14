@@ -134,9 +134,10 @@ const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
 );
 
 // A test server on a random port, plus an HttpClient pointed at it.
-const Served = Layer.unwrap(
-  Effect.map(CustomerApi, (api) => HttpServer.serve()(api.fetch)),
-).pipe(Layer.provideMerge(NodeHttpServer.layerTest), Layer.provide(World));
+const Served = Layer.unwrap(Effect.map(CustomerApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provide(World),
+);
 
 // The test server serves the Api at its root; its HttpClient already targets the server.
 const Client = Layer.mergeAll(Domain.protocolHttp(""), sessionClient("customer:c-1"));

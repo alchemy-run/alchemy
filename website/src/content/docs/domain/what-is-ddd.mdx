@@ -333,7 +333,7 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 <DAG
   nodes={[
     { id: "bank", label: "Account", type: "Banking: holds money", layer: 0, kind: "aggregate" },
-    { id: "api", label: "BankApi", type: "published interface", layer: 1 },
+    { id: "api", label: "BankApi", type: "published interface", kind: "api", layer: 1 },
     { id: "logins", label: "Account", type: "Identity: a login", layer: 2, kind: "aggregate" },
   ]}
   edges={[

@@ -13,7 +13,8 @@ export type Kind =
   | "stream"
   | "policy"
   | "rejection"
-  | "external";
+  | "external"
+  | "api";
 
 /** How a kind's box is drawn. */
 export type Shape =
@@ -83,11 +84,8 @@ export const KINDS: Record<Kind, KindStyle> = {
     name: "Stream",
     hue: "#9aa7c7",
     shape: "stack",
-    icon: [
-      "M2 7c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
-      "M2 12c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
-      "M2 17c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
-    ],
+    // Entries flowing one way, like Kinesis: parallel lines into one arrowhead.
+    icon: ["M3 7h11", "M3 12h17", "M3 17h11", "M17 9l3 3-3 3"],
   },
   policy: {
     name: "Policy",
@@ -112,6 +110,18 @@ export const KINDS: Record<Kind, KindStyle> = {
     hue: "#d97aa8",
     shape: "outside",
     icon: ["M9 2v6", "M15 2v6", "M6 8h12v4a6 6 0 0 1-12 0z", "M12 18v4"],
+  },
+  api: {
+    name: "Api",
+    hue: "#ece8df",
+    shape: "box",
+    // What the model publishes to the outside world.
+    icon: [
+      "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z",
+      "M3 12h18",
+      "M12 3c3 3 3 15 0 18",
+      "M12 3c-3 3-3 15 0 18",
+    ],
   },
 };
 

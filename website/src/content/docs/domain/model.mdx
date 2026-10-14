@@ -244,7 +244,7 @@ A model is one bounded context, so every name in it means one thing. When two pa
 <DAG
   nodes={[
     { id: "support", label: "Support", type: "Domain.Model", layer: 0 },
-    { id: "api", label: "BankApi", type: "Domain.Api", layer: 1 },
+    { id: "api", label: "BankApi", type: "Domain.Api", kind: "api", layer: 1 },
     { id: "bank", label: "Bank", type: "Domain.Model", layer: 2, tone: "accent" },
   ]}
   edges={[
