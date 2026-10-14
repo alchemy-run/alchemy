@@ -13,10 +13,11 @@ responses streamed token by token. For queues, streams, schedules, and
 other event sources, use a [Lambda Function](/aws/compute/lambda).
 
 :::caution
-Web Functions run Node.js 24 on Arm64 and are available in `us-east-1`,
-`us-east-2`, `us-west-2`, `eu-west-1`, and `ap-northeast-1`. Code ships
-through the Alchemy assets bucket, so run `alchemy provider aws bootstrap`
-once per account and Region.
+Web Functions run Node.js 24 on Arm64. They launched in `us-east-1`,
+`us-east-2`, `us-west-2`, `eu-west-1`, and `ap-northeast-1`, and AWS is
+adding Regions: check the [Lambda pricing page](https://aws.amazon.com/lambda/pricing/)
+for where they run today. Code ships through the Alchemy assets bucket, so
+run `alchemy provider aws bootstrap` once per account and Region.
 :::
 
 ## Declare a Web Function

@@ -265,8 +265,11 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * apps, streaming AI responses. Use `AWS.Lambda.Function` for event sources
  * (SQS, DynamoDB Streams, S3 notifications, schedules) and direct invokes;
  * a Web Function only receives HTTP. Event sources and background loops
- * (`ServerHost.run`) are type errors in a Web Function and fail at plan. Web Functions are available in
- * `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, and `ap-northeast-1`.
+ * (`ServerHost.run`) are type errors in a Web Function and fail at plan.
+ * Web Functions launched in `us-east-1`, `us-east-2`, `us-west-2`,
+ * `eu-west-1`, and `ap-northeast-1`, and AWS is adding Regions; see the
+ * [Lambda pricing page](https://aws.amazon.com/lambda/pricing/) for where
+ * they run today. Alchemy doesn't restrict the Region.
  *
  * Every deploy uploads the bundle to the Alchemy assets bucket, creates an
  * immutable revision, and shifts the endpoint's traffic to it. Lambda keeps
