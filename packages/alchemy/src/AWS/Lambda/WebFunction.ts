@@ -136,8 +136,8 @@ export interface WebFunctionProps extends PlatformProps {
    * Lambda manages a dynamic per-environment limit that can be lower, but
    * never exceeds this value. This is not a total: the endpoint's peak is
    * `maxEnvironments × maxConcurrencyPerEnvironment`. Valid range: 1–128.
-   * Lower it for CPU- or memory-bound servers. Changing it creates a new
-   * revision.
+   * Lower it for CPU- or memory-bound servers: every environment has a
+   * fixed 2 GB of memory and 2 vCPUs. Changing it creates a new revision.
    * @default 64
    */
   maxConcurrencyPerEnvironment?: number;

@@ -214,6 +214,10 @@ most `maxEnvironments × maxConcurrencyPerEnvironment` requests are in
 flight. Lower it for CPU-heavy servers. Requests beyond `rateLimit` get
 HTTP 429.
 
+Each environment has 2 GB of memory and 2 vCPUs, and you can't change
+that. Node's heap defaults to 1 GB; raise it with
+`env: { NODE_OPTIONS: "--max-old-space-size=1536" }`.
+
 ## Serve from several Regions
 
 List extra Regions to get one global domain that routes each request to
