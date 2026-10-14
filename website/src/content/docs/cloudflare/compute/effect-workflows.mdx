@@ -7,8 +7,8 @@ An Effect workflow is a durable process written with `effect/workflow`: a
 series of steps whose results are stored, so a run that's interrupted
 resumes after its last finished step, and a run can wait hours or days for
 a timer or a signal. On Cloudflare they run on Durable Objects
-(`Cloudflare.DurableWorkflows`) or on Cloudflare Workflows
-(`Cloudflare.EffectWorkflows`), with the same workflow code.
+(`Cloudflare.Workflows.DurableObjectEngine`) or on Cloudflare Workflows
+(`Cloudflare.Workflows.NativeEngine`), with the same workflow code.
 
 Reach for Effect workflows when you want the same workflow code to run
 anywhere Effect's `WorkflowEngine` does: on Cloudflare, on
@@ -61,7 +61,7 @@ and `error` schemas, because its result is stored as JSON.
 
 ## Host it on Durable Objects
 
-`Cloudflare.DurableWorkflows` takes the workflow Layers and provides the
+`Cloudflare.Workflows.DurableObjectEngine` takes the workflow Layers and provides the
 engine. Provide it to the Worker, and capture the engine during init:
 handlers run later, outside the init's `Effect.provide`.
 
@@ -84,7 +84,7 @@ export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
         return HttpServerResponse.text(greeting);
       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
     };
-  }).pipe(Effect.provide(Cloudflare.DurableWorkflows(GreetLive))),
+  }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(GreetLive))),
 ) {}
 ```
 
@@ -93,12 +93,12 @@ it (`GreetWorkflow`), and deploying the Worker deploys them.
 
 ## Or run it on Cloudflare Workflows
 
-`Cloudflare.EffectWorkflows` hosts the same workflow Layers on Cloudflare
-Workflows instead: one Workflow class, `EffectWorkflows`, runs them all, and
+`Cloudflare.Workflows.NativeEngine` hosts the same workflow Layers on Cloudflare
+Workflows instead: one Workflow class, `NativeEngine`, runs them all, and
 each run is one Workflow instance. Swap the Layer and nothing else changes:
 
 ```typescript
-Effect.provide(Cloudflare.EffectWorkflows(GreetLive))
+Effect.provide(Cloudflare.Workflows.NativeEngine(GreetLive))
 ```
 
 Steps run with `step.do`, sleeps with `step.sleep`, and signals are
@@ -170,7 +170,7 @@ run too.
 
 Steps often call another Durable Object's methods. Those are runtime-only
 (they need `RuntimeContext`), which every run has, because each run happens
-inside a Durable Object event. `DurableWorkflows` satisfies that requirement
+inside a Durable Object event. `DurableObjectEngine` satisfies that requirement
 for the workflow Layers, so they can resolve namespaces while the Worker
 starts and call them from their steps:
 

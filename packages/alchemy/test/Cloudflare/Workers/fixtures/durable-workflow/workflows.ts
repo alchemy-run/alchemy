@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
 import { Journal } from "./journal.ts";
@@ -49,7 +50,12 @@ export const Parent = Workflow.make("Parent", {
 export const WorkflowsLive = Layer.unwrap(
   Effect.gen(function* () {
     const journals = yield* Journal;
-    const record = (id: string, entry: string) => journals.getByName(id).append(entry);
+    // Right after a deploy, a call to the journal can fail in transit.
+    const record = (id: string, entry: string) =>
+      journals
+        .getByName(id)
+        .append(entry)
+        .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }), Effect.orDie);
 
     const GreetLive = Greet.toLayer(({ id, name }) =>
       Effect.gen(function* () {

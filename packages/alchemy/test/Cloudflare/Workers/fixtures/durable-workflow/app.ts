@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -84,6 +85,17 @@ export const app = Effect.gen(function* () {
         default:
           return HttpServerResponse.text("Not Found", { status: 404 });
       }
-    }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine), Effect.orDie),
+    }).pipe(
+      Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
+      // Report why a request failed, so a failing test shows it.
+      Effect.catchCause((cause) =>
+        Effect.succeed(
+          HttpServerResponse.text(
+            `${Cause.pretty(cause)}\n${String((Cause.squash(cause) as { cause?: unknown })?.cause ?? "")}`,
+            { status: 500 },
+          ),
+        ),
+      ),
+    ),
   };
 });

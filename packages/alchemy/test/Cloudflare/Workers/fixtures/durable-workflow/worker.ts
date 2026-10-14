@@ -9,5 +9,5 @@ export type { PollResult } from "./app.ts";
 export default class DurableWorkflowWorker extends Cloudflare.Worker<DurableWorkflowWorker>()(
   "DurableWorkflowWorker",
   { main: import.meta.url },
-  app.pipe(Effect.provide(Cloudflare.DurableWorkflows(WorkflowsLive))),
+  app.pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(WorkflowsLive))),
 ) {}

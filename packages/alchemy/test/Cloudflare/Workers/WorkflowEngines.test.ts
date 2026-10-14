@@ -47,11 +47,11 @@ const freshId = (prefix: string) =>
   Effect.sync(() => `${prefix}-${crypto.randomUUID().slice(0, 8)}`);
 
 describe.concurrent.each([
-  { engine: "durable-objects", dev: true, stage: "durable-workflow-local" },
-  { engine: "durable-objects", dev: false, stage: "durable-workflow-live" },
-  { engine: "workflows", dev: true, stage: "effect-workflows-local" },
-  { engine: "workflows", dev: false, stage: "effect-workflows-live" },
-] as const)("Effect workflows on $engine (dev: $dev)", ({ engine, dev, stage }) => {
+  { engine: "durable-object", dev: true, stage: "durable-workflow-local" },
+  { engine: "durable-object", dev: false, stage: "durable-workflow-live" },
+  { engine: "native", dev: true, stage: "native-engine-local" },
+  { engine: "native", dev: false, stage: "native-engine-live" },
+] as const)("Workflows on the $engine engine (dev: $dev)", ({ engine, dev, stage }) => {
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state, engine);
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

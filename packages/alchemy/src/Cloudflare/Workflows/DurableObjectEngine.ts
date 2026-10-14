@@ -20,9 +20,9 @@ import {
   encodeResult,
   payloadCodec,
 } from "../../WorkflowEncoding.ts";
-import { DurableObject as CloudflareDurableObject } from "./DurableObject.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
-import type { Worker } from "./Worker.ts";
+import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import type { Worker } from "../Workers/Worker.ts";
 
 /**
  * Runs Effect workflows on Durable Objects. Each workflow gets its own Durable
@@ -68,7 +68,7 @@ import type { Worker } from "./Worker.ts";
  *         return HttpServerResponse.text(executionId);
  *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DurableWorkflows(SendWelcomeLive))),
+ *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(SendWelcomeLive))),
  * ) {}
  * ```
  *
@@ -76,7 +76,7 @@ import type { Worker } from "./Worker.ts";
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
+const DurableObjectEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
@@ -240,7 +240,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
   );
 
 /**
- * Host workflows on Durable Objects: provides `DurableWorkflowEngine` to the
+ * Host workflows on Durable Objects: provides a `WorkflowEngine` to the
  * given workflow Layers (from `Workflow.toLayer`), and to everything after them.
  *
  * Activities often call runtime-only APIs, like another Durable Object's
@@ -261,7 +261,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
  *         return HttpServerResponse.text("ok");
  *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DurableWorkflows(Layer.mergeAll(SendWelcomeLive, ChargeLive)))),
+ *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(Layer.mergeAll(SendWelcomeLive, ChargeLive)))),
  * ) {}
  * ```
  *
@@ -269,7 +269,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableWorkflows = <ROut, E, RIn>(
+export const DurableObjectEngine = <ROut, E, RIn>(
   workflows: Layer.Layer<ROut, E, RIn>,
 ): Layer.Layer<
   ROut | WorkflowEngine.WorkflowEngine,
@@ -278,7 +278,7 @@ export const DurableWorkflows = <ROut, E, RIn>(
 > =>
   // `Workflow.toLayer` lifts a handler's requirements onto its Layer, but a
   // handler only runs inside a run, which provides its own RuntimeContext.
-  workflows.pipe(Layer.provideMerge(DurableWorkflowEngine)) as Layer.Layer<
+  workflows.pipe(Layer.provideMerge(DurableObjectEngineLayer)) as Layer.Layer<
     ROut | WorkflowEngine.WorkflowEngine,
     E,
     Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
@@ -328,14 +328,14 @@ class CurrentExecution extends Context.Service<
       due: number,
     ) => Effect.Effect<void>;
   }
->()("alchemy/Cloudflare/DurableWorkflowEngine/CurrentExecution") {}
+>()("alchemy/Cloudflare/Workflows/DurableObjectEngine/CurrentExecution") {}
 
 const currentExecution = (operation: string) =>
   Effect.flatMap(Effect.serviceOption(CurrentExecution), (current) =>
     Option.isSome(current)
       ? Effect.succeed(current.value)
       : Effect.die(
-          new Error(`DurableWorkflowEngine: ${operation} only runs inside a workflow execution`),
+          new Error(`DurableObjectEngine: ${operation} only runs inside a workflow execution`),
         ),
   );
 
@@ -523,7 +523,7 @@ const resumeParent = (registration: Registration, parent: ParentRef) =>
 
 // ---------------------------------------------------------------- Durable Object calls
 
-const DefectTag = "alchemy/DurableWorkflowEngine/Defect";
+const DefectTag = "alchemy/Cloudflare/Workflows/DurableObjectEngine/Defect";
 
 /**
  * Workers RPC replaces thrown errors with an opaque "internal error". Return
