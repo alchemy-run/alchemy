@@ -13,6 +13,13 @@ import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
 import { makeCallback } from "../../Callback.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import {
+  decodeExit,
+  decodeResult,
+  encodeExit,
+  encodeResult,
+  payloadCodec,
+} from "../../WorkflowEncoding.ts";
 import { DurableObject as CloudflareDurableObject } from "./DurableObject.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import type { Worker } from "./Worker.ts";
@@ -509,41 +516,6 @@ const resumeParent = (registration: Registration, parent: ParentRef) =>
     const engine = registration.engine();
     yield* engine.resume({ _tag: parent.workflowName } as Workflow.Any, parent.executionId);
   });
-
-// ---------------------------------------------------------------- encoding
-
-const ExitJson = Schema.toCodecJson(Schema.Exit(Schema.Unknown, Schema.Unknown, Schema.Defect()));
-
-/**
- * Activity and deferred exits arrive with their values already encoded; a
- * void value is stored as null, since undefined isn't JSON.
- */
-const encodeExit = (exit: Exit.Exit<unknown, unknown>) =>
-  Schema.encodeEffect(ExitJson)(Exit.map(exit, (value) => value ?? null)).pipe(
-    Effect.map(JSON.stringify),
-    Effect.orDie,
-  );
-
-const decodeExit = (text: string) =>
-  Schema.decodeEffect(ExitJson)(JSON.parse(text)).pipe(Effect.orDie);
-
-const payloadCodec = (workflow: AnyWorkflow) =>
-  Schema.toCodecJson(workflow.payloadSchema) as unknown as Schema.Codec<unknown, unknown>;
-
-const resultCodec = (workflow: AnyWorkflow) =>
-  Schema.toCodecJson(
-    Schema.Exit(workflow.successSchema, workflow.errorSchema, Schema.Defect()),
-  ) as unknown as Schema.Codec<Exit.Exit<unknown, unknown>, unknown>;
-
-/** A workflow's own result is stored through its success and error schemas. */
-const encodeResult = (workflow: AnyWorkflow, exit: Exit.Exit<unknown, unknown>) =>
-  Schema.encodeEffect(resultCodec(workflow))(exit).pipe(Effect.map(JSON.stringify), Effect.orDie);
-
-const decodeResult = (workflow: AnyWorkflow, text: string) =>
-  Schema.decodeEffect(resultCodec(workflow))(JSON.parse(text)).pipe(
-    Effect.map((exit) => new Workflow.Complete({ exit })),
-    Effect.orDie,
-  );
 
 // ---------------------------------------------------------------- Durable Object calls
 
