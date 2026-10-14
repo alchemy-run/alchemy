@@ -30,7 +30,7 @@ laptop) has no such hook, so:
 ```
 
 Sections 1–3 are user code, the same on every platform except the Layer in
-`alchemy.run.ts`. Sections 4–11 are what Alchemy does underneath.
+`alchemy.run.ts`. Sections 4–12 are what Alchemy does underneath.
 
 ## 1. User code: declare the egresses
 
@@ -282,7 +282,7 @@ export default AWS.MicroVM.Sandbox(
 ```
 
 Nothing about the proxy appears in either: on a microVM the bootstrap starts
-it (section 7); in a Cloudflare Container there is none (section 11).
+it (section 8); in a Cloudflare Container there is none (section 12).
 
 ## 3. User code: pick the platform
 
@@ -333,7 +333,7 @@ yield* worker.bind`Egress(${key})`({ env: { [`ALCHEMY_EGRESS_SECRET_${key}`]: to
 
 **The image does not list hosts.** Which hosts go to the gateway depends on
 the session (narrowing) and changes mid-session (`setEgress`), so it comes
-from the grant at runtime (section 7).
+from the grant at runtime (section 8).
 
 ## 5. Deploy time: what the microVM Layer binds into the hosting Worker
 
@@ -367,10 +367,12 @@ yield* worker.bind`SandboxLauncher`({ env: { AWS_ROLE_ARN: launcher.roleArn } })
 const GRANT_TTL = 5 * 60_000;
 const RENEW_EVERY = 2 * 60_000;
 
-let current: ReadonlyArray<Egress> = [];
+/** The sandbox's egress set, as data: survives the Durable Object being evicted (section 7). */
+const loadEgress = state.storage.get<ReadonlyArray<EgressRef>>("egress").pipe(Effect.map((e) => e ?? []));
+const saveEgress = (egress: ReadonlyArray<EgressRef>) => state.storage.put("egress", egress);
 
 /** A grant for this session's egresses: what the sandbox may route to the gateway. */
-const mintGrant = (egress: ReadonlyArray<Egress>) =>
+const mintGrant = (egress: ReadonlyArray<EgressRef>) =>
   Grant.encode(
     [
       `expires < ${Date.now() + GRANT_TTL}`,
@@ -381,18 +383,22 @@ const mintGrant = (egress: ReadonlyArray<Egress>) =>
     ].reduce(Grant.attenuate, Grant.mint(env.ALCHEMY_EGRESS_ROOT_KEY, "v1")),
   );
 
-/** Hand the proxy a new grant over its control port (section 7). */
+/** Hand the proxy a new grant over its control port (section 8). */
 const pushGrant = (grant: string) =>
   HttpClient.post(`${machineUrl(3129)}/grant`, {
     body: grant,
     headers: { authorization: `Bearer ${controlSecret}` },
   });
 
-start: ({ egress }) =>
+start: ({ egress: given }) =>
   Effect.gen(function* () {
-    current = egress;
-    // Only this Durable Object can change the sandbox's grant.
-    controlSecret = crypto.randomUUID();
+    // A given set replaces the stored one; no set keeps whatever is stored (setEgress included).
+    if (given !== undefined) yield* saveEgress(given.map(Egress.toRef));
+    const egress = yield* loadEgress;
+    if (yield* running) return yield* pushGrant(mintGrant(egress)); // already up: just re-sync
+    // Only this Durable Object can change the sandbox's grant; stored with the machine id.
+    const controlSecret = crypto.randomUUID();
+    yield* state.storage.put("controlSecret", controlSecret);
     yield* microvms.run({
       image: imageRef, // the program's bundle + Alchemy's bootstrap + section 4's layers
       env: {
@@ -414,21 +420,79 @@ start: ({ egress }) =>
 alarm: () =>
   Effect.gen(function* () {
     if (!(yield* running)) return; // stopped: no grant, no renewals
-    yield* pushGrant(mintGrant(current));
+    yield* pushGrant(mintGrant(yield* loadEgress)); // from storage: correct after an eviction
     yield* state.storage.setAlarm(Date.now() + RENEW_EVERY);
   }),
 
+// Stored first: a crash between the two steps still converges on the next alarm.
 setEgress: (egress) =>
-  Effect.sync(() => (current = egress)).pipe(Effect.andThen(pushGrant(mintGrant(egress)))),
+  saveEgress(egress.map(Egress.toRef)).pipe(
+    Effect.andThen(pushGrant(mintGrant(egress.map(Egress.toRef)))),
+  ),
 
 stop: () =>
   pushGrant("").pipe( // routes nothing from now on
     Effect.andThen(microvms.stop(machineId)),
     Effect.andThen(state.storage.deleteAlarm()),
+    // The egress set stays stored: a later start() with no `egress` resumes with it.
   ),
 ```
 
-## 7. Run time: the sandbox's bootstrap runs the proxy
+## 7. Where egress state lives
+
+Egress is stateless where it can be and stateful in one place: the
+Durable Object that owns the sandbox.
+
+```ts
+// Stateless, fixed at deploy time: declarations, rules, tokens (in the gateway's host env).
+export const Repo = GitHub.Egress(Sandbox, { token: GitHub.ProfileToken, repositories });
+
+// Stateless, self-describing: a grant carries its egresses, scopes, hosts and expiry.
+// The gateway needs only the root key to check it.
+Grant.verify(env.ALCHEMY_EGRESS_ROOT_KEY, grant);
+
+// Stateful, in the owning Durable Object's storage: the sandbox's egress set, as data.
+yield* state.storage.get("egress");
+// [
+//   { egress: "Model" },
+//   { egress: "Repo", scope: { repository: "alchemy-run/alchemy", issue: 42 } },
+// ]
+
+// Stateful, in the sandbox's memory: the proxy's last pushed grant. A cache of the above.
+```
+
+So an egress value is data. `repo.narrow(scope)` returns a declaration key
+plus a scope, and the handler is looked up from the key wherever it runs:
+
+```ts
+// alchemy internal: Egress/Egress.ts
+export interface EgressRef {
+  readonly egress: string; // the declaration's key: "Repo"
+  readonly scope?: unknown; // what narrow() was given
+}
+export const toRef = (egress: Egress): EgressRef => ({ egress: egress.key, scope: egress.scope });
+```
+
+What `start` and `setEgress` do with it, on every platform:
+
+```ts
+yield* sandbox.start({ egress: [model, repo.narrow({ repository, issue })] }); // stores, then applies
+yield* sandbox.setEgress([model]); // stores, then applies
+yield* sandbox.start(); // no `egress`: applies whatever is stored (keeps the setEgress above)
+yield* sandbox.stop(); // stops; the stored set stays for the next start()
+```
+
+Every failure converges from storage:
+
+```ts
+// The Durable Object is evicted while the sandbox runs:
+//   microVM: the next alarm mints from storage, not from an empty variable.
+//   Cloudflare: constructing the Durable Object re-applies the stored set's interception.
+// The proxy restarts: its startup grant may have expired; the next alarm (≤2 min) pushes a fresh one.
+// A crash between storing and applying: the next alarm / construction applies what's stored.
+```
+
+## 8. Run time: the sandbox's bootstrap runs the proxy
 
 ```ts
 // alchemy internal: Runtime/Bootstrap/index.ts — the image's entrypoint, before `main`
@@ -514,7 +578,7 @@ export const startEgressProxy = async (options: {
 
 The proxy never asks anyone for a grant. It uses the one it was last given.
 
-## 8. Run time: the gateway (stateless)
+## 9. Run time: the gateway (stateless)
 
 `Egress.Gateway({ egress })` hooks nothing. It binds the root key and the
 egresses' secrets into whatever yields it (a Worker, a Lambda, a server), and
@@ -543,7 +607,7 @@ export const gateway = (egress: ReadonlyArray<EgressDeclaration>) =>
   };
 ```
 
-## 9. Revocation
+## 10. Revocation
 
 ```ts
 // The sandbox loses access at once: the proxy swaps to the new grant before the call returns.
@@ -557,7 +621,7 @@ If 5 minutes is too long for writes, the next step is a revocation list owned
 by the gateway (keyed by grant id, written by the Durable Object, checked on
 writes only). The gateway still wouldn't know who owns the sandbox.
 
-## 10. Grants
+## 11. Grants
 
 ```ts
 // alchemy internal: Egress/Grant.ts
@@ -595,14 +659,24 @@ A grant isn't a credential for GitHub or Anthropic. It lets whoever holds it
 ask the gateway to run the egresses it names, as narrowed, for up to 5
 minutes. The tokens stay in the gateway's host.
 
-## 11. Cloudflare Containers stay as they are
+## 12. Cloudflare Containers stay as they are
 
 `src/Sandbox.cloudflare.ts` (section 2) needs no proxy, grant or gateway:
 the Durable Object intercepts the container's traffic and runs the same
-handlers (built). The one change for Cloudflare is streaming request bodies
-instead of buffering them; today `makeEgressHandle` reads the whole body.
+handlers (built). Two changes for Cloudflare:
 
-## 12. Every environment
+```ts
+// 1. A bug today: ContainerClient.ts keeps the egress set in memory only.
+coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durable Object is evicted
+// - The Durable Object restarts while the container runs: interception is lost, traffic goes
+//   direct (fails closed: the placeholder token doesn't authenticate).
+// - The next start({ egress }) re-applies the original set, silently undoing setEgress.
+// Fix: store the set as EgressRefs (section 7) and re-apply it when the Durable Object is constructed.
+
+// 2. Stream request bodies; today makeEgressHandle reads the whole body.
+```
+
+## 13. Every environment
 
 Each host is a constructor over the same `Sandbox` declaration, taking that
 host's props and a program that provides that host's layers:
@@ -611,7 +685,7 @@ host's props and a program that provides that host's layers:
 // Cloudflare Container: interception (built)
 Cloudflare.Containers.Sandbox(Sandbox, { main, image, instance: "standard-4" }, program);
 
-// AWS microVM: sections 4–10
+// AWS microVM: sections 4–11
 AWS.MicroVM.Sandbox(Sandbox, { main, image, memory: "32 GB", cpu: 8, gateway }, program);
 
 // ECS / Fly / Kubernetes: the same proxy and gateway; only how the sandbox starts differs
@@ -622,7 +696,7 @@ Fly.Sandbox(Sandbox, { main, image, size: "performance-8x", gateway }, program);
 Local.Sandbox(Sandbox, { main, gateway }, program);
 ```
 
-## 13. Open questions
+## 14. Open questions
 
 1. **Certificates:** the proxy generates X.509 leaf certificates, which Node can't do natively. Use `@peculiar/x509`, or write the proxy in Go?
 2. **The control port** needs the platform to expose port 3129 to the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
