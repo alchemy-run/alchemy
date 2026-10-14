@@ -12,7 +12,8 @@ laptop) has no such hook, so:
   run anywhere that serves HTTP: its own Worker (the easiest), your Worker,
   a Lambda with a function URL, a server.
 - **The Durable Object that started the sandbox keeps it supplied with grants.**
-  A fresh 5-minute grant every 2 minutes, pushed to the proxy, plus a new one
+  A fresh grant (5 minutes by default, `ttl` on `start`) renewed well before it
+  expires, pushed to the proxy, plus a new one
   whenever the egress set changes. Revoking means pushing an empty grant and
   then stopping.
 
@@ -24,7 +25,7 @@ laptop) has no such hook, so:
 │ proxy (bootstrap)                       │        │    → add the token → stream to api.github.com           │
 │   routes the grant's `hosts`            │        │                                                         │
 │   other hosts: tunnel straight out      │        │  Api Worker → Durable Object that owns the sandbox      │
-│ control port :3129 ◀────────────────────┼────────┤    alarm every 2 min: push a fresh 5-min grant          │
+│ control port :3129 ◀────────────────────┼────────┤    alarm before expiry: push a fresh grant (ttl)       │
 │   (new grant: routing follows it)       │        │    setEgress: push a new grant · revoke: push ""        │
 └─────────────────────────────────────────┘        └─────────────────────────────────────────────────────────┘
 ```
@@ -81,6 +82,9 @@ export class Agent extends Cloudflare.DurableObject<Agent>()(
         work: (issue: number) =>
           sandbox.start({
             egress: [model, repo.narrow({ repository: "alchemy-run/alchemy", issue })],
+            // How long each grant lives; a grant copied out of the sandbox is useful this long.
+            // Default 5 minutes. No effect on a Cloudflare Container (no grants).
+            ttl: "5 minutes",
           }),
         // Mid-session: the proxy gets a new grant at once.
         modelOnly: () => sandbox.setEgress([model]),
@@ -364,21 +368,27 @@ yield* worker.bind`SandboxLauncher`({ env: { AWS_ROLE_ARN: launcher.roleArn } })
 
 ```ts
 // alchemy internal: AWS/MicroVM/Sandbox.ts — runs in the Durable Object that owns the sandbox
-const GRANT_TTL = 5 * 60_000;
-const RENEW_EVERY = 2 * 60_000;
+/** What the Durable Object stores per sandbox (section 7): survives an eviction. */
+interface EgressState {
+  readonly ttl: Duration.Duration; // from start({ ttl }) / setEgress(egress, { ttl })
+  readonly egress: ReadonlyArray<EgressRef>;
+}
+const load = state.storage.get<EgressState>("egress").pipe(
+  Effect.map((s) => s ?? { ttl: Duration.minutes(5), egress: [] }),
+);
+const save = (next: EgressState) => state.storage.put("egress", next);
 
-/** The sandbox's egress set, as data: survives the Durable Object being evicted (section 7). */
-const loadEgress = state.storage.get<ReadonlyArray<EgressRef>>("egress").pipe(Effect.map((e) => e ?? []));
-const saveEgress = (egress: ReadonlyArray<EgressRef>) => state.storage.put("egress", egress);
+/** Renew at 40% of the TTL: one push can fail and the next still lands before expiry. */
+const renewIn = (ttl: Duration.Duration) => Duration.toMillis(ttl) * 0.4;
 
 /** A grant for this session's egresses: what the sandbox may route to the gateway. */
-const mintGrant = (egress: ReadonlyArray<EgressRef>) =>
+const mintGrant = ({ ttl, egress }: EgressState) =>
   Grant.encode(
     [
-      `expires < ${Date.now() + GRANT_TTL}`,
-      ...egress.map((e) => `egress ${e.declaration} = ${JSON.stringify(e.scope ?? {})}`),
+      `expires < ${Date.now() + Duration.toMillis(ttl)}`,
+      ...egress.map((e) => `egress ${e.egress} = ${JSON.stringify(e.scope ?? {})}`),
       // e.g. 'egress Repo = {"repository":"alchemy-run/alchemy","issue":42}'
-      `hosts = ${egress.flatMap((e) => e.hosts).join(",")}`,
+      `hosts = ${egress.flatMap((e) => hostsOf(e)).join(",")}`,
       // e.g. "api.anthropic.com,api.github.com,uploads.github.com,github.com"
     ].reduce(Grant.attenuate, Grant.mint(env.ALCHEMY_EGRESS_ROOT_KEY, "v1")),
   );
@@ -390,12 +400,16 @@ const pushGrant = (grant: string) =>
     headers: { authorization: `Bearer ${controlSecret}` },
   });
 
-start: ({ egress: given }) =>
+start: ({ egress: given, ttl }) =>
   Effect.gen(function* () {
     // A given set replaces the stored one; no set keeps whatever is stored (setEgress included).
-    if (given !== undefined) yield* saveEgress(given.map(Egress.toRef));
-    const egress = yield* loadEgress;
-    if (yield* running) return yield* pushGrant(mintGrant(egress)); // already up: just re-sync
+    const stored = yield* load;
+    const current: EgressState = {
+      ttl: ttl !== undefined ? Duration.decode(ttl) : stored.ttl,
+      egress: given !== undefined ? given.map(Egress.toRef) : stored.egress,
+    };
+    yield* save(current);
+    if (yield* running) return yield* pushGrant(mintGrant(current)); // already up: just re-sync
     // Only this Durable Object can change the sandbox's grant; stored with the machine id.
     const controlSecret = crypto.randomUUID();
     yield* state.storage.put("controlSecret", controlSecret);
@@ -404,7 +418,7 @@ start: ({ egress: given }) =>
       env: {
         ...imageEnv, // GH_TOKEN=alchemy-egress, ALCHEMY_EGRESS_PROXY=1
         ALCHEMY_EGRESS_GATEWAY: env.ALCHEMY_EGRESS_GATEWAY,
-        ALCHEMY_EGRESS_GRANT: mintGrant(egress), // the first grant
+        ALCHEMY_EGRESS_GRANT: mintGrant(current), // the first grant
         ALCHEMY_EGRESS_CONTROL_SECRET: controlSecret,
         HTTPS_PROXY: "http://127.0.0.1:3128",
         HTTP_PROXY: "http://127.0.0.1:3128",
@@ -413,22 +427,30 @@ start: ({ egress: given }) =>
       },
       ports: [3000, 3129], // the harness; the proxy's control port
     });
-    yield* state.storage.setAlarm(Date.now() + RENEW_EVERY);
+    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl));
   }),
 
-// Every 2 minutes while the sandbox runs: a fresh 5-minute grant.
+// While the sandbox runs: a fresh grant before the current one expires (every 2 min at the default).
 alarm: () =>
   Effect.gen(function* () {
     if (!(yield* running)) return; // stopped: no grant, no renewals
-    yield* pushGrant(mintGrant(yield* loadEgress)); // from storage: correct after an eviction
-    yield* state.storage.setAlarm(Date.now() + RENEW_EVERY);
+    const current = yield* load; // from storage: correct after an eviction
+    yield* pushGrant(mintGrant(current));
+    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl));
   }),
 
 // Stored first: a crash between the two steps still converges on the next alarm.
-setEgress: (egress) =>
-  saveEgress(egress.map(Egress.toRef)).pipe(
-    Effect.andThen(pushGrant(mintGrant(egress.map(Egress.toRef)))),
-  ),
+setEgress: (egress, options) =>
+  Effect.gen(function* () {
+    const stored = yield* load;
+    const current: EgressState = {
+      ttl: options?.ttl !== undefined ? Duration.decode(options.ttl) : stored.ttl,
+      egress: egress.map(Egress.toRef),
+    };
+    yield* save(current);
+    yield* pushGrant(mintGrant(current));
+    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl)); // a new ttl reschedules
+  }),
 
 stop: () =>
   pushGrant("").pipe( // routes nothing from now on
@@ -451,12 +473,15 @@ export const Repo = GitHub.Egress(Sandbox, { token: GitHub.ProfileToken, reposit
 // The gateway needs only the root key to check it.
 Grant.verify(env.ALCHEMY_EGRESS_ROOT_KEY, grant);
 
-// Stateful, in the owning Durable Object's storage: the sandbox's egress set, as data.
+// Stateful, in the owning Durable Object's storage: the sandbox's egress set and ttl, as data.
 yield* state.storage.get("egress");
-// [
-//   { egress: "Model" },
-//   { egress: "Repo", scope: { repository: "alchemy-run/alchemy", issue: 42 } },
-// ]
+// {
+//   ttl: "5 minutes",
+//   egress: [
+//     { egress: "Model" },
+//     { egress: "Repo", scope: { repository: "alchemy-run/alchemy", issue: 42 } },
+//   ],
+// }
 
 // Stateful, in the sandbox's memory: the proxy's last pushed grant. A cache of the above.
 ```
@@ -476,8 +501,8 @@ export const toRef = (egress: Egress): EgressRef => ({ egress: egress.key, scope
 What `start` and `setEgress` do with it, on every platform:
 
 ```ts
-yield* sandbox.start({ egress: [model, repo.narrow({ repository, issue })] }); // stores, then applies
-yield* sandbox.setEgress([model]); // stores, then applies
+yield* sandbox.start({ egress: [model, repo.narrow({ repository, issue })], ttl: "5 minutes" }); // stores, then applies
+yield* sandbox.setEgress([model], { ttl: "1 hour" }); // stores, then applies; ttl optional (kept if omitted)
 yield* sandbox.start(); // no `egress`: applies whatever is stored (keeps the setEgress above)
 yield* sandbox.stop(); // stops; the stored set stays for the next start()
 ```
@@ -488,7 +513,7 @@ Every failure converges from storage:
 // The Durable Object is evicted while the sandbox runs:
 //   microVM: the next alarm mints from storage, not from an empty variable.
 //   Cloudflare: constructing the Durable Object re-applies the stored set's interception.
-// The proxy restarts: its startup grant may have expired; the next alarm (≤2 min) pushes a fresh one.
+// The proxy restarts: its startup grant may have expired; the next alarm (≤40% of ttl) pushes a fresh one.
 // A crash between storing and applying: the next alarm / construction applies what's stored.
 ```
 
@@ -614,10 +639,10 @@ export const gateway = (egress: ReadonlyArray<EgressDeclaration>) =>
 yield* sandbox.setEgress([model]); // GitHub hosts go straight out, without a token
 yield* sandbox.stop(); // the proxy gets "", then the microVM stops
 
-// A grant copied out of the sandbox keeps working until its `expires` caveat: at most 5 minutes.
+// A grant copied out of the sandbox keeps working until its `expires` caveat: at most `ttl`.
 ```
 
-If 5 minutes is too long for writes, the next step is a revocation list owned
+If a short `ttl` still isn't enough for writes, the next step is a revocation list owned
 by the gateway (keyed by grant id, written by the Durable Object, checked on
 writes only). The gateway still wouldn't know who owns the sandbox.
 
@@ -701,4 +726,4 @@ Local.Sandbox(Sandbox, { main, gateway }, program);
 1. **Certificates:** the proxy generates X.509 leaf certificates, which Node can't do natively. Use `@peculiar/x509`, or write the proxy in Go?
 2. **The control port** needs the platform to expose port 3129 to the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
 3. **Bypassing the proxy:** tools that ignore `HTTPS_PROXY` reach the internet directly. That can't leak credentials, since the sandbox has none, but it does skip the rules for non-egress hosts. Closing it needs a firewall that only allows the Worker.
-4. **A missed renewal:** if the Durable Object can't reach the control port for 5 minutes, the sandbox's grant expires and egress stops until the next push. Is that the right failure, or should the proxy fall back to asking?
+4. **A missed renewal:** if the Durable Object can't reach the control port for a whole `ttl`, the sandbox's grant expires and egress stops until the next push. Is that the right failure, or should the proxy fall back to asking?
