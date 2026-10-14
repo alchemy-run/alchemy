@@ -136,14 +136,36 @@ Being on an Api doesn't mean anyone may use an entry for anything. Each entry st
 
 ## Serve it
 
-`httpEffect` turns an Api into an HTTP handler. Mount it on a route in whatever serves your app.
+An Api is served from a Worker. `httpEffect` turns the Api into an HTTP handler, and the Worker returns it as its `fetch`. This is the tutorial's bank:
 
 ```typescript title="src/BankWorker.ts"
-const customerApi = yield* CustomerApi.httpEffect;
-const supportApi = yield* SupportApi.httpEffect;
+const BankLive = SessionLive.pipe(
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provide(DomainCloudflare.DurableObjects),
+);
+
+export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+  "BankWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* BankApi.httpEffect;
+    return { fetch: api };
+  }).pipe(Effect.provide(BankLive)),
+) {}
 ```
 
-The handler needs the hosted model, plus implementations of any middleware its entries declare, such as the session check. Commands, `get` and `list` are plain requests. Live reads, `watch` and `events`, are upgraded to WebSockets connected to the aggregate or view that owns the key, which pushes each change as it commits.
+`BankLive` is everything the handler needs: the model hosted on Durable Objects, with its policies and projections, and an implementation of every middleware the Api's entries declare, here the session check. Deploying the Worker deploys the Durable Objects with it.
+
+Commands, `get`, `peek` and `list` are plain requests. Live reads, `watch` and `events`, are upgraded to WebSockets connected to the Durable Object that owns the key, which pushes each change as it commits.
+
+A Worker can serve several Apis by routing on the path. The example bank serves customers on `/api` and support agents on `/support`:
+
+```typescript title="src/BankWorker.ts"
+if (path.startsWith("/api")) return yield* customerApi;
+if (path.startsWith("/support")) return yield* supportApi;
+```
+
+See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted.
 
 ## Call it with a typed client
 
