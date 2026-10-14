@@ -31,7 +31,8 @@ for (const mode of ["config", "environment"] as const) {
         );
         // Port zero cannot be a reachable gateway; Docker is also unavailable.
         const error = yield* ensureFloci({
-          external: mode === "config",
+          // Omitted in environment mode: an explicit value overrides the env var.
+          external: mode === "config" ? true : undefined,
           port: 0,
           elbListenerPorts: [],
           cloudfrontEdgePorts: [],
