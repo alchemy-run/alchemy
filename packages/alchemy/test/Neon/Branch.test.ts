@@ -15,6 +15,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
+import * as Drift from "@/Drift";
 import { Branch, type BranchEndpointConfig, type BranchProps } from "@/Neon/Branch";
 import type { PostgresOrigin } from "@/Neon/PostgresOrigin";
 import { Project } from "@/Neon/Project";
@@ -293,6 +294,50 @@ describe.concurrent(
           ).toBe(true);
         }),
       { timeout: 120_000 },
+    );
+
+    test.provider(
+      "detects and repairs endpoint settings changed out of band",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { project, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const project = yield* Project("EndpointDriftProject", {
+                // Within the Neon Free plan limit, so the test also runs there.
+                historyRetentionSeconds: 21_600,
+              });
+              const branch = yield* Branch("EndpointDriftBranch", {
+                project,
+                endpoints: [
+                  { type: "read_write", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 1 },
+                ],
+              });
+              return { project, branch };
+            }),
+          );
+          const scope = { project_id: project.projectId, branch_id: branch.branchId };
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect((yield* detectDrift()).resources.EndpointDriftBranch?.action).toBe("unchanged");
+
+          const endpoint = (yield* listProjectBranchEndpoints(scope)).endpoints[0]!;
+          const change = yield* updateProjectEndpoint({
+            project_id: scope.project_id,
+            endpoint_id: endpoint.id,
+            endpoint: { autoscaling_limit_max_cu: 0.5 },
+          });
+          yield* waitForOperations(change.operations);
+          expect((yield* detectDrift()).resources.EndpointDriftBranch?.action).toBe("drifted");
+
+          const repaired = yield* Drift.repair(stack).pipe(Effect.provide(stack.state));
+          expect(repaired.resources.EndpointDriftBranch?.action).toBe("repaired");
+          const restored = (yield* listProjectBranchEndpoints(scope)).endpoints[0]!;
+          expect(restored.id).toBe(endpoint.id);
+          expect(restored.autoscaling_limit_max_cu).toBe(1);
+          expect((yield* detectDrift()).resources.EndpointDriftBranch?.action).toBe("unchanged");
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     test.provider(
