@@ -30,7 +30,9 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),
-        Layer.provideMerge(Credentials.fromEnv()),
+        // The role's credentials come from the container credentials endpoint,
+        // not `AWS_ACCESS_KEY_ID`.
+        Layer.provideMerge(Credentials.fromContainerMetadata()),
         Layer.provideMerge(Region.fromEnv()),
         Layer.provideMerge(platform),
         Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())),
