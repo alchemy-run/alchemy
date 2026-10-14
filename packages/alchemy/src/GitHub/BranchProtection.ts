@@ -396,8 +396,7 @@ type BranchProtectionUpdate = Omit<UpdateBranchProtectionParams, "required_statu
 // GitHub rejects a request that sends both. The route stays a `string` so
 // `request` accepts the body that is serialized. `BranchProtectionUpdate`
 // still checks every other field against the endpoint.
-const UPDATE_BRANCH_PROTECTION: string =
-  "PUT /repos/{owner}/{repo}/branches/{branch}/protection";
+const UPDATE_BRANCH_PROTECTION: string = "PUT /repos/{owner}/{repo}/branches/{branch}/protection";
 
 const requiredStatusChecksOf = (
   checks: BranchProtectionProps["requiredStatusChecks"],
