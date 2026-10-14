@@ -27,7 +27,11 @@ const buildRolePolicyStatements: PolicyStatement[] = [
   {
     Effect: "Allow",
     Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-    Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
+    Resource: [
+      "arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*",
+      // Where Lambda writes MicroVM build logs.
+      "arn:aws:logs:*:*:log-group:/aws/lambda-microvms/*",
+    ],
   },
 ];
 

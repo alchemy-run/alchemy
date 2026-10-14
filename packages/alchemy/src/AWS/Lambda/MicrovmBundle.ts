@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -38,10 +39,11 @@ export const buildMicrovmDockerfile = (
       ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
         // `unzip` (and `tar`) present before the installer runs.
         "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
-      : userDockerfile === undefined
-        ? "RUN dnf install -y nodejs && dnf clean all"
+      : // AL2023's default `nodejs` is Node 18 (EOL, no global `crypto`).
+        userDockerfile === undefined
+        ? "RUN dnf install -y nodejs22 && dnf clean all"
         : // A custom base (e.g. `node:24-bookworm`) may already carry node.
-          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs && dnf clean all)";
+          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs22 && dnf clean all)";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [
     base,
@@ -90,7 +92,9 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const realMain = yield* fs.realPath(main);
+  // `main` may be `import.meta.url` (a file URL) or `import.meta.filename`.
+  const mainPath = main.startsWith("file:") ? yield* Effect.sync(() => fileURLToPath(main)) : main;
+  const realMain = yield* fs.realPath(mainPath);
   const cwd = yield* findCwdForBundle(realMain);
 
   const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {

@@ -101,7 +101,7 @@ const sandboxError = (message: string) => (cause: unknown) =>
   });
 
 const imageTag = (id: string, size: string) =>
-  (MicrovmImagePlatform as unknown as () => (id: string) => MicrovmImage)()(
+  (MicrovmImagePlatform as unknown as () => (id: string) => Effect.Effect<unknown>)()(
     microvmSandboxImageId(id, size),
   );
 
@@ -141,7 +141,8 @@ export const connectMicrovmSandbox = (id: string, descriptor: SandboxHostDescrip
     const ops: Record<string, SizeOps> = {};
     yield* Effect.gen(function* () {
       for (const size of sizes) {
-        const image = imageTag(id, size);
+        // The platform tag yields the image resource (its Outputs bind into the Worker).
+        const image = (yield* imageTag(id, size)) as MicrovmImage;
         ops[size] = {
           imageArn: (yield* image.imageArn) as unknown as Effect.Effect<string>,
           run: yield* RunMicrovm(image),

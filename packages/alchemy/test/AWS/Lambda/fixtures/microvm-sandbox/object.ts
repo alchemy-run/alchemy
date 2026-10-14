@@ -26,7 +26,7 @@ export class MicrovmSandboxObject extends Cloudflare.DurableObject<MicrovmSandbo
             size,
             egress: [
               gateway.repo.narrow({ repository: REPO_A }),
-              gateway.repo.narrow({ repository: REPO_B }),
+              gateway.repo.narrow({ repository: REPO_B, graphql: false }),
             ],
             ttl: ttlMillis,
           }),

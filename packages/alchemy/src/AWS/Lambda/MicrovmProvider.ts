@@ -66,6 +66,7 @@ const withBindings = (
 };
 
 const READY_STATES = new Set<string>(["CREATED", "UPDATED"]);
+const BUILDING_STATES = new Set<string>(["CREATING", "UPDATING"]);
 const FAILED_STATES = new Set<string>(["CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"]);
 
 const toIso = (value: Date | string | undefined): string | undefined =>
@@ -490,15 +491,21 @@ export const MicrovmImageProvider = () =>
       const artifact = yield* resolveArtifact(id, news, session);
 
       // Observe — prefer the cached ARN; otherwise look up by name (a name
-      // is not a valid `getMicrovmImage` identifier).
-      const observed = output?.imageArn
+      // is not a valid `getMicrovmImage` identifier). A build still in
+      // flight (an interrupted deploy) can't be updated: wait it out.
+      const found = output?.imageArn
         ? yield* getImage(output.imageArn)
         : yield* findImageByName(name);
+      const observed =
+        found && BUILDING_STATES.has(found.state)
+          ? yield* waitUntilSettled(found.imageArn, session)
+          : found;
 
       // Ensure + sync: rebuild only when the build identity changed.
       const image = !observed
         ? yield* createImage(name, news, artifact, baseImageArn, desiredTags, session)
-        : output?.codeArtifact?.hash === artifact.hash
+        : // A failed build is rebuilt even when nothing changed.
+          output?.codeArtifact?.hash === artifact.hash && !FAILED_STATES.has(observed.state)
           ? observed
           : yield* updateImage(observed.imageArn, news, artifact, baseImageArn, session);
 
@@ -514,13 +521,19 @@ export const MicrovmImageProvider = () =>
       yield* terminateRunningMicrovms(output.imageArn, session);
       yield* session.note(`Deleting MicroVM image ${output.name}...`);
 
+      // A build in flight blocks the delete ("current state"): wait it out.
+      const current = yield* getImage(output.imageArn);
+      if (current && BUILDING_STATES.has(current.state)) {
+        yield* waitUntilSettled(output.imageArn, session);
+      }
       yield* microvms.deleteMicrovmImage({ imageIdentifier: output.imageArn }).pipe(
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         // A MicroVM caught mid-termination still blocks the delete; retry
         // briefly until the instances are fully gone.
         Effect.retry({
           while: (e): e is ValidationException =>
-            e._tag === "ValidationException" && e.message.includes("running MicroVMs"),
+            e._tag === "ValidationException" &&
+            (e.message.includes("running MicroVMs") || e.message.includes("current state")),
           schedule: Schedule.max([Schedule.fixed(5_000), Schedule.recurs(12)]),
         }),
       );
@@ -641,6 +654,23 @@ const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
       schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
         Schedule.tap(({ attempt }) =>
           session.note(`Waiting for MicroVM image build... (${attempt * 10}s)`),
+        ),
+      ),
+    }),
+  );
+
+/** Wait until no build is in flight; the image may have built or failed. */
+const waitUntilSettled = (imageArn: string, session: ScopedPlanStatusSession) =>
+  Effect.gen(function* () {
+    const image = yield* microvms.getMicrovmImage({ imageIdentifier: imageArn });
+    if (!BUILDING_STATES.has(image.state)) return image;
+    return yield* new ImageBuilding({ imageArn, state: image.state });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ImageBuilding",
+      schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for an earlier MicroVM image build... (${attempt * 10}s)`),
         ),
       ),
     }),
