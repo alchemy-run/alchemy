@@ -595,6 +595,7 @@ export default defineConfig({
                   link: "/cloudflare/compute/container-lifecycle",
                 },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
               ],
             },
             {

@@ -140,6 +140,9 @@ bun alchemy deploy
 | A policy | One Durable Object per policy and key (by default, per source instance) |
 | A projection | One Durable Object per projection and key, with the key's input log |
 | A stream key, like the card of `a-1` | One Durable Object per stream and key |
+| A saga run, like transfer `t-1` | One Durable Object per saga and run, holding its steps' results |
+
+Sagas run on `Cloudflare.DurableWorkflows`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
 ## Count on these guarantees
 

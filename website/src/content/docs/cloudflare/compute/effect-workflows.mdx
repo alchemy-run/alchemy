@@ -1,0 +1,186 @@
+---
+title: Effect workflows
+description: Run Effect workflows on Durable Objects. Declare a workflow with effect/workflow, host it with Cloudflare.DurableWorkflows, start it from a Worker, and let it sleep, wait for signals and undo steps durably.
+---
+
+An Effect workflow is a durable process written with `effect/workflow`: a
+series of steps whose results are stored, so a run that's interrupted
+resumes after its last finished step, and a run can wait hours or days for
+a timer or a signal. `Cloudflare.DurableWorkflows` runs them on Durable
+Objects, one object per run.
+
+Reach for Effect workflows when you want the same workflow code to run
+anywhere Effect's `WorkflowEngine` does: on Durable Objects here, in memory
+in tests, or on another engine elsewhere. If you want Cloudflare's own
+managed product instead, see [Workflows](/cloudflare/compute/workflows).
+
+## Define a workflow
+
+`Workflow.make` declares the workflow: its name, the payload it starts
+with, its result, and the key that identifies one run.
+
+```typescript
+// src/Greet.ts
+import * as Schema from "effect/Schema";
+import { Workflow } from "effect/workflow";
+
+export const Greet = Workflow.make("Greet", {
+  payload: { id: Schema.String, name: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+```
+
+Starting a workflow again with the same key returns the run already
+started, so a retried request never starts a second one.
+
+## Implement its steps
+
+`toLayer` implements the workflow. Each step is an `Activity`: a named
+Effect whose result is stored the first time it completes. When the run
+replays, a finished step returns its stored result instead of running again.
+
+```typescript
+// src/Greet.ts
+import * as Effect from "effect/Effect";
+import { Activity } from "effect/workflow";
+
+export const GreetLive = Greet.toLayer(({ name }) =>
+  Activity.make({
+    name: "greet",
+    success: Schema.String,
+    execute: Effect.succeed(`hello ${name}`),
+  }),
+);
+```
+
+A step that returns a value or fails with a typed error declares `success`
+and `error` schemas, because its result is stored as JSON.
+
+## Host it on Durable Objects
+
+`Cloudflare.DurableWorkflows` takes the workflow Layers and provides the
+engine. Provide it to the Worker, and capture the engine during init:
+handlers run later, outside the init's `Effect.provide`.
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { WorkflowEngine } from "effect/workflow";
+import { Greet, GreetLive } from "./Greet.ts";
+
+export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
+  "AppWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engine = yield* WorkflowEngine.WorkflowEngine;
+    return {
+      fetch: Effect.gen(function* () {
+        const greeting = yield* Greet.execute({ id: "g-1", name: "sam" });
+        return HttpServerResponse.text(greeting);
+      }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
+    };
+  }).pipe(Effect.provide(Cloudflare.DurableWorkflows(GreetLive))),
+) {}
+```
+
+Each workflow gets its own Durable Object class on the Worker, named after
+it (`GreetWorkflow`), and deploying the Worker deploys them.
+
+## Start it without waiting
+
+`execute` waits for the result. Pass `discard: true` to start the run and
+get its execution id back straight away, then read its result with `poll`:
+
+```typescript
+const executionId = yield* Greet.execute({ id: "g-2", name: "alex" }, { discard: true });
+const result = yield* Greet.poll(executionId);
+```
+
+`poll` returns nothing for a run that doesn't exist, `Suspended` for one
+that's still waiting, and `Complete` with its exit once it's done.
+
+## Sleep durably
+
+`DurableClock.sleep` waits on the run's Durable Object alarm, so the wait
+survives restarts and costs nothing while it lasts:
+
+```typescript
+yield* DurableClock.sleep({ name: "cool-off", duration: "1 hour" });
+```
+
+Sleeps of a minute or less run in memory by default. Pass
+`inMemoryThreshold: 0` to make a short sleep durable too.
+
+## Wait for a signal
+
+A `DurableDeferred` is a value a run waits for, delivered from outside:
+an approval, a webhook, a person clicking a link. The run suspends until
+it arrives.
+
+```typescript
+export const Approval = DurableDeferred.make("approval", { success: Schema.String });
+
+const approvedBy = yield* DurableDeferred.await(Approval);
+```
+
+Complete it from anywhere with the engine, using a token that names the run:
+
+```typescript
+yield* DurableDeferred.done(Approval, {
+  token: DurableDeferred.tokenFromExecutionId(Approval, { workflow: Approve, executionId }),
+  exit: Exit.succeed("agent-7"),
+});
+```
+
+## Undo a step when a later one fails
+
+`withCompensation` attaches what to do if the run fails after the step
+succeeded. Compensations run last step first.
+
+```typescript
+yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
+  Checkout.withCompensation(() => Activity.make({ name: "release", execute: release(order) })),
+);
+```
+
+`interrupt(executionId)` stops a run where it waits, and its compensations
+run too.
+
+## Call other Durable Objects from a step
+
+Steps often call another Durable Object's methods. Those are runtime-only
+(they need `RuntimeContext`), which every run has, because each run happens
+inside a Durable Object event. `DurableWorkflows` satisfies that requirement
+for the workflow Layers, so they can resolve namespaces while the Worker
+starts and call them from their steps:
+
+```typescript
+export const RecordLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const journals = yield* Journal;
+    return Record.toLayer(({ id }) =>
+      Activity.make({ name: "append", execute: journals.getByName(id).append("done") }),
+    );
+  }),
+);
+```
+
+## How a run executes
+
+A run is one Durable Object instance, named by its execution id, with its
+journal in that instance's SQLite: the payload, each finished step's
+result, completed signals and pending timers. Every wake-up (a start, a
+signal, a timer, an interrupt) schedules one durable alarm callback that
+replays the run, so runs never overlap, and a run that fails or is cut
+short is retried.
+
+Under `alchemy dev` the same Durable Objects run locally in workerd, so
+workflows, sleeps and signals behave as they do when deployed.
+
+:::note
+A [Domain saga](/domain/saga) is an Effect workflow too. A model hosted with
+`DomainCloudflare.DurableObjects` runs its sagas on this engine.
+:::
