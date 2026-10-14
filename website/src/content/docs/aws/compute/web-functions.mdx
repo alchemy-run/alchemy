@@ -291,6 +291,30 @@ const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
 one. Both serve the same code and follow every deploy, but each scales on
 its own, so a webhook burst can't use up the other endpoint's capacity.
 
+For a Web Function declared as a class, like `Api` above, pass the class
+itself:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+      function: Api,
+      authType: "ApplicationManaged",
+    });
+    return { url: api.url, webhooks: webhooks.url };
+  }),
+);
+```
+
 Your server sees which endpoint a request came through in the
 `lambda-web-endpoint-name` header. Use it to keep each endpoint to its own
 routes:

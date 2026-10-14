@@ -440,6 +440,8 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * });
  * ```
  *
+ * For a class-form Web Function, pass the class: `function: Api`.
+ *
  * @resource
  */
 export const WebFunction: Platform<

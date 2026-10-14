@@ -96,6 +96,19 @@ export interface WebFunctionEndpoint extends Resource<
   Providers
 > {}
 
+const WebFunctionEndpointResource = Resource<WebFunctionEndpoint>(WebFunctionEndpointTypeId);
+
+/** Yield a `function` declaration so the endpoint references the resource. */
+const resolveEndpointProps = (
+  props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
+): Effect.Effect<WebFunctionEndpointProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const fn = Effect.isEffect(resolved.function) ? yield* resolved.function : resolved.function;
+    return { ...resolved, function: fn };
+  });
+
 /**
  * An additional HTTPS endpoint for an `AWS.Lambda.WebFunction`.
  *
@@ -125,9 +138,10 @@ export interface WebFunctionEndpoint extends Resource<
  * ```
  *
  * **Example:** With a class-form Web Function
+ * Pass the class itself (here `Api`, declared with
+ * `class Api extends AWS.Lambda.WebFunction<Api>()(...)`); the endpoint
+ * yields it for you.
  * ```typescript
- * import Api from "./src/api.ts";
- *
  * const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
  *   function: Api,
  *   authType: "ApplicationManaged",
@@ -152,19 +166,6 @@ export interface WebFunctionEndpoint extends Resource<
  *
  * @resource
  */
-const WebFunctionEndpointResource = Resource<WebFunctionEndpoint>(WebFunctionEndpointTypeId);
-
-/** Yield a `function` declaration so the endpoint references the resource. */
-const resolveEndpointProps = (
-  props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
-): Effect.Effect<WebFunctionEndpointProps, never, Providers> =>
-  Effect.gen(function* () {
-    const resolved = Effect.isEffect(props) ? yield* props : props;
-    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
-    const fn = Effect.isEffect(resolved.function) ? yield* resolved.function : resolved.function;
-    return { ...resolved, function: fn };
-  });
-
 export const WebFunctionEndpoint: typeof WebFunctionEndpointResource = Object.assign(
   (
     id: string,
