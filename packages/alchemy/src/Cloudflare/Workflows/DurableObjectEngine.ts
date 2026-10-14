@@ -21,7 +21,7 @@ import {
   encodeResult,
   makeCurrentActivity,
   payloadCodec,
-} from "../../Workflows/Encoding.ts";
+} from "../../WorkflowEncoding.ts";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";

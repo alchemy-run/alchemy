@@ -5,7 +5,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
 import * as Lambda from "@/AWS/Lambda";
-import * as Workflows from "@/Workflows/index.ts";
+import * as Workflows from "@/Workflows.ts";
 import { TestWorkflows } from "./host.ts";
 import { Approval, Approve, Checkout, Greet, Nap, Parent } from "./workflows.ts";
 

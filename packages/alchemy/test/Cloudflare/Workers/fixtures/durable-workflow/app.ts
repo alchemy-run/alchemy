@@ -2,11 +2,11 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Workflows from "@/Workflows/index.ts";
+import * as Workflows from "@/Workflows.ts";
 import { Journal } from "./journal.ts";
 import { Approval, Approve, Checkout, Greet, Nap, Parent } from "./workflows.ts";
 
-export type { Status } from "@/Workflows/index.ts";
+export type { Status } from "@/Workflows.ts";
 
 /** The test Worker's routes, whichever engine runs its workflows. */
 export const app = Effect.gen(function* () {

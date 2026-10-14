@@ -7,10 +7,10 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import { executionNameOf } from "@/AWS/Lambda/DurableWorkflows.ts";
+import { executionNameOf } from "@/AWS/Lambda/WorkflowFunction.ts";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import type { Status } from "@/Workflows/index.ts";
+import type { Status } from "@/Workflows.ts";
 import CallerLive, { WorkflowCaller } from "./fixtures/durable-workflows/caller.ts";
 import HostLive, { TestWorkflows } from "./fixtures/durable-workflows/host.ts";
 

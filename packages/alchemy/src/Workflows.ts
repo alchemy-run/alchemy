@@ -1,10 +1,99 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as Schema from "effect/Schema";
 import { type DurableDeferred, type Workflow, WorkflowEngine } from "effect/workflow";
-import type { Implemented } from "./Implemented.ts";
+import type { RuntimeContext } from "./RuntimeContext.ts";
+
+declare const ImplementedTypeId: unique symbol;
+
+/**
+ * Marks a workflow as runnable here: something in the context implements it.
+ * `Workflows.layer` provides it for the workflow it implements, and a remote
+ * engine, like `AWS.Lambda.DurableFunctionEngine`, for the workflows its
+ * hosts run. `Workflows.RunWorkflow` requires it, so running a workflow
+ * nothing implements is a type error.
+ */
+export interface Implemented<Name extends string> {
+  readonly [ImplementedTypeId]: Name;
+}
+
+/** @internal */
+export const Implemented = <Name extends string>(name: Name) =>
+  Context.Service<Implemented<Name>, true>(`alchemy/Workflows/Implemented/${name}`);
+
+/** @internal */
+export const implemented = <Name extends string>(
+  names: ReadonlyArray<Name>,
+): Layer.Layer<Implemented<Name>> =>
+  Layer.succeedContext(
+    names.reduce(
+      (context, name) => Context.add(context, Implemented(name), true),
+      Context.empty() as Context.Context<Implemented<Name>>,
+    ),
+  );
+
+type Requirements<L> = L extends Layer.Layer<any, any, infer R> ? R : never;
+
+/**
+ * Implement a workflow. Like `workflow.toLayer(execute)`, it registers the
+ * handler with the engine, and it marks the workflow as implemented, so
+ * `RunWorkflow` can run it.
+ *
+ * Handlers can call runtime-only APIs, like another Durable Object's methods.
+ * `toLayer` puts everything a handler requires on the Layer it returns. A
+ * runtime-only API requires `RuntimeContext`, which a Worker's or Lambda
+ * function's init doesn't have. A handler only runs inside a run, and every
+ * run has one, so this Layer doesn't ask for it.
+ *
+ * ### Implementing a workflow
+ * **Example:** A step that calls a Durable Object
+ * ```typescript
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Activity } from "effect/workflow";
+ *
+ * export const GreetLive = Layer.unwrap(
+ *   Effect.gen(function* () {
+ *     const journals = yield* Journal;
+ *     return Workflows.layer(Greet, ({ name }) =>
+ *       Activity.make({ name: "greet", execute: journals.getByName(name).append(name) }),
+ *     );
+ *   }),
+ * );
+ * ```
+ *
+ * @primitive
+ */
+export const layer = <
+  Name extends string,
+  Payload extends Workflow.AnyStructSchema,
+  Success extends Schema.Top,
+  Error extends Schema.Top,
+  R,
+>(
+  workflow: Workflow.Workflow<Name, Payload, Success, Error>,
+  execute: (
+    payload: Payload["Type"],
+    executionId: string,
+  ) => Effect.Effect<Success["Type"], Error["Type"], R>,
+): Layer.Layer<
+  Implemented<Name>,
+  never,
+  Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
+> =>
+  Layer.merge(
+    workflow.toLayer(execute) as Layer.Layer<
+      never,
+      never,
+      Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
+    >,
+    implemented([workflow._tag]),
+  );
 
 type NameOf<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 type SuccessOf<W> = W extends Workflow.Workflow<any, any, infer S, any> ? S["Type"] : never;

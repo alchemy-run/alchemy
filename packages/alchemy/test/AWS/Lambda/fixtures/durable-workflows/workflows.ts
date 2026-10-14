@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
-import * as Workflows from "@/Workflows/index.ts";
+import * as Workflows from "@/Workflows.ts";
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {
   reason: Schema.String,

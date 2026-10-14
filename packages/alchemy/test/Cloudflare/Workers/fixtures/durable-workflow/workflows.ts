@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
-import * as Workflows from "@/Workflows/index.ts";
+import * as Workflows from "@/Workflows.ts";
 import { Journal } from "./journal.ts";
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {

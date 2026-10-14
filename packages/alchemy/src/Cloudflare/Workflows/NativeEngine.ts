@@ -15,7 +15,7 @@ import {
   encodeResult,
   makeCurrentActivity,
   payloadCodec,
-} from "../../Workflows/Encoding.ts";
+} from "../../WorkflowEncoding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import { Workflow, type WorkflowHandle } from "./Workflow.ts";
 import { WorkflowStep } from "./WorkflowRuntime.ts";

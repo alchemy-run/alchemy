@@ -35,7 +35,7 @@
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
-    "./Workflows": "./src/Workflows/index.ts",
+    "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
@@ -120,9 +120,9 @@
         "default": "./lib/AI/index.js"
       },
       "./Workflows": {
-        "types": "./lib/Workflows/index.d.ts",
-        "bun": "./src/Workflows/index.ts",
-        "default": "./lib/Workflows/index.js"
+        "types": "./lib/Workflows.d.ts",
+        "bun": "./src/Workflows.ts",
+        "default": "./lib/Workflows.js"
       },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",
