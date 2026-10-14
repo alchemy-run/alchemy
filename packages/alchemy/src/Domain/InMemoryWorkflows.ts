@@ -2,6 +2,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import { Workflow, WorkflowEngine } from "effect/workflow";
@@ -79,8 +80,12 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
         }),
         Workflow.intoResult,
-        Effect.provideService(WorkflowEngine.WorkflowInstance, instance),
-        Effect.provideService(WorkflowEngine.WorkflowEngine, engine),
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
+            Layer.succeed(WorkflowEngine.WorkflowEngine, engine),
+          ),
+        ),
         Effect.flatMap((result) => {
           if (result._tag === "Suspended") return Effect.void;
           execution.result = result;
