@@ -8,11 +8,14 @@ import { HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import type { EgressRef } from "../../Egress/Kind.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import {
   CONTROL_METHOD,
   dispatchControl,
+  dispatchMint,
+  MINT_METHOD,
   registerDurableObjectClass,
 } from "../Containers/EgressRelay.ts";
 import {
@@ -204,6 +207,15 @@ export const makeDurableObjectBridge =
             exit._tag === "Success"
               ? exit.value
               : new Response(`alchemy egress: ${Cause.pretty(exit.cause)}`, { status: 500 }),
+        );
+      }
+
+      /** The container relay asks for a gateway's grant (see Containers/EgressRelay.ts). */
+      async [MINT_METHOD](gateway: string, refs: ReadonlyArray<EgressRef>, ttl: number) {
+        return this.#execute(
+          () => dispatchMint(gateway, refs, ttl),
+          async (exit) =>
+            exit._tag === "Success" ? exit.value : { error: Cause.pretty(exit.cause) },
         );
       }
 

@@ -3,10 +3,14 @@
  * (Egress/DESIGN.md §8): the Durable Object that owns the container
  * intercepts each routed host into its own Worker's `AlchemyEgress`
  * entrypoint, with that host's routes and granted egress in `ctx.props`.
- * The relay runs in the Worker, never in the Durable Object, and mints each
- * gateway's grant itself, lazily, over the gateway's service binding: the
- * props never hold a grant, so renewing one never re-registers an intercept
- * (which resets TLS handshakes in flight).
+ * The relay runs in the Worker, never in the Durable Object. It gets each
+ * gateway's grant lazily, from the Durable Object that granted the egress
+ * (which mints through the gateway's `GatewayClient`: a service binding RPC
+ * for a Worker, `lambda:InvokeFunction` for a Lambda), and caches it in the
+ * isolate: the props never hold a grant, so renewing one never re-registers
+ * an intercept (which resets TLS handshakes in flight). Traffic goes over
+ * the gateway's service binding when it has one (a Worker), and to its URL
+ * otherwise (a Lambda function URL).
  *
  * This module is part of the runtime bridge entry (`alchemy/Cloudflare/Bridge`):
  * keep its imports lean.
@@ -15,6 +19,7 @@ import type * as cf from "@cloudflare/workers-types";
 import type { WorkerEntrypoint } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import { canonicalJson } from "../../Egress/Canonical.ts";
+import { type MintReply, mintFor } from "../../Egress/Clients.ts";
 import type { EgressRef } from "../../Egress/Kind.ts";
 import { gatewayBindingName, mostSpecific, type Route } from "../../Egress/Route.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -24,6 +29,17 @@ export const RELAY_ENTRYPOINT = "AlchemyEgress";
 
 /** The Durable Object RPC method a control request is delivered to. */
 export const CONTROL_METHOD = "__alchemyControl";
+
+/** The Durable Object RPC method the relay asks for a gateway's grant. */
+export const MINT_METHOD = "__alchemyEgressMint";
+
+/** The Durable Object that granted a host's egress (it mints for the relay). */
+export interface EgressOwner {
+  /** The Durable Object class (its `ctx.exports` name). */
+  readonly className: string;
+  /** The Durable Object's id (`id.toString()`). */
+  readonly id: string;
+}
 
 /** A host the owning Durable Object answers itself (e.g. a harness's shutdown hook). */
 export interface ControlTarget {
@@ -49,6 +65,8 @@ export interface RelayProps {
   readonly egress?: Readonly<Record<string, ReadonlyArray<EgressRef>>>;
   /** Each grant's lifetime, in milliseconds. */
   readonly ttl?: number;
+  /** The Durable Object that granted the egress: the relay asks it to mint. */
+  readonly owner?: EgressOwner;
   /** Answered by the owning Durable Object instead of a gateway. */
   readonly control?: ControlTarget;
 }
@@ -77,20 +95,29 @@ const minting = new Map<string, Promise<CachedGrant>>();
 
 class MintRefused extends Error {}
 
-const RPC_ERROR_TAG = "~alchemy/rpc/error";
+type DurableObjectStub = Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>;
 
+const ownerStub = (
+  exports: Record<string, unknown> | undefined,
+  owner: { readonly className: string; readonly id: string },
+): DurableObjectStub | undefined => {
+  const namespace = exports?.[owner.className] as cf.DurableObjectNamespace | undefined;
+  return namespace
+    ? (namespace.get(namespace.idFromString(owner.id)) as unknown as DurableObjectStub)
+    : undefined;
+};
+
+/** Ask the owning Durable Object to mint through the gateway's client. */
 const mintOver = async (
-  binding: { mint?: (refs: ReadonlyArray<EgressRef>, ttl: number) => Promise<unknown> },
+  owner: DurableObjectStub,
+  gateway: string,
   refs: ReadonlyArray<EgressRef>,
   ttl: number,
 ): Promise<CachedGrant> => {
-  const result = (await binding.mint!(refs, ttl)) as
-    | { readonly _tag?: string; readonly error?: { readonly message?: string } }
-    | { readonly grant: string; readonly expires: number };
-  if ("_tag" in result && result._tag === RPC_ERROR_TAG) {
-    throw new MintRefused(result.error?.message ?? "the gateway refused the grant");
-  }
-  const { grant, expires } = result as { readonly grant: string; readonly expires: number };
+  const reply = (await owner[MINT_METHOD]!(gateway, refs, ttl)) as MintReply;
+  if ("refused" in reply) throw new MintRefused(reply.refused);
+  if ("error" in reply) throw new Error(reply.error);
+  const { grant, expires } = reply;
   return { grant, expires, renewAt: expires - Math.floor(ttl * RENEWAL_MARGIN) };
 };
 
@@ -99,12 +126,12 @@ const timeout = (millis: number) =>
 
 /**
  * The grant for `refs` at `gateway`: cached until it nears expiry, minted
- * over the gateway's service binding otherwise. A mint another request
+ * by the owning Durable Object otherwise. A mint another request
  * started is shared, but awaited for at most {@link SHARED_MINT_TIMEOUT}
  * (its I/O belongs to that request; if it goes away, mint again).
  */
 const grantFor = async (
-  binding: { mint?: (refs: ReadonlyArray<EgressRef>, ttl: number) => Promise<unknown> },
+  owner: DurableObjectStub,
   gateway: string,
   refs: ReadonlyArray<EgressRef>,
   ttl: number,
@@ -117,7 +144,7 @@ const grantFor = async (
     const done = await Promise.race([shared.catch(() => undefined), timeout(SHARED_MINT_TIMEOUT)]);
     if (done) return done.grant;
   }
-  const mint = mintOver(binding, refs, ttl);
+  const mint = mintOver(owner, gateway, refs, ttl);
   minting.set(key, mint);
   try {
     const minted = await mint;
@@ -139,27 +166,31 @@ const grantFor = async (
 //#endregion
 
 /**
- * Send a container's request to its route's gateway over its service
- * binding (no public hop), with a grant minted for the host's egress. The
- * body is streamed, never buffered.
+ * Send a container's request to its route's gateway, with a grant minted
+ * for the host's egress: over the gateway's service binding (a Worker, no
+ * public hop), or to its URL (a Lambda function URL). The body is streamed,
+ * never buffered.
  */
 const toGateway = async (
   request: Request,
   route: RelayRoute,
   props: RelayProps,
+  ctx: { readonly exports?: Record<string, unknown> },
   env: Record<string, unknown> | undefined,
 ): Promise<Response> => {
   const gateway = route.gateway.id;
-  const binding = env?.[gatewayBindingName(gateway)] as
-    | (cf.Fetcher & { mint?: (refs: ReadonlyArray<EgressRef>, ttl: number) => Promise<unknown> })
-    | undefined;
+  const binding = env?.[gatewayBindingName(gateway)] as cf.Fetcher | undefined;
   const refs = props.egress?.[gateway];
-  if (!binding?.mint || !refs?.length || props.ttl === undefined) {
+  const owner = props.owner && ownerStub(ctx.exports, props.owner);
+  if (!owner || !refs?.length || props.ttl === undefined) {
+    return deny(`gateway ${gateway} has no grant for this host`, 502);
+  }
+  if (!binding?.fetch && !route.gateway.url) {
     return deny(`gateway ${gateway} is not bound to this Worker`, 502);
   }
   let grant: string;
   try {
-    grant = await grantFor(binding, gateway, refs, props.ttl);
+    grant = await grantFor(owner, gateway, refs, props.ttl);
   } catch (error) {
     return error instanceof MintRefused
       ? deny(`gateway ${gateway} refused: ${error.message}`)
@@ -176,8 +207,11 @@ const toGateway = async (
     redirect: "manual",
     ...(hasBody ? { body: request.body } : {}),
   };
-  const url = route.gateway.url || "https://alchemy-egress-gateway.invalid/";
-  return binding.fetch(url, init as cf.RequestInit) as unknown as Promise<Response>;
+  if (binding?.fetch) {
+    const url = route.gateway.url || "https://alchemy-egress-gateway.invalid/";
+    return binding.fetch(url, init as cf.RequestInit) as unknown as Promise<Response>;
+  }
+  return fetch(route.gateway.url, init);
 };
 
 /** Hand a control request to the Durable Object that registered it. */
@@ -209,7 +243,7 @@ export const relayEgress = (
   const route = mostSpecific(routes, url.hostname, `${url.pathname}${url.search}`);
   // Not an egress request (a path no route claims): straight out, no credential.
   if (!route) return fetch(request);
-  return toGateway(request, route, props, env).catch((error: unknown) =>
+  return toGateway(request, route, props, ctx, env).catch((error: unknown) =>
     deny(`gateway ${route.gateway.id} could not be reached: ${String(error)}`, 502),
   );
 };
@@ -267,6 +301,14 @@ export const registerControl = (state: object, control: EgressControl) => {
 export const controlsOf = (state: object): ReadonlyArray<EgressControl> => [
   ...(controls.get(state)?.values() ?? []),
 ];
+
+/**
+ * @internal Mint gateway `gateway`'s grant for the relay, through the
+ * client this Durable Object yielded (DESIGN.md §6: one `GatewayClient.mint`
+ * whichever host serves the gateway).
+ */
+export const dispatchMint = (gateway: string, refs: ReadonlyArray<EgressRef>, ttl: number) =>
+  mintFor(gateway, refs, ttl);
 
 /** @internal Answer a control request the relay forwarded to this Durable Object. */
 export const dispatchControl = (

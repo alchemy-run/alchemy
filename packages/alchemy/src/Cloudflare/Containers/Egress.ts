@@ -2,9 +2,9 @@
  * Container egress, in the Durable Object that owns a Cloudflare container
  * (Egress/DESIGN.md §8, §10, §12). The object stores what it granted
  * (`{ ttl, egress }`) and intercepts each routed host into its Worker's
- * `AlchemyEgress` relay (EgressRelay.ts) with that host's routes and granted
- * egress in the props. The props hold no grant: the relay mints and renews
- * grants itself, so an intercept is re-registered only when its host's
+ * `AlchemyEgress` relay (EgressRelay.ts) with that host's routes, granted
+ * egress and owner (this object) in the props. The props hold no grant: the
+ * relay asks this object to mint when its cached grant nears expiry, so an intercept is re-registered only when its host's
  * props change (`start` with different egress, `setEgress`, `stop`).
  */
 import type * as cf from "@cloudflare/workers-types";
@@ -149,17 +149,22 @@ const hostProps = (
     byHost.set(host, [...(byHost.get(host) ?? []), route]);
   }
   const hosts: Record<string, RelayProps> = {};
+  const className = durableObjectClassOf(state);
+  if (byHost.size > 0 && className === undefined) {
+    throw new Error("Container egress is only available inside an Alchemy Durable Object.");
+  }
+  const owner = { className: className!, id: state.id.toString() };
   for (const [host, forHost] of byHost) {
     const gateways = [...new Set(forHost.map((route) => route.gateway.id))].sort();
     hosts[host] = {
       routes: forHost,
       egress: Object.fromEntries(gateways.map((id) => [id, byGateway.get(id) ?? []])),
       ttl: next.ttl,
+      owner,
     };
   }
   const controls = controlsOf(state);
   if (controls.length > 0) {
-    const className = durableObjectClassOf(state);
     if (className === undefined) {
       throw new Error("Container controls are only available inside an Alchemy Durable Object.");
     }
@@ -297,8 +302,17 @@ export const reapplyStored = (state: cf.DurableObjectState) =>
     if (!container?.running) return;
     const stored = yield* loadEgress(state);
     const hosts = hostsOf(stored);
+    const className = durableObjectClassOf(state);
     const known = Object.fromEntries(
-      Object.entries(hosts).filter((entry): entry is [string, RelayProps] => entry[1] !== null),
+      Object.entries(hosts)
+        .filter((entry): entry is [string, RelayProps] => entry[1] !== null)
+        // Props stored before the relay minted through this object lack it.
+        .map(([host, props]): [string, RelayProps] => [
+          host,
+          props.routes?.length && !props.owner && className !== undefined
+            ? { ...props, owner: { className, id: state.id.toString() } }
+            : props,
+        ]),
     );
     if (Object.keys(known).length === 0) return;
     yield* applyHosts(state, container, known, {});

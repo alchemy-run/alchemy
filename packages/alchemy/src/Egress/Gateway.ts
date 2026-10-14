@@ -19,6 +19,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
+import type { Function as LambdaFunction } from "../AWS/Lambda/Function.ts";
 import { makeRpcStub } from "../Cloudflare/Workers/Rpc.ts";
 import { Worker } from "../Cloudflare/Workers/Worker.ts";
 import { WorkerEnvironment } from "../Cloudflare/Workers/WorkerRuntime.ts";
@@ -27,6 +28,8 @@ import { Random } from "../Random.ts";
 import type { Rpc } from "../Rpc.ts";
 import { RpcCallError } from "../Rpc.ts";
 import { RuntimeContext, sanitizeKey } from "../RuntimeContext.ts";
+import type { FunctionContext } from "../Serverless/Function.ts";
+import { gatewayClient, registerGatewayClient } from "./Clients.ts";
 import * as Grant from "./Grant.ts";
 import { EgressSecretScope, makeEgressSecretScope } from "./Handler.ts";
 import {
@@ -48,7 +51,8 @@ export type GatewayDeclaration = { readonly [name: string]: EgressKind<string, n
 
 /**
  * The requirement `yield* Gateway` leaves for the stack: which host serves
- * the gateway. Provide it with `Gateway.host(worker)`.
+ * the gateway. Provide it with `Gateway.host(worker)` or
+ * `Gateway.host(lambdaFunction)`.
  */
 export interface GatewayHost<Self> {
   readonly "~alchemy/Kind": "EgressGatewayHost";
@@ -76,6 +80,29 @@ export type MintMethod = (
   ttlMillis: number,
 ) => Effect.Effect<MintResult, EgressNotServed, RuntimeContext>;
 
+/**
+ * The direct invoke a Lambda-hosted gateway answers `mint` on:
+ * `{ "~alchemy/egress/mint": { refs, ttl } }`. A function URL request is a
+ * different event shape, so `mint` is never reachable over the public URL.
+ */
+export const MINT_INVOKE = "~alchemy/egress/mint";
+
+/** A direct invoke asking the gateway to mint. */
+export interface MintInvoke {
+  readonly [MINT_INVOKE]: { readonly refs: ReadonlyArray<EgressRef>; readonly ttl: number };
+}
+
+/** What a Lambda-hosted gateway answers a {@link MintInvoke} with. */
+export type MintInvokeReply =
+  | { readonly minted: MintResult }
+  | { readonly refused: { readonly message: string; readonly egress?: string } };
+
+export const isMintInvoke = (event: unknown): event is MintInvoke =>
+  typeof event === "object" &&
+  event !== null &&
+  typeof (event as Record<string, unknown>)[MINT_INVOKE] === "object" &&
+  Array.isArray((event as MintInvoke)[MINT_INVOKE]?.refs);
+
 /** What `Gateway.serve` returns: a Worker (or Lambda) implementation. */
 export type GatewayServer = {
   /** The sandbox's traffic: `Authorization: Macaroon <grant>`, `x-alchemy-target`, `x-alchemy-method`. */
@@ -84,7 +111,11 @@ export type GatewayServer = {
     never,
     HttpServerRequest | Scope.Scope | RuntimeContext
   >;
-  /** Sign a grant for refs to this gateway's egresses. Called over a service binding. */
+  /**
+   * Sign a grant for refs to this gateway's egresses. Called over a service
+   * binding (a Worker host) or a direct `lambda:InvokeFunction` (a Lambda
+   * host), never over the public URL.
+   */
   readonly mint: MintMethod;
 };
 
@@ -105,7 +136,9 @@ export interface GatewayClient<G = unknown> {
   readonly kinds: GatewayDeclaration;
   /** Where the sandbox's traffic goes (the HTTPS transport). */
   readonly url: Effect.Effect<string, never, RuntimeContext>;
-  /** Ask the gateway to sign a grant. */
+  /** How the gateway is hosted: a Worker (service binding) or a Lambda (function URL). */
+  readonly transport: "worker" | "lambda";
+  /** Ask the gateway to sign a grant: service binding RPC, or Lambda `InvokeFunction`. */
   readonly mint: (
     refs: ReadonlyArray<EgressRef>,
     ttl: Duration.Input,
@@ -162,17 +195,18 @@ export interface GatewayClass<
     implementation: Effect.Effect<A & NoExtra<A, D>, E, R>,
   ): Effect.Effect<GatewayServer, E, Exclude<R, EgressSecretScope>>;
   /**
-   * Which Worker serves this gateway: provide the returned Layer to the
-   * stack, like a sandbox's host. The Worker's implementation must be (or
-   * expose) this gateway's `serve`.
+   * Which Worker or Lambda Function serves this gateway: provide the
+   * returned Layer to the stack, like a sandbox's host. The host's
+   * implementation must be (or expose) this gateway's `serve`.
    *
-   * TODO(egress): Lambda-hosted gateways. `serve` already runs on a Lambda;
-   * hosting needs a Lambda branch here that binds the function URL and
-   * `lambda:InvokeFunction` (mint over IAM, not the public URL, which would
-   * expose `mint` through the HTTP RPC route).
+   * A Worker is reached over a service binding (`mint` over Worker RPC,
+   * traffic over the binding or its URL). A Lambda Function needs a function
+   * URL: the sandbox's traffic goes to the URL, and `mint` is a direct
+   * `lambda:InvokeFunction`, granted to whichever Worker yields the gateway
+   * (the stack needs the AWS providers for that Worker's IAM identity).
    */
   host<R = never>(
-    worker: Effect.Effect<Worker & Rpc<{ readonly mint: MintMethod }>, never, R>,
+    host: Effect.Effect<(Worker & Rpc<{ readonly mint: MintMethod }>) | LambdaFunction, never, R>,
     options?: GatewayHostOptions,
   ): Layer.Layer<GatewayHost<Self>, never, R>;
 }
@@ -181,11 +215,7 @@ export interface GatewayClass<
 
 //#region runtime client registry
 
-/** The gateways this isolate has yielded, by id (the owning Durable Object looks them up from stored refs). */
-const clients = new Map<string, GatewayClient>();
-
-/** The client for gateway `id`, if this isolate yielded it. */
-export const gatewayClient = (id: string): GatewayClient | undefined => clients.get(id);
+export { gatewayClient } from "./Clients.ts";
 
 const grantable = <G, E>(
   client: GatewayClient<G>,
@@ -201,7 +231,7 @@ const grantable = <G, E>(
 
 /** The kind of a granted egress, if its gateway was yielded in this isolate. */
 export const kindOf = (ref: EgressRef): EgressKind<string, never> | undefined => {
-  const kinds = clients.get(ref.gateway)?.kinds;
+  const kinds = gatewayClient(ref.gateway)?.kinds;
   return kinds && Object.prototype.hasOwnProperty.call(kinds, ref.egress)
     ? kinds[ref.egress]
     : undefined;
@@ -239,7 +269,10 @@ const GATEWAY_ONLY = new Set([
   "true-client-ip",
 ]);
 const isGatewayOnly = (name: string) =>
-  GATEWAY_ONLY.has(name) || name.startsWith("cf-") || name.startsWith("x-forwarded-");
+  GATEWAY_ONLY.has(name) ||
+  name.startsWith("cf-") ||
+  name.startsWith("x-forwarded-") ||
+  name.startsWith("x-amzn-"); // a Lambda function URL's
 
 const RESPONSE_DROP = new Set([
   "content-length",
@@ -391,43 +424,58 @@ const makeServe =
         });
       }).pipe(Effect.provide(FetchHttpClient.layer));
 
+      // A host that takes raw invocations (a Lambda) answers `mint` on a
+      // direct invoke, authorized by IAM. Its HTTP events (the function URL)
+      // only ever reach `fetch`.
+      const runtime = yield* Effect.serviceOption(RuntimeContext);
+      const listen =
+        runtime._tag === "Some" ? (runtime.value as Partial<FunctionContext>).listen : undefined;
+      if (listen) {
+        yield* listen((event: unknown) =>
+          isMintInvoke(event)
+            ? mint(event[MINT_INVOKE].refs, event[MINT_INVOKE].ttl).pipe(
+                Effect.map((minted): MintInvokeReply => ({ minted })),
+                Effect.catchTag("EgressNotServed", (error) =>
+                  Effect.succeed<MintInvokeReply>({
+                    refused: {
+                      message: error.message,
+                      ...(error.egress !== undefined ? { egress: error.egress } : {}),
+                    },
+                  }),
+                ),
+              )
+            : undefined,
+        );
+      }
+
       return { fetch, mint } satisfies GatewayServer;
     });
 
 //#endregion
 
 interface GatewayHostShape {
-  readonly worker: Effect.Effect<Worker, never, any>;
+  readonly host: Effect.Effect<Worker | LambdaFunction, never, any>;
   readonly path: string;
 }
 
-const makeClient = (
+const LAMBDA_FUNCTION_TYPE = "AWS.Lambda.Function";
+
+/** Recognized structurally, so this module never imports the AWS module graph. */
+const isLambdaFunction = (host: Worker | LambdaFunction): host is LambdaFunction =>
+  (host as { Type?: string }).Type === LAMBDA_FUNCTION_TYPE;
+
+/** How `mint` reaches the gateway: plain RPC arguments, the gateway's typed errors. */
+type MintTransport = (
+  refs: ReadonlyArray<EgressRef>,
+  ttlMillis: number,
+) => Effect.Effect<MintResult, EgressNotServed | EgressGatewayError, RuntimeContext>;
+
+/** Mint over the gateway Worker's service binding (Worker RPC). */
+const serviceBindingMint = (
   id: string,
-  hostTag: Context.Key<any, GatewayHostShape>,
-  kinds: GatewayDeclaration,
-) =>
+  name: string,
+): Effect.Effect<MintTransport, never, WorkerEnvironment> =>
   Effect.gen(function* () {
-    const name = gatewayBindingName(id);
-    const urlKey = `${name}_URL`;
-    const ctx = yield* RuntimeContext;
-    let url: Effect.Effect<string>;
-    if (!globalThis.__ALCHEMY_RUNTIME__) {
-      // Deploy: bind the gateway's Worker (a service binding, for mint) and
-      // its URL (for the sandbox's traffic) into this Worker.
-      const host = yield* hostTag;
-      const worker = yield* host.worker;
-      const self = yield* Worker;
-      yield* self.bind`EgressGateway(${id})`({
-        bindings: [{ type: "service", name, service: worker.workerName }],
-      });
-      const path = host.path;
-      const publicUrl = worker.url.pipe(
-        Output.map((base: string | undefined) => (base ? new URL(path, base).toString() : "")),
-      ) as Output.Output<string>;
-      url = (yield* Output.named(publicUrl, urlKey).asEffect()) as unknown as Effect.Effect<string>;
-    } else {
-      url = ctx.get<string>(sanitizeKey(urlKey)) as unknown as Effect.Effect<string>;
-    }
     const env = yield* WorkerEnvironment;
     const stub = makeRpcStub<{
       readonly mint: (
@@ -438,27 +486,105 @@ const makeClient = (
       Effect.sync(() => (env as Record<string, unknown>)[name]),
       { errors: [EgressNotServed] },
     );
+    return (refs, ttlMillis) =>
+      stub.mint(refs, ttlMillis).pipe(
+        Effect.catchTag("RpcCallError", (cause) =>
+          Effect.fail(
+            new EgressGatewayError({
+              message: `gateway ${id} could not be reached`,
+              gateway: id,
+              cause,
+            }),
+          ),
+        ),
+      );
+  });
+
+/**
+ * Mint with a direct `lambda:InvokeFunction` on the gateway's function,
+ * signed with this Worker's AWS identity. Loaded only when a gateway is
+ * hosted on Lambda, so other Workers never bundle the AWS SDK.
+ */
+const lambdaMint = (
+  id: string,
+  functionArn: Effect.Effect<string>,
+  grantOn: Output.Output<string> | undefined,
+): Effect.Effect<MintTransport> =>
+  Effect.promise(() => import("../AWS/Lambda/EgressGatewayClient.ts")).pipe(
+    Effect.flatMap((client) => client.makeLambdaGatewayMint(id, functionArn, grantOn)),
+  ) as Effect.Effect<MintTransport>;
+
+const makeClient = (
+  id: string,
+  hostTag: Context.Key<any, GatewayHostShape>,
+  kinds: GatewayDeclaration,
+) =>
+  Effect.gen(function* () {
+    const name = gatewayBindingName(id);
+    const urlKey = `${name}_URL`;
+    const functionKey = `${name}_FUNCTION`;
+    const ctx = yield* RuntimeContext;
+    let url: Effect.Effect<string>;
+    let transport: GatewayClient["transport"];
+    let mint: MintTransport;
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const host = yield* hostTag;
+      const target = yield* host.host;
+      const self = yield* Worker;
+      const path = host.path;
+      const at = (base: string | undefined) => (base ? new URL(path, base).toString() : "");
+      if (isLambdaFunction(target)) {
+        // Deploy: the function URL (the sandbox's traffic) and the function
+        // ARN (`mint`, over IAM) into this Worker. No service binding.
+        const publicUrl = target.functionUrl.pipe(Output.map(at)) as Output.Output<string>;
+        url = (yield* Output.named(
+          publicUrl,
+          urlKey,
+        ).asEffect()) as unknown as Effect.Effect<string>;
+        const functionArn = (yield* Output.named(
+          target.functionArn as Output.Output<string>,
+          functionKey,
+        ).asEffect()) as unknown as Effect.Effect<string>;
+        transport = "lambda";
+        mint = yield* lambdaMint(id, functionArn, target.functionArn as Output.Output<string>);
+      } else {
+        // Deploy: bind the gateway's Worker (a service binding, for mint) and
+        // its URL (for the sandbox's traffic) into this Worker.
+        yield* self.bind`EgressGateway(${id})`({
+          bindings: [{ type: "service", name, service: target.workerName }],
+        });
+        const publicUrl = target.url.pipe(Output.map(at)) as Output.Output<string>;
+        url = (yield* Output.named(
+          publicUrl,
+          urlKey,
+        ).asEffect()) as unknown as Effect.Effect<string>;
+        transport = "worker";
+        mint = yield* serviceBindingMint(id, name);
+      }
+    } else {
+      url = ctx.get<string>(sanitizeKey(urlKey)) as unknown as Effect.Effect<string>;
+      // A Lambda-hosted gateway bound its function ARN; a Worker, a service binding.
+      const functionArn = yield* ctx.get<string>(sanitizeKey(functionKey));
+      if (functionArn) {
+        transport = "lambda";
+        mint = yield* lambdaMint(id, Effect.succeed(functionArn), undefined);
+      } else {
+        transport = "worker";
+        mint = yield* serviceBindingMint(id, name);
+      }
+    }
     const client: GatewayClient = {
       id,
       kinds,
       url,
+      transport,
       mint: (refs, ttl) =>
         Effect.gen(function* () {
-          const result = yield* stub.mint(refs, Duration.toMillis(ttl)).pipe(
-            Effect.catchTag("RpcCallError", (cause) =>
-              Effect.fail(
-                new EgressGatewayError({
-                  message: `gateway ${id} could not be reached`,
-                  gateway: id,
-                  cause,
-                }),
-              ),
-            ),
-          );
+          const result = yield* mint(refs, Duration.toMillis(ttl));
           return { gateway: { id, url: yield* url }, ...result } satisfies MintedGrant;
         }),
     };
-    clients.set(id, client);
+    registerGatewayClient(client);
     return client;
   });
 
@@ -532,6 +658,51 @@ const makeClient = (
  * );
  * ```
  *
+ * ### Hosting a gateway on AWS Lambda
+ * A Lambda Function with a function URL serves the same `serve`. The
+ * sandbox's traffic goes to the function URL; `mint` is answered only on a
+ * direct `lambda:InvokeFunction`, which `yield* Gateway` grants to the
+ * consuming Worker's IAM identity (so the stack needs the AWS providers).
+ *
+ * **Example:** A Lambda gateway with credentials from DynamoDB
+ * ```typescript
+ * // src/gateway.lambda.ts
+ * export default AWS.Lambda.Function(
+ *   "UserGatewayLambda",
+ *   { main: import.meta.url, functionUrl: true },
+ *   UserGateway.serve(
+ *     Effect.gen(function* () {
+ *       const credentials = yield* AWS.DynamoDB.GetItem(Credentials);
+ *       const lookup = (subject: string) =>
+ *         credentials({ Key: { subject: { S: subject } } }).pipe(Effect.map(({ Item }) => Item!));
+ *       return {
+ *         repo: yield* GitHub.Egress({
+ *           token: ({ subject }) => lookup(subject).pipe(Effect.map((item) => item.githubToken.S!)),
+ *         }),
+ *         custom: yield* Egress.Http({
+ *           credential: ({ subject }) => lookup(subject).pipe(Effect.map(toHttpCredential)),
+ *         }),
+ *       };
+ *     }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+ *   ),
+ * );
+ * ```
+ *
+ * **Example:** Provide the Lambda as the gateway's host
+ * ```typescript
+ * export default Alchemy.Stack(
+ *   "Harness",
+ *   {
+ *     providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
+ *     state: Alchemy.localState(),
+ *   },
+ *   Effect.gen(function* () {
+ *     const api = yield* Api; // a Worker whose Durable Object yields UserGateway
+ *     return { url: api.url.as<string>() };
+ *   }).pipe(Effect.provide(UserGateway.host(UserGatewayLambda))),
+ * );
+ * ```
+ *
  * ### Granting egresses
  * **Example:** Narrow an egress and choose whose credential it uses
  * ```typescript
@@ -571,8 +742,10 @@ export const Gateway =
       static readonly id = id;
       static readonly egresses = egresses;
       static serve = makeServe(id);
-      static host = (worker: Effect.Effect<Worker, never, any>, options: GatewayHostOptions = {}) =>
-        Layer.succeed(hostTag, { worker, path: options.path ?? "/" });
+      static host = (
+        host: Effect.Effect<Worker | LambdaFunction, never, any>,
+        options: GatewayHostOptions = {},
+      ) => Layer.succeed(hostTag, { host, path: options.path ?? "/" });
     }
     return Object.assign(
       GatewayDeclarationClass,

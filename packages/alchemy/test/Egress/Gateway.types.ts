@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Anthropic from "@/Anthropic/index.ts";
+import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import * as Egress from "@/Egress/index.ts";
 import * as GitHub from "@/GitHub/index.ts";
@@ -74,6 +75,18 @@ WorkGateway.host(GatewayWorker);
 WorkGateway.host(GatewayWorker, { path: "/egress" });
 // @ts-expect-error — a Worker that doesn't serve a gateway can't host one
 WorkGateway.host(Cloudflare.Worker("Plain", { main: "./plain.ts" }, Effect.succeed({})));
+
+// Or a Lambda Function (with a function URL) serving it.
+const GatewayLambda = AWS.Lambda.Function(
+  "WorkGatewayLambda",
+  { main: "./gateway.ts", functionUrl: true },
+  WorkGateway.serve(
+    Effect.gen(function* () {
+      return { model: yield* model, repo: yield* repo };
+    }),
+  ),
+);
+WorkGateway.host(GatewayLambda);
 
 // yield* Gateway: each declared egress, grantable; narrow takes the kind's scope.
 Effect.gen(function* () {
