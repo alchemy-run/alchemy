@@ -84,40 +84,46 @@ const radius = style.shape === "pill" ? h / 2 : 8;
 </g>
 
 <style>
+  /* Solid fills in the kind's colour, with dark ink on top. */
+  .alc-dnode {
+    --ink: #1b1813;
+  }
+
   .alc-dnode__bg {
-    fill: color-mix(in srgb, var(--hue) 22%, var(--alc-bg-elev-2));
-    stroke: var(--hue);
+    fill: var(--hue);
+    stroke: color-mix(in srgb, var(--hue) 70%, black);
     stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
   .alc-dnode--outside .alc-dnode__bg {
+    stroke: var(--hue);
     stroke-dasharray: 5 4;
-    fill: color-mix(in srgb, var(--hue) 10%, var(--alc-bg-elev-2));
+    fill: color-mix(in srgb, var(--hue) 85%, white);
   }
 
   .alc-dnode__behind {
-    fill: color-mix(in srgb, var(--hue) 10%, var(--alc-bg-elev-2));
-    stroke: color-mix(in srgb, var(--hue) 55%, transparent);
+    fill: color-mix(in srgb, var(--hue) 75%, black);
+    stroke: color-mix(in srgb, var(--hue) 55%, black);
     stroke-width: 1.2;
   }
 
   .alc-dnode__inner {
     fill: none;
-    stroke: color-mix(in srgb, var(--hue) 55%, transparent);
+    stroke: color-mix(in srgb, var(--ink) 45%, transparent);
     stroke-width: 1;
   }
 
   .alc-dnode__fold {
-    fill: color-mix(in srgb, var(--hue) 40%, var(--alc-bg-elev-2));
-    stroke: var(--hue);
+    fill: color-mix(in srgb, var(--hue) 70%, black);
+    stroke: color-mix(in srgb, var(--hue) 70%, black);
     stroke-width: 1.2;
     stroke-linejoin: round;
   }
 
   .alc-dnode__icon path {
     fill: none;
-    stroke: var(--hue);
+    stroke: var(--ink);
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -126,13 +132,13 @@ const radius = style.shape === "pill" ? h / 2 : 8;
   .alc-dnode__label {
     font-family: var(--alc-font-mono);
     font-size: 13px;
-    font-weight: 600;
-    fill: var(--alc-fg-1);
+    font-weight: 700;
+    fill: var(--ink);
   }
 
   .alc-dnode__type {
     font-family: var(--alc-font-mono);
     font-size: 10.5px;
-    fill: color-mix(in srgb, var(--hue) 80%, var(--alc-fg-2));
+    fill: color-mix(in srgb, var(--ink) 72%, transparent);
   }
 </style>
