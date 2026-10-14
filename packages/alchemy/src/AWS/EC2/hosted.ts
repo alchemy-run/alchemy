@@ -681,32 +681,45 @@ systemctl enable --now ${unitName}.service
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }
 
-    if (output.managedIam && output.instanceProfileName && output.roleName) {
-      const attachedPolicyArns = yield* listAttachedPolicyArns(output.roleName).pipe(
+    if (output.managedIam && output.roleName) {
+      const roleName = output.roleName;
+      // State written before the instance profile name was recorded (e.g.
+      // LaunchTemplate) lacks it: find the managed role's profiles instead.
+      const instanceProfileNames = output.instanceProfileName
+        ? [output.instanceProfileName]
+        : yield* iam.listInstanceProfilesForRole({ RoleName: roleName }).pipe(
+            Effect.map((result) =>
+              (result.InstanceProfiles ?? []).map((profile) => profile.InstanceProfileName),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+          );
+      const attachedPolicyArns = yield* listAttachedPolicyArns(roleName).pipe(
         Effect.orElseSucceed(() => []),
       );
-      yield* iam
-        .removeRoleFromInstanceProfile({
-          InstanceProfileName: output.instanceProfileName,
-          RoleName: output.roleName,
-        })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-      yield* iam
-        .deleteInstanceProfile({
-          InstanceProfileName: output.instanceProfileName,
-        })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+      for (const instanceProfileName of instanceProfileNames) {
+        yield* iam
+          .removeRoleFromInstanceProfile({
+            InstanceProfileName: instanceProfileName,
+            RoleName: roleName,
+          })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        yield* iam
+          .deleteInstanceProfile({
+            InstanceProfileName: instanceProfileName,
+          })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+      }
       for (const policyArn of attachedPolicyArns) {
         yield* iam
           .detachRolePolicy({
-            RoleName: output.roleName,
+            RoleName: roleName,
             PolicyArn: policyArn,
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
       }
       yield* iam
         .deleteRole({
-          RoleName: output.roleName,
+          RoleName: roleName,
         })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }
