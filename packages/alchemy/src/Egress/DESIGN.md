@@ -5,11 +5,13 @@ Anthropic, …) go to an **egress gateway**, which checks them against the
 egress rules, adds the real credential, and forwards them. Every other host
 goes straight out.
 
-A gateway is a declaration of the egresses it serves, hosted anywhere that
-serves HTTP. A Durable Object yields gateways like any other binding and
-hands their egresses to a sandbox. Each egress belongs to its gateway at the
-type level, so only egresses a gateway serves can be granted, and one sandbox
-can use several gateways at once:
+Three declarations, each typed, none configured: a **gateway** names the
+egresses it serves by kind; a **sandbox** names the kinds it accepts; a
+Durable Object yields both and connects them. Credentials and rules are
+configured where they're used, in the gateway's effectful constructor. Each
+egress belongs to its gateway at the type level, so only egresses a gateway
+serves, of kinds the sandbox accepts, can be granted, and one sandbox can use
+several gateways at once:
 
 ```ts
 const work = yield* WorkGateway; // { model, repo }
@@ -49,111 +51,129 @@ Cloudflare Container                  microVM / ECS / Fly / local
                    verify grant → egress handler (rules, credential) → api.github.com
 ```
 
-## 1. Declare the egresses
+## 1. Egress kinds
 
-An egress is the rules for one service, plus where its credential comes from.
+An egress kind is code that ships with Alchemy (or that you write): the rules
+for one service, the type of its scope, and the tools and placeholder
+credentials a sandbox needs to use it.
 
 ```ts
-// src/egress.ts
+GitHub.Egress // rules for git, REST and GraphQL; scope { repository, issue?, pullRequest? }; git + gh, GH_TOKEN
+Anthropic.Egress // the Messages API; no scope; ANTHROPIC_API_KEY
+Egress.Http // any host; host, paths and headers come from its credential
+```
+
+A kind is never configured at module scope. Configuring one needs credentials,
+and credentials come from bindings (secrets, a D1 table of users' tokens),
+which only exist inside an effectful constructor. So kinds are named in
+declarations, and configured in the gateway's implementation (section 2).
+
+## 2. Declare a gateway and implement it
+
+The declaration names the egresses a gateway serves and their kinds. It holds
+no configuration and no credentials, so it is cheap to import anywhere:
+
+```ts
+// src/gateway.ts
 import * as Anthropic from "alchemy/Anthropic";
+import * as Egress from "alchemy/Egress";
+import * as GitHub from "alchemy/GitHub";
+
+export class WorkGateway extends Egress.Gateway<WorkGateway>()("WorkGateway", {
+  model: Anthropic.Egress,
+  repo: GitHub.Egress,
+}) {}
+
+export class UserGateway extends Egress.Gateway<UserGateway>()("UserGateway", {
+  repo: GitHub.Egress,
+  custom: Egress.Http,
+}) {}
+```
+
+The implementation is an effectful constructor: it yields its bindings, then
+configures each egress. `Gateway.serve` turns it into a whole Worker (or
+Lambda) implementation, and checks it against the declaration: a missing
+name, an extra one, or the wrong kind doesn't compile.
+
+```ts
+// src/gateway.worker.ts
+import * as Anthropic from "alchemy/Anthropic";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
-import { Sandbox } from "./Sandbox.ts";
+import * as Effect from "effect/Effect";
+import { WorkGateway } from "./gateway.ts";
 
-export const Model = Anthropic.Egress(Sandbox, {
-  apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
-});
-
-export const Repo = GitHub.Egress(Sandbox, {
-  token: GitHub.ProfileToken,
-  repositories: [
-    {
-      repository: "alchemy-run/alchemy",
-      contents: "write",
-      pullRequests: "write",
-      issues: "write",
-      push: { branches: ["agent/**"] },
-    },
-  ],
-});
+export default Cloudflare.Worker(
+  "WorkGatewayWorker",
+  { main: import.meta.url },
+  WorkGateway.serve(
+    Effect.gen(function* () {
+      return {
+        model: yield* Anthropic.Egress({ apiKey: Config.Redacted("ANTHROPIC_API_KEY") }),
+        repo: yield* GitHub.Egress({
+          token: GitHub.ProfileToken,
+          repositories: [
+            {
+              repository: "alchemy-run/alchemy",
+              contents: "write",
+              pullRequests: "write",
+              issues: "write",
+              push: { branches: ["agent/**"] },
+            },
+          ],
+        }),
+      };
+    }),
+  ),
+);
 ```
 
 ### Credentials from a database
 
-The kind of egress and its rules are code, so they're declared. Whose
-credential to use is data, so it's resolved per request, in the gateway, from
-a subject carried in the signed grant:
+Whose credential to use is data. A credential can be a function of the
+subject carried in the signed grant, using a binding the constructor yielded:
 
 ```ts
-// src/egress.ts
-import { Tokens } from "./tokens.ts"; // e.g. a D1 table of users' GitHub tokens
-
-export const UserRepo = GitHub.Egress(Sandbox, {
-  // Runs in the gateway, with the gateway's bindings, cached per subject.
-  token: ({ subject }) => Tokens.get(subject),
-});
-```
-
-When the host and headers are data too, a generic egress takes them from the
-resolver:
-
-```ts
+// src/gateway.lambda.ts — the same pattern on a Lambda with a function URL
+import * as AWS from "alchemy/AWS";
 import * as Egress from "alchemy/Egress";
-import { Credentials } from "./credentials.ts";
+import * as GitHub from "alchemy/GitHub";
+import * as Effect from "effect/Effect";
+import { UserGateway } from "./gateway.ts";
+import { Credentials } from "./credentials.ts"; // a DynamoDB table of users' credentials
 
-// Resolves to { host, paths?, headers } per subject: a credential row, an OAuth connection, …
-export const Custom = Egress.Http(Sandbox, {
-  credential: ({ subject }) => Credentials.get(subject),
-});
+export default AWS.Lambda.Function(
+  "UserGatewayLambda",
+  { main: import.meta.url, url: true },
+  UserGateway.serve(
+    Effect.gen(function* () {
+      const credentials = yield* AWS.DynamoDB.GetItem(Credentials);
+      const lookup = (subject: string) =>
+        credentials({ Key: { subject: { S: subject } } }).pipe(Effect.map(({ Item }) => Item!));
+      return {
+        // per request (cached per subject); `subject` comes from the signed grant
+        repo: yield* GitHub.Egress({
+          token: ({ subject }) => lookup(subject).pipe(Effect.map((item) => item.githubToken.S!)),
+        }),
+        // host, paths and headers all come from the stored credential
+        custom: yield* Egress.Http({
+          credential: ({ subject }) => lookup(subject).pipe(Effect.map(toHttpCredential)),
+        }),
+      };
+    }).pipe(Effect.provide(AWS.DynamoDB.GetItemLive)),
+  ),
+);
 ```
 
 Rotating or revoking a stored credential is a database write: the next
 request gets the new answer, or fails.
 
-## 2. Declare a gateway and host it
-
-A gateway names the egresses it serves. The names are its egresses' type:
-
-```ts
-// src/gateway.ts
-import * as Egress from "alchemy/Egress";
-import { Custom, Model, Repo, UserRepo } from "./egress.ts";
-
-export class WorkGateway extends Egress.Gateway<WorkGateway>()("WorkGateway", {
-  model: Model,
-  repo: Repo,
-}) {}
-
-export class UserGateway extends Egress.Gateway<UserGateway>()("UserGateway", {
-  repo: UserRepo,
-  custom: Custom,
-}) {}
-```
-
-`Gateway.serve` is a whole Worker (or Lambda) implementation. Serving a
-gateway binds its egresses' credentials and its signing key into that host:
-
-```ts
-// src/gateway.worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import { WorkGateway } from "./gateway.ts";
-
-export default Cloudflare.Worker("WorkGatewayWorker", { main: import.meta.url }, WorkGateway.serve);
-```
-
-```ts
-// src/gateway.lambda.ts — the same gateway on a Lambda with a function URL
-import * as AWS from "alchemy/AWS";
-import { UserGateway } from "./gateway.ts";
-
-export default AWS.Lambda.Function("UserGatewayLambda", { main: import.meta.url, url: true }, UserGateway.serve);
-```
-
-Or inside a Worker you already have, routed by hand:
+### Inside a Worker you already have
 
 ```ts
 // src/worker.ts
-const gateway = yield* WorkGateway.serve;
+const gateway = yield* WorkGateway.serve(implementation);
 return {
   fetch: Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -169,9 +189,19 @@ return {
 // src/Sandbox.ts — the shape the Durable Object uses: start, exec, setEgress, stop
 import * as AI from "alchemy/AI";
 
-// The size names are part of the declaration: they type start({ size }).
-export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()("Sandbox") {}
+// The declaration types start(): the sizes it takes, and the egress kinds it accepts.
+export class Sandbox extends AI.Sandbox<
+  Sandbox,
+  {
+    size: "small" | "large";
+    egress: GitHub.Egress | Anthropic.Egress;
+  }
+>()("Sandbox") {}
 ```
+
+Each host installs the tools for the accepted kinds at deploy (`git` and `gh`
+for `GitHub.Egress`). `start` sets the placeholder credentials
+(`GH_TOKEN=alchemy-egress`) at run time, for the egresses actually granted.
 
 A host constructor takes the declaration, the host's props and the program.
 The program provides its own layers, because only code written for a host
@@ -288,15 +318,21 @@ export class Agent extends Cloudflare.DurableObject<Agent>()(
 ) {}
 ```
 
-Only a gateway's own egresses are in reach, and `narrow` keeps each egress's
-typed scope:
+Only a gateway's own egresses are in reach, only kinds the sandbox accepts can
+be granted, and `narrow` takes the kind's scope type:
 
 ```ts
 work.stripe;
 // ✗ Property 'stripe' does not exist on type 'WorkGateway'
-work.repo.narrow({ repository: "alchemy-run/distilled", issue });
-// ✗ '"alchemy-run/distilled"' is not assignable to '"alchemy-run/alchemy"' (Repo's repositories `as const`)
+sandbox.start({ size: "large", egress: [user.custom] });
+// ✗ 'Egress.Http' is not assignable to 'GitHub.Egress | Anthropic.Egress'
+work.repo.narrow({ repo: "alchemy-run/alchemy" });
+// ✗ Object literal may only specify known properties, and 'repo' does not exist in type 'GitHub.Scope'
 ```
+
+Which repositories a gateway's `repo` actually allows is configuration, so a
+`narrow` outside them is refused by the gateway when it mints the grant
+(`EgressNotServed`), at `start`.
 
 `work.repo` and `user.repo` both want `github.com` and `api.github.com`.
 Routing is by host and path, so they can share a host when their paths don't
@@ -502,19 +538,18 @@ open connections, so a renewed grant, `setEgress` and `stop` apply at once.
 
 ### Anywhere else: a proxy in the sandbox
 
-The image gets the proxy switch, tools and placeholders at deploy time, from
-the egresses served for `Sandbox`. No gateways and no routes: those arrive at
-run time.
+The image gets the proxy and the accepted kinds' tools at deploy time. No
+gateways, routes or placeholders: those arrive at run time.
 
 ```ts
-// alchemy internal: Egress/Egress.ts, when a declaration is yielded at deploy time (by Gateway.serve)
-yield* sandbox.bind`Egress(${key})`({
-  image: [gitCliLayer, ghCliLayer], // GitHub.Egress; Anthropic.Egress: none
-  env: {
-    GH_TOKEN: "alchemy-egress", // a placeholder: tools think they're signed in
-    ALCHEMY_EGRESS_PROXY: "1", // the bootstrap starts the proxy (non-Cloudflare hosts)
-  },
-});
+// alchemy internal: AWS/MicroVM/Sandbox.ts, at deploy
+const image = baseImage.with(
+  ...acceptedKinds(Sandbox).flatMap((kind) => kind.tools), // GitHub.Egress: git, gh
+  { env: { ALCHEMY_EGRESS_PROXY: "1" } }, // the bootstrap starts the proxy
+);
+
+// at start, for the egresses granted
+env: { ...placeholdersOf(granted) } // GH_TOKEN=alchemy-egress: tools think they're signed in
 ```
 
 ```ts
@@ -606,16 +641,19 @@ granted requests.
 
 ```ts
 // alchemy internal: Egress/Gateway.ts
-export const serve = <G extends GatewayDeclaration>(gateway: G) =>
+export const serve =
+  <G extends GatewayDeclaration, R>(gateway: G) =>
+  (implementation: Effect.Effect<ConfiguredEgresses<G>, never, R>) =>
   Effect.gen(function* () {
     const key = yield* Random(`${gateway.id}Key`, { bytes: 32 }); // bound into this host only
-    for (const egress of Object.values(gateway.egresses)) yield* egress; // binds credentials here
+    const egresses = yield* implementation; // the user's constructor: bindings, credentials, rules
 
     return {
       /** Called by a Durable Object that yielded this gateway (service binding / InvokeFunction). */
       mint: (egress: ReadonlyArray<EgressRef>, ttl: Duration.Duration) =>
         Effect.gen(function* () {
-          for (const ref of egress) if (!(ref.egress in gateway.egresses)) return yield* new EgressNotServed(ref);
+          // Each egress checks its scope against its configuration (e.g. GitHub's repositories).
+          for (const ref of egress) yield* egresses[ref.egress].allows(ref.scope);
           return yield* Grant.mint(key, crypto.randomUUID(), [
             { expires: Date.now() + Duration.toMillis(ttl) },
             ...egress.map((ref) => ({ egress: ref.egress, scope: ref.scope, subject: ref.subject })),
@@ -631,7 +669,7 @@ export const serve = <G extends GatewayDeclaration>(gateway: G) =>
         const ref = Grant.covering(grant, target, Date.now()); // expiry, then the egress whose routes match
         if (!ref) return HttpServerResponse.text(`${target.host}${target.pathname} is not granted`, { status: 403 });
         // Rules from the declaration, scope and subject from the grant, credential from this host.
-        const handle = yield* gateway.egresses[ref.egress].handler({ scope: ref.scope, subject: ref.subject });
+        const handle = yield* egresses[ref.egress].handler({ scope: ref.scope, subject: ref.subject });
         return yield* handle(toUpstreamRequest(request, target));
       }),
     };
@@ -889,10 +927,13 @@ coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durabl
 ## 16. Every environment
 
 ```ts
-// Gateways: a declaration of named egresses, served on any HTTP host
-export class WorkGateway extends Egress.Gateway<WorkGateway>()("WorkGateway", { model: Model, repo: Repo }) {}
-Cloudflare.Worker("WorkGatewayWorker", { main }, WorkGateway.serve);
-AWS.Lambda.Function("WorkGatewayLambda", { main, url: true }, WorkGateway.serve);
+// Gateways: a declaration of named egress kinds; an effectful constructor, served on any HTTP host
+export class WorkGateway extends Egress.Gateway<WorkGateway>()("WorkGateway", { model: Anthropic.Egress, repo: GitHub.Egress }) {}
+Cloudflare.Worker("WorkGatewayWorker", { main }, WorkGateway.serve(implementation));
+AWS.Lambda.Function("WorkGatewayLambda", { main, url: true }, WorkGateway.serve(implementation));
+
+// Sandboxes: a declaration of sizes and accepted egress kinds
+export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large"; egress: GitHub.Egress | Anthropic.Egress }>()("Sandbox") {}
 
 // Sandbox hosts: none of them name a gateway
 Cloudflare.Containers.Sandbox(Sandbox, { main, image, sizes: { small: "basic", large: "standard-4" } }, program);
@@ -910,9 +951,10 @@ yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ re
 
 ```
 1. #2251 (merged)  ctx.props and ctx.exports in the Effect DX
-2. alchemy/Egress  Egress.Gateway declaration + serve (mint, fetch); yield* Gateway (GrantableEgress,
-                   narrow, for); Grant (WebCrypto); routes (host + path, conflicts); resolver credentials;
-                   Egress.Http
+2. alchemy/Egress  egress kinds as values with effectful constructors (GitHub, Anthropic, Http);
+                   Egress.Gateway declaration + serve(effect) (mint, fetch); yield* Gateway
+                   (GrantableEgress, narrow, for); Grant (WebCrypto); routes (host + path, conflicts);
+                   accepted kinds on AI.Sandbox
 3. Cloudflare      AlchemyEgress relay entrypoint; routes via service binding / URL; stored egress +
                    alarm renewal; bugs 1–3; drop the __alchemyEgress hop through the Durable Object
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
