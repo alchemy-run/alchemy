@@ -78,3 +78,4 @@ export * from "./UserPoolTriggerEventSource.ts";
 export * from "./Version.ts";
 export * from "./WebSocketEventSource.ts";
 export * from "./WirelessDestinationEventSource.ts";
+export * from "./WorkflowFunction.ts";

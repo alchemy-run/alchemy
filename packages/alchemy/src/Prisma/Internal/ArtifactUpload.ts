@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 import { artifactFileStream, type ArtifactFile } from "./ArtifactFile.ts";
 import { PrismaUploadClient } from "./HttpClient.ts";
 
-const ARTIFACT_UPLOAD_TIMEOUT = Duration.minutes(5);
+const ARTIFACT_UPLOAD_TIMEOUT = Duration.minutes(15);
 const UPLOAD_ERROR_BODY_BYTES = 64 * 1024;
 
 export const executeArtifactUpload = (
@@ -38,7 +38,7 @@ export const executeArtifactUpload = (
       Effect.timeoutOption(ARTIFACT_UPLOAD_TIMEOUT),
     );
     if (Option.isNone(responseOption)) {
-      return yield* Effect.fail(new Error("Prisma artifact upload timed out after 5 minutes."));
+      return yield* Effect.fail(new Error("Prisma artifact upload timed out after 15 minutes."));
     }
     const response = responseOption.value;
     if (response.status < 200 || response.status >= 300) {
