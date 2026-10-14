@@ -47,11 +47,13 @@ const freshId = (prefix: string) =>
   Effect.sync(() => `${prefix}-${crypto.randomUUID().slice(0, 8)}`);
 
 describe.concurrent.each([
-  { dev: true, stage: "durable-workflow-local" },
-  { dev: false, stage: "durable-workflow-live" },
-])("DurableWorkflowEngine (dev: $dev)", ({ dev, stage }) => {
+  { engine: "durable-object", dev: true, stage: "durable-workflow-local" },
+  { engine: "durable-object", dev: false, stage: "durable-workflow-live" },
+  { engine: "native", dev: true, stage: "native-engine-local" },
+  { engine: "native", dev: false, stage: "native-engine-live" },
+] as const)("Workflows on the $engine engine (dev: $dev)", ({ engine, dev, stage }) => {
   const state = dev ? inMemoryState() : Cloudflare.state();
-  const Stack = makeStack(state);
+  const Stack = makeStack(state, engine);
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     providers: Cloudflare.providers(),
     state,
@@ -63,10 +65,22 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* request(`${output.url}/ready`);
+      // A fresh workers.dev URL can take a while to start serving.
+      yield* request(`${output.url}/ready`).pipe(
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+      );
+      // A Workflow class can take a while to reach every Worker version after
+      // a deploy: wait until a run actually completes.
+      yield* Effect.gen(function* () {
+        const id = yield* freshId("probe");
+        const result = yield* request<PollResult>(`${output.url}/run/Greet/${id}`, "POST");
+        if (result.status !== "success") {
+          return yield* new NotReady({ message: JSON.stringify(result) });
+        }
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }));
       return output;
     }),
-    { timeout: 120_000 },
+    { timeout: 240_000 },
   );
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 

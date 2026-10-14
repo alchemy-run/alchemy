@@ -1,0 +1,154 @@
+---
+title: Effect workflows
+description: Run Effect workflows on AWS Lambda durable functions. Host them with AWS.Lambda.WorkflowHost, start and signal them with AWS.Lambda.DurableWorkflowEngine, and let them sleep and wait durably.
+---
+
+An Effect workflow is a durable process written with `effect/workflow`: a
+series of steps whose results are stored, so a run that's interrupted
+resumes after its last finished step, and a run can wait hours or days for
+a timer or a signal. On AWS they run on Lambda durable functions: each run
+is one durable execution.
+
+The same workflow code runs on Cloudflare too. See
+[Effect workflows on Cloudflare](/cloudflare/compute/effect-workflows).
+
+## Define a workflow
+
+`Workflow.make` declares the workflow, and `toLayer` implements it. Each step
+is an `Activity`: a named Effect whose result is stored the first time it
+completes.
+
+```typescript
+// src/workflows.ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, Workflow } from "effect/workflow";
+
+export const Greet = Workflow.make("Greet", {
+  payload: { id: Schema.String, name: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+export const GreetLive = Greet.toLayer(({ name }) =>
+  Activity.make({
+    name: "greet",
+    success: Schema.String,
+    execute: Effect.succeed(`hello ${name}`),
+  }),
+);
+```
+
+## Host it in a durable function
+
+`AWS.Lambda.WorkflowHost` turns the workflow Layers into a durable
+function's implementation. One durable function can host many workflows.
+
+```typescript
+// src/host.ts
+import * as AWS from "alchemy/AWS";
+import * as Layer from "effect/Layer";
+import { GreetLive } from "./workflows.ts";
+
+export default class Workflows extends AWS.Lambda.DurableFunction<Workflows>()(
+  "Workflows",
+  { main: import.meta.url, executionTimeout: "7 days" },
+  AWS.Lambda.WorkflowHost(Layer.mergeAll(GreetLive)),
+) {}
+```
+
+`executionTimeout` caps how long one run may take in total, waits included,
+up to a year.
+
+## Start it
+
+`AWS.Lambda.DurableWorkflowEngine` starts, reads, signals and interrupts
+runs of the workflows a durable function hosts, through the Lambda API:
+
+```typescript
+const greeting = yield* Greet.execute({ id: "g-1", name: "sam" }).pipe(
+  Effect.provide(AWS.Lambda.DurableWorkflowEngine({ functionName })),
+);
+```
+
+It calls Lambda with the ambient AWS credentials, which need
+`lambda:InvokeFunction` on the function and the durable execution actions
+(`GetDurableExecution`, `GetDurableExecutionHistory`,
+`ListDurableExecutionsByFunction`, `StopDurableExecution` and the
+`SendDurableExecutionCallback*` actions).
+
+Durable executions replay against the version they started on, so pass a
+`qualifier` (a published version or alias) in production. It defaults to
+`$LATEST`, which suits development.
+
+## Start it without waiting
+
+`execute` waits for the result. Pass `discard: true` to start the run and get
+its execution id back straight away, then read its result with `poll`:
+
+```typescript
+const executionId = yield* Greet.execute({ id: "g-2", name: "alex" }, { discard: true });
+const result = yield* Greet.poll(executionId);
+```
+
+Starting a workflow again with the same key returns the run already started,
+so a retried request never starts a second one.
+
+## Sleep durably
+
+`DurableClock.sleep` is a durable wait: the invocation ends, nothing is
+billed while it waits, and Lambda invokes the function again when it's due.
+
+```typescript
+yield* DurableClock.sleep({ name: "cool-off", duration: "1 hour" });
+```
+
+Sleeps of a minute or less run in memory by default. Pass
+`inMemoryThreshold: 0` to make a short sleep durable too. Durable sleeps
+round up to whole seconds.
+
+## Wait for a signal
+
+A `DurableDeferred` is a value a run waits for, delivered from outside. The
+run waits on a Lambda callback until it arrives.
+
+```typescript
+export const Approval = DurableDeferred.make("approval", { success: Schema.String });
+
+const approvedBy = yield* DurableDeferred.await(Approval);
+```
+
+Complete it with the engine, using a token that names the run:
+
+```typescript
+yield* DurableDeferred.done(Approval, {
+  token: DurableDeferred.tokenFromExecutionId(Approval, { workflow: Approve, executionId }),
+  exit: Exit.succeed("agent-7"),
+});
+```
+
+The engine finds the run's callback in its execution history. A callback
+only exists once the run reaches its wait, so `done` retries for up to a few
+minutes while the run gets there.
+
+## Undo a step when a later one fails
+
+`withCompensation` attaches what to do if the run fails after the step
+succeeded. Compensations run last step first.
+
+```typescript
+yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
+  Checkout.withCompensation(() => Activity.make({ name: "release", execute: release(order) })),
+);
+```
+
+`interrupt(executionId)` wakes a run that's waiting on a signal, which then
+fails where it waits and runs its compensations. A run that's busy in a step
+can only be stopped, with `StopDurableExecution`, and its compensations don't
+run.
+
+## See what a run did
+
+Every step is a named operation in the durable execution, so the Lambda
+console and `GetDurableExecutionHistory` show which steps ran, with their
+names (`greet/1`: the step and its attempt), results and timings.

@@ -13,9 +13,16 @@ import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
 import { makeCallback } from "../../Callback.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObject as CloudflareDurableObject } from "./DurableObject.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
-import type { Worker } from "./Worker.ts";
+import {
+  decodeExit,
+  decodeResult,
+  encodeExit,
+  encodeResult,
+  payloadCodec,
+} from "../../WorkflowEncoding.ts";
+import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import type { Worker } from "../Workers/Worker.ts";
 
 /**
  * Runs Effect workflows on Durable Objects. Each workflow gets its own Durable
@@ -61,7 +68,7 @@ import type { Worker } from "./Worker.ts";
  *         return HttpServerResponse.text(executionId);
  *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DurableWorkflows(SendWelcomeLive))),
+ *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(SendWelcomeLive))),
  * ) {}
  * ```
  *
@@ -69,7 +76,7 @@ import type { Worker } from "./Worker.ts";
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
+const DurableObjectEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
@@ -233,7 +240,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
   );
 
 /**
- * Host workflows on Durable Objects: provides `DurableWorkflowEngine` to the
+ * Host workflows on Durable Objects: provides a `WorkflowEngine` to the
  * given workflow Layers (from `Workflow.toLayer`), and to everything after them.
  *
  * Activities often call runtime-only APIs, like another Durable Object's
@@ -254,7 +261,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
  *         return HttpServerResponse.text("ok");
  *       }).pipe(Effect.provideService(WorkflowEngine.WorkflowEngine, engine)),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DurableWorkflows(Layer.mergeAll(SendWelcomeLive, ChargeLive)))),
+ *   }).pipe(Effect.provide(Cloudflare.Workflows.DurableObjectEngine(Layer.mergeAll(SendWelcomeLive, ChargeLive)))),
  * ) {}
  * ```
  *
@@ -262,7 +269,7 @@ export const DurableWorkflowEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, n
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableWorkflows = <ROut, E, RIn>(
+export const DurableObjectEngine = <ROut, E, RIn>(
   workflows: Layer.Layer<ROut, E, RIn>,
 ): Layer.Layer<
   ROut | WorkflowEngine.WorkflowEngine,
@@ -271,7 +278,7 @@ export const DurableWorkflows = <ROut, E, RIn>(
 > =>
   // `Workflow.toLayer` lifts a handler's requirements onto its Layer, but a
   // handler only runs inside a run, which provides its own RuntimeContext.
-  workflows.pipe(Layer.provideMerge(DurableWorkflowEngine)) as Layer.Layer<
+  workflows.pipe(Layer.provideMerge(DurableObjectEngineLayer)) as Layer.Layer<
     ROut | WorkflowEngine.WorkflowEngine,
     E,
     Exclude<RIn, WorkflowEngine.WorkflowEngine | RuntimeContext> | Worker
@@ -321,14 +328,14 @@ class CurrentExecution extends Context.Service<
       due: number,
     ) => Effect.Effect<void>;
   }
->()("alchemy/Cloudflare/DurableWorkflowEngine/CurrentExecution") {}
+>()("alchemy/Cloudflare/Workflows/DurableObjectEngine/CurrentExecution") {}
 
 const currentExecution = (operation: string) =>
   Effect.flatMap(Effect.serviceOption(CurrentExecution), (current) =>
     Option.isSome(current)
       ? Effect.succeed(current.value)
       : Effect.die(
-          new Error(`DurableWorkflowEngine: ${operation} only runs inside a workflow execution`),
+          new Error(`DurableObjectEngine: ${operation} only runs inside a workflow execution`),
         ),
   );
 
@@ -433,15 +440,19 @@ const executionObject = (registration: Registration) =>
             return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
           }),
           Workflow.intoResult,
-          Effect.provideService(WorkflowEngine.WorkflowInstance, instance),
-          Effect.provideService(WorkflowEngine.WorkflowEngine, registration.engine()),
-          Effect.provideService(CurrentExecution, {
-            workflowName: workflow._tag,
-            executionId: row.execution_id,
-            query,
-            complete,
-            scheduleClock,
-          }),
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
+              Layer.succeed(WorkflowEngine.WorkflowEngine, registration.engine()),
+              Layer.succeed(CurrentExecution, {
+                workflowName: workflow._tag,
+                executionId: row.execution_id,
+                query,
+                complete,
+                scheduleClock,
+              }),
+            ),
+          ),
         );
         // Suspended: a clock or a completed deferred wakes it again.
         if (result._tag === "Suspended") return;
@@ -510,44 +521,9 @@ const resumeParent = (registration: Registration, parent: ParentRef) =>
     yield* engine.resume({ _tag: parent.workflowName } as Workflow.Any, parent.executionId);
   });
 
-// ---------------------------------------------------------------- encoding
-
-const ExitJson = Schema.toCodecJson(Schema.Exit(Schema.Unknown, Schema.Unknown, Schema.Defect()));
-
-/**
- * Activity and deferred exits arrive with their values already encoded; a
- * void value is stored as null, since undefined isn't JSON.
- */
-const encodeExit = (exit: Exit.Exit<unknown, unknown>) =>
-  Schema.encodeEffect(ExitJson)(Exit.map(exit, (value) => value ?? null)).pipe(
-    Effect.map(JSON.stringify),
-    Effect.orDie,
-  );
-
-const decodeExit = (text: string) =>
-  Schema.decodeEffect(ExitJson)(JSON.parse(text)).pipe(Effect.orDie);
-
-const payloadCodec = (workflow: AnyWorkflow) =>
-  Schema.toCodecJson(workflow.payloadSchema) as unknown as Schema.Codec<unknown, unknown>;
-
-const resultCodec = (workflow: AnyWorkflow) =>
-  Schema.toCodecJson(
-    Schema.Exit(workflow.successSchema, workflow.errorSchema, Schema.Defect()),
-  ) as unknown as Schema.Codec<Exit.Exit<unknown, unknown>, unknown>;
-
-/** A workflow's own result is stored through its success and error schemas. */
-const encodeResult = (workflow: AnyWorkflow, exit: Exit.Exit<unknown, unknown>) =>
-  Schema.encodeEffect(resultCodec(workflow))(exit).pipe(Effect.map(JSON.stringify), Effect.orDie);
-
-const decodeResult = (workflow: AnyWorkflow, text: string) =>
-  Schema.decodeEffect(resultCodec(workflow))(JSON.parse(text)).pipe(
-    Effect.map((exit) => new Workflow.Complete({ exit })),
-    Effect.orDie,
-  );
-
 // ---------------------------------------------------------------- Durable Object calls
 
-const DefectTag = "alchemy/DurableWorkflowEngine/Defect";
+const DefectTag = "alchemy/Cloudflare/Workflows/DurableObjectEngine/Defect";
 
 /**
  * Workers RPC replaces thrown errors with an opaque "internal error". Return

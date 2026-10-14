@@ -12,9 +12,9 @@ import type { WorkflowEngine } from "effect/workflow";
 import { makeCallback } from "../Callback.ts";
 import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
-import { DurableWorkflowEngine } from "../Cloudflare/Workers/DurableWorkflowEngine.ts";
 import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
+import { DurableObjectEngine } from "../Cloudflare/Workflows/DurableObjectEngine.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import { isAfter, mergeCheckpoints } from "./InMemory.ts";
@@ -978,4 +978,4 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * @provides WorkflowEngine
  */
 export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
-  Layer.merge(DurableObjectPlatform, DurableWorkflowEngine);
+  Layer.merge(DurableObjectPlatform, DurableObjectEngine(Layer.empty));

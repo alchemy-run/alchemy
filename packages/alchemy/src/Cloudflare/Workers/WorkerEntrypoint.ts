@@ -150,7 +150,8 @@ export interface WorkerEntrypointBinding<
  * ### Delivering ctx.props
  * The options form attaches properties the target reads from
  * `this.ctx.props` — workerd's per-binding configuration channel. `Output`
- * values resolve at deploy time.
+ * values resolve at deploy time. An Effect Worker reads them with
+ * `yield* ctx.props` on `Cloudflare.WorkerExecutionContext`.
  *
  * **Example:** Entrypoint binding with props
  * ```typescript

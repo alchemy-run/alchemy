@@ -142,7 +142,7 @@ bun alchemy deploy
 | A stream key, like the card of `a-1` | One Durable Object per stream and key |
 | A saga run, like transfer `t-1` | One Durable Object per saga and run, holding its steps' results |
 
-Sagas run on `Cloudflare.DurableWorkflows`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
+Sagas run on `Cloudflare.Workflows.DurableObjectEngine`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
 ## Count on these guarantees
 
