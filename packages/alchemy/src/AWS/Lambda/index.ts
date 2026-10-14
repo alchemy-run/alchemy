@@ -78,5 +78,6 @@ export * from "./UserPoolTriggerEventSource.ts";
 export * from "./Version.ts";
 export * from "./WebFunction.ts";
 export * from "./WebFunctionEndpoint.ts";
+export * from "./WebFunctionPermission.ts";
 export * from "./WebSocketEventSource.ts";
 export * from "./WirelessDestinationEventSource.ts";

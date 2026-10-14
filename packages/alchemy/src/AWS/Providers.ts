@@ -712,6 +712,7 @@ export const providers = () =>
         Lambda.Permission,
         Lambda.WebFunction,
         Lambda.WebFunctionEndpoint,
+        Lambda.WebFunctionPermission,
         LexV2.Bot,
         LexV2.BotAlias,
         LexV2.BotLocale,
@@ -1391,6 +1392,7 @@ export const providers = () =>
           // deploys them to AWS like any mode-agnostic provider.
           Lambda.WebFunctionProvider(),
           Lambda.WebFunctionEndpointProvider(),
+          Lambda.WebFunctionPermissionProvider(),
           flociDual(Logs.Destination, () => Logs.DestinationProvider()),
           flociDual(Logs.LogGroup, () => Logs.LogGroupProvider()),
           flociDual(Logs.LogStream, () => Logs.LogStreamProvider()),

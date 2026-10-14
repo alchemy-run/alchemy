@@ -81,6 +81,10 @@ export interface WebFunctionEndpoint extends Resource<
   {
     /** Name of the Web Function the endpoint serves. */
     functionName: string;
+    /** ARN of the Web Function the endpoint serves. */
+    functionArn: string;
+    /** Auth type of the endpoint. */
+    authType: WebFunctionAuthType;
     /** Name of the endpoint. */
     endpointName: string;
     /** ARN of the endpoint, the resource for `lambda:InvokeWebFunctionEndpoint`. */
@@ -188,6 +192,8 @@ export const WebFunctionEndpointProvider = () =>
       const toAttributes = (
         functionName: string,
         endpoint: {
+          functionArn: string;
+          authType: string;
           endpointName: string;
           endpointArn: string;
           domainName: string;
@@ -195,6 +201,8 @@ export const WebFunctionEndpointProvider = () =>
         },
       ): WebFunctionEndpoint["Attributes"] => ({
         functionName,
+        functionArn: endpoint.functionArn,
+        authType: endpoint.authType as WebFunctionAuthType,
         endpointName: endpoint.endpointName,
         endpointArn: endpoint.endpointArn,
         domainName: endpoint.domainName,

@@ -246,6 +246,44 @@ const internal = yield* AWS.Lambda.WebFunction("Internal", {
 });
 ```
 
+To let a specific caller in, such as a role in another account, grant it
+access to the endpoint:
+
+```typescript
+yield* AWS.Lambda.WebFunctionPermission("PartnerInvoke", {
+  endpoint: internal,
+  principal: "arn:aws:iam::444455556666:role/partner-caller",
+});
+```
+
+## Put CloudFront in front
+
+Serve the function through CloudFront for a custom domain, caching, or
+AWS WAF. Set `webFunction` on the origin and keep `authType: "IamAuth"`:
+
+```typescript
+const api = yield* AWS.Lambda.WebFunction("Api", {
+  main: "./src/server.ts",
+  authType: "IamAuth",
+});
+
+const cdn = yield* AWS.CloudFront.Distribution("Cdn", {
+  origins: [{ id: "api", webFunction: api }],
+  defaultCacheBehavior: {
+    targetOriginId: "api",
+    viewerProtocolPolicy: "redirect-to-https",
+    cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+    originRequestPolicyId: AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+  },
+});
+```
+
+CloudFront signs every request to the function, and only this
+distribution may call it, so requests to the function's own URL are
+refused. Your server still receives the viewer's `Authorization` header.
+Don't forward the viewer's `Host` header to this origin: Lambda routes on
+it, which is why the example uses `AllViewerExceptHostHeader`.
+
 ## Reach private resources
 
 Set `vpc` to send the server's outbound traffic through your VPC, for

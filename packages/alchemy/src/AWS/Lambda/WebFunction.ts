@@ -221,6 +221,8 @@ export interface WebFunction extends Resource<
     domainName: string;
     /** HTTPS URL of the built-in endpoint (`https://<domainName>`). */
     url: string;
+    /** Auth type of the built-in endpoint. */
+    authType: WebFunctionAuthType;
     /**
      * Revision created by the latest deploy. The built-in endpoint and every
      * `WebFunctionEndpoint` route all traffic to it.
@@ -939,6 +941,7 @@ export const WebFunctionProvider = () =>
         endpointArn: endpoint.endpointArn,
         domainName: endpoint.domainName,
         url: `https://${endpoint.domainName}`,
+        authType: endpoint.authType as WebFunctionAuthType,
         revisionId: activeRevisionId(endpoint),
         roleName: role.roleName,
         roleArn: role.roleArn,
@@ -1051,6 +1054,7 @@ export const WebFunctionProvider = () =>
               endpointArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${endpointName}`,
               domainName: "",
               url: "",
+              authType: olds?.authType ?? "IamAuth",
               revisionId: "",
               roleName,
               roleArn: role.Role.Arn,
@@ -1073,6 +1077,10 @@ export const WebFunctionProvider = () =>
             endpointArn: endpoint?.endpointArn ?? `${fn.functionArn}/endpoint/${endpointName}`,
             domainName: endpoint?.domainName ?? output?.domainName ?? "",
             url: endpoint ? `https://${endpoint.domainName}` : (output?.url ?? ""),
+            authType: (endpoint?.authType ??
+              output?.authType ??
+              olds?.authType ??
+              "IamAuth") as WebFunctionAuthType,
             revisionId: endpoint ? activeRevisionId(endpoint) : (output?.revisionId ?? ""),
             roleName,
             roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,

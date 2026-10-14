@@ -8,12 +8,18 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import {
+  WebFunctionPermission,
+  type WebFunctionEndpointRef,
+} from "../Lambda/WebFunctionPermission.ts";
 import type { Providers } from "../Providers.ts";
+import { OriginAccessControl } from "./OriginAccessControl.ts";
 
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
 
@@ -27,15 +33,34 @@ class DistributionPendingDeployment extends Data.TaggedError("DistributionPendin
   message: string;
 }> {}
 
+/**
+ * A Lambda Web Function endpoint to serve as an origin: an
+ * `AWS.Lambda.WebFunction` (its built-in endpoint), an
+ * `AWS.Lambda.WebFunctionEndpoint`, or a class declaration of either.
+ */
+export interface WebFunctionOriginTarget extends WebFunctionEndpointRef {
+  domainName: string;
+}
+
 export interface DistributionOrigin {
   /**
    * Unique origin identifier inside the distribution.
    */
   id: string;
   /**
-   * Origin domain name.
+   * Origin domain name. Required unless {@link webFunction} is set.
    */
-  domainName: Input<string>;
+  domainName?: Input<string>;
+  /**
+   * Serve a Lambda Web Function endpoint through this origin. Alchemy sets
+   * the origin's domain, sends HTTPS, creates an origin access control that
+   * signs every origin request, and grants this distribution (and only this
+   * distribution) permission to invoke the endpoint. The endpoint must use
+   * `authType: "IamAuth"`, so requests that bypass CloudFront are refused.
+   * Don't forward the viewer's `Host` header to this origin: Lambda routes
+   * on it.
+   */
+  webFunction?: WebFunctionOriginTarget | Effect.Effect<WebFunctionOriginTarget, never, Providers>;
   /**
    * Optional origin path prefix.
    */
@@ -500,6 +525,64 @@ export interface Distribution extends Resource<
   Providers
 > {}
 
+const DistributionResource = Resource<Distribution>("AWS.CloudFront.Distribution");
+
+/**
+ * Compose the children a `webFunction` origin needs: an origin access
+ * control before the distribution, and an invoke grant scoped to the
+ * distribution after it (the grant needs the distribution's ARN, which is
+ * why it is its own resource rather than part of the function).
+ */
+const withWebFunctionOrigins = (
+  id: string,
+  props: DistributionProps | Effect.Effect<DistributionProps, never, Providers>,
+): Effect.Effect<Distribution, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    const origins: unknown = resolved.origins;
+    if (
+      globalThis.__ALCHEMY_RUNTIME__ ||
+      !Array.isArray(origins) ||
+      !origins.some((origin: DistributionOrigin) => origin.webFunction !== undefined)
+    ) {
+      return yield* DistributionResource(id, resolved);
+    }
+    const targets: { originId: string; target: WebFunctionOriginTarget }[] = [];
+    const nextOrigins = yield* Effect.forEach(origins as DistributionOrigin[], (origin) =>
+      Effect.gen(function* () {
+        if (origin.webFunction === undefined) return origin;
+        const target = Effect.isEffect(origin.webFunction)
+          ? yield* origin.webFunction
+          : origin.webFunction;
+        targets.push({ originId: origin.id, target });
+        const access = yield* OriginAccessControl(`${origin.id}OriginAccess`, {
+          description: `Signs requests from ${id} to Lambda Web Function origin ${origin.id}`,
+          originType: "lambda",
+          signingBehavior: "always-amz-auth",
+        });
+        const { webFunction: _webFunction, ...rest } = origin;
+        return {
+          ...rest,
+          domainName: target.domainName,
+          originAccessControlId: access.originAccessControlId,
+          customOriginConfig: {
+            originProtocolPolicy: "https-only" as const,
+            ...rest.customOriginConfig,
+          },
+        } satisfies DistributionOrigin;
+      }),
+    ).pipe(Namespace.push(id));
+    const distribution = yield* DistributionResource(id, { ...resolved, origins: nextOrigins });
+    yield* Effect.forEach(targets, ({ originId, target }) =>
+      WebFunctionPermission(`${originId}Invoke`, {
+        endpoint: target,
+        principal: "cloudfront.amazonaws.com",
+        sourceArn: distribution.distributionArn,
+      }),
+    ).pipe(Namespace.push(id));
+    return distribution;
+  });
+
 /**
  * A CloudFront distribution.
  *
@@ -554,6 +637,32 @@ export interface Distribution extends Resource<
  * });
  * ```
  *
+ * ### Lambda Web Function Origins
+ * Set `webFunction` on an origin to serve an `AWS.Lambda.WebFunction` (or a
+ * `WebFunctionEndpoint`) through CloudFront. Alchemy creates the origin
+ * access control that signs each origin request and grants only this
+ * distribution permission to invoke the endpoint. The endpoint must use
+ * `authType: "IamAuth"`, so requests that skip CloudFront are refused.
+ *
+ * **Example:** CloudFront in front of a Web Function
+ * ```typescript
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   authType: "IamAuth",
+ * });
+ *
+ * const cdn = yield* AWS.CloudFront.Distribution("Cdn", {
+ *   origins: [{ id: "api", webFunction: api }],
+ *   defaultCacheBehavior: {
+ *     targetOriginId: "api",
+ *     viewerProtocolPolicy: "redirect-to-https",
+ *     cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+ *     originRequestPolicyId:
+ *       AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+ *   },
+ * });
+ * ```
+ *
  * ### Invalidating the Cache
  * **Example:** Purge Paths on Deploy
  * ```typescript
@@ -570,7 +679,11 @@ export interface Distribution extends Resource<
  *
  * @resource
  */
-export const Distribution = Resource<Distribution>("AWS.CloudFront.Distribution");
+export const Distribution: typeof DistributionResource = Object.assign(
+  (id: string, props: DistributionProps | Effect.Effect<DistributionProps, never, Providers>) =>
+    withWebFunctionOrigins(id, props),
+  DistributionResource,
+) as unknown as typeof DistributionResource;
 
 export const DistributionProvider = () =>
   Provider.effect(
