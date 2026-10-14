@@ -19,6 +19,12 @@ import * as tls from "node:tls";
  * A control endpoint (`PUT /routes`, bearer secret) replaces the route table
  * at run time; the next request sees the new table.
  *
+ * The CA is replaceable too ({@link EgressProxy.useCa}): an AWS Lambda
+ * MicroVM resumes from a build-time snapshot, so a CA minted at boot would be
+ * shared by every MicroVM of the image. There the bootstrap starts the proxy
+ * with no CA and installs one minted in the `/run` hook. Until a proxy has a
+ * CA it decrypts nothing: a routed host is refused (fail closed).
+ *
  * Effect has no primitive for raw `CONNECT` sockets or TLS termination, so
  * the proxy works on `node:net` / `node:tls` sockets, each acquired in the
  * caller's `Scope` and destroyed when it closes. It is deliberately
@@ -43,6 +49,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as ScopedCache from "effect/ScopedCache";
@@ -69,8 +76,11 @@ export interface EgressProxyOptions {
   readonly host?: string;
   /** The live route table; replaced by the control endpoint. */
   readonly routes: SubscriptionRef.SubscriptionRef<ReadonlyArray<Route>>;
-  /** Signs the leaves presented for routed hosts. */
-  readonly ca: LocalCa;
+  /**
+   * Signs the leaves presented for routed hosts. Absent, routed hosts are
+   * refused (`503`) until {@link EgressProxy.useCa} installs one.
+   */
+  readonly ca?: LocalCa;
 }
 
 export interface EgressProxy {
@@ -78,6 +88,12 @@ export interface EgressProxy {
   readonly port: number;
   /** What `HTTPS_PROXY` / `HTTP_PROXY` should be set to. */
   readonly url: string;
+  /**
+   * Sign leaves with `ca` from now on. Every terminator built for the
+   * previous CA is closed, so no new connection is served a leaf it signed
+   * (connections already decrypted run to completion).
+   */
+  readonly useCa: (ca: LocalCa) => Effect.Effect<void>;
 }
 
 /** A request's head: what the proxy reads and rewrites. */
@@ -305,7 +321,13 @@ export const serveEgressProxy = (
   options: EgressProxyOptions,
 ): Effect.Effect<EgressProxy, EgressProxyError, Scope.Scope> =>
   Effect.gen(function* () {
-    const { routes, ca } = options;
+    const { routes } = options;
+    // The CA in use, and a generation that names it: terminators are cached
+    // per generation, so one built for a replaced CA is never handed out.
+    const current = yield* Ref.make<{ readonly generation: number; readonly ca?: LocalCa }>({
+      generation: 0,
+      ca: options.ca,
+    });
     const bind = options.host ?? "127.0.0.1";
     // Every connection handler runs in this set: closing the scope interrupts
     // them, and their finalizers destroy their sockets.
@@ -364,15 +386,24 @@ export const serveEgressProxy = (
         yield* splice(client, upstream);
       }).pipe(Effect.scoped);
 
-    // One loopback TLS server per routed `host:port`, presenting that host's
-    // leaf. Re-created after 12h so the leaf (24h) never expires in use; a
-    // failed start is not cached.
+    // One loopback TLS server per CA generation and routed `host:port`,
+    // presenting that host's leaf. Re-created after 12h so the leaf (24h)
+    // never expires in use; a failed start is not cached.
+    // Keyed `<generation> <host:port>`.
     const terminators = yield* ScopedCache.makeWith<string, number, EgressProxyError | CaError>({
       capacity: 1024,
       timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.hours(12) : Duration.zero),
-      lookup: (authority) =>
+      lookup: (key) =>
         Effect.gen(function* () {
-          const { host, port } = parseAuthority(authority, 443)!;
+          const space = key.indexOf(" ");
+          const generation = Number(key.slice(0, space));
+          const { host, port } = parseAuthority(key.slice(space + 1), 443)!;
+          const { generation: now, ca } = yield* Ref.get(current);
+          // Replaced (or never installed) since the caller looked: refuse
+          // rather than cache a leaf from the wrong CA.
+          if (!ca || now !== generation) {
+            return yield* new EgressProxyError({ message: `no CA for ${host}` });
+          }
           const leaf = yield* ca.leafFor(host);
           const server = tls.createServer(
             // http/1.1 only: the proxy rewrites HTTP/1 heads, not h2 frames.
@@ -390,12 +421,18 @@ export const serveEgressProxy = (
         const target = parseAuthority(authority, 443);
         if (!target) return yield* respond(client, "400 Bad Request");
         const table = yield* SubscriptionRef.get(routes);
+        const routed = hasRoute(table, target.host);
+        const { generation, ca } = yield* Ref.get(current);
+        // No CA yet: nothing is decrypted, and a routed host never goes out
+        // without its gateway.
+        if (routed && !ca) return yield* respond(client, "503 Service Unavailable");
         const upstream = yield* (
-          hasRoute(table, target.host)
+          routed
             ? // Decrypt: the path decides the route, so it must be visible.
-              ScopedCache.get(terminators, formatAuthority(target.host, target.port, -1)).pipe(
-                Effect.flatMap((port) => connect("127.0.0.1", port)),
-              )
+              ScopedCache.get(
+                terminators,
+                `${generation} ${formatAuthority(target.host, target.port, -1)}`,
+              ).pipe(Effect.flatMap((port) => connect("127.0.0.1", port)))
             : // npm, PyPI, docs: tunnelled untouched.
               connect(target.host, target.port)
         ).pipe(Effect.option);
@@ -442,7 +479,11 @@ export const serveEgressProxy = (
     const server = net.createServer((socket) => run(handleClient(socket)));
     const port = yield* listen(server, options.port ?? DEFAULT_PROXY_PORT, bind);
     const display = bind === "0.0.0.0" || bind === "::" ? "127.0.0.1" : bind;
-    return { port, url: `http://${display}:${port}` } satisfies EgressProxy;
+    const useCa = (ca: LocalCa) =>
+      Ref.update(current, ({ generation }) => ({ generation: generation + 1, ca })).pipe(
+        Effect.andThen(ScopedCache.invalidateAll(terminators)),
+      );
+    return { port, url: `http://${display}:${port}`, useCa } satisfies EgressProxy;
   });
 
 export interface EgressControlOptions {

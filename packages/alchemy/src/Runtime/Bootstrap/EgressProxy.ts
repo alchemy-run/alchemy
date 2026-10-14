@@ -8,7 +8,9 @@
  * On an AWS Lambda MicroVM (`ALCHEMY_EGRESS_RUN_HOOK`) the process is
  * snapshotted at build time, so nothing per-run can be in its env: the
  * secret, the first table and the program's env arrive in the `/run`
- * lifecycle hook, which the control endpoint answers.
+ * lifecycle hook, which the control endpoint answers — and so is the
+ * proxy's CA, minted there so no two MicroVMs of one image share it (see
+ * {@link serveSandboxEgress}).
  *
  * Everything the program starts (git, gh, a harness CLI) inherits
  * `HTTPS_PROXY` and a CA bundle that trusts the proxy's per-sandbox CA.
@@ -20,15 +22,16 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { makeLocalCa } from "../../Egress/LocalCa.ts";
+import { type LocalCa, makeLocalCa } from "../../Egress/LocalCa.ts";
 import {
   DEFAULT_CONTROL_PORT,
   DEFAULT_PROXY_PORT,
+  type EgressProxy,
   EgressProxyError,
   serveEgressControl,
   serveEgressProxy,
 } from "../../Egress/Proxy.ts";
-import { Routes } from "../../Egress/Route.ts";
+import { type Route, Routes } from "../../Egress/Route.ts";
 import { trustEnv, writeTrustBundle } from "../../Egress/Trust.ts";
 
 /** Set at deploy time on images that run the proxy. */
@@ -81,6 +84,136 @@ const portFromEnv = (name: string, fallback: number) => {
   return Number.isInteger(value) && value >= 0 ? value : fallback;
 };
 
+export interface SandboxEgressOptions {
+  /** Where the proxy listens (0 picks a free port). */
+  readonly proxyPort: number;
+  /** Where the control endpoint (and the MicroVM lifecycle hooks) listen. */
+  readonly controlPort: number;
+  /** @default "0.0.0.0" (the owner pushes from outside the sandbox) */
+  readonly controlHost?: string;
+  /** The proxy's CA alone. */
+  readonly caPath: string;
+  /** System roots plus the proxy's CA: what {@link trustEnv} points at. */
+  readonly bundlePath: string;
+  /** The first route table (ignored with `runHook`: it arrives in `/run`). */
+  readonly routes: ReadonlyArray<Route>;
+  /** Authenticates `PUT /routes` (ignored with `runHook`: it arrives in `/run`). */
+  readonly secret?: string;
+  /**
+   * An AWS Lambda MicroVM: this process is snapshotted at build time, so the
+   * control secret, the first route table, the program's env AND the CA
+   * arrive (or are minted) in the `/run` hook.
+   */
+  readonly runHook?: boolean;
+  /** `ready` hook: whether the image is ready to snapshot. */
+  readonly ready?: Effect.Effect<boolean>;
+}
+
+const writeCa = (options: SandboxEgressOptions, ca: LocalCa) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFileString(options.caPath, ca.pem);
+    yield* writeTrustBundle(options.bundlePath, [ca.pem]);
+  }).pipe(
+    Effect.mapError(
+      (cause) => new EgressProxyError({ message: "failed to write the egress CA bundle", cause }),
+    ),
+  );
+
+const mintCa = makeLocalCa.pipe(
+  Effect.mapError((cause) => new EgressProxyError({ message: cause.message, cause })),
+);
+
+/**
+ * Serve the proxy and its control endpoint, and write the CA and trust
+ * bundle, until the scope closes.
+ *
+ * Outside a MicroVM the CA is minted now. In a MicroVM (`runHook`) anything
+ * minted now would be in the build-time snapshot, shared by every MicroVM of
+ * the image, so the proxy starts with no CA (it decrypts nothing and routes
+ * nothing) and the bundle holds the system roots alone. The `/run` hook then
+ * mints this MicroVM's own CA, rewrites the bundle in place (the paths in
+ * {@link trustEnv} stay valid), installs the CA in the proxy, and only then
+ * applies the first route table.
+ *
+ * Who trusts the new CA: the bundle is read by each program at its own
+ * start. The program itself (this process) starts before `/run`, but it
+ * never trusted the bundle: `NODE_EXTRA_CA_CERTS` is read once at process
+ * start and is only set below, after start. The tools that need it (git,
+ * gh, a harness CLI) are children the program spawns per request, after
+ * `/run` (the placeholder credentials they use only arrive there), so they
+ * read the new bundle. A child spawned before `/run` would trust only the
+ * system roots: it fails closed on a routed host rather than trusting a
+ * snapshot-shared CA.
+ */
+export const serveSandboxEgress = (
+  options: SandboxEgressOptions,
+): Effect.Effect<
+  { readonly proxy: EgressProxy; readonly controlPort?: number },
+  EgressProxyError,
+  FileSystem.FileSystem | Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const controlHost = options.controlHost ?? "0.0.0.0";
+    const fs = yield* FileSystem.FileSystem;
+    if (options.runHook) {
+      // No routes until `/run`: nothing is decrypted before this MicroVM has its own CA.
+      const routes = yield* SubscriptionRef.make<ReadonlyArray<Route>>([]);
+      yield* Effect.gen(function* () {
+        yield* fs.remove(options.caPath, { force: true });
+        yield* writeTrustBundle(options.bundlePath, []);
+      }).pipe(
+        Effect.mapError(
+          (cause) => new EgressProxyError({ message: "failed to write the trust bundle", cause }),
+        ),
+      );
+      const proxy = yield* serveEgressProxy({ port: options.proxyPort, routes });
+      const control = yield* serveEgressControl({
+        host: controlHost,
+        port: options.controlPort,
+        routes,
+        hooks: {
+          ready: options.ready,
+          run: (payload) =>
+            Effect.gen(function* () {
+              const config = yield* decodeRunPayload(payload ?? "{}").pipe(
+                Effect.mapError(
+                  (cause) => new EgressProxyError({ message: "invalid run hook payload", cause }),
+                ),
+              );
+              // This MicroVM's own CA, before any route exists.
+              const ca = yield* mintCa;
+              yield* writeCa(options, ca).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+              yield* proxy.useCa(ca);
+              if (config.routes) yield* SubscriptionRef.set(routes, config.routes);
+              // Read by each program at its own start (git, gh, a harness CLI).
+              if (config.env) yield* Effect.sync(() => Object.assign(process.env, config.env));
+              return Redacted.make(config.secret);
+            }),
+        },
+      });
+      return { proxy, controlPort: control.port };
+    }
+
+    const routes = yield* SubscriptionRef.make(options.routes);
+    const ca = yield* mintCa;
+    yield* writeCa(options, ca);
+    const proxy = yield* serveEgressProxy({ port: options.proxyPort, routes, ca });
+    if (!options.secret) {
+      yield* Effect.logWarning(
+        "ALCHEMY_EGRESS_CONTROL_SECRET is not set: the egress route table cannot be updated",
+      );
+      return { proxy };
+    }
+    const control = yield* serveEgressControl({
+      host: controlHost,
+      port: options.controlPort,
+      routes,
+      secret: Redacted.make(options.secret),
+    });
+    return { proxy, controlPort: control.port };
+  });
+
 export const startEgressProxy: Effect.Effect<
   void,
   EgressProxyError,
@@ -88,71 +221,24 @@ export const startEgressProxy: Effect.Effect<
 > = Effect.gen(function* () {
   if (!process.env[EGRESS_PROXY_SWITCH]) return;
 
-  const initial = yield* decodeRoutes(process.env.ALCHEMY_EGRESS_ROUTES ?? "[]").pipe(
-    Effect.mapError(
-      (cause) => new EgressProxyError({ message: "invalid ALCHEMY_EGRESS_ROUTES", cause }),
-    ),
-  );
-  const routes = yield* SubscriptionRef.make(initial);
-  const ca = yield* makeLocalCa.pipe(
-    Effect.mapError((cause) => new EgressProxyError({ message: cause.message, cause })),
-  );
-
-  yield* Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(EGRESS_PROXY_CA, ca.pem);
-    yield* writeTrustBundle(EGRESS_PROXY_CA_BUNDLE, [ca.pem]);
-  }).pipe(
-    Effect.mapError(
-      (cause) => new EgressProxyError({ message: "failed to write the egress CA bundle", cause }),
-    ),
-  );
-
-  const proxy = yield* serveEgressProxy({
-    port: portFromEnv("ALCHEMY_EGRESS_PROXY_PORT", DEFAULT_PROXY_PORT),
-    routes,
-    ca,
+  const runHook = !!process.env[EGRESS_RUN_HOOK_SWITCH];
+  const initial = runHook
+    ? []
+    : yield* decodeRoutes(process.env.ALCHEMY_EGRESS_ROUTES ?? "[]").pipe(
+        Effect.mapError(
+          (cause) => new EgressProxyError({ message: "invalid ALCHEMY_EGRESS_ROUTES", cause }),
+        ),
+      );
+  const { proxy } = yield* serveSandboxEgress({
+    proxyPort: portFromEnv("ALCHEMY_EGRESS_PROXY_PORT", DEFAULT_PROXY_PORT),
+    controlPort: portFromEnv("ALCHEMY_EGRESS_CONTROL_PORT", DEFAULT_CONTROL_PORT),
+    caPath: EGRESS_PROXY_CA,
+    bundlePath: EGRESS_PROXY_CA_BUNDLE,
+    routes: initial,
+    secret: process.env.ALCHEMY_EGRESS_CONTROL_SECRET,
+    runHook,
+    ready: programListening,
   });
-
-  const secret = process.env.ALCHEMY_EGRESS_CONTROL_SECRET;
-  const controlPort = portFromEnv("ALCHEMY_EGRESS_CONTROL_PORT", DEFAULT_CONTROL_PORT);
-  if (process.env[EGRESS_RUN_HOOK_SWITCH]) {
-    // An AWS Lambda MicroVM: this process was snapshotted at build time, so
-    // the control secret, the first route table and the program's env
-    // arrive in the `/run` hook, served on the control port (`hooks.port`).
-    yield* serveEgressControl({
-      host: "0.0.0.0",
-      port: controlPort,
-      routes,
-      hooks: {
-        ready: programListening,
-        run: (payload) =>
-          Effect.gen(function* () {
-            const config = yield* decodeRunPayload(payload ?? "{}").pipe(
-              Effect.mapError(
-                (cause) => new EgressProxyError({ message: "invalid run hook payload", cause }),
-              ),
-            );
-            if (config.routes) yield* SubscriptionRef.set(routes, config.routes);
-            // Read by each program at its own start (git, gh, a harness CLI).
-            if (config.env) yield* Effect.sync(() => Object.assign(process.env, config.env));
-            return Redacted.make(config.secret);
-          }),
-      },
-    });
-  } else if (secret) {
-    yield* serveEgressControl({
-      // The owner pushes route tables from outside the sandbox.
-      host: "0.0.0.0",
-      port: controlPort,
-      routes,
-      secret: Redacted.make(secret),
-    });
-  } else {
-    yield* Effect.logWarning(
-      "ALCHEMY_EGRESS_CONTROL_SECRET is not set: the egress route table cannot be updated",
-    );
-  }
 
   // Read by each program at its own start. curl reads only the lowercase
   // `http_proxy`; most other tools read either case.

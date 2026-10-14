@@ -29,12 +29,18 @@ export const systemRoots: Effect.Effect<string, never, FileSystem.FileSystem> = 
   },
 );
 
-/** Write `path` = system roots + `pems`. */
+/**
+ * Write `path` = system roots + `pems`. Replaces an existing bundle in place
+ * (same path, written aside then renamed over it), so a program reading it
+ * concurrently sees the old bundle or the new one, never half of either.
+ */
 export const writeTrustBundle = (path: string, pems: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const roots = yield* systemRoots;
-    yield* fs.writeFileString(path, [roots, ...pems].map((pem) => `${pem.trim()}\n`).join("\n"));
+    const next = `${path}.next`;
+    yield* fs.writeFileString(next, [roots, ...pems].map((pem) => `${pem.trim()}\n`).join("\n"));
+    yield* fs.rename(next, path);
   });
 
 /** The env vars that point each toolchain at the bundle at `bundlePath`. */

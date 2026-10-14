@@ -1,3 +1,6 @@
+import { X509Certificate } from "node:crypto";
+import * as net from "node:net";
+import * as tls from "node:tls";
 import { describe, expect, layer } from "alchemy-test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -20,6 +23,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { makeLocalCa } from "@/Egress/LocalCa.ts";
 import { serveEgressControl, serveEgressProxy, writeTrustBundle } from "@/Egress/Proxy.ts";
 import type { Route } from "@/Egress/Route.ts";
+import { serveSandboxEgress } from "@/Runtime/Bootstrap/EgressProxy.ts";
 import { httpServer, PlatformServices } from "@/Util/PlatformServices.ts";
 
 interface Seen {
@@ -193,6 +197,35 @@ const curl = (
     " [%{http_code}]",
     url,
   ]);
+
+/**
+ * The leaf the proxy presents for `host` (through `CONNECT`), unverified:
+ * the caller checks which CA signed it.
+ */
+const leafThrough = (proxyUrl: string, host: string) =>
+  Effect.callback<X509Certificate, Error>((resume) => {
+    const { hostname, port } = new URL(proxyUrl);
+    const socket = net.connect(Number(port), hostname, () =>
+      socket.write(`CONNECT ${host}:443 HTTP/1.1\r\nHost: ${host}:443\r\n\r\n`),
+    );
+    const fail = (cause: Error) => {
+      socket.destroy();
+      resume(Effect.fail(cause));
+    };
+    socket.once("error", fail);
+    socket.once("data", (chunk: Buffer) => {
+      const status = chunk.toString("latin1").split("\r\n")[0] ?? "";
+      if (!status.includes(" 200 ")) return fail(new Error(status));
+      const secure = tls.connect({ socket, servername: host, rejectUnauthorized: false }, () => {
+        const cert = secure.getPeerX509Certificate();
+        secure.destroy();
+        if (!cert) return fail(new Error("no peer certificate"));
+        resume(Effect.succeed(cert));
+      });
+      secure.once("error", fail);
+    });
+    return Effect.sync(() => socket.destroy());
+  });
 
 layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
   describe("routing", { tags: ["local"] }, () => {
@@ -387,6 +420,143 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
           expect((yield* put("Bearer stolen")).status).toBe(401);
           expect((yield* put("Bearer s3cret")).status).toBe(204);
           expect(yield* SubscriptionRef.get(routes)).toEqual([]);
+        }).pipe(Effect.provide(FetchHttpClient.layer)),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("CA rotation", { tags: ["local"] }, () => {
+    it.effect(
+      "no CA refuses routed hosts; a replaced CA signs every new connection",
+      () =>
+        Effect.gen(function* () {
+          const gateway = yield* fakeGateway("answer");
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-egress-" });
+          const routes = yield* SubscriptionRef.make<ReadonlyArray<Route>>([
+            { host: "api.github.com", gateway: { id: "work", url: gateway.url }, grant: "g1" },
+          ]);
+          const proxy = yield* serveEgressProxy({ port: 0, routes });
+
+          // No CA: refused, and never sent straight out with the placeholder.
+          const refused = yield* curl(proxy.url, "https://api.github.com/zen");
+          expect(refused.stdout).not.toContain("gateway:");
+          expect(refused.stderr).toContain("503");
+          expect(gateway.seen).toEqual([]);
+
+          const bundleFor = (name: string, pem: string) =>
+            Effect.gen(function* () {
+              const bundle = path.join(dir, `${name}.pem`);
+              yield* writeTrustBundle(bundle, [pem]);
+              return bundle;
+            });
+          const a = yield* makeLocalCa;
+          const b = yield* makeLocalCa;
+          const bundleA = yield* bundleFor("a", a.pem);
+          const bundleB = yield* bundleFor("b", b.pem);
+          const rootA = yield* Effect.sync(() => new X509Certificate(a.pem));
+          const rootB = yield* Effect.sync(() => new X509Certificate(b.pem));
+
+          yield* proxy.useCa(a);
+          const withA = yield* curl(proxy.url, "https://api.github.com/zen", { cacert: bundleA });
+          expect(withA.stdout).toBe("gateway:https://api.github.com/zen [200]");
+          expect((yield* leafThrough(proxy.url, "api.github.com")).verify(rootA.publicKey)).toBe(
+            true,
+          );
+
+          // The terminator (and leaf) cached for A is gone: B signs from now on.
+          yield* proxy.useCa(b);
+          const leaf = yield* leafThrough(proxy.url, "api.github.com");
+          expect(leaf.verify(rootB.publicKey)).toBe(true);
+          expect(leaf.verify(rootA.publicKey)).toBe(false);
+          const staleTrust = yield* curl(proxy.url, "https://api.github.com/zen", {
+            cacert: bundleA,
+          });
+          expect(staleTrust.stdout).not.toContain("gateway:");
+          const withB = yield* curl(proxy.url, "https://api.github.com/zen", { cacert: bundleB });
+          expect(withB.stdout).toBe("gateway:https://api.github.com/zen [200]");
+        }),
+      { timeout: 60_000 },
+    );
+
+    it.effect(
+      "a MicroVM mints its own CA in the run hook, never at boot (snapshot) time",
+      () =>
+        Effect.gen(function* () {
+          const gateway = yield* fakeGateway("answer");
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const client = yield* HttpClient.HttpClient;
+          const route: Route = {
+            host: "api.github.com",
+            gateway: { id: "work", url: gateway.url },
+            grant: "g1",
+          };
+
+          /** One MicroVM resumed from the snapshot: boot, then `/run`. */
+          const microvm = (name: string) =>
+            Effect.gen(function* () {
+              const dir = yield* fs.makeTempDirectoryScoped({ prefix: `alchemy-egress-${name}-` });
+              const caPath = path.join(dir, "ca.pem");
+              const bundlePath = path.join(dir, "bundle.pem");
+              const { proxy, controlPort } = yield* serveSandboxEgress({
+                proxyPort: 0,
+                controlPort: 0,
+                controlHost: "127.0.0.1",
+                caPath,
+                bundlePath,
+                // Ignored in run-hook mode: no routes until `/run`.
+                routes: [route],
+                runHook: true,
+              });
+              const run = () =>
+                client.execute(
+                  HttpClientRequest.post(
+                    `http://127.0.0.1:${controlPort}/aws/lambda-microvms/runtime/v1/run`,
+                  ).pipe(
+                    HttpClientRequest.bodyJsonUnsafe({
+                      runHookPayload: JSON.stringify({ secret: "s3cret", routes: [route] }),
+                    }),
+                  ),
+                );
+              return { proxy, caPath, bundlePath, run };
+            });
+
+          const first = yield* microvm("a");
+          // Before `/run`: no CA anywhere, the bundle is the system roots
+          // alone, and nothing is decrypted.
+          expect(yield* fs.exists(first.caPath)).toBe(false);
+          const bootBundle = yield* fs.readFileString(first.bundlePath);
+          expect(bootBundle).not.toContain("Alchemy Egress");
+          const early = yield* curl(first.proxy.url, "https://api.github.com/zen", {
+            cacert: first.bundlePath,
+          });
+          expect(early.stdout).not.toContain("gateway:");
+          expect(gateway.seen).toEqual([]);
+
+          expect((yield* first.run()).status).toBe(200);
+          const caA = yield* fs.readFileString(first.caPath);
+          const bundleA = yield* fs.readFileString(first.bundlePath);
+          // Rewritten in place: the same path now trusts this MicroVM's CA.
+          expect(bundleA).toContain(caA.trim());
+          expect(bundleA.startsWith(bootBundle.trim())).toBe(true);
+          const rootA = yield* Effect.sync(() => new X509Certificate(caA));
+          const leaf = yield* leafThrough(first.proxy.url, "api.github.com");
+          expect(leaf.verify(rootA.publicKey)).toBe(true);
+          const routed = yield* curl(first.proxy.url, "https://api.github.com/zen", {
+            cacert: first.bundlePath,
+          });
+          expect(routed.stdout).toBe("gateway:https://api.github.com/zen [200]");
+
+          // A second MicroVM of the same image: a CA of its own.
+          const second = yield* microvm("b");
+          expect((yield* second.run()).status).toBe(200);
+          const caB = yield* fs.readFileString(second.caPath);
+          expect(caB).not.toBe(caA);
+          expect(
+            (yield* leafThrough(second.proxy.url, "api.github.com")).verify(rootA.publicKey),
+          ).toBe(false);
         }).pipe(Effect.provide(FetchHttpClient.layer)),
       { timeout: 60_000 },
     );
