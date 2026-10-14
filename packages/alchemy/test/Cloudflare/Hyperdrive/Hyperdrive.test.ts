@@ -25,6 +25,9 @@ import {
   AccessOriginConnection,
   AccessOriginRoute,
 } from "./fixtures/access-origin.ts";
+import { outOfBandConfig } from "./fixtures/lookup-config.ts";
+import HyperdriveLookupEffectWorker from "./fixtures/lookup-effect-worker.ts";
+import { lookupConfigName } from "./fixtures/lookup.ts";
 import HyperdriveVpcEffectWorker from "./fixtures/vpc-effect-worker.ts";
 import {
   VPC_ORIGIN_PASSWORD,
@@ -157,6 +160,104 @@ test.provider(
       "provider:neon:project",
       "live",
     ],
+  },
+);
+
+// ── Existing configuration (#1343) ─────────────────────────────────────────
+// `Hyperdrive.lookup` binds a configuration the stack does not own: deploys
+// only read it and destroy leaves it untouched.
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
+  status: number;
+  body: string;
+}> {}
+
+/** GET `${base}/meta`, riding out fresh workers.dev cold-start 404s. */
+const getMeta = (base: string) =>
+  HttpClient.get(`${base}/meta`).pipe(
+    Effect.flatMap((res) =>
+      res.text.pipe(
+        Effect.flatMap((body) =>
+          res.status === 200
+            ? Effect.succeed(JSON.parse(body) as { database: string; hasConnectionString: boolean })
+            : Effect.fail(new WorkerNotReady({ status: res.status, body })),
+        ),
+      ),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerNotReady",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 30,
+    }),
+  );
+
+test.provider(
+  "lookup binds an existing configuration without managing it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const { origin } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("LookupProject");
+          return { origin: project.origin };
+        }),
+      );
+
+      const deployed = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const created = yield* outOfBandConfig(accountId, lookupConfigName("live"), origin);
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* Neon.Project("LookupProject");
+              // By name, through `Cloudflare.Hyperdrive.Connect`.
+              const effectWorker = yield* HyperdriveLookupEffectWorker;
+              // By id, through `env`.
+              const asyncWorker = yield* Cloudflare.Worker("HyperdriveLookupAsyncWorker", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/async-worker.ts"),
+                env: {
+                  HD: Cloudflare.Hyperdrive.lookup("HyperdriveLookupById", {
+                    hyperdriveId: created.id,
+                  }),
+                },
+              });
+              return { effectWorker, asyncWorker };
+            }),
+          );
+
+          // Both binding flavors resolve the looked-up configuration at runtime.
+          for (const url of [deployed.effectWorker.url!, deployed.asyncWorker.url!]) {
+            const meta = yield* getMeta(url);
+            expect(meta.database).toEqual(origin.database);
+            expect(meta.hasConnectionString).toBe(true);
+          }
+
+          yield* stack.destroy();
+
+          // Neither the deploy nor the destroy touched the configuration.
+          const survived = yield* hyperdrive.getConfig({ accountId, hyperdriveId: created.id });
+          expect(survived.id).toEqual(created.id);
+          expect(survived.modifiedOn).toEqual(created.modifiedOn);
+          return deployed;
+        }),
+      );
+
+      yield* waitForWorkerToBeDeleted(deployed.effectWorker.workerName, accountId);
+      yield* waitForWorkerToBeDeleted(deployed.asyncWorker.workerName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 
