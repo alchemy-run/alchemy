@@ -1,7 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import EntrypointPropsWorker from "./worker.ts";
+import EntrypointPropsWorker from "./effect-worker.ts";
+
+/** The async Worker, hosting its own Durable Object. */
+export const AsyncEntrypointPropsWorker = () =>
+  Cloudflare.Worker("AsyncEntrypointPropsWorker", {
+    main: new URL("./async-worker.ts", import.meta.url).pathname,
+    env: { MINTER: Cloudflare.DurableObject("AsyncPropsMinter") },
+  });
 
 export default Alchemy.Stack(
   "EntrypointPropsStack",
@@ -10,9 +17,11 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* EntrypointPropsWorker;
+    const effect = yield* EntrypointPropsWorker;
+    const async = yield* AsyncEntrypointPropsWorker();
     return {
-      url: worker.url.as<string>(),
+      effectUrl: effect.url.as<string>(),
+      asyncUrl: async.url.as<string>(),
     };
   }),
 );

@@ -18,50 +18,53 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const TENANT = `props=${JSON.stringify({ tenant: "acme" })}`;
 
-describe(
-  "ctx.props and self entrypoint stubs",
-  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
-  () => {
-    test(
-      "an external request has empty props",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/props`, "props={}", { label: "external props" });
-      }).pipe(logLevel),
-      { timeout: 180_000 },
-    );
-
-    test(
-      "a Worker handler mints a default entrypoint stub with props",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/mint`, `via-worker:${TENANT}`, {
-          label: "worker loopback",
-        });
-      }).pipe(logLevel),
-      { timeout: 180_000 },
-    );
-
-    test(
-      "a Durable Object mints a host entrypoint stub with props",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/mint-do`, `via-do:${TENANT}`, {
-          label: "durable object loopback",
-        });
-      }).pipe(logLevel),
-      { timeout: 180_000 },
-    );
-
-    test(
-      "an entrypoint the Worker does not export fails with a typed error",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/missing`, "EntrypointUnavailableError:Missing", {
-          label: "missing entrypoint",
-        });
-      }).pipe(logLevel),
-      { timeout: 180_000 },
-    );
+const routes = (variant: "effect" | "async") => [
+  { name: "an external request has empty props", path: "/props", expected: "props={}" },
+  {
+    name: "a Worker handler mints a default entrypoint stub with props",
+    path: "/mint",
+    expected: `via-worker:${TENANT}`,
   },
-);
+  {
+    name: "a Durable Object mints a host entrypoint stub with props",
+    path: "/mint-do",
+    expected: `via-do:${TENANT}`,
+  },
+  // Effect Workers export only `default`; a named entrypoint is a native class.
+  ...(variant === "async"
+    ? [
+        {
+          name: "a Worker handler mints a named entrypoint stub with props",
+          path: "/mint-named",
+          expected: `via-named:${TENANT}`,
+        },
+      ]
+    : []),
+  {
+    name: "an entrypoint the Worker does not export is unavailable",
+    path: "/missing",
+    expected: variant === "effect" ? "EntrypointUnavailableError:Missing" : "undefined:Missing",
+  },
+];
+
+for (const variant of ["effect", "async"] as const) {
+  describe(
+    `ctx.props and self entrypoint stubs (${variant})`,
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+    () => {
+      for (const route of routes(variant)) {
+        test(
+          route.name,
+          Effect.gen(function* () {
+            const urls = yield* stack;
+            const url = variant === "effect" ? urls.effectUrl : urls.asyncUrl;
+            yield* expectUrlContains(`${url}${route.path}`, route.expected, {
+              label: `${variant} ${route.path}`,
+            });
+          }).pipe(logLevel),
+          { timeout: 180_000 },
+        );
+      }
+    },
+  );
+}

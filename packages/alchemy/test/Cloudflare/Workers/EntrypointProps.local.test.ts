@@ -6,7 +6,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import EntrypointPropsWorker from "./fixtures/entrypoint-props/worker.ts";
+import EntrypointPropsWorker from "./fixtures/entrypoint-props/effect-worker.ts";
+import { AsyncEntrypointPropsWorker } from "./fixtures/entrypoint-props/stack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -52,7 +53,7 @@ const getTextReady = (url: string) =>
  * `ctx.exports` loopback the same way the deployed Worker does.
  */
 test.provider(
-  "local worker reads ctx.props and mints self entrypoint stubs with props",
+  "local effect and async workers read ctx.props and mint self entrypoint stubs with props",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -69,6 +70,16 @@ test.provider(
       expect(yield* getTextReady(`${deployed.url}/missing`)).toBe(
         "EntrypointUnavailableError:Missing",
       );
+
+      yield* stack.destroy();
+
+      const asyncDeployed = yield* stack.deploy(AsyncEntrypointPropsWorker());
+      expect(asyncDeployed.url).toMatch(/^http:\/\/localhost:\d+$/);
+      expect(yield* getTextReady(`${asyncDeployed.url}/props`)).toBe("props={}");
+      expect(yield* getTextReady(`${asyncDeployed.url}/mint`)).toBe(`via-worker:${tenant}`);
+      expect(yield* getTextReady(`${asyncDeployed.url}/mint-named`)).toBe(`via-named:${tenant}`);
+      expect(yield* getTextReady(`${asyncDeployed.url}/mint-do`)).toBe(`via-do:${tenant}`);
+      expect(yield* getTextReady(`${asyncDeployed.url}/missing`)).toBe("undefined:Missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
