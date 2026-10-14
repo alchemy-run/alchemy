@@ -201,6 +201,36 @@ const transfer = Transfer.ref("t-1");
 const request = (amount: number, approval = false) =>
   new RequestTransfer({ from: alice.id, to: bob.id, amount, approval });
 
+// A step that sends a debit, then fails its first attempt: the retry sends the
+// same command again, which the wallet must apply once.
+class Flaky extends Schema.TaggedError<Flaky>()("Flaky", {}) {}
+
+class DebitTwice extends Domain.Saga("DebitTwice", {
+  key: Schema.String,
+  input: { from: Schema.String, amount: Schema.Number },
+}) {}
+
+const DebitTwiceLive = DebitTwice.toLayer(
+  Effect.gen(function* () {
+    const wallets = yield* Wallet;
+    return Effect.fn(function* ({ key, from, amount }) {
+      yield* Activity.make({
+        name: "debit",
+        error: Flaky,
+        execute: Effect.gen(function* () {
+          yield* wallets.send(from, new Debit({ transfer: key, amount })).pipe(Effect.orDie);
+          if ((yield* Activity.CurrentAttempt) === 1) return yield* new Flaky();
+        }),
+      }).pipe(Activity.retry({ times: 2 }), Effect.orDie);
+    });
+  }),
+);
+
+class Retries extends Domain.Model("Retries", {
+  aggregates: [Wallet],
+  sagas: [DebitTwice],
+}) {}
+
 describe("Domain.Saga", () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
@@ -266,6 +296,18 @@ describe("Domain.Saga", () => {
       Story.saga(MoveMoney, "t-1", { _tag: "Rejected", rejection: new NotApproved() }),
       Story.then(alice),
     ),
+  );
+
+  it.live("a step that runs again sends the same commands", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const debits = yield* DebitTwice;
+      yield* wallets.send(alice, new Open({ balance: 100 }));
+      yield* debits.start("t-1", { from: "alice", amount: 40 });
+      yield* debits.result("t-1");
+      // Debited once: the retry's send had the same command id.
+      expect((yield* wallets.state(alice)).balance).toBe(60);
+    }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
   );
 
   // In real time: the client polls while it waits for the result.

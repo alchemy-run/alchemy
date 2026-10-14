@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import { Workflow, WorkflowEngine } from "effect/workflow";
+import { CurrentActivity, makeCurrentActivity } from "../WorkflowEncoding.ts";
 
 /**
  * What the in-memory platform gives its workflow engine: its clock, its work
@@ -162,7 +163,15 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
         activityInstance.interrupted = instance.interrupted;
         const result = yield* activity.executeEncoded.pipe(
           Workflow.intoResult,
-          Effect.provideService(WorkflowEngine.WorkflowInstance, activityInstance),
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(WorkflowEngine.WorkflowInstance, activityInstance),
+              Layer.succeed(
+                CurrentActivity,
+                makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name),
+              ),
+            ),
+          ),
         );
         if (result._tag === "Complete") activities.set(key, result.exit);
         return result;

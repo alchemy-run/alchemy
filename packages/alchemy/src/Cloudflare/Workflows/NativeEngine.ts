@@ -9,6 +9,8 @@ import * as Schema from "effect/Schema";
 import { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
+  CurrentActivity,
+  makeCurrentActivity,
   decodeExit,
   decodeResult,
   encodeExit,
@@ -341,7 +343,17 @@ const NativeEngineLayer: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worke
               // The run's services, with the step's own instance.
               Effect.provide(
                 Layer.succeedContext(
-                  Context.add(run.context, WorkflowEngine.WorkflowInstance, activityInstance),
+                  run.context.pipe(
+                    Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                    Context.add(
+                      CurrentActivity,
+                      makeCurrentActivity(
+                        instance.workflow._tag,
+                        instance.executionId,
+                        activity.name,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ) as Effect.Effect<string>,

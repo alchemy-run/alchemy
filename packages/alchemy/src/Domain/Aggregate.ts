@@ -4,6 +4,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { CurrentActivity } from "../WorkflowEncoding.ts";
 import type * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import type * as Middleware from "./Middleware.ts";
@@ -436,17 +437,23 @@ export class PolicyRun extends Context.Service<PolicyRun, { readonly next: () =>
 ) {}
 
 /**
- * The command id for a send: the caller's, the policy run's next
- * deterministic id, or a fresh one.
+ * The command id for a send: the caller's; inside a saga step, the step's
+ * next id, so a step that runs again sends the same commands; the policy
+ * run's next deterministic id; or a fresh one.
  *
  * @internal
  */
 export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<string> =>
   options?.commandId !== undefined
     ? Effect.succeed(options.commandId)
-    : Effect.flatMap(Effect.serviceOption(PolicyRun), (run) =>
-        Option.isSome(run) ? Effect.sync(run.value.next) : Effect.sync(() => crypto.randomUUID()),
-      );
+    : Effect.gen(function* () {
+        // A step is the narrower scope: a saga started by a policy runs inside it.
+        const step = yield* Effect.serviceOption(CurrentActivity);
+        if (Option.isSome(step)) return step.value.next();
+        const policy = yield* Effect.serviceOption(PolicyRun);
+        if (Option.isSome(policy)) return policy.value.next();
+        return yield* Effect.sync(() => crypto.randomUUID());
+      });
 
 /**
  * Declare an aggregate: a consistency boundary keyed by id that decides

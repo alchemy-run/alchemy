@@ -64,6 +64,8 @@ yield* Activity.make({
 
 A step declares the errors it can fail with, so a refusal survives being stored. Here the destination account's `NotOpen` becomes the saga's own `DestinationClosed`.
 
+A step that runs again is safe. A step can run twice: when it's retried, or when its run is cut short after the step's command committed but before its result was stored. The commands a step sends get ids derived from the run and the step, so the second run sends the same command ids, and the aggregate applies each command once. Keep each step to one command, so each stored result matches one fact.
+
 ## Undo a step when a later one fails
 
 A step can carry a compensation: what to do if the run fails after the step succeeded. The debit's compensation refunds it.
@@ -129,7 +131,26 @@ yield* Workflow.addFinalizer((exit) =>
 
 ## Start it from a policy
 
-A policy decides when a saga runs. `yield* ExecuteTransfer` gives the saga's client, and `start` begins a run, or returns the one already started with that key, so a policy that runs twice still starts one transfer.
+Start a saga from a policy, on the event that records the request. The command that asked for the transfer commits `TransferRequested` and replies straight away; the policy starts the saga after that, and the saga runs on its own. Nobody waits for it.
+
+<DAG
+  nodes={[
+    { id: "request", label: "RequestTransfer", type: "replies at once", kind: "command", col: 0, row: 0 },
+    { id: "transfer", label: "Transfer", type: "records the request", kind: "aggregate", col: 1, row: 0 },
+    { id: "requested", label: "TransferRequested", type: "the fact", kind: "event", col: 2, row: 0 },
+    { id: "policy", label: "TransferExecution", type: "starts it, later", kind: "policy", col: 2, row: 1 },
+    { id: "saga", label: "ExecuteTransfer", type: "runs on its own", kind: "saga", col: 1, row: 1 },
+  ]}
+  edges={[
+    { from: "request", to: "transfer" },
+    { from: "transfer", to: "requested" },
+    { from: "requested", to: "policy", dashed: true },
+    { from: "policy", to: "saga" },
+  ]}
+  caption="The request is a fact before the process starts, so it's never lost, and the caller never waits for the process."
+/>
+
+`yield* ExecuteTransfer` gives the saga's client. `start` begins a run, or returns the one already started with that key. Policies run at least once, so key the saga by the aggregate it's about: a policy that runs twice still starts one transfer.
 
 ```typescript title="src/Transfer/TransferExecution.ts"
 case "TransferRequested":
@@ -148,6 +169,10 @@ List the saga on the model, next to its aggregates and policies, and its Layer w
 ```typescript title="src/Bank.ts"
 sagas: [ExecuteTransfer],
 ```
+
+## Don't wait for it in a policy
+
+`start` returns as soon as the run is recorded. The client also has `result`, which waits for the run to finish, but a run can take days, and a policy that waits holds up every later event on its key. Use `result` in tests and scripts. Anything that needs to react to how a saga ends should react to the events it reports instead, like `TransferCompleted` or `TransferFailed`.
 
 ## Wait for a decision
 
@@ -171,7 +196,7 @@ The Transfer decides the race between approval and expiry, so there's one source
 
 ## Follow it
 
-`TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish. A saga's own client can read a run too, with `status` and `result`.
+`TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish: the saga reports every step to the Transfer, so the view has everything a client should see. A saga's own client can read a run too, with `status` and `result`, which suits operators and tests more than apps.
 
 ```typescript
 // test/followTransfer.ts
