@@ -18,6 +18,7 @@ import { join, relative, resolve } from "node:path";
  * provisioned in Floci before the run and removed after it.
  */
 import { Glob } from "bun";
+import { startFlociForTests } from "./floci-container.ts";
 import { provisionFlociStandingFixtures, type FlociStandingFixtures } from "./floci-fixtures.ts";
 import { preferLocalFlociImage } from "./floci-image.ts";
 import { resolveFlociDefaultNetwork } from "./floci-network.ts";
@@ -247,6 +248,13 @@ if (external) {
   console.log("test:aws:floci: using the existing Floci server (no Docker fallback)");
 } else {
   preferLocalFlociImage("test:aws:floci");
+  try {
+    await startFlociForTests("test:aws:floci");
+  } catch (error) {
+    fail(
+      `could not start the Floci container: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+    );
+  }
 }
 
 // Suites that take subnet/security-group IDs from the environment (e.g.

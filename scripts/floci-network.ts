@@ -11,11 +11,14 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 
 export interface FlociDefaultNetwork {
   readonly subnetIds: ReadonlyArray<string>;
   readonly securityGroupIds: ReadonlyArray<string>;
 }
+
+const region = process.env.AWS_REGION ?? "us-east-1";
 
 export const resolveFlociDefaultNetwork = (external: boolean): Promise<FlociDefaultNetwork> =>
   Effect.runPromise(
@@ -55,8 +58,18 @@ export const resolveFlociDefaultNetwork = (external: boolean): Promise<FlociDefa
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Credentials.fromEnv(),
-          Layer.succeed(Region, Effect.succeed((process.env.AWS_REGION ?? "us-east-1") as never)),
+          // The emulator's own account; the caller's shell may hold no AWS
+          // credentials, or real ones that must never reach this lookup.
+          Layer.succeed(
+            Credentials.Credentials,
+            Effect.succeed({
+              accessKeyId: Redacted.make("test"),
+              secretAccessKey: Redacted.make("test"),
+              sessionToken: undefined,
+              region: region as never,
+            }),
+          ),
+          Layer.succeed(Region, Effect.succeed(region as never)),
           Endpoint.of(`http://localhost:${Floci.DEFAULT_FLOCI_PORT}`),
           FetchHttpClient.layer,
         ),
